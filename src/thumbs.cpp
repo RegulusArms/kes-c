@@ -31,6 +31,24 @@ static const QHash<int, QString> FLAVORS = {{128, "normal"}, {256, "large"}, {51
 const QStringList COVER_NAMES = {"cover", "folder", ".cover", ".folder", "front", "poster"};
 
 QString covers_file() { return join(CONFIG_DIR(), "covers.json"); }
+QString styles_file() { return join(CONFIG_DIR(), "folder_styles.json"); }
+
+const QList<QPair<QString, QString>> FOLDER_COLORS = {
+    {"Red", "#e01b24"},  {"Orange", "#ff7800"}, {"Yellow", "#f6d32d"}, {"Green", "#33d17a"}, {"Teal", "#2aa198"},
+    {"Blue", "#3584e4"}, {"Purple", "#9141ac"}, {"Pink", "#e66ba5"},   {"Brown", "#986a44"}, {"Grey", "#77767b"}};
+
+QIcon color_swatch(const QString &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QColor(0, 0, 0, 80));
+    p.setBrush(QColor(color));
+    p.drawRoundedRect(QRectF(0.5, 0.5, size - 1, size - 1), 3, 3);
+    p.end();
+    return QIcon(pm);
+}
 
 int bucket_for(int size)
 {
@@ -259,6 +277,10 @@ QImage compose_folder(const QList<QImage> &images, int size, const QString &colo
     QRectF body(m, m + s * 0.19, s - 2 * m, s * 0.75);
     p.setBrush(front);
     p.drawRoundedRect(body, s * 0.06, s * 0.06);
+    if (images.isEmpty()) {   // a plain folder in this colour (no previews)
+        p.end();
+        return canvas;
+    }
     // mosaic
     QRectF inner = body.adjusted(s * 0.035, s * 0.035, -s * 0.035, -s * 0.035);
     QPainterPath clip;
@@ -405,8 +427,14 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
 
 // ---------------------------------------------------------------- manager (main thread)
 
+static ThumbnailManager *first_manager = nullptr;
+
+ThumbnailManager *ThumbnailManager::instance() { return first_manager; }
+
 ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 {
+    if (!first_manager)
+        first_manager = this;
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     image_exts();                    // initialise on the main thread
@@ -424,6 +452,80 @@ void ThumbnailManager::load_covers()
     QJsonObject obj = QJsonDocument::fromJson(data).object();
     for (auto it = obj.begin(); it != obj.end(); ++it)
         covers[it.key()] = it.value().toString();
+    QJsonObject st = QJsonDocument::fromJson(read_file(thumbs::styles_file(), &ok)).object();
+    for (auto it = st.begin(); it != st.end(); ++it)
+        styles[it.key()] = it.value().toObject().toVariantMap();
+}
+
+QString ThumbnailManager::custom_color(const QString &folder) const
+{
+    return styles.value(folder).value("color").toString();
+}
+
+QString ThumbnailManager::color_for(const QString &folder) const
+{
+    QString c = custom_color(folder);
+    return c.isEmpty() ? folder_color : c;
+}
+
+bool ThumbnailManager::previews_for(const QString &folder) const
+{
+    return styles.value(folder).value("previews", true).toBool();
+}
+
+void ThumbnailManager::set_style(const QStringList &folders, const QString &key, const QVariant &value)
+{
+    for (const QString &f : folders) {
+        QVariantMap st = styles.value(f);
+        if (value.isValid())
+            st[key] = value;
+        else
+            st.remove(key);
+        if (st.isEmpty())
+            styles.remove(f);
+        else
+            styles[f] = st;
+    }
+    QJsonObject obj;
+    for (auto it = styles.begin(); it != styles.end(); ++it)
+        obj[it.key()] = QJsonObject::fromVariantMap(it.value());
+    try {
+        makedirs(dirname(thumbs::styles_file()), true);
+        write_text(thumbs::styles_file(), QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    } catch (const OSError &) {
+    }
+    for (const QString &f : folders)
+        invalidate(f);
+}
+
+void ThumbnailManager::set_folder_color(const QStringList &folders, const QString &color)
+{
+    set_style(folders, "color", color.isEmpty() ? QVariant() : QVariant(color));
+}
+
+void ThumbnailManager::set_folder_previews(const QStringList &folders, bool on)
+{
+    set_style(folders, "previews", on ? QVariant() : QVariant(false));
+}
+
+QPixmap ThumbnailManager::plain_folder(const QString &color, int size)
+{
+    QPair<QString, int> k(color, thumbs::bucket_for(size));
+    auto it = plain_cache.find(k);
+    if (it == plain_cache.end())
+        it = plain_cache.insert(k, QPixmap::fromImage(thumbs::compose_folder({}, k.second, color, {})));
+    return *it;
+}
+
+QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews)
+{
+    if (previews && previews_for(path)) {
+        QPixmap pm = get(path, mtime, true, size);
+        if (!pm.isNull())
+            return pm;
+    }
+    QString color = custom_color(path);
+    return color.isEmpty() ? QPixmap() : plain_folder(color, size);
 }
 
 void ThumbnailManager::set_cover(const QString &folder, const QString &image)
@@ -448,7 +550,7 @@ QString ThumbnailManager::key(const QString &path, qint64 mtime, bool is_dir, in
     int b = thumbs::bucket_for(size);
     if (is_dir)
         return QStringList{path, "d", QString::number(b), QString::number(mtime), QString::number(folder_count),
-                           folder_order, folder_color, covers.value(path)}
+                           folder_order, color_for(path), covers.value(path)}
             .join('\x1f');
     return QStringList{path, "f", QString::number(b), QString::number(mtime)}.join('\x1f');
 }
@@ -472,7 +574,7 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
         }
         pending << k;
         prio += 1;
-        thumbs::FolderOpts opts{folder_count, folder_order, folder_color, covers.value(path)};
+        thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);
         auto job = [this, k, path, mtime, is_dir, b, opts]() {
             QImage img;
@@ -614,6 +716,12 @@ RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManag
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
     covers = manager->covers;
+    for (auto it = manager->styles.begin(); it != manager->styles.end(); ++it) {
+        if (!it.value().value("color").toString().isEmpty())
+            colors[it.key()] = it.value().value("color").toString();
+        if (!it.value().value("previews", true).toBool())
+            no_previews << it.key();
+    }
 }
 
 void RecursiveBuilder::emit_progress(bool force)
@@ -643,6 +751,7 @@ void RecursiveBuilder::one(char kind, const QString &path)
             if (kind == 'd') {
                 thumbs::FolderOpts o = opts;
                 o.cover = covers.value(path);
+                o.color = colors.value(path, opts.color);
                 thumbs::folder_thumb(path, st.st_mtime, size, o);
             } else if (st.st_size <= max_bytes || is_video(path)) {
                 thumbs::file_thumb(path, st.st_mtime, size);
@@ -694,7 +803,7 @@ void RecursiveBuilder::run()
             if (!f.startsWith('.') && exts.contains(ext_of(f)))
                 if (!submit('f', join(dir, f)))
                     return false;
-        if (stop || !submit('d', dir))
+        if (stop || (!no_previews.contains(dir) && !submit('d', dir)))
             return false;
         emit_progress();
         return true;

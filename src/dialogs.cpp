@@ -394,6 +394,11 @@ QWidget *PropertiesDialog::general_tab()
     icon->setAlignment(Qt::AlignCenter);
     icon->setPixmap(icon_for_path(path).pixmap(96, 96));
     form->addRow(icon);
+    if (ThumbnailManager *t = ThumbnailManager::instance(); single && isdir(path) && t) {
+        QPixmap pm = t->folder_pixmap(path, QFileInfo(path).lastModified().toSecsSinceEpoch(), 128);
+        if (!pm.isNull())
+            icon->setPixmap(t->scaled(pm, 128));
+    }
     if (single && (is_image(path) || is_video(path))) {
         struct stat st;
         if (stat_(path, st)) {
@@ -443,6 +448,8 @@ QWidget *PropertiesDialog::general_tab()
                                                      .arg(qulonglong(st.st_ino))
                                                      .arg(qulonglong(st.st_nlink))
                                                      .arg(qulonglong(st.st_dev))));
+        if (is_dir)
+            folder_style_rows(form);
         if (isfile(path)) {
             AppRef app = default_app(path);
             auto *row = new QHBoxLayout;
@@ -485,6 +492,39 @@ QWidget *PropertiesDialog::general_tab()
                                               .arg(vol.rootPath(), QString::fromUtf8(vol.fileSystemType()),
                                                    human_size(vol.bytesAvailable()), human_size(vol.bytesTotal()))));
     return w;
+}
+
+void PropertiesDialog::folder_style_rows(QFormLayout *form)
+{
+    // folder colour and image previews for this folder (also in the folder's right-click menu)
+    ThumbnailManager *t = ThumbnailManager::instance();
+    if (!t)
+        return;
+    style_color = new QComboBox;
+    style_color->addItem(thumbs::color_swatch(t->folder_color), "Default", QString());
+    for (const auto &[name, color] : thumbs::FOLDER_COLORS)
+        style_color->addItem(thumbs::color_swatch(color), name, color);
+    QString cur = t->custom_color(path);
+    if (!cur.isEmpty() && style_color->findData(cur) < 0)
+        style_color->addItem(thumbs::color_swatch(cur), QString("Custom (%1)").arg(cur), cur);
+    style_color->setCurrentIndex(std::max(0, style_color->findData(cur)));
+    form->addRow("Folder colour:", style_color);
+    style_previews = new QCheckBox("Show image previews on this folder's icon");
+    style_previews->setChecked(t->previews_for(path));
+    form->addRow("", style_previews);
+}
+
+void PropertiesDialog::apply_folder_style()
+{
+    ThumbnailManager *t = ThumbnailManager::instance();
+    if (!t || !style_color)
+        return;
+    QString color = style_color->currentData().toString();
+    if (color != t->custom_color(path))
+        t->set_folder_color({path}, color);
+    bool on = style_previews->isChecked();
+    if (on != t->previews_for(path))
+        t->set_folder_previews({path}, on);
 }
 
 void PropertiesDialog::show_dir_size(const QVariant &res)
@@ -918,6 +958,7 @@ QWidget *PropertiesDialog::checksum_tab()
 void PropertiesDialog::apply()
 {
     if (single) {
+        apply_folder_style();   // before a rename: styles are kept by path
         QWidget *owner = parentWidget() ? parentWidget() : this;
         if (!perm_boxes.isEmpty()) {
             mode_t m = mode();

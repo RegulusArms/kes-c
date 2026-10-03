@@ -14,6 +14,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QFormLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -79,6 +80,8 @@ private:
     QWidget *general_tab();
     void show_dir_size(const QVariant &res);
     void change_app();
+    void folder_style_rows(QFormLayout *form);
+    void apply_folder_style();
     QWidget *perm_tab();
     void toggle_exec(bool on);
     mode_t mode() const;
@@ -109,6 +112,8 @@ private:
     QLineEdit *name_edit = nullptr;
     QLabel *size_label = nullptr;
     QLabel *app_label = nullptr;
+    QComboBox *style_color = nullptr;
+    QCheckBox *style_previews = nullptr;
     QHash<mode_t, QCheckBox *> perm_boxes;
     mode_t orig_mode = 0;
     QLabel *octal = nullptr;

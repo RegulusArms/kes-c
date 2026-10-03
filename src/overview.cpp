@@ -563,7 +563,7 @@ void BookmarkCard::update_pic()
     if (local) {
         if (isdir(target)) {
             QFileInfo fi(target);
-            QPixmap pm = thumbs->get(target, fi.lastModified().toSecsSinceEpoch(), true, 128);
+            QPixmap pm = thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128);
             if (!pm.isNull()) {
                 pic->setPixmap(thumbs->scaled(pm, 128));
                 return;

@@ -219,6 +219,7 @@ private:
     void toggle_panel(QWidget *w, const QString &key, bool on);
     QStringList open_with_choice(const QStringList &files, const QString &choice);
     void uwp_add(const QString &path);
+    void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
 
     QList<QPointer<ImageViewer>> viewers;

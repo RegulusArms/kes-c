@@ -1939,6 +1939,12 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         im->addAction("Use as Folder Cover", this, [this, single]() { thumbs->set_cover(dirname(single), single); });
         im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); });
     }
+    QStringList folders;
+    for (const QString &x : paths)
+        if (isdir(x))
+            folders << x;
+    if (!folders.isEmpty() && folders.size() == paths.size())
+        folder_style_menu(m, folders);
     if (is_dir && thumbs->covers.contains(single))
         m->addAction("Reset Folder Cover", this, [this, single]() { thumbs->set_cover(single, QString()); });
     if (is_dir) {
@@ -1953,6 +1959,32 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     m->addSeparator();
     m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); });
     return m;
+}
+
+void MainWindow::folder_style_menu(QMenu *m, const QStringList &folders)
+{
+    // Folder Colour submenu and the Show Image Previews switch for one or more folders
+    ThumbnailManager *t = thumbs;
+    QSet<QString> current;
+    for (const QString &f : folders)
+        current << t->custom_color(f);
+    QMenu *cm = m->addMenu(icon({"preferences-color", "applications-graphics"}), "Folder Colour");
+    for (const auto &[name, color] : thumbs::FOLDER_COLORS) {
+        QString c = color;
+        QAction *a = cm->addAction(thumbs::color_swatch(c), name, this, [t, folders, c]() { t->set_folder_color(folders, c); });
+        a->setCheckable(true);
+        a->setChecked(current == QSet<QString>{c});
+    }
+    cm->addSeparator();
+    QAction *a = cm->addAction(thumbs::color_swatch(t->folder_color), "Default", this,
+                               [t, folders]() { t->set_folder_color(folders, QString()); });
+    a->setCheckable(true);
+    a->setChecked(current == QSet<QString>{QString()});
+    bool on = std::all_of(folders.begin(), folders.end(), [t](const QString &f) { return t->previews_for(f); });
+    a = m->addAction("Show Image Previews", this, [t, folders, on]() { t->set_folder_previews(folders, !on); });
+    a->setCheckable(true);
+    a->setChecked(on);
+    a->setToolTip("Show a mosaic of the images inside on this folder's icon");
 }
 
 // -- file actions

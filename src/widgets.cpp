@@ -62,14 +62,12 @@ QPixmap FSModel::thumb(const QModelIndex &index) const
 {
     QFileInfo fi = fileInfo(index);
     QString path = fi.absoluteFilePath();
-    bool is_dir = fi.isDir();
-    if (is_dir) {
-        if (!folder_previews)
-            return QPixmap();
-    } else if (!(is_image(path) || is_video(path))) {
+    qint64 mtime = fi.lastModified().toSecsSinceEpoch();
+    if (fi.isDir())
+        return thumbs->folder_pixmap(path, mtime, thumb_size, folder_previews);
+    if (!(is_image(path) || is_video(path)))
         return QPixmap();
-    }
-    return thumbs->get(path, fi.lastModified().toSecsSinceEpoch(), is_dir, thumb_size, fi.size());
+    return thumbs->get(path, mtime, false, thumb_size, fi.size());
 }
 
 QIcon FSModel::plain_icon(const QModelIndex &index) const
@@ -176,8 +174,10 @@ QVariant SearchModel::data(const QModelIndex &index, int role) const
         QVariantList st = item->data(StatRole).toList();
         bool is_dir = st.value(0).toBool();
         QPixmap pm;
-        if ((is_dir && folder_previews) || is_image(path) || is_video(path))
-            pm = thumbs->get(path, st.value(1).toLongLong(), is_dir, thumb_size, st.value(2).toLongLong());
+        if (is_dir)
+            pm = thumbs->folder_pixmap(path, st.value(1).toLongLong(), thumb_size, folder_previews);
+        else if (is_image(path) || is_video(path))
+            pm = thumbs->get(path, st.value(1).toLongLong(), false, thumb_size, st.value(2).toLongLong());
         if (role == ThumbRole)
             return pm.isNull() ? QVariant() : QVariant(pm);
         return pm.isNull() ? QVariant(icon_for_path(path, is_dir)) : QVariant(QIcon(pm));
@@ -863,8 +863,10 @@ void InfoPanel::set_preview()
     bool is_dir = fi.isDir();
     int size = std::max(160, std::min(viewport()->width() - 24, 512));
     QPixmap pm;
-    if ((is_dir && folder_previews) || is_image(path) || is_video(path))
-        pm = thumbs->get(path, fi.lastModified().toSecsSinceEpoch(), is_dir, 512, fi.size());
+    if (is_dir)
+        pm = thumbs->folder_pixmap(path, fi.lastModified().toSecsSinceEpoch(), 512, folder_previews);
+    else if (is_image(path) || is_video(path))
+        pm = thumbs->get(path, fi.lastModified().toSecsSinceEpoch(), false, 512, fi.size());
     if (!pm.isNull())
         preview->setPixmap(thumbs->scaled(pm, size));
     else
