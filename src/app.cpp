@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "admin.h"
+#include "animate.h"
 #include "archive.h"
 #include "archive_ui.h"
 #include "dialogs.h"
@@ -184,6 +185,8 @@ void Pane::setup_grid()
     g->setFrameShape(QFrame::NoFrame);
     MainWindow *w = win;
     delegate = new GridDelegate(this, thumbs, [w](const QString &p) { return w->cut_paths.contains(p); }, g);
+    animator = new Animator(g, this);
+    delegate->animator = animator;
     delegate->icon_size = grid_size;
     g->setItemDelegate(delegate);
     setup_common(g);
@@ -379,6 +382,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     path = p;
     stack->setCurrentWidget(mode_view);
     thumbs->cancel_pending();
+    animator->clear();
     model->setNameFilters({});
     QModelIndex root = model->setRootPath(p);
     grid->setRootIndex(root);
@@ -2546,15 +2550,30 @@ void MainWindow::properties(const QStringList &paths, QWidget *parent)
 
 void MainWindow::preferences()
 {
-    if (PreferencesDialog(this).exec()) {
-        apply_thumb_settings(thumbs);
-        thumbs->clear_memory();
-        for (MainWindow *w : WINDOWS)
-            for (Pane *p : w->panes()) {
-                p->apply_folder_previews();
-                p->view()->viewport()->update();
-            }
+    // A separate, non-modal window: GNOME attaches modal dialogs to their parent ("attach-modal-dialogs"), so
+    // dragging a modal Preferences would drag the whole Kestrel window with it.
+    if (prefs) {
+        prefs->raise();
+        prefs->activateWindow();
+        return;
     }
+    prefs = new PreferencesDialog(this);
+    prefs->setWindowModality(Qt::NonModal);
+    prefs->setAttribute(Qt::WA_DeleteOnClose);
+    connect(prefs, &QDialog::accepted, this, &MainWindow::preferences_saved);
+    prefs->show();
+}
+
+void MainWindow::preferences_saved()
+{
+    apply_thumb_settings(thumbs);
+    thumbs->clear_memory();
+    for (MainWindow *w : WINDOWS)
+        for (Pane *p : w->panes()) {
+            p->animator->clear();
+            p->apply_folder_previews();
+            p->view()->viewport()->update();
+        }
 }
 
 void MainWindow::clear_cache()

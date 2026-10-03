@@ -17,6 +17,7 @@
 #include <atomic>
 #include <functional>
 
+class Animator;
 class ThumbnailManager;
 class QVBoxLayout;
 class QHBoxLayout;
@@ -123,6 +124,7 @@ public:
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     int icon_size = 128;
+    Animator *animator = nullptr;   // GIF / WebM playing in place of thumbnails
 
 private:
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;

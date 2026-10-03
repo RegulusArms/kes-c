@@ -1299,6 +1299,14 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     slide->setRange(1, 120);
     slide->setSuffix(" s");
     slide->setValue(s.value("slideshow_secs", 4).toInt());
+    play_gifs = new QCheckBox("Play animated GIFs in the file view");
+    play_gifs->setChecked(s.value("play_gifs", false).toBool());
+    play_webm = new QCheckBox("Play WebM videos in the file view (silent looping previews)");
+    play_webm->setChecked(s.value("play_webm", false).toBool());
+    if (!which("ffmpeg")) {
+        play_webm->setEnabled(false);
+        play_webm->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
+    }
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
     form->addRow("Folder colour:", color_btn);
@@ -1308,6 +1316,8 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow("Open videos with:", vid_opener);
     form->addRow(single_click);
     form->addRow(list_previews);
+    form->addRow(play_gifs);
+    form->addRow(play_webm);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1389,6 +1399,8 @@ void PreferencesDialog::save()
     s.setValue("single_click", single_click->isChecked());
     s.setValue("list_folder_previews", list_previews->isChecked());
     s.setValue("slideshow_secs", slide->value());
+    s.setValue("play_gifs", play_gifs->isChecked());
+    s.setValue("play_webm", play_webm->isChecked());
     accept();
 }
 

@@ -6,7 +6,9 @@
 #include <QSet>
 #include <QWidget>
 
+class Animator;
 class FSModel;
+class PreferencesDialog;
 class GridDelegate;
 class ImageViewer;
 class InfoPanel;
@@ -92,6 +94,7 @@ public:
     QTreeView *tree;
     QListView *grid;
     int grid_size, list_size;
+    Animator *animator;   // GIF / WebM playing in the grid
 
 Q_SIGNALS:
     void path_changed();
@@ -226,6 +229,7 @@ private:
     void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
     void sync_undo();
+    void preferences_saved();
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
@@ -239,6 +243,7 @@ private:
     QMenu *sort_menu;
     QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info, *a_undo;
     bool closing = false;
+    QPointer<PreferencesDialog> prefs;   // the open Preferences window
 };
 
 QString location_arg(const QString &arg);

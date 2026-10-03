@@ -1,5 +1,6 @@
 #include "widgets.h"
 
+#include "animate.h"
 #include "dialogs.h"
 #include "metadata.h"
 #include "overview.h"
@@ -349,9 +350,10 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
     int s = icon_size;
     QRect icon_rect(r.x() + (r.width() - s) / 2, r.y() + 6, s, s);
     QVariant thumb = index.data(ThumbRole);
+    QPixmap anim = animator && !is_dir ? animator->frame(path, index, s) : QPixmap();   // GIF / WebM playing
     QRectF badge_box(icon_rect);   // where the star goes: the corner of what's drawn
-    if (thumb.isValid()) {
-        QPixmap spm = thumbs->scaled(thumb.value<QPixmap>(), s);
+    if (!anim.isNull() || thumb.isValid()) {
+        QPixmap spm = !anim.isNull() ? anim : thumbs->scaled(thumb.value<QPixmap>(), s);
         double dpr = spm.devicePixelRatio();
         double w = spm.width() / dpr, h = spm.height() / dpr;
         QRectF target(icon_rect.x() + (s - w) / 2, icon_rect.y() + (s - h), w, h);
@@ -366,7 +368,7 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
             p->setPen(QColor(0, 0, 0, 50));
             p->setBrush(Qt::NoBrush);
             p->drawRoundedRect(target, 4, 4);
-            if (is_video(path))
+            if (is_video(path) && anim.isNull())
                 play_badge(p, target);
         } else {
             p->drawPixmap(target, spm, QRectF(spm.rect()));

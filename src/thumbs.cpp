@@ -512,7 +512,8 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
             return true;
         });
     };
-    collect(join(APP_CACHE(), "folders"));
+    collect(join(APP_CACHE(), "folders"));    // folder mosaics
+    collect(join(APP_CACHE(), "animated"));   // looping video previews
     for (const QString &flavor : FLAVORS) {
         QString d = join(THUMB_DIR(), flavor);
         if (!isdir(d))
