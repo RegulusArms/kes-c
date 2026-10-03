@@ -19,6 +19,8 @@ This is a port of the Python/PyQt6 [Kestrel Explorer](../kestrel-explorer) to C+
 kes ~/Pictures           # once installed
 ```
 
+`--default` also makes Kestrel answer "Show in folder" / "Open containing folder" from browsers and other apps. Those don't use the default folder app: they call the `org.freedesktop.FileManager1` D-Bus service, which GNOME Files normally provides. The installer adds a per-user D-Bus activation file so Kestrel provides it instead, and closes GNOME Files' background service so it lets go. If you open GNOME Files later while no Kestrel window is open, it takes the service back until it quits.
+
 To build by hand:
 
 ```bash

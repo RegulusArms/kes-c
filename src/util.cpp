@@ -1324,7 +1324,7 @@ void ensure_desktop_entry()
                                   "Comment=Browse files and image galleries with folder previews\n"
                                   "Exec=%2 %U\nIcon=folder\nTerminal=false\n"
                                   "Categories=System;FileTools;FileManager;Viewer;\n"
-                                  "MimeType=inode/directory;\nStartupWMClass=%3\n")
+                                  "MimeType=inode/directory;x-directory/normal;\nStartupWMClass=%3\n")
                                   .arg(APP_NAME, launcher, APP_ID)
                                   .toUtf8());
     } catch (const OSError &) {

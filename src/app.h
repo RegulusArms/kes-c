@@ -65,6 +65,7 @@ public:
     void try_select();
     void select_later(const QString &path);
     void select_paths(const QStringList &paths);
+    void scroll_to_current(const QString &path);
     void go_back();
     void go_forward();
     void go_up();
@@ -189,6 +190,7 @@ public:
     void show_shortcuts();
 
     ThumbnailManager *thumbs;
+    QTabWidget *tabs;
     QSet<QString> cut_paths;
     bool show_hidden;
     bool folder_previews;
@@ -220,7 +222,6 @@ private:
     void close_when_idle();
 
     QList<QPointer<ImageViewer>> viewers;
-    QTabWidget *tabs;
     QSplitter *split;
     QLabel *status_label, *free_label, *build_label;
     QSlider *zoom_slider;
@@ -234,6 +235,8 @@ private:
     bool closing = false;
 };
 
+QString location_arg(const QString &arg);
+void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id);
 MainWindow *open_window(const QStringList &paths);
 void apply_thumb_settings(ThumbnailManager *t);
 int kes_main(int argc, char **argv);

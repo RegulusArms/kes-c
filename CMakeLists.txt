@@ -22,6 +22,7 @@ add_executable(kes
     src/proc.cpp
     src/uwp.cpp
     src/fileops.cpp
+    src/fm1.cpp
     src/admin.cpp
     src/thumbs.cpp
     src/metadata.cpp

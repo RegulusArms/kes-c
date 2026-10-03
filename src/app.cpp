@@ -5,6 +5,7 @@
 #include "archive_ui.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "fm1.h"
 #include "overview.h"
 #include "proc.h"
 #include "thumbs.h"
@@ -503,7 +504,20 @@ void Pane::select_paths(const QStringList &paths)
     if (first.isValid()) {
         sm->setCurrentIndex(first, QItemSelectionModel::NoUpdate);
         view()->scrollTo(first);
+        // large folders are laid out in batches, so the item may not have its final position yet: scroll again once
+        // layout has caught up (unless the user has moved on to another item)
+        QString target = first.siblingAtColumn(0).data(PathRole).toString();
+        for (int ms : {50, 250, 700})
+            QTimer::singleShot(ms, this, [this, target]() { scroll_to_current(target); });
     }
+}
+
+void Pane::scroll_to_current(const QString &p)
+{
+    QModelIndex idx = index_for(p);
+    QModelIndex cur = view()->currentIndex();
+    if (idx.isValid() && cur.isValid() && cur.siblingAtColumn(0) == idx.siblingAtColumn(0))
+        view()->scrollTo(idx);
 }
 
 QModelIndex Pane::index_for(const QString &p) const
@@ -2569,6 +2583,74 @@ void apply_thumb_settings(ThumbnailManager *t)
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
 }
 
+void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id)
+{
+    // a request to the org.freedesktop.FileManager1 service (see fm1.h), e.g. a browser's "Show in folder"
+    QStringList paths;
+    for (const QString &u : uris) {
+        QString p = uri_to_path(u);
+        if (!p.isEmpty())
+            paths << p;
+    }
+    if (paths.isEmpty())
+        return;
+    if (!startup_id.isEmpty()) {
+        // the caller's activation token: without it GNOME (Wayland) won't let the new window take focus
+        qputenv("XDG_ACTIVATION_TOKEN", startup_id.toUtf8());
+        qputenv("DESKTOP_STARTUP_ID", startup_id.toUtf8());
+    }
+    if (method == "ShowItemProperties") {
+        MainWindow *w = WINDOWS.isEmpty() ? open_window({dirname(paths.first())}) : WINDOWS.last();
+        w->properties(paths);
+        return;
+    }
+    MainWindow *w;
+    if (method == "ShowFolders") {
+        w = open_window(paths);
+    } else {
+        // ShowItems: each item's folder in a tab, with the item selected, scrolled to and focused (folders too:
+        // they're shown in their parent, not opened)
+        QStringList folders, firsts;
+        for (const QString &p : paths) {
+            QString folder = dirname(rstrip(p, '/'));
+            if (folder.isEmpty())
+                folder = "/";
+            if (!folders.contains(folder)) {
+                folders << folder;
+                firsts << p;
+            }
+        }
+        w = open_window({folders.first()});
+        for (int i = 0; i < folders.size(); ++i) {
+            Pane *pane = i == 0 ? w->pane() : w->new_tab(folders[i], false);
+            if (pane)
+                pane->select_later(firsts[i]);
+        }
+    }
+    w->raise();
+    w->activateWindow();
+    if (w->pane()) {
+        w->tabs->setCurrentIndex(0);
+        w->pane()->view()->setFocus();
+    }
+}
+
+QString location_arg(const QString &arg)
+{
+    // a command-line argument (as passed by xdg-open, the file chooser or GNOME) as a location for open_location:
+    // a local path, OVERVIEW, or a network URI to mount; empty if it can't be opened
+    if (arg.startsWith("file:"))
+        return uri_to_path(arg);
+    QString scheme = is_uri(arg) ? arg.section(':', 0, 0).toLower() : QString();
+    if (scheme == "trash")
+        return join(TRASH_DIR(), "files");
+    if (scheme == "computer" || scheme == "x-nautilus-desktop" || scheme == "other-locations" || scheme == "recent")
+        return OVERVIEW;
+    if (is_uri(arg))
+        return arg;   // smb://, sftp://, … are mounted through gvfs by open_location
+    return abspath(expanduser(arg));
+}
+
 MainWindow *open_window(const QStringList &paths)
 {
     auto *w = new MainWindow(paths, g_thumbs);
@@ -2609,10 +2691,22 @@ int kes_main(int argc, char **argv)
         QString a = QString::fromLocal8Bit(argv[i]);
         if (a.startsWith('-'))
             continue;
-        if (a.startsWith("file://"))
-            a = uri_to_path(a);
-        paths << abspath(expanduser(a));
+        QString loc = location_arg(a);
+        if (!loc.isEmpty())
+            paths << loc;
     }
-    open_window(paths);
+    bool service = false;
+    for (int i = 1; i < argc; ++i)
+        service = service || QByteArray(argv[i]) == "--dbus-service";
+    fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);
+    if (service) {
+        // started by D-Bus for a "show in folder" request: no window of our own; quit if none is asked for
+        QTimer::singleShot(30000, qApp, []() {
+            if (WINDOWS.isEmpty())
+                QApplication::quit();
+        });
+    } else {
+        open_window(paths);
+    }
     return app.exec();
 }
