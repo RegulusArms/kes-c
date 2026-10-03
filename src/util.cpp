@@ -80,6 +80,60 @@ const QSet<QString> RAW_EXTS = {".3fr", ".arw", ".crw", ".cr2", ".cr3", ".dcr", 
                                 ".k25", ".kdc", ".mdc", ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".pef",
                                 ".raf", ".raw", ".rw2", ".rwl", ".sr2", ".srf", ".srw", ".x3f"};
 
+bool explicit_conda_env()
+{
+    QByteArray env = qgetenv("CONDA_DEFAULT_ENV");
+    return !env.isEmpty() && env != "base";
+}
+
+void prefer_system_environment()
+{
+    if (explicit_conda_env())
+        return;
+    // conda installs that aren't named in the environment variables (e.g. a PATH entry left by a shell profile)
+    static const QRegularExpression conda_dir("/(ana|mini)conda\\d*(/|$)|/miniforge\\d*(/|$)|/mambaforge(/|$)|/micromamba(/|$)");
+    QStringList roots;
+    QByteArray prefix = qgetenv("CONDA_PREFIX");
+    if (!prefix.isEmpty())
+        roots << rstrip(QString::fromLocal8Bit(prefix), '/');
+    for (const char *var : {"CONDA_EXE", "CONDA_PYTHON_EXE"}) {   // <root>/bin/conda
+        QByteArray exe = qgetenv(var);
+        if (!exe.isEmpty())
+            roots << rstrip(dirname(dirname(QString::fromLocal8Bit(exe))), '/');
+    }
+    roots.removeAll(QString());
+    auto is_conda = [&](const QString &p) {
+        for (const QString &r : roots)
+            if (p == r || p.startsWith(r + "/"))
+                return true;
+        return conda_dir.match(p).hasMatch();
+    };
+    for (const char *var : {"PATH", "LD_LIBRARY_PATH", "XDG_DATA_DIRS"}) {
+        QByteArray value = qgetenv(var);
+        if (value.isEmpty())
+            continue;
+        QStringList keep, conda;
+        for (const QString &p : QString::fromLocal8Bit(value).split(':'))
+            (!p.isEmpty() && is_conda(p) ? conda : keep) << p;
+        if (!conda.isEmpty())
+            qputenv(var, (keep + conda).join(':').toLocal8Bit());
+    }
+    for (const char *var : {"GSETTINGS_SCHEMA_DIR", "GIO_MODULE_DIR", "GIO_EXTRA_MODULES", "QT_PLUGIN_PATH",
+                            "QT_QPA_PLATFORM_PLUGIN_PATH"}) {
+        QByteArray value = qgetenv(var);
+        if (value.isEmpty())
+            continue;
+        QStringList keep;
+        for (const QString &p : QString::fromLocal8Bit(value).split(':'))
+            if (!p.isEmpty() && !is_conda(p))
+                keep << p;
+        if (keep.isEmpty())
+            qunsetenv(var);
+        else
+            qputenv(var, keep.join(':').toLocal8Bit());
+    }
+}
+
 QSettings &settings()
 {
     static QSettings s(APP_ID, APP_ID);

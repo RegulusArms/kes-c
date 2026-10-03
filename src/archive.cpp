@@ -21,6 +21,9 @@ static const QStringList SYSTEM_PATH = {"/usr/local/bin", "/usr/bin", "/bin"};
 
 QString tool(const QString &name)
 {
+    // the system's copy over e.g. conda's (unless started from an explicitly activated conda env; see util.h)
+    if (explicit_conda_env())
+        return QStandardPaths::findExecutable(name);
     QString p = QStandardPaths::findExecutable(name, SYSTEM_PATH);
     return p.isEmpty() ? QStandardPaths::findExecutable(name) : p;
 }

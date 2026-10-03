@@ -2782,6 +2782,7 @@ MainWindow *open_window(const QStringList &paths)
 
 int kes_main(int argc, char **argv)
 {
+    prefer_system_environment();   // before GLib or Qt load anything: see util.h
     // LibRaw (RAW image plugin) uses OpenMP; by default each decode spawns one busy-waiting thread per core, which
     // starves the UI. Must be set before the plugin is loaded.
     setenv("OMP_NUM_THREADS", "2", 0);
