@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "fileops.h"
+#include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
 
@@ -399,7 +400,7 @@ QWidget *PropertiesDialog::general_tab()
         if (!pm.isNull())
             icon->setPixmap(t->scaled(pm, 128));
     }
-    if (single && (is_image(path) || is_video(path))) {
+    if (single && !isdir(path) && thumbs::can_thumbnail(path)) {
         struct stat st;
         if (stat_(path, st)) {
             QString p = path;
@@ -983,6 +984,8 @@ void PropertiesDialog::apply()
         QString new_name = name_edit->text().trimmed();
         if (!new_name.isEmpty() && new_name != basename(rstrip(path, '/'))) {
             auto res = dialogs::do_rename(path, new_name);
+            if (!res.denied && res.error.isEmpty())
+                undo::record("rename", "Rename", {qMakePair(path, join(dirname(path), new_name))});
             if (res.denied) {
                 QString p = path, target = join(dirname(path), new_name);
                 admin::retry_as_admin(owner, "Rename",
@@ -1229,6 +1232,11 @@ void BatchRenameDialog::apply()
         }
         for (int i = 0; i < temps.size(); ++i)
             util::rename(temps[i].first, join(dirname(temps[i].second), names[i]));
+        QList<QPair<QString, QString>> renamed;
+        for (int i = 0; i < temps.size(); ++i)
+            if (basename(temps[i].second) != names[i])
+                renamed << qMakePair(temps[i].second, join(dirname(temps[i].second), names[i]));
+        undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
     } catch (const OSError &e) {
         for (const auto &[tmp, p] : temps)
             if (exists(tmp))

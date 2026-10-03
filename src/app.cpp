@@ -7,6 +7,9 @@
 #include "fileops.h"
 #include "fm1.h"
 #include "overview.h"
+#include "places.h"
+#include "sharing.h"
+#include "undo.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -83,7 +86,17 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     close->setAutoRaise(true);
     connect(close, &QToolButton::clicked, this, [this]() { close_search(); });
     sl->addWidget(search_edit, 1);
+    search_contents = new QCheckBox("File contents");
+    search_contents->setToolTip("Search inside files too, using the desktop's search index (localsearch).\n"
+                                "Includes subfolders; only finds files in indexed folders.");
+    search_contents->setChecked(settings().value("search_contents", false).toBool());
+    search_contents->setVisible(can_search_contents());
+    connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
+        settings().setValue("search_contents", v);
+        do_search();
+    });
     sl->addWidget(search_sub);
+    sl->addWidget(search_contents);
     sl->addWidget(close);
     search_bar->hide();
     search_timer = new QTimer(this);
@@ -122,6 +135,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
 
     model = make_model();
     search_model = new SearchModel(thumbs, this);
+    connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     attach(model);
     set_view_mode(settings().value("view_mode", "grid").toString());
     set_path(start);
@@ -242,7 +256,9 @@ bool Pane::is_grid() const { return mode_view == grid; }
 QAbstractItemView *Pane::view() const { return mode_view; }
 bool Pane::is_overview() const { return path == OVERVIEW; }
 bool Pane::is_trash() const { return path == join(TRASH_DIR(), "files"); }
-QString Pane::dir() const { return is_overview() ? QString() : path; }
+bool Pane::is_virtual() const { return places::is_virtual(path); }
+bool Pane::is_listing() const { return is_trash() || is_virtual(); }
+QString Pane::dir() const { return is_overview() || is_virtual() ? QString() : path; }   // empty: no folder
 
 void Pane::set_view_mode(const QString &mode)
 {
@@ -324,6 +340,21 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         Q_EMIT path_changed();
         return true;
     }
+    if (places::is_virtual(target)) {
+        if (record && !path.isEmpty() && path != target) {
+            back_stack << snapshot(target);
+            fwd_stack.clear();
+        }
+        if (in_search || search_bar->isVisible())
+            close_search(false, true);
+        path = target;
+        stack->setCurrentWidget(mode_view);
+        view()->selectionModel()->clear();
+        pending_select = select;
+        Q_EMIT path_changed();
+        show_trash();
+        return true;
+    }
     QString p = abspath(expanduser(target));
     if (isfile(p)) {
         select = p;
@@ -369,23 +400,31 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
 void Pane::show_trash()
 {
     // list the items of every trash folder (home + each drive's .Trash-$uid) in the results model, with the folder
-    // each item was deleted from as its Location; loaded on a thread
+    // each item was deleted from as its Location; or the Starred / Recent files with their folder. Loaded on a thread.
     trash_gen += 1;
     int gen = trash_gen;
+    QString place = is_trash() ? QString() : path;
     fileops::run_task(
         this, "",
-        []() {
+        [place]() {
             QVariantList items;
-            for (const auto &[p, o] : trashed_items())
+            for (const auto &[p, o] : place.isEmpty() ? trashed_items() : places::items(place))
                 items << QVariant(QStringList{p, o});
             return QVariant(items);
         },
         [this, gen](const QVariant &items) { fill_trash(items, gen); }, true);
 }
 
+void Pane::starred_changed()
+{
+    if (path == places::STARRED)
+        show_trash();
+    view()->viewport()->update();
+}
+
 void Pane::fill_trash(const QVariant &items_v, int gen)
 {
-    if (gen != trash_gen || !is_trash())
+    if (gen != trash_gen || !is_listing())
         return;
     QString text = search_bar->isVisible() ? search_edit->text().trimmed().toLower() : QString();
     QStringList paths;
@@ -424,7 +463,7 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
 void Pane::add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel)
 {
     // in chunks, so a trash with tens of thousands of items doesn't block the window
-    if (gen != trash_gen || !is_trash())
+    if (gen != trash_gen || !is_listing())
         return;
     search_model->add_paths(paths.mid(0, 1000), locations);
     if (paths.size() > 1000) {
@@ -600,7 +639,7 @@ void Pane::go_forward()
 
 void Pane::go_up()
 {
-    if (is_overview())
+    if (is_overview() || is_virtual())
         return;
     QString parent = dirname(path);
     if (parent != path)
@@ -613,7 +652,7 @@ void Pane::refresh()
         overview->refresh();
         return;
     }
-    if (is_trash()) {
+    if (is_listing()) {
         show_trash();
         return;
     }
@@ -649,10 +688,11 @@ void Pane::update_empty()
         return;
     }
     QString text;
-    if (in_search && is_trash()) {
+    if (in_search && is_listing()) {
+        bool searching_text = search_bar->isVisible() && !search_edit->text().trimmed().isEmpty();
+        QString none = is_trash() ? QString("Trash is empty") : places::empty_text(path);
         if (!search_model->rowCount())
-            text = search_bar->isVisible() && !search_edit->text().trimmed().isEmpty() ? "No matches in the trash"
-                                                                                       : "Trash is empty";
+            text = searching_text ? QString("No matches") : none;
     } else if (in_search) {
         if (search_model->rowCount() == 0 && !searching())
             text = "No results";
@@ -741,7 +781,7 @@ void Pane::do_search()
         record_search();
     else
         unrecord_search();
-    if (is_trash()) {   // filter the combined trash list by name
+    if (is_listing()) {   // filter the combined trash / Starred / Recent list by name
         show_trash();
         return;
     }
@@ -755,7 +795,8 @@ void Pane::do_search()
         update_empty();
         return;
     }
-    if (search_sub->isChecked()) {
+    bool contents = can_search_contents() && search_contents->isChecked();
+    if (search_sub->isChecked() || contents) {
         if (!in_search) {
             in_search = true;
             attach(search_model);
@@ -763,7 +804,7 @@ void Pane::do_search()
             tree->setRootIndex(QModelIndex());
         }
         search_model->clear_results();
-        auto *t = new SearchThread(path, text, win->show_hidden);
+        auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents);
         connect(t, &SearchThread::found, this, [this, t](const QStringList &paths) {
             if (t != search_thread)
                 return;   // a search that was replaced
@@ -957,6 +998,8 @@ QString Pane::title() const
 {
     if (is_overview())
         return OVERVIEW_TITLE;
+    if (is_listing() && !(search_bar->isVisible() && !search_edit->text().trimmed().isEmpty()))
+        return is_trash() ? QString("Trash") : places::title(path);
     if (in_search)
         return "Search: " + search_edit->text();
     QString b = basename(rstrip(path, '/'));
@@ -1182,6 +1225,10 @@ void MainWindow::build_actions()
     A("Quit", {"Ctrl+Q"}, []() { QApplication::quit(); }, fm);
 
     QMenu *em = menu->addMenu("Edit");
+    a_undo = A("Undo", {"Ctrl+Z"}, [this]() { undo::undo(this); }, em, {"edit-undo"});
+    connect(undo::signals_(), &undo::Signals::changed, this, &MainWindow::sync_undo);
+    sync_undo();
+    em->addSeparator();
     A("Cut", {"Ctrl+X"}, [this]() { clip(true, pane()->selected_paths()); }, em, {"edit-cut"});
     A("Copy", {"Ctrl+C"}, [this]() { clip(false, pane()->selected_paths()); }, em, {"edit-copy"});
     A("Paste", {"Ctrl+V"}, [this]() { paste(); }, em, {"edit-paste"});
@@ -1333,7 +1380,7 @@ void MainWindow::pane_path_changed(Pane *p)
     setWindowTitle(QString("%1 — %2").arg(p->title(), APP_NAME));
     a_back->setEnabled(!p->back_stack.isEmpty());
     a_fwd->setEnabled(!p->fwd_stack.isEmpty());
-    a_up->setEnabled(!p->is_overview() && p->path != "/");
+    a_up->setEnabled(!p->is_overview() && !p->is_virtual() && p->path != "/");
     sync_view_btn();
     sync_zoom_slider();
     QString d = p->dir();
@@ -1608,6 +1655,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     QStringList dirs, files;
     for (const QString &x : paths)
         (isdir(x) ? dirs : files) << x;
+    places::add_recent(files);
     if (!dirs.isEmpty()) {
         if (dirs.size() == 1 && !new_tab_ && files.isEmpty()) {
             p->set_path(dirs.first());
@@ -1768,6 +1816,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 {
     auto *m = new QMenu(this);
     QString cur = p->path;
+    if (paths.isEmpty() && p->is_virtual()) {
+        m->addAction("Select All", this, [p]() { p->view()->selectAll(); });
+        return m;
+    }
     if (paths.isEmpty()) {
         m->addAction(icon({"folder-new"}), "New Folder…", this, [this]() { new_folder(); });
         QMenu *nd = m->addMenu(icon({"document-new"}), "New Document");
@@ -1811,6 +1863,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
         if (in_trash(join(cur, "x")))
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
+        sharing::add_scripts_menu(m, {}, cur, [this](const QString &d) { navigate(d); });
         m->addSeparator();
         m->addAction(icon({"document-properties"}), "Properties", this, [this, cur]() { properties({cur}); });
         return m;
@@ -1834,6 +1887,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                 new_tab(x, false);
         });
         m->addAction("Open in New Window", this, [paths]() { open_window(paths); });
+    }
+    if (is_dir) {
+        sharing::add_open_folder_menu(m, single, [this, paths]() { OpenWithDialog(this, paths).exec(); });
     }
     QStringList imgs;
     for (const QString &x : paths)
@@ -1887,16 +1943,25 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         copy_text(uris);
     });
 
+    bool starred = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_starred(x); });
+    m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
+                 starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); });
+
+    QString here = p->dir();   // empty in Starred / Recent: no "… Here" there
     QMenu *lm = m->addMenu(icon({"emblem-symbolic-link", "insert-link"}), "Links && Shortcuts");
-    lm->addAction("Create Symbolic Link Here", this, [this, paths, cur]() { make_links(paths, cur, "sym"); });
-    lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, cur]() { make_links(paths, cur, "rel"); });
-    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
-        lm->addAction("Create Hard Link Here", this, [this, paths, cur]() { make_links(paths, cur, "hard"); });
+    if (!here.isEmpty()) {
+        lm->addAction("Create Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "sym"); });
+        lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "rel"); });
+    }
+    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
+        lm->addAction("Create Hard Link Here", this, [this, paths, here]() { make_links(paths, here, "hard"); });
     lm->addAction("Create Symbolic Link In…", this, [this, paths]() { make_links(paths, QString(), "sym"); });
     lm->addSeparator();
     QString desktop = xdg_user_dir("DESKTOP");
     lm->addAction("Send Link to Desktop", this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); });
-    lm->addAction("Create Desktop Shortcut (.desktop) Here", this, [this, paths, cur]() { make_links(paths, cur, "desktop"); });
+    if (!here.isEmpty())
+        lm->addAction("Create Desktop Shortcut (.desktop) Here", this,
+                      [this, paths, here]() { make_links(paths, here, "desktop"); });
     lm->addAction("Send Shortcut (.desktop) to Desktop", this,
                   [this, paths, desktop]() { make_links(paths, desktop, "desktop"); });
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); })) {
@@ -1947,6 +2012,11 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         folder_style_menu(m, folders);
     if (is_dir && thumbs->covers.contains(single))
         m->addAction("Reset Folder Cover", this, [this, single]() { thumbs->set_cover(single, QString()); });
+    sharing::add_send_to_menu(m, paths);
+    if (is_dir && sharing::can_share())
+        m->addAction(icon({"folder-remote", "network-workgroup"}), "Network Sharing…", this,
+                     [this, single]() { sharing::share_dialog(this, single); });
+    sharing::add_scripts_menu(m, paths, here, [this](const QString &d) { navigate(d); });
     if (is_dir) {
         m->addAction("Regenerate Preview", this, [this, single]() { thumbs->invalidate(single); });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
@@ -2066,7 +2136,8 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         const QMimeData *md = QGuiApplication::clipboard()->mimeData();
         if (md && md->hasImage()) {
             QString dst = unique_path(target, "Pasted image.png", "num");
-            QGuiApplication::clipboard()->image().save(dst, "PNG");
+            if (QGuiApplication::clipboard()->image().save(dst, "PNG"))
+                undo::record_paths("create", "Paste", {dst});
             pane()->select_later(dst);
         }
         return;
@@ -2132,7 +2203,7 @@ void MainWindow::duplicate(const QStringList &paths)
     QList<fileops::Job> jobs;
     for (const QString &p : paths)
         jobs << fileops::Job{"copy", p, unique_path(dirname(p), basename(p))};
-    fileops::start_ops(this, jobs, "Duplicating");
+    fileops::start_ops(this, jobs, "Duplicating", nullptr, "Duplicate");
 }
 
 void MainWindow::new_folder()
@@ -2148,6 +2219,7 @@ void MainWindow::new_folder()
     QString p = join(cur, name.trimmed());
     try {
         makedirs(p);
+        undo::record_paths("create", "New Folder", {p});
         pane()->select_later(p);
     } catch (const OSError &e) {
         if (e.permission()) {
@@ -2189,6 +2261,7 @@ void MainWindow::new_file(const QString &tmpl)
             copyfile(tmpl, p);
         else
             write_text(p, QByteArray(), true);
+        undo::record_paths("create", "New File", {p});
         pane()->select_later(p);
     } catch (const OSError &e) {
         if (e.permission()) {
@@ -2245,8 +2318,10 @@ void MainWindow::rename(const QStringList &paths)
     }
     if (!res.error.isEmpty())
         QMessageBox::warning(this, "Rename", res.error);
-    else
+    else {
+        undo::record("rename", "Rename", {qMakePair(paths.first(), target)});
         renamed(true);
+    }
 }
 
 void MainWindow::trash_paths(const QStringList &paths)
@@ -2257,21 +2332,25 @@ void MainWindow::trash_paths(const QStringList &paths)
         delete_paths(paths);
         return;
     }
-    auto work = [paths](Task *task) -> QVariant {
+    auto trashed = std::make_shared<QStringList>();
+    auto work = [paths, trashed](Task *task) -> QVariant {
         QVariantList failed;
         for (int i = 0; i < paths.size(); ++i) {
-            task->check();
+            if (task->cancelled)
+                break;   // items already moved stay in the trash (and can be undone)
             task->report(i, paths.size(),
                          QString("%1 of %2 — %3").arg(group_digits(i), group_digits(paths.size()), basename(paths[i])));
             try {
                 util::trash(paths[i]);
+                *trashed << paths[i];
             } catch (const OSError &e) {
                 failed << QVariant(QStringList{paths[i], e.message()});
             }
         }
-        return failed;
+        return task->cancelled ? QVariant() : QVariant(failed);
     };
-    auto done = [this, paths](const QVariant &res) {
+    auto done = [this, paths, trashed](const QVariant &res) {
+        undo::record_paths("trash", "Move to Trash", *trashed);
         sidebar->refresh();
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
@@ -2411,6 +2490,7 @@ void MainWindow::make_links(const QStringList &paths, QString dest, const QStrin
     }
     if (!errors.isEmpty())
         QMessageBox::warning(this, "Create Link", errors.join('\n'));
+    undo::record_paths("create", "Create Link", made);
     QPointer<MainWindow> self(this);
     auto finish = [self, made, denied, dest](bool) {
         if (!self)
@@ -2595,6 +2675,13 @@ void MainWindow::closeEvent(QCloseEvent *ev)
     QMainWindow::closeEvent(ev);
 }
 
+void MainWindow::sync_undo()
+{
+    QString what = undo::label();
+    a_undo->setText(what.isEmpty() ? QString("Undo") : "Undo " + what);
+    a_undo->setEnabled(!what.isEmpty());
+}
+
 void MainWindow::close_when_idle()
 {
     // finish closing once every task has stopped (tasks that can't be cancelled run to the end)
@@ -2676,7 +2763,9 @@ QString location_arg(const QString &arg)
     QString scheme = is_uri(arg) ? arg.section(':', 0, 0).toLower() : QString();
     if (scheme == "trash")
         return join(TRASH_DIR(), "files");
-    if (scheme == "computer" || scheme == "x-nautilus-desktop" || scheme == "other-locations" || scheme == "recent")
+    if (scheme == "recent" || scheme == "starred")
+        return scheme == "recent" ? places::RECENT : places::STARRED;
+    if (scheme == "computer" || scheme == "x-nautilus-desktop" || scheme == "other-locations")
         return OVERVIEW;
     if (is_uri(arg))
         return arg;   // smb://, sftp://, … are mounted through gvfs by open_location

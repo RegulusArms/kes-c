@@ -54,6 +54,8 @@ public:
     QAbstractItemView *view() const;
     bool is_overview() const;
     bool is_trash() const;
+    bool is_virtual() const;   // Starred or Recent: files from anywhere, not a folder
+    bool is_listing() const;   // a list of files from many folders (Trash, Starred, Recent) in the results model
     QString dir() const;   // the current folder, or empty on the overview page
     void set_view_mode(const QString &mode);
     void apply_folder_previews();
@@ -119,6 +121,7 @@ private:
     void clicked(const QModelIndex &idx);
     void double_clicked(const QModelIndex &idx);
     void use_model_root();
+    void starred_changed();
 
     ThumbnailManager *thumbs;
     bool search_recorded = false;   // the folder as it was before the active search is on back_stack
@@ -129,6 +132,7 @@ private:
     QWidget *search_bar;
     QLineEdit *search_edit;
     QCheckBox *search_sub;
+    QCheckBox *search_contents;
     QTimer *search_timer;
     QStackedWidget *stack;
     QAbstractItemView *mode_view;   // grid or tree; stays set while the overview page is shown
@@ -221,6 +225,7 @@ private:
     void uwp_add(const QString &path);
     void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
+    void sync_undo();
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
@@ -232,7 +237,7 @@ private:
     QWidget *build_box;
     QToolButton *build_stop, *view_btn, *sort_btn, *menu_btn;
     QMenu *sort_menu;
-    QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info;
+    QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info, *a_undo;
     bool closing = false;
 };
 

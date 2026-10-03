@@ -40,6 +40,12 @@ struct FolderOpts {
 };
 
 QImage load_scaled(const QString &path, int size);
+// system thumbnailers (PDF, fonts, audio, …): {mime type: [Exec line, …]} from the freedesktop .thumbnailer files
+const QHash<QString, QStringList> &thumbnailers();
+QStringList thumbnailers_for(const QString &path);
+// whether a file can get a thumbnail: images and videos (Kestrel's own), anything else a system thumbnailer handles
+bool can_thumbnail(const QString &path);
+QImage system_thumb(const QString &path, int size);
 QImage video_frame(const QString &path, int size);
 // a QImage thumbnail (max size x size) using the freedesktop cache; null if there is none
 QImage file_thumb(const QString &path, qint64 mtime, int size);

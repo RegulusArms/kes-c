@@ -1,6 +1,7 @@
 #include "fileops.h"
 
 #include "admin.h"
+#include "undo.h"
 #include "util.h"
 
 #include <QApplication>
@@ -220,7 +221,8 @@ public:
     }
 
     QStringList errors;
-    QList<Job> denied;   // jobs that failed for lack of permission, to retry as administrator
+    QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
+    QList<Job> completed;   // jobs that succeeded (for undo)
 
     QStringList run()
     {
@@ -241,6 +243,7 @@ public:
                     move(j.src, j.dst, j.op == "merge_move");
                 else
                     copy(j.src, j.dst, j.op == "merge_copy");
+                completed << j;
             } catch (const OSError &e) {
                 if (e.permission())
                     denied << j;
@@ -462,14 +465,29 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
     });
 }
 
-Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done)
+Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done,
+                const QString &undo_label)
 {
     if (jobs.isEmpty())
         return nullptr;
     auto ops = std::make_shared<std::unique_ptr<Ops>>();
     QPointer<QWidget> p(parent);
-    auto finished = [ops, p, title, on_done](const QVariant &res) {
+    auto finished = [ops, p, title, on_done, undo_label](const QVariant &res) {
         QList<Job> denied = *ops ? (*ops)->denied : QList<Job>();
+        if (!undo_label.isEmpty() && *ops) {
+            QList<QPair<QString, QString>> moves;
+            QStringList copies;
+            for (const Job &j : (*ops)->completed) {
+                if (j.op == "move")
+                    moves << qMakePair(j.src, j.dst);
+                else if (j.op == "copy")
+                    copies << j.dst;
+            }
+            if (!moves.isEmpty())
+                undo::record("move", undo_label, moves);
+            else if (!copies.isEmpty())
+                undo::record_paths("create", undo_label, copies);
+        }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
             QMessageBox::warning(p, title, "Some items could not be processed:\n\n" + errors.mid(0, 20).join('\n'));
@@ -541,7 +559,7 @@ void transfer(QWidget *parent, const QStringList &sources, const QString &dest_d
 {
     auto jobs = plan_transfer(parent, sources, dest_dir, op);
     if (jobs && !jobs->isEmpty())
-        start_ops(parent, *jobs, op == "copy" ? "Copying" : "Moving", on_done);
+        start_ops(parent, *jobs, op == "copy" ? "Copying" : "Moving", on_done, op == "copy" ? "Copy" : "Move");
 }
 
 // ---------------------------------------------------------------- links & shortcuts

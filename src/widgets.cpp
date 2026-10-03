@@ -3,6 +3,7 @@
 #include "dialogs.h"
 #include "metadata.h"
 #include "overview.h"
+#include "places.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -20,9 +21,11 @@
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QStorageInfo>
 #include <QVBoxLayout>
 
+#include <cmath>
 #include <fnmatch.h>
 
 using namespace util;
@@ -65,7 +68,7 @@ QPixmap FSModel::thumb(const QModelIndex &index) const
     qint64 mtime = fi.lastModified().toSecsSinceEpoch();
     if (fi.isDir())
         return thumbs->folder_pixmap(path, mtime, thumb_size, folder_previews);
-    if (!(is_image(path) || is_video(path)))
+    if (!thumbs::can_thumbnail(path))
         return QPixmap();
     return thumbs->get(path, mtime, false, thumb_size, fi.size());
 }
@@ -176,7 +179,7 @@ QVariant SearchModel::data(const QModelIndex &index, int role) const
         QPixmap pm;
         if (is_dir)
             pm = thumbs->folder_pixmap(path, st.value(1).toLongLong(), thumb_size, folder_previews);
-        else if (is_image(path) || is_video(path))
+        else if (thumbs::can_thumbnail(path))
             pm = thumbs->get(path, st.value(1).toLongLong(), false, thumb_size, st.value(2).toLongLong());
         if (role == ThumbRole)
             return pm.isNull() ? QVariant() : QVariant(pm);
@@ -194,8 +197,8 @@ void SearchModel::thumb_ready(const QString &path)
     }
 }
 
-SearchThread::SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent)
-    : QThread(parent), root(root), query(query.toLower()), hidden(hidden)
+SearchThread::SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent, bool contents)
+    : QThread(parent), root(root), query(query.toLower()), raw_query(query), hidden(hidden), contents(contents)
 {
     wildcard = query.contains('*') || query.contains('?') || query.contains('[');
 }
@@ -207,8 +210,47 @@ bool SearchThread::match(const QString &name) const
     return name.toLower().contains(query);
 }
 
+bool can_search_contents() { return which("localsearch"); }
+
+void SearchThread::run_contents()
+{
+    // search file contents (and names) with the desktop's search index (localsearch), within root
+    static const QRegularExpression sep("[\\s*?\\[\\]]+");
+    QStringList terms = raw_query.split(sep, Qt::SkipEmptyParts);
+    if (terms.isEmpty())
+        return;
+    auto r = proc::run(QStringList{"localsearch", "search", "-f", "--limit", "20000"} + terms, 60000);
+    QString prefix = rstrip(root, '/') + "/";
+    QStringList batch;
+    for (const QString &line : QString::fromUtf8(r.out).split('\n')) {
+        if (stop)
+            return;
+        QString p = uri_to_path(line.trimmed());
+        if (p.isEmpty() || !p.startsWith(prefix) || !lexists(p))
+            continue;
+        if (!hidden) {
+            bool dot = false;
+            for (const QString &part : p.mid(prefix.size()).split('/'))
+                dot = dot || part.startsWith('.');
+            if (dot)
+                continue;
+        }
+        batch << p;
+        if (batch.size() >= 50) {
+            Q_EMIT found(batch);
+            batch.clear();
+        }
+    }
+    if (!batch.isEmpty())
+        Q_EMIT found(batch);
+}
+
 void SearchThread::run()
 {
+    if (contents) {
+        run_contents();
+        return;
+    }
     QStringList batch;
     int count = 0;
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
@@ -307,11 +349,13 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
     int s = icon_size;
     QRect icon_rect(r.x() + (r.width() - s) / 2, r.y() + 6, s, s);
     QVariant thumb = index.data(ThumbRole);
+    QRectF badge_box(icon_rect);   // where the star goes: the corner of what's drawn
     if (thumb.isValid()) {
         QPixmap spm = thumbs->scaled(thumb.value<QPixmap>(), s);
         double dpr = spm.devicePixelRatio();
         double w = spm.width() / dpr, h = spm.height() / dpr;
         QRectF target(icon_rect.x() + (s - w) / 2, icon_rect.y() + (s - h), w, h);
+        badge_box = target;
         if (!is_dir) {
             QPainterPath clip;
             clip.addRoundedRect(target, 4, 4);
@@ -337,6 +381,10 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         int es = std::max(16, s / 5);
         em.paint(p, QRect(icon_rect.right() - es, icon_rect.bottom() - es, es, es));
     }
+    if (places::is_starred(path)) {
+        double bs = std::max(16, s / 6);
+        star_badge(p, QRectF(badge_box.right() - bs * 0.75, badge_box.top() - bs * 0.25, bs, bs));
+    }
     // text
     p->setPen(pal.color(QPalette::Text));
     if (selected) {
@@ -353,6 +401,30 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         QRect lr(text_rect.x(), text_rect.y() + i * fm.height(), text_rect.width(), fm.height());
         p->drawText(lr, Qt::AlignHCenter | Qt::AlignVCenter, ls[i]);
     }
+    p->restore();
+}
+
+void GridDelegate::star_badge(QPainter *p, const QRectF &rect)
+{
+    // a small gold star (starred items)
+    QPointF c = rect.center();
+    double r = rect.width() / 2;
+    QPainterPath star;
+    for (int i = 0; i < 10; ++i) {
+        double radius = i % 2 == 0 ? r : r * 0.45;
+        double a = M_PI / 2 + i * M_PI / 5;
+        QPointF pt(c.x() + radius * std::cos(a), c.y() - radius * std::sin(a));
+        if (i == 0)
+            star.moveTo(pt);
+        else
+            star.lineTo(pt);
+    }
+    star.closeSubpath();
+    p->save();
+    p->setOpacity(1.0);
+    p->setPen(QColor(120, 80, 0, 220));
+    p->setBrush(QColor("#f6c02d"));
+    p->drawPath(star);
     p->restore();
 }
 
@@ -473,6 +545,8 @@ void PathBar::set_path(const QString &p)
     QString rest, base;
     if (p == OVERVIEW) {
         parts << Part{OVERVIEW_TITLE, OVERVIEW, "computer"};
+    } else if (places::is_virtual(p)) {
+        parts << Part{places::title(p), p, places::icon_name(p)};
     } else if (p == HOME() || p.startsWith(HOME() + "/")) {
         parts << Part{"Home", HOME(), "user-home"};
         rest = strip(p.mid(HOME().size()), "/");
@@ -632,6 +706,8 @@ void Sidebar::refresh()
     header("PLACES");
     add(OVERVIEW_TITLE, OVERVIEW, theme_icon({"computer", "folder"}), "overview");
     add("Home", HOME(), theme_icon({"user-home", "folder"}));
+    add("Recent", places::RECENT, theme_icon({"document-open-recent", "folder-recent", "folder"}), "recent");
+    add("Starred", places::STARRED, theme_icon({"starred", "starred-symbolic", "folder"}), "starred");
     const QList<QStringList> places = {{"DESKTOP", "Desktop", "user-desktop"},
                                        {"DOCUMENTS", "Documents", "folder-documents"},
                                        {"DOWNLOAD", "Downloads", "folder-download"},
@@ -865,7 +941,7 @@ void InfoPanel::set_preview()
     QPixmap pm;
     if (is_dir)
         pm = thumbs->folder_pixmap(path, fi.lastModified().toSecsSinceEpoch(), 512, folder_previews);
-    else if (is_image(path) || is_video(path))
+    else if (thumbs::can_thumbnail(path))
         pm = thumbs->get(path, fi.lastModified().toSecsSinceEpoch(), false, 512, fi.size());
     if (!pm.isNull())
         preview->setPixmap(thumbs->scaled(pm, size));

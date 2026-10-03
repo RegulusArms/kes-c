@@ -90,7 +90,8 @@ private:
 class SearchThread : public QThread {
     Q_OBJECT
 public:
-    SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent = nullptr);
+    SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent = nullptr,
+                 bool contents = false);
     std::atomic<bool> stop{false};
 
 Q_SIGNALS:
@@ -101,11 +102,15 @@ protected:
 
 private:
     bool match(const QString &name) const;
+    void run_contents();
     QString root;
-    QString query;
+    QString query, raw_query;
     bool hidden;
     bool wildcard;
+    bool contents;
 };
+
+bool can_search_contents();   // the desktop's search index (localsearch) is installed
 
 // ---------------------------------------------------------------- grid delegate
 
@@ -122,6 +127,7 @@ public:
 private:
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
     static void play_badge(QPainter *p, const QRectF &rect);
+    static void star_badge(QPainter *p, const QRectF &rect);
     QWidget *pane;
     ThumbnailManager *thumbs;
     std::function<bool(const QString &)> is_cut;

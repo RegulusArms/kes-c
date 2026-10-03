@@ -117,6 +117,121 @@ QImage video_frame(const QString &path, int size)
     return QImage();
 }
 
+// ---------------------------------------------------------------- system thumbnailers (PDF, fonts, audio, …)
+
+const QHash<QString, QStringList> &thumbnailers()
+{
+    // the same .thumbnailer files GNOME Files uses, in order of preference: ~/.local/share/thumbnailers first
+    static const QHash<QString, QStringList> table = [] {
+        QHash<QString, QStringList> t;
+        QByteArray home = qgetenv("XDG_DATA_HOME"), dirs = qgetenv("XDG_DATA_DIRS");
+        QStringList data_dirs{home.isEmpty() ? HOME() + "/.local/share" : QString::fromLocal8Bit(home)};
+        data_dirs += (dirs.isEmpty() ? QString("/usr/local/share:/usr/share") : QString::fromLocal8Bit(dirs)).split(':');
+        for (const QString &d : data_dirs) {
+            QStringList names;
+            try {
+                names = listdir(join(d, "thumbnailers"));
+            } catch (const OSError &) {
+                continue;
+            }
+            names.sort();
+            for (const QString &name : names) {
+                if (!name.endsWith(".thumbnailer"))
+                    continue;
+                QHash<QString, QString> entry;
+                bool ok = false;
+                for (const QByteArray &line : read_file(join(join(d, "thumbnailers"), name), &ok).split('\n')) {
+                    int eq = line.indexOf('=');
+                    if (eq > 0)
+                        entry.insert(QString::fromUtf8(line.left(eq)).trimmed(), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+                }
+                QString exe = entry.value("Exec"), try_exec = entry.value("TryExec");
+                if (exe.isEmpty() || (!try_exec.isEmpty() && !which(try_exec)))
+                    continue;
+                for (const QString &mt : entry.value("MimeType").split(';', Qt::SkipEmptyParts))
+                    if (!t[mt].contains(exe))
+                        t[mt] << exe;
+            }
+        }
+        return t;
+    }();
+    return table;
+}
+
+QStringList thumbnailers_for(const QString &path)
+{
+    const QHash<QString, QStringList> &table = thumbnailers();
+    if (table.isEmpty())
+        return {};
+    QMimeType m = mime_for(path, 0);
+    for (const QString &name : QStringList{m.name()} + m.aliases() + m.allAncestors())
+        if (table.contains(name))
+            return table.value(name);
+    return {};
+}
+
+bool can_thumbnail(const QString &path)
+{
+    return is_image(path) || is_video(path) || !thumbnailers_for(path).isEmpty();
+}
+
+static QMutex tries_lock;
+static QHash<QString, QPair<int, int>> tries;   // Exec line -> (successes, failures): one that only fails is skipped
+
+static QImage run_thumbnailer(const QString &exe, const QString &path, int size)
+{
+    // The output goes to /tmp/gnome-desktop-thumbnailer-*.png like GNOME's own: Ubuntu's AppArmor profiles only let
+    // thumbnailers such as evince/papers write there.
+    QByteArray tmpl = "/tmp/gnome-desktop-thumbnailer-XXXXXX.png";
+    int fd = ::mkstemps(tmpl.data(), 4);
+    if (fd < 0)
+        return QImage();
+    ::close(fd);
+    QString out = dec(tmpl.constData());
+    bool ok = false;
+    QStringList args = shlex_split(exe, &ok);
+    QImage img;
+    if (ok && !args.isEmpty()) {
+        QStringList argv;
+        for (QString a : args) {
+            a.replace("%%", QString(QChar(0xFFFF)));
+            a.replace("%i", abspath(path)).replace("%u", file_uri(path)).replace("%o", out).replace("%s", QString::number(size));
+            argv << a.replace(QChar(0xFFFF), "%");
+        }
+        proc::Options o;
+        o.out = proc::DEVNULL;
+        o.err = proc::DEVNULL;
+        auto r = proc::run(argv, 30000, o);
+        if (!r.failed && !r.timed_out)
+            img = QImage(out);
+    }
+    ::unlink(tmpl.constData());
+    return img;
+}
+
+QImage system_thumb(const QString &path, int size)
+{
+    for (const QString &exe : thumbnailers_for(path)) {
+        {
+            QMutexLocker g(&tries_lock);
+            QPair<int, int> t = tries.value(exe);
+            if (!t.first && t.second >= 3)
+                continue;
+        }
+        QImage img = run_thumbnailer(exe, path, size);
+        {
+            QMutexLocker g(&tries_lock);
+            (img.isNull() ? tries[exe].second : tries[exe].first) += 1;
+        }
+        if (!img.isNull()) {
+            if (img.width() > size || img.height() > size)
+                img = img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            return img;
+        }
+    }
+    return QImage();
+}
+
 QImage file_thumb(const QString &path, qint64 mtime, int size)
 {
     QString flavor = FLAVORS.value(bucket_for(size));
@@ -134,10 +249,13 @@ QImage file_thumb(const QString &path, qint64 mtime, int size)
         img = load_scaled(path, size);
     else if (is_video(path))
         img = video_frame(path, size);
+    bool own = !img.isNull();
+    if (img.isNull())   // PDFs, fonts, … (and images Qt can't decode): the system thumbnailers
+        img = system_thumb(path, size);
     if (img.isNull())
         return QImage();
     // don't bother caching images that are already thumbnail sized
-    if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path))) {
+    if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
             makedirs(cache_dir, true, 0700);
             img.setText("Thumb::URI", uri);
@@ -438,6 +556,7 @@ ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     image_exts();                    // initialise on the main thread
+    thumbs::thumbnailers();
     progress_timer.setSingleShot(true);
     progress_timer.setInterval(100);
     connect(&progress_timer, &QTimer::timeout, this, &ThumbnailManager::emit_progress);
