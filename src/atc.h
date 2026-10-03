@@ -20,6 +20,11 @@ extern const char *NAME;   // the tower's bus name
 
 int run_tower(int argc, char **argv);   // `kes --atc`: run the tower until the last flight has left
 
+// Preferences → "Open folders from other apps as tabs": give folders to the Kestrel whose window was used last (it
+// opens them as tabs, selecting `select[i]` in folders[i] when given, and comes to the front). Returns that Kestrel's
+// bus name, or empty if there's none (no tower, or no Kestrel with a window): then open our own window.
+QString hand_off(const QStringList &folders, const QStringList &select = QStringList());
+
 class Radio : public QObject {
     Q_OBJECT
 public:

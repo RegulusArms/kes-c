@@ -27,6 +27,7 @@ static const char *XML = R"(
     <method name="Kept"><arg type="s" name="Messages" direction="out"/></method>
     <method name="UndoPush"><arg type="s" name="Op" direction="in"/></method>
     <method name="UndoPop"><arg type="s" name="Op" direction="out"/></method>
+    <method name="Handoff"><arg type="s" name="Request" direction="in"/><arg type="s" name="Flight" direction="out"/></method>
     <signal name="Broadcast"><arg type="s" name="Flight"/><arg type="s" name="Message"/></signal>
   </interface>
 </node>
@@ -79,6 +80,29 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
             undo_changed(conn);
         }
         g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", out.constData()));
+        return;
+    }
+    if (m == "Handoff") {   // a new Kestrel's folders, for the flight whose window was used last
+        const gchar *arg = nullptr;
+        g_variant_get(params, "(&s)", &arg);
+        QString best;
+        double best_active = -1;
+        for (auto f = tower->kept.begin(); f != tower->kept.end(); ++f) {
+            QJsonObject w = f.value().value("windows");
+            if (tower->flights.contains(f.key()) && w.value("count").toInt() > 0 && w.value("active").toDouble() > best_active) {
+                best = f.key();
+                best_active = w.value("active").toDouble();
+            }
+        }
+        if (!best.isEmpty()) {
+            QJsonObject msg = QJsonDocument::fromJson(arg).object();
+            msg["type"] = "open";
+            msg["flight"] = best;
+            g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast",
+                                          g_variant_new("(ss)", g_dbus_connection_get_unique_name(conn), compact(msg).constData()),
+                                          nullptr);
+        }
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", best.toUtf8().constData()));
         return;
     }
     if (m == "Flights") {
@@ -261,6 +285,27 @@ void Radio::start()
     rs.started = true;
     g_bus_watch_name(G_BUS_TYPE_SESSION, NAME, G_BUS_NAME_WATCHER_FLAGS_NONE, tower_appeared, tower_vanished, nullptr,
                      nullptr);
+}
+
+QString hand_off(const QStringList &folders, const QStringList &select)
+{
+    GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+    if (!conn)
+        return QString();
+    QString token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN", qEnvironmentVariable("DESKTOP_STARTUP_ID"));
+    QJsonObject req{{"folders", QJsonArray::fromStringList(folders)}, {"select", QJsonArray::fromStringList(select)},
+                    {"token", token}};
+    // no tower, no answer within a moment: open our own window
+    GVariant *r = g_dbus_connection_call_sync(conn, NAME, PATH, IFACE, "Handoff", g_variant_new("(s)", compact(req).constData()),
+                                              G_VARIANT_TYPE("(s)"), G_DBUS_CALL_FLAGS_NO_AUTO_START, 2000, nullptr, nullptr);
+    g_object_unref(conn);
+    if (!r)
+        return QString();
+    const gchar *s;
+    g_variant_get(r, "(&s)", &s);
+    QString out = QString::fromUtf8(s);
+    g_variant_unref(r);
+    return out;
 }
 
 bool Radio::tower_up() const { return rs.conn && !rs.tower.isEmpty(); }

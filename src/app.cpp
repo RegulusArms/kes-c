@@ -23,6 +23,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -51,6 +52,7 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QWindow>
 
 #include <csignal>
 #include <cstdio>
@@ -62,6 +64,9 @@ static const int GRID_MIN = 48, GRID_MAX = 320;
 static const int LIST_MIN = 16, LIST_MAX = 128;
 static const QStringList SORT_COLUMNS = {"Name", "Size", "Type", "Modified"};
 static QList<MainWindow *> WINDOWS;
+static QPointer<MainWindow> last_active;   // the window used most recently
+static qint64 last_active_ms = 0;
+static void report_windows();
 static ThumbnailManager *g_thumbs = nullptr;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
@@ -2710,6 +2715,7 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         if (v)
             v->close();
     WINDOWS.removeAll(this);
+    report_windows();
     QMainWindow::closeEvent(ev);
 }
 
@@ -2740,6 +2746,68 @@ void apply_thumb_settings(ThumbnailManager *t)
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
 }
 
+// ---- Preferences → "Open folders from other apps as tabs in an open Kestrel window"
+
+static void report_windows()
+{
+    // for the tower's Handoff: whether we have windows, and when one was last used
+    atc::announce("windows", {{"count", int(WINDOWS.size())}, {"active", double(last_active_ms)}}, true);
+}
+
+static bool open_in_tabs()
+{
+    // never from a conda environment the user activated: the Kestrel taking over may run in a different one
+    return settings().value("open_in_tabs", false).toBool() && !explicit_conda_env();
+}
+
+static MainWindow *recent_window()
+{
+    if (last_active && WINDOWS.contains(last_active.data()))
+        return last_active;
+    return WINDOWS.isEmpty() ? nullptr : WINDOWS.last();
+}
+
+static void use_token(const QString &token)
+{
+    // the launcher's activation token: without it GNOME (Wayland) won't let the window come to the front
+    if (!token.isEmpty()) {
+        qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
+        qputenv("DESKTOP_STARTUP_ID", token.toUtf8());
+    }
+}
+
+static void open_as_tabs(MainWindow *w, const QStringList &folders, const QStringList &select)
+{
+    // folders as new tabs (selecting select[i] in folders[i] when given); the first becomes current
+    int first = w->tabs->count();
+    for (int i = 0; i < folders.size(); ++i) {
+        if (select.value(i).isEmpty()) {
+            w->open_location(folders[i], true);
+        } else if (Pane *p = w->new_tab(folders[i], false)) {
+            p->select_later(select[i]);
+        }
+    }
+    if (w->tabs->count() > first) {
+        w->tabs->setCurrentIndex(first);
+        w->pane()->view()->setFocus();
+    }
+    w->setWindowState(w->windowState() & ~Qt::WindowMinimized);
+    w->raise();
+    w->activateWindow();
+}
+
+static bool tabs_instead(const QStringList &folders, const QStringList &select)
+{
+    // true if the folders went to an open window as tabs: one of ours, or another Kestrel's (through the tower)
+    if (!open_in_tabs())
+        return false;
+    if (MainWindow *w = recent_window()) {
+        open_as_tabs(w, folders, select);
+        return true;
+    }
+    return !atc::hand_off(folders, select).isEmpty();
+}
+
 void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id)
 {
     // a request to the org.freedesktop.FileManager1 service (see fm1.h), e.g. a browser's "Show in folder"
@@ -2763,6 +2831,8 @@ void handle_fm1(const QString &method, const QStringList &uris, const QString &s
     }
     MainWindow *w;
     if (method == "ShowFolders") {
+        if (tabs_instead(paths, {}))
+            return;
         w = open_window(paths);
     } else {
         // ShowItems: each item's folder in a tab, with the item selected, scrolled to and focused (folders too:
@@ -2777,6 +2847,8 @@ void handle_fm1(const QString &method, const QStringList &uris, const QString &s
                 firsts << p;
             }
         }
+        if (tabs_instead(folders, firsts))
+            return;
         w = open_window({folders.first()});
         for (int i = 0; i < folders.size(); ++i) {
             Pane *pane = i == 0 ? w->pane() : w->new_tab(folders[i], false);
@@ -2807,7 +2879,25 @@ void on_atc(const QJsonObject &m)
     }
     if (own)
         return;   // the rest was already applied where it was changed
-    if (type == "settings") {
+    if (type == "open" && m.value("flight").toString() == atc::radio()->flight()) {
+        // folders another Kestrel handed over (open_in_tabs)
+        QStringList folders, select;
+        for (const QJsonValue &v : m.value("folders").toArray())
+            folders << v.toString();
+        for (const QJsonValue &v : m.value("select").toArray())
+            select << v.toString();
+        if (folders.isEmpty())
+            return;
+        use_token(m.value("token").toString());
+        if (MainWindow *w = recent_window()) {
+            open_as_tabs(w, folders, select);
+        } else {   // our last window closed in the meantime
+            MainWindow *nw = open_window(folders.mid(0, 1));
+            open_as_tabs(nw, folders.mid(1), select.mid(1));
+            if (nw->pane() && !select.value(0).isEmpty())
+                nw->pane()->select_later(select[0]);
+        }
+    } else if (type == "settings") {
         settings().sync();
         apply_preferences();
     } else if (type == "starred") {
@@ -2848,6 +2938,7 @@ MainWindow *open_window(const QStringList &paths)
     auto *w = new MainWindow(paths, g_thumbs);
     WINDOWS << w;
     w->show();
+    report_windows();
     return w;
 }
 
@@ -2893,6 +2984,16 @@ int kes_main(int argc, char **argv)
     bool service = false;
     for (int i = 1; i < argc; ++i)
         service = service || QByteArray(argv[i]) == "--dbus-service";
+    if (!service && !paths.isEmpty() && open_in_tabs() && !atc::hand_off(paths).isEmpty())
+        return 0;   // an open Kestrel window took the folders as tabs
+    QObject::connect(qApp, &QGuiApplication::focusWindowChanged, qApp, [](QWindow *win) {
+        for (MainWindow *w : WINDOWS)
+            if (win && w->windowHandle() == win) {
+                last_active = w;
+                last_active_ms = QDateTime::currentMSecsSinceEpoch();
+                report_windows();
+            }
+    });
     QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
     atc::radio()->start();
     fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);

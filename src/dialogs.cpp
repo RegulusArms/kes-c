@@ -1310,6 +1310,10 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     shared_undo = new QCheckBox("Share undo between all Kestrel windows");
     shared_undo->setChecked(s.value("shared_undo", false).toBool());
     shared_undo->setToolTip("On: Ctrl+Z in any Kestrel window undoes the newest action from any of them.\nOff: each Kestrel undoes only what was done in it.");
+    open_in_tabs = new QCheckBox("Open folders from other apps as tabs in an open Kestrel window");
+    open_in_tabs->setChecked(s.value("open_in_tabs", false).toBool());
+    open_in_tabs->setToolTip("On: a folder opened from another app (or with “Show in folder”) becomes a tab in the "
+                             "Kestrel window you used last.\nOff: it opens in a new window.");
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
     form->addRow("Folder colour:", color_btn);
@@ -1322,6 +1326,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow(play_gifs);
     form->addRow(play_webm);
     form->addRow(shared_undo);
+    form->addRow(open_in_tabs);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1406,6 +1411,7 @@ void PreferencesDialog::save()
     s.setValue("play_gifs", play_gifs->isChecked());
     s.setValue("play_webm", play_webm->isChecked());
     s.setValue("shared_undo", shared_undo->isChecked());
+    s.setValue("open_in_tabs", open_in_tabs->isChecked());
     accept();
 }
 
