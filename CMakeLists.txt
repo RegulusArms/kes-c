@@ -28,6 +28,7 @@ add_executable(kes
     src/undo.cpp
     src/admin.cpp
     src/animate.cpp
+    src/atc.cpp
     src/thumbs.cpp
     src/metadata.cpp
     src/viewer.cpp

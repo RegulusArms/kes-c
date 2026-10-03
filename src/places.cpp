@@ -1,5 +1,6 @@
 #include "places.h"
 
+#include "atc.h"
 #include "util.h"
 
 #include <QBuffer>
@@ -70,6 +71,7 @@ bool is_starred(const QString &path)
 
 void set_starred(const QStringList &paths, bool on)
 {
+    starred_list.reset();   // another Kestrel may have changed it since
     QStringList current = starred();
     if (on) {
         for (const QString &p : paths)
@@ -87,6 +89,14 @@ void set_starred(const QStringList &paths, bool on)
         write_text(starred_file(), QJsonDocument(QJsonArray::fromStringList(current)).toJson(QJsonDocument::Indented));
     } catch (const OSError &) {
     }
+    Q_EMIT signals_()->starred_changed();
+    atc::announce("starred");
+}
+
+void reload_starred()
+{
+    starred_list.reset();
+    starred();
     Q_EMIT signals_()->starred_changed();
 }
 

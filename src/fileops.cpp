@@ -1,6 +1,7 @@
 #include "fileops.h"
 
 #include "admin.h"
+#include "atc.h"
 #include "undo.h"
 #include "util.h"
 
@@ -9,10 +10,12 @@
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -36,7 +39,11 @@ static qint64 monotonic_ms()
 
 // ---------------------------------------------------------------- Task
 
-Task::Task(const QString &title, Fn fn, bool cancellable) : title(title), cancellable(cancellable), fn(std::move(fn)) {}
+Task::Task(const QString &title, Fn fn, bool cancellable) : title(title), cancellable(cancellable), fn(std::move(fn))
+{
+    static int next_id = 0;
+    id = QString::number(++next_id);
+}
 
 void Task::check()
 {
@@ -69,6 +76,124 @@ void Task::run()
     Q_EMIT result(res);
 }
 
+// ---------------------------------------------------------------- TaskBoard
+
+TaskBoard *TaskBoard::instance()
+{
+    static TaskBoard *b = new TaskBoard;
+    return b;
+}
+
+TaskBoard::TaskBoard()
+{
+    timer = new QTimer(this);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, this, &TaskBoard::publish);
+    connect(atc::radio(), &atc::Radio::heard, this, &TaskBoard::on_heard);
+    connect(atc::radio(), &atc::Radio::reset, this, [this]() {
+        remote.clear();
+        Q_EMIT changed();
+    });
+}
+
+void TaskBoard::add(Task *task)
+{
+    local << task;
+    connect(task, &Task::progress, this, [this]() {
+        schedule(500);
+        Q_EMIT changed();
+    });
+    connect(task, &QThread::finished, this, [this, task]() {
+        local.removeAll(task);
+        schedule(0);
+        Q_EMIT changed();
+    });
+    schedule(0);
+    Q_EMIT changed();
+}
+
+void TaskBoard::schedule(int ms)
+{
+    // report soon (a task started, ended or was cancelled) or within ms (progress); never more often than that
+    if (!timer->isActive() || timer->remainingTime() > ms)
+        timer->start(ms);
+}
+
+void TaskBoard::publish()
+{
+    QJsonArray list;
+    for (Task *t : local)
+        list << QJsonObject{{"id", t->id},           {"title", t->title},
+                            {"text", t->text},       {"fraction", t->fraction},
+                            {"cancellable", t->cancellable}, {"cancelling", bool(t->cancelled)},
+                            {"admin", t->admin}};
+    atc::announce("tasks", {{"tasks", list}}, true);
+}
+
+QList<TaskInfo> TaskBoard::others(const QList<Task *> &mine) const
+{
+    QList<TaskInfo> out;
+    QString me = atc::radio()->flight();
+    for (Task *t : local)
+        if (!mine.contains(t))
+            out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t};
+    for (const QList<TaskInfo> &l : remote)
+        out << l;
+    return out;
+}
+
+void TaskBoard::cancel(const TaskInfo &task)
+{
+    if (task.local) {
+        if (local.contains(task.local))
+            task.local->cancel();
+        schedule(0);
+    } else {
+        // the Kestrel running it does the cancelling (its admin session stays its own)
+        atc::announce("cancel", {{"flight", task.flight}, {"task", task.id}});
+        for (TaskInfo &t : remote[task.flight])
+            if (t.id == task.id)
+                t.cancelling = true;
+    }
+    Q_EMIT changed();
+}
+
+void TaskBoard::on_heard(const QJsonObject &m)
+{
+    if (m.value("own").toBool())
+        return;
+    QString type = m.value("type").toString(), from = m.value("from").toString();
+    if (type == "tasks") {
+        QList<TaskInfo> l;
+        for (const QJsonValue &v : m.value("tasks").toArray()) {
+            QJsonObject o = v.toObject();
+            l << TaskInfo{from,
+                          o.value("id").toString(),
+                          o.value("title").toString(),
+                          o.value("text").toString(),
+                          o.value("fraction").toDouble(-1.0),
+                          o.value("cancellable").toBool(),
+                          o.value("cancelling").toBool(),
+                          o.value("admin").toBool(),
+                          nullptr};
+        }
+        if (l.isEmpty())
+            remote.remove(from);
+        else
+            remote[from] = l;
+        Q_EMIT changed();
+    } else if (type == "left") {
+        if (remote.remove(from))
+            Q_EMIT changed();
+    } else if (type == "cancel" && m.value("flight").toString() == atc::radio()->flight()) {
+        for (Task *t : local)
+            if (t->id == m.value("task").toString() && t->cancellable)
+                t->cancel();
+        schedule(0);
+        Q_EMIT changed();
+    }
+}
+
 // ---------------------------------------------------------------- TaskPanel
 
 TaskPanel::TaskPanel(QWidget *parent) : QWidget(parent)
@@ -89,6 +214,7 @@ TaskPanel::TaskPanel(QWidget *parent) : QWidget(parent)
     lay->addWidget(bar);
     lay->addWidget(stop);
     hide();
+    connect(TaskBoard::instance(), &TaskBoard::changed, this, &TaskPanel::refresh);
 }
 
 void TaskPanel::add(Task *task)
@@ -96,6 +222,7 @@ void TaskPanel::add(Task *task)
     tasks << task;
     connect(task, &Task::progress, this, [this, task](double f, const QString &t) { on_progress(task, f, t); });
     connect(task, &QThread::finished, this, [this, task]() { on_finished(task); });
+    TaskBoard::instance()->add(task);
     refresh();
 }
 
@@ -118,32 +245,57 @@ void TaskPanel::cancel_first()
     if (!tasks.isEmpty()) {
         tasks.first()->cancel();
         refresh();
+        return;
     }
+    QList<TaskInfo> others = TaskBoard::instance()->others(tasks);
+    if (!others.isEmpty())
+        TaskBoard::instance()->cancel(others.first());
 }
 
 void TaskPanel::refresh()
 {
-    if (tasks.isEmpty()) {
+    QList<TaskInfo> others = TaskBoard::instance()->others(tasks);
+    if (tasks.isEmpty() && others.isEmpty()) {
         hide();
         return;
     }
-    Task *t = tasks.first();
-    QString text = t->title + (t->cancelled ? QString(" — cancelling…") : !t->text.isEmpty() ? ": " + t->text : QString());
-    QString more = tasks.size() > 1 ? QString("  (+%1 more)").arg(tasks.size() - 1) : QString();
-    label->setText(label->fontMetrics().elidedText(text, Qt::ElideMiddle, 380) + more);
+    auto line = [](const TaskInfo &t) { return (t.admin ? "🛡 " : "") + t.title + (!t.text.isEmpty() ? ": " + t.text : QString()); };
+    TaskInfo first;
+    QString where;
+    if (!tasks.isEmpty()) {
+        Task *t = tasks.first();
+        first = TaskInfo{QString(), t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), false, t};
+    } else {
+        first = others.takeFirst();
+        where = " (in another window)";
+    }
+    QString shown = (first.admin && !first.local ? "🛡 " : "") + first.title;
+    QString text = shown + where +
+                   (first.cancelling ? QString(" — cancelling…") : !first.text.isEmpty() ? ": " + first.text : QString());
+    QStringList more;
+    if (tasks.size() > 1)
+        more << QString("+%1 more").arg(tasks.size() - 1);
+    if (!others.isEmpty())
+        more << QString("+%1 in other windows").arg(others.size());
+    label->setText(label->fontMetrics().elidedText(text, Qt::ElideMiddle, 380) +
+                   (more.isEmpty() ? QString() : "  (" + more.join(", ") + ")"));
     QStringList tips;
     for (Task *x : tasks)
         tips << x->title + (!x->text.isEmpty() ? ": " + x->text : QString());
+    if (!where.isEmpty())
+        tips << line(first) + " — in another window";
+    for (const TaskInfo &x : others)
+        tips << line(x) + " — in another window";
     setToolTip(tips.join('\n'));
-    if (t->fraction < 0) {
+    if (first.fraction < 0) {
         bar->setRange(0, 0);
     } else {
         bar->setRange(0, 1000);
-        bar->setValue(int(t->fraction * 1000));
+        bar->setValue(int(first.fraction * 1000));
     }
-    stop->setVisible(t->cancellable);
-    stop->setEnabled(!t->cancelled);
-    stop->setToolTip("Cancel " + t->title.toLower());
+    stop->setVisible(first.cancellable);
+    stop->setEnabled(!first.cancelling);
+    stop->setToolTip("Cancel " + first.title.toLower() + where);
     show();
 }
 

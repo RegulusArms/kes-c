@@ -1,6 +1,7 @@
 // Main window and browser panes.
 #pragma once
 
+#include <QJsonObject>
 #include <QMainWindow>
 #include <QPointer>
 #include <QSet>
@@ -248,6 +249,7 @@ private:
 
 QString location_arg(const QString &arg);
 void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id);
+void on_atc(const QJsonObject &msg);   // a change reported through the tower (atc.h)
 MainWindow *open_window(const QStringList &paths);
 void apply_thumb_settings(ThumbnailManager *t);
 int kes_main(int argc, char **argv);

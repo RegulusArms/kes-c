@@ -4,6 +4,7 @@
 #include "animate.h"
 #include "archive.h"
 #include "archive_ui.h"
+#include "atc.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "fm1.h"
@@ -27,6 +28,8 @@
 #include <QHeaderView>
 #include <QImageReader>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -2022,7 +2025,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                      [this, single]() { sharing::share_dialog(this, single); });
     sharing::add_scripts_menu(m, paths, here, [this](const QString &d) { navigate(d); });
     if (is_dir) {
-        m->addAction("Regenerate Preview", this, [this, single]() { thumbs->invalidate(single); });
+        m->addAction("Regenerate Preview", this, [this, single]() {
+            thumbs->invalidate(single);
+            atc::announce("folders", {{"paths", QJsonArray{single}}});
+        });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
                      [this, single]() { build_previews(single); });
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
@@ -2564,10 +2570,17 @@ void MainWindow::preferences()
     prefs->show();
 }
 
-void MainWindow::preferences_saved()
+static void repaint_all()
 {
-    apply_thumb_settings(thumbs);
-    thumbs->clear_memory();
+    for (MainWindow *w : WINDOWS)
+        for (Pane *p : w->panes())
+            p->view()->viewport()->update();
+}
+
+static void apply_preferences()
+{
+    apply_thumb_settings(g_thumbs);
+    g_thumbs->clear_memory();
     for (MainWindow *w : WINDOWS)
         for (Pane *p : w->panes()) {
             p->animator->clear();
@@ -2576,12 +2589,18 @@ void MainWindow::preferences_saved()
         }
 }
 
+void MainWindow::preferences_saved()
+{
+    apply_preferences();
+    atc::announce("settings");
+}
+
 void MainWindow::clear_cache()
 {
     rmtree(join(APP_CACHE(), "folders"));
     thumbs->clear_memory();
-    for (Pane *p : panes())
-        p->view()->viewport()->update();
+    repaint_all();
+    atc::announce("thumbs_cleared");
     statusBar()->showMessage("Folder preview cache cleared", 3000);
 }
 
@@ -2611,9 +2630,8 @@ void MainWindow::purge_thumbnails()
         [this](const QVariant &res) {
             QVariantList r = res.toList();
             thumbs->clear_memory();
-            for (MainWindow *w : WINDOWS)
-                for (Pane *p : w->panes())
-                    p->view()->viewport()->update();
+            repaint_all();
+            atc::announce("thumbs_cleared");
             statusBar()->showMessage(QString("Deleted %1 thumbnails (%2)")
                                          .arg(group_digits(r.value(0).toLongLong()), human_size(r.value(1).toLongLong())),
                                      6000);
@@ -2773,6 +2791,39 @@ void handle_fm1(const QString &method, const QStringList &uris, const QString &s
     }
 }
 
+void on_atc(const QJsonObject &m)
+{
+    // a change reported by another Kestrel through the tower (see atc.h), or by this one ("own")
+    QString type = m.value("type").toString();
+    bool own = m.value("own").toBool();
+    if (type == "bookmarks") {   // also refreshes this process's other windows
+        for (MainWindow *w : WINDOWS) {
+            w->sidebar->refresh();
+            for (Pane *p : w->panes())
+                if (p->is_overview())
+                    p->refresh();
+        }
+    }
+    if (own)
+        return;   // the rest was already applied where it was changed
+    if (type == "settings") {
+        settings().sync();
+        apply_preferences();
+    } else if (type == "starred") {
+        places::reload_starred();
+    } else if (type == "folders") {
+        g_thumbs->reload_styles();
+        for (const QJsonValue &v : m.value("paths").toArray())
+            g_thumbs->invalidate(v.toString(), false);   // the sender already removed the cached mosaic
+    } else if (type == "thumbs_cleared") {
+        g_thumbs->clear_memory();
+        for (MainWindow *w : WINDOWS)
+            for (Pane *p : w->panes())
+                p->animator->clear();
+        repaint_all();
+    }
+}
+
 QString location_arg(const QString &arg)
 {
     // a command-line argument (as passed by xdg-open, the file chooser or GNOME) as a location for open_location:
@@ -2811,6 +2862,8 @@ int kes_main(int argc, char **argv)
             std::printf("%s %s\n", APP_NAME, VERSION);
             return 0;
         }
+        if (QByteArray(argv[i]) == "--atc")
+            return atc::run_tower(argc, argv);   // the tower: no window (see atc.h)
     }
     std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel while we write to it
     QApplication::setApplicationName(APP_ID);
@@ -2839,6 +2892,8 @@ int kes_main(int argc, char **argv)
     bool service = false;
     for (int i = 1; i < argc; ++i)
         service = service || QByteArray(argv[i]) == "--dbus-service";
+    QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
+    atc::radio()->start();
     fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);
     if (service) {
         // started by D-Bus for a "show in folder" request: no window of our own; quit if none is asked for

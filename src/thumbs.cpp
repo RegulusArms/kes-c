@@ -1,11 +1,13 @@
 #include "thumbs.h"
 
 #include "proc.h"
+#include "atc.h"
 #include "util.h"
 
 #include <QDateTime>
 #include <QFile>
 #include <QImageReader>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPainter>
@@ -568,6 +570,8 @@ ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 void ThumbnailManager::load_covers()
 {
     bool ok = false;
+    covers.clear();
+    styles.clear();
     QByteArray data = read_file(thumbs::covers_file(), &ok);
     QJsonObject obj = QJsonDocument::fromJson(data).object();
     for (auto it = obj.begin(); it != obj.end(); ++it)
@@ -593,8 +597,11 @@ bool ThumbnailManager::previews_for(const QString &folder) const
     return styles.value(folder).value("previews", true).toBool();
 }
 
+void ThumbnailManager::reload_styles() { load_covers(); }
+
 void ThumbnailManager::set_style(const QStringList &folders, const QString &key, const QVariant &value)
 {
+    load_covers();   // another Kestrel may have changed them since
     for (const QString &f : folders) {
         QVariantMap st = styles.value(f);
         if (value.isValid())
@@ -616,6 +623,7 @@ void ThumbnailManager::set_style(const QStringList &folders, const QString &key,
     }
     for (const QString &f : folders)
         invalidate(f);
+    atc::announce("folders", {{"paths", QJsonArray::fromStringList(folders)}});
 }
 
 void ThumbnailManager::set_folder_color(const QStringList &folders, const QString &color)
@@ -650,6 +658,7 @@ QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int s
 
 void ThumbnailManager::set_cover(const QString &folder, const QString &image)
 {
+    load_covers();
     if (!image.isEmpty())
         covers[folder] = image;
     else
@@ -663,6 +672,7 @@ void ThumbnailManager::set_cover(const QString &folder, const QString &image)
     } catch (const OSError &) {
     }
     invalidate(folder);
+    atc::announce("folders", {{"paths", QJsonArray{folder}}});
 }
 
 QString ThumbnailManager::key(const QString &path, qint64 mtime, bool is_dir, int size) const
@@ -762,7 +772,7 @@ void ThumbnailManager::emit_progress()
     Q_EMIT progress(batch_done, batch_total);
 }
 
-void ThumbnailManager::invalidate(const QString &path)
+void ThumbnailManager::invalidate(const QString &path, bool disk)
 {
     for (auto it = lru.begin(); it != lru.end();) {
         if (key_path(it->first) == path) {
@@ -778,7 +788,8 @@ void ThumbnailManager::invalidate(const QString &path)
     for (auto it = failed.begin(); it != failed.end();)
         it = key_path(*it) == path ? failed.erase(it) : std::next(it);
     for (int size : {128, 256, 512})
-        ::unlink(enc(join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size))).constData());
+        if (disk)
+            ::unlink(enc(join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size))).constData());
     Q_EMIT updated(path);
 }
 

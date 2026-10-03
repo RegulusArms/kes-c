@@ -68,8 +68,9 @@ public:
     QIcon get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize = 0);
     QPixmap scaled(const QPixmap &pm, int size);   // cached smooth downscale to fit size x size
     void cancel_pending();
-    void invalidate(const QString &path);
+    void invalidate(const QString &path, bool disk = true);   // disk=false keeps the cached mosaic on disk
     void clear_memory();
+    void reload_styles();   // re-read covers and folder styles (another Kestrel changed them)
     void set_cover(const QString &folder, const QString &image);   // empty image resets it
 
     // per-folder style: colour and previews on/off

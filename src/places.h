@@ -29,6 +29,7 @@ Signals *signals_();
 QStringList starred();
 bool is_starred(const QString &path);
 void set_starred(const QStringList &paths, bool on);
+void reload_starred();   // re-read the list (another Kestrel changed it) and emit starred_changed
 
 // (path, original path) for a place, as util::trashed_items() gives for the trash (here both the same)
 QList<QPair<QString, QString>> items(const QString &place);

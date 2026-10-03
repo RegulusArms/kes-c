@@ -1,0 +1,46 @@
+// Air traffic control: keeps every running Kestrel ("flight") up to date with what the others change.
+//
+// Kestrel isn't single-instance: a folder opened from another app may start its own Kestrel process, and a crash only
+// takes down that one. The tower (`kes --atc`, no window) is a small service on the D-Bus session bus. Each Kestrel's
+// radio checks in with it, reports changes to shared state (Preferences, stars, folder colours and covers, bookmarks,
+// cleared caches) and hears what the other flights report. The first Kestrel that finds no tower starts one, and the
+// tower lands itself shortly after the last flight leaves. If the tower goes down, the flights start a new one.
+//
+// The Python and C++ versions speak the same protocol (JSON messages), so they share one tower. Admin sessions are
+// never shared: each window keeps its own.
+#pragma once
+
+#include <QJsonObject>
+#include <QObject>
+#include <QString>
+
+namespace atc {
+
+extern const char *NAME;   // the tower's bus name
+
+int run_tower(int argc, char **argv);   // `kes --atc`: run the tower until the last flight has left
+
+class Radio : public QObject {
+    Q_OBJECT
+public:
+    // Check in with the tower, starting it if there is none (call once the event loop is about to run).
+    void start();
+    // Tell this process's windows and every other flight. msg has a "type"; heard() repeats it here with "own": true.
+    // keep: this is our current state of that type (e.g. our running tasks), not an event. The tower remembers the
+    // latest one and hands it to flights that check in later; when we leave, it tells the others ("left").
+    void announce(const QString &type, const QJsonObject &extra = QJsonObject(), bool keep = false);
+    QString flight() const;   // our name on the bus ("from" in the others' messages), empty if not connected
+
+Q_SIGNALS:
+    // a change from another flight ("from": its name), or our own ("own": true); {"type": "left"} when a flight has gone
+    void heard(const QJsonObject &msg);
+    void reset();   // checked in with a (new) tower: forget the others' kept state, it's sent again next
+};
+
+Radio *radio();
+inline void announce(const QString &type, const QJsonObject &extra = QJsonObject(), bool keep = false)
+{
+    radio()->announce(type, extra, keep);
+}
+
+}  // namespace atc

@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include "atc.h"
+
 #include "proc.h"
 #include "uwp.h"
 
@@ -1349,6 +1351,7 @@ void write_bookmarks(const QList<QPair<QString, QString>> &items)
         lines << uri + (label == def ? QString() : " " + label);
     }
     write_text(GTK_BOOKMARKS(), (lines.join('\n') + "\n").toUtf8());
+    atc::announce("bookmarks");
 }
 
 QList<QUrl> url_list(const QStringList &paths)
