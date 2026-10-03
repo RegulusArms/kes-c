@@ -25,11 +25,14 @@ static const char *XML = R"(
     <method name="Report"><arg type="s" name="Message" direction="in"/></method>
     <method name="Flights"><arg type="s" name="Flights" direction="out"/></method>
     <method name="Kept"><arg type="s" name="Messages" direction="out"/></method>
+    <method name="UndoPush"><arg type="s" name="Op" direction="in"/></method>
+    <method name="UndoPop"><arg type="s" name="Op" direction="out"/></method>
     <signal name="Broadcast"><arg type="s" name="Flight"/><arg type="s" name="Message"/></signal>
   </interface>
 </node>
 )";
-static const int LAND_MS = 10000;   // the tower lands this long after the last flight has left (or if none checks in)
+static const int LAND_MS = 10000;
+static const int UNDO_MAX = 50;   // the tower lands this long after the last flight has left (or if none checks in)
 
 static QByteArray compact(const QJsonObject &o) { return QJsonDocument(o).toJson(QJsonDocument::Compact); }
 
@@ -39,9 +42,22 @@ struct Tower {
     GDBusNodeInfo *node = nullptr;
     QHash<QString, QJsonObject> flights;   // unique bus name -> what it said when checking in
     QHash<QString, QHash<QString, QJsonObject>> kept;   // flight -> type -> its latest "keep" message
+    QList<QJsonObject> undo;   // the shared undo history (Preferences → Share undo…), newest last
     QTimer land;
 };
 static Tower *tower = nullptr;
+
+static void undo_changed(GDBusConnection *conn)
+{
+    // tell every flight what Ctrl+Z would undo now; kept, so flights checking in later know it too
+    QString me = QString::fromUtf8(g_dbus_connection_get_unique_name(conn));
+    QJsonObject msg{{"type", "undo_changed"},
+                    {"label", tower->undo.isEmpty() ? QString() : tower->undo.last().value("label").toString()},
+                    {"keep", true}};
+    tower->kept[me]["undo_changed"] = msg;
+    g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast",
+                                  g_variant_new("(ss)", me.toUtf8().constData(), compact(msg).constData()), nullptr);
+}
 
 static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *, const gchar *, const gchar *method,
                        GVariant *params, GDBusMethodInvocation *invocation, gpointer)
@@ -53,6 +69,15 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
             for (const QJsonObject &msg : f.value())
                 list << QJsonObject{{"flight", f.key()}, {"message", msg}};
         QByteArray out = QJsonDocument(list).toJson(QJsonDocument::Compact);
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", out.constData()));
+        return;
+    }
+    if (m == "UndoPop") {   // each entry is handed out once, so two windows can't undo the same thing
+        QByteArray out;
+        if (!tower->undo.isEmpty()) {
+            out = compact(tower->undo.takeLast());
+            undo_changed(conn);
+        }
         g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", out.constData()));
         return;
     }
@@ -71,6 +96,14 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
     g_variant_get(params, "(&s)", &arg);
     if (m == "CheckIn") {
         tower->flights[who] = QJsonDocument::fromJson(arg).object();
+    } else if (m == "UndoPush") {
+        QJsonObject op = QJsonDocument::fromJson(arg).object();
+        if (!op.isEmpty()) {
+            tower->undo << op;
+            while (tower->undo.size() > UNDO_MAX)
+                tower->undo.removeFirst();
+            undo_changed(conn);
+        }
     } else {   // Report: pass it on to every flight (the sender ignores its own)
         if (!tower->flights.contains(who))
             tower->flights[who] = QJsonObject();
@@ -228,6 +261,28 @@ void Radio::start()
     rs.started = true;
     g_bus_watch_name(G_BUS_TYPE_SESSION, NAME, G_BUS_NAME_WATCHER_FLAGS_NONE, tower_appeared, tower_vanished, nullptr,
                      nullptr);
+}
+
+bool Radio::tower_up() const { return rs.conn && !rs.tower.isEmpty(); }
+
+QString Radio::request(const QString &method, const QString &arg)
+{
+    if (!tower_up())
+        return QString();
+    QByteArray a = arg.toUtf8();
+    GVariant *r = g_dbus_connection_call_sync(rs.conn, NAME, PATH, IFACE, method.toUtf8().constData(),
+                                              arg.isNull() ? nullptr : g_variant_new("(s)", a.constData()), nullptr,
+                                              G_DBUS_CALL_FLAGS_NONE, 2000, nullptr, nullptr);
+    if (!r)
+        return QString();
+    QString out = "";
+    if (g_variant_n_children(r)) {
+        const gchar *s;
+        g_variant_get(r, "(&s)", &s);
+        out = QString::fromUtf8(s);
+    }
+    g_variant_unref(r);
+    return out;
 }
 
 QString Radio::flight() const

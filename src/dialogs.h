@@ -179,7 +179,7 @@ private:
     QComboBox *order, *img_opener, *vid_opener;
     QColor color;
     QPushButton *color_btn;
-    QCheckBox *single_click, *list_previews, *play_gifs, *play_webm;
+    QCheckBox *single_click, *list_previews, *play_gifs, *play_webm, *shared_undo;
 };
 
 namespace dialogs {

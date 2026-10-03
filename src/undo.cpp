@@ -1,10 +1,14 @@
 #include "undo.h"
 
 #include "app.h"
+#include "atc.h"
 #include "fileops.h"
 #include "util.h"
 #include "widgets.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPointer>
 #include <QStatusBar>
@@ -19,11 +23,49 @@ struct Op {
     QString kind, label;
     QList<QPair<QString, QString>> items;
 };
-static QList<Op> stack;   // newest last
+static QList<Op> stack;   // this Kestrel's own history, newest last
+static QString shared_label;   // what the tower's shared history would undo
+
+// Preferences → "Share undo between all Kestrel windows": the history is kept by the tower (atc.h), so Ctrl+Z in any
+// Kestrel undoes the newest action from any of them. Off (the default), or while there is no tower, each Kestrel
+// undoes only what was done in it.
+static bool shared() { return settings().value("shared_undo", false).toBool() && atc::radio()->tower_up(); }
+
+// the tower's format: {"kind", "label", "items": [[a, b], …]} (b is "" for trash and create)
+static QString to_json(const Op &op)
+{
+    QJsonArray items;
+    for (const auto &[a, b] : op.items)
+        items << QJsonArray{a, b};
+    return QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"kind", op.kind}, {"label", op.label}, {"items", items}}).toJson(QJsonDocument::Compact));
+}
+
+static Op from_json(const QString &text)
+{
+    QJsonObject o = QJsonDocument::fromJson(text.toUtf8()).object();
+    Op op{o.value("kind").toString(), o.value("label").toString(), {}};
+    for (const QJsonValue &v : o.value("items").toArray())
+        op.items << qMakePair(v.toArray().at(0).toString(), v.toArray().at(1).toString());
+    return op;
+}
 
 Signals *signals_()
 {
-    static Signals *s = new Signals;
+    static Signals *s = nullptr;
+    if (!s) {
+        s = new Signals;
+        QObject::connect(atc::radio(), &atc::Radio::heard, s, [](const QJsonObject &m) {
+            if (m.value("type").toString() == "undo_changed") {
+                shared_label = m.value("label").toString();
+                Q_EMIT signals_()->changed();
+            }
+        });
+        QObject::connect(atc::radio(), &atc::Radio::reset, s, []() {
+            shared_label.clear();   // a new tower starts with an empty history
+            Q_EMIT signals_()->changed();
+        });
+    }
     return s;
 }
 
@@ -31,6 +73,8 @@ void record(const QString &kind, const QString &label, const QList<QPair<QString
 {
     if (items.isEmpty())
         return;
+    if (shared() && !atc::radio()->request("UndoPush", to_json(Op{kind, label, items})).isNull())
+        return;   // the tower tells every window (undo_changed)
     stack << Op{kind, label, items};
     while (stack.size() > MAX)
         stack.removeFirst();
@@ -45,7 +89,12 @@ void record_paths(const QString &kind, const QString &label, const QStringList &
     record(kind, label, items);
 }
 
-QString label() { return stack.isEmpty() ? QString() : stack.last().label; }
+QString label()
+{
+    if (shared() && !shared_label.isEmpty())
+        return shared_label;
+    return stack.isEmpty() ? QString() : stack.last().label;   // also what was done here before sharing was on
+}
 
 // {original path: the most recently trashed copy of it in a trash files/ folder}
 static QHash<QString, QString> trashed_index()
@@ -70,9 +119,15 @@ static QHash<QString, QString> trashed_index()
 
 void undo(MainWindow *win)
 {
-    if (stack.isEmpty())
-        return;
-    Op op = stack.takeLast();
+    Op op;
+    QString got = shared() ? atc::radio()->request("UndoPop") : QString();
+    if (!got.isEmpty()) {
+        op = from_json(got);
+    } else {
+        if (stack.isEmpty())
+            return;
+        op = stack.takeLast();
+    }
     Q_EMIT signals_()->changed();
     QString title = "Undo " + op.label;
     QPointer<MainWindow> w(win);

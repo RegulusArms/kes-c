@@ -1,4 +1,5 @@
-// Undo for file operations (Ctrl+Z), shared by every window.
+// Undo for file operations (Ctrl+Z), shared by this Kestrel's windows (or every Kestrel's, with Preferences → Share
+// undo between all Kestrel windows).
 //
 // Recorded: moves (drag and drop, cut/paste, Move To), renames (single and batch), Move to Trash, and items created by
 // copy, paste, duplicate, New Folder / New File and links. Undoing a creation moves the new items to the trash, like

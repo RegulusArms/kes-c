@@ -2587,6 +2587,7 @@ static void apply_preferences()
             p->apply_folder_previews();
             p->view()->viewport()->update();
         }
+    Q_EMIT undo::signals_()->changed();   // "Share undo…" may have changed what Ctrl+Z undoes
 }
 
 void MainWindow::preferences_saved()

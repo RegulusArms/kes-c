@@ -30,6 +30,10 @@ public:
     // latest one and hands it to flights that check in later; when we leave, it tells the others ("left").
     void announce(const QString &type, const QJsonObject &extra = QJsonObject(), bool keep = false);
     QString flight() const;   // our name on the bus ("from" in the others' messages), empty if not connected
+    bool tower_up() const;
+    // Call a tower method and wait for the answer (its string result, "" if it has none); a null QString if the
+    // tower isn't up or didn't answer.
+    QString request(const QString &method, const QString &arg = QString());
 
 Q_SIGNALS:
     // a change from another flight ("from": its name), or our own ("own": true); {"type": "left"} when a flight has gone

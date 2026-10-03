@@ -1307,6 +1307,9 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
         play_webm->setEnabled(false);
         play_webm->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
     }
+    shared_undo = new QCheckBox("Share undo between all Kestrel windows");
+    shared_undo->setChecked(s.value("shared_undo", false).toBool());
+    shared_undo->setToolTip("On: Ctrl+Z in any Kestrel window undoes the newest action from any of them.\nOff: each Kestrel undoes only what was done in it.");
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
     form->addRow("Folder colour:", color_btn);
@@ -1318,6 +1321,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow(list_previews);
     form->addRow(play_gifs);
     form->addRow(play_webm);
+    form->addRow(shared_undo);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1401,6 +1405,7 @@ void PreferencesDialog::save()
     s.setValue("slideshow_secs", slide->value());
     s.setValue("play_gifs", play_gifs->isChecked());
     s.setValue("play_webm", play_webm->isChecked());
+    s.setValue("shared_undo", shared_undo->isChecked());
     accept();
 }
 
