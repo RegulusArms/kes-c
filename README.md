@@ -10,7 +10,8 @@ This is a port of the Python/PyQt6 [Kestrel Explorer](../kestrel-explorer) to C+
 
 ```bash
 ./install.sh             # installs build tools if needed, builds, adds `kes` to ~/.local/bin and the app grid
-./install.sh --default   # ...and makes it the default app for opening folders
+./install.sh --default   # ...and makes it the default app for opening folders and the trash
+./install.sh --dock      # ...and puts it in the dock in place of GNOME Files
 ./install.sh --install-recommended   # ...and installs the recommended packages (RAW/HEIC previews etc.)
 ./install.sh --uninstall
 
@@ -20,6 +21,8 @@ kes ~/Pictures           # once installed
 ```
 
 `--default` also makes Kestrel answer "Show in folder" / "Open containing folder" from browsers and other apps. Those don't use the default folder app: they call the `org.freedesktop.FileManager1` D-Bus service, which GNOME Files normally provides. The installer adds a per-user D-Bus activation file so Kestrel provides it instead, and closes GNOME Files' background service so it lets go. If you open GNOME Files later while no Kestrel window is open, it takes the service back until it quits.
+
+It also makes Kestrel the app for `trash:///` (the dock's Trash icon, `gio open trash:///`), remembering which app had it so `--uninstall` can put it back. If GNOME Files is pinned in the dock, `--default` asks whether to put Kestrel in its place; `--dock` does that without asking. `--uninstall` puts GNOME Files back if the installer swapped it.
 
 To build by hand:
 
@@ -292,6 +295,15 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 - **The EXIF summary and AI-prompt panel use a built-in reader** instead of Pillow. It reads EXIF from JPEG, PNG (`eXIf`), WebP and TIFF-based RAW files, and text chunks from PNG. HEIC/AVIF EXIF appears only in the Metadata tab (through exiftool).
 - **The admin helper is a compiled program** (`kes-admin-helper`) instead of a Python script, so the password prompt names that file rather than `/usr/bin/python3`. It speaks the same protocol and has the same safety rules.
 
+## Tests
+
+```bash
+tests/run.sh                  # every test
+tests/run.sh fileops atc_undo # only some
+```
+
+There are 130 checks in 6 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
+
 ## Layout
 
 | File | Purpose |
@@ -312,6 +324,7 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 | `src/archive_ui.cpp` | Compress and Extract dialogs, password prompts, and the archive job flows |
 | `src/uwp.cpp` | Integration with the UWP wallpaper manager (over D-Bus and the `uwp` command) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
+| `tests/` | The test suite (see [Tests](#tests)) |
 | `CMakeLists.txt` | Build configuration |
 
 ## Performance: Python vs C++
