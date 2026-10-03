@@ -1,0 +1,27 @@
+# Build output
+build/
+build-*/
+CMakeLists.txt.user
+compile_commands.json
+.cache/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code per-user settings (shared .claude/settings.json is fine to commit)
+.claude/settings.local.json
+
+# OS clutter
+.DS_Store
+Thumbs.db
+.directory
+.Trash-*/
+
+# Logs and scratch files
+*.log
+*.tmp
+*.bak
