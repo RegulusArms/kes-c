@@ -23,6 +23,7 @@ add_executable(kes
     src/uwp.cpp
     src/fileops.cpp
     src/fm1.cpp
+    src/chooser.cpp
     src/places.cpp
     src/sharing.cpp
     src/undo.cpp

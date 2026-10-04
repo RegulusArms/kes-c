@@ -19,6 +19,11 @@ class RecursiveBuilder;
 class SearchModel;
 class SearchThread;
 class Sidebar;
+class ChooserBar;
+namespace chooser {
+struct Request;
+struct Result;
+}  // namespace chooser
 class TaskPanel;
 class ThumbnailManager;
 class QAction;
@@ -86,6 +91,7 @@ public:
     void sort_by(int col, int order = -1);
     QString title() const;
     bool searching() const;
+    void set_type_filter(const QStringList &globs);   // chooser: show folders and only these files
 
     MainWindow *win;
     QString path;
@@ -145,12 +151,14 @@ private:
     FSModel *model = nullptr;
     SearchModel *search_model = nullptr;
     GridDelegate *delegate;
+    QStringList type_filters;   // chooser: the chosen file type's globs
 };
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     MainWindow(const QStringList &paths, ThumbnailManager *thumbs);
+    void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 
     Pane *pane() const;
     QList<Pane *> panes() const;
@@ -207,6 +215,7 @@ public:
     TaskPanel *task_panel;
     PathBar *pathbar;
     QCheckBox *preview_box;
+    ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
@@ -252,5 +261,6 @@ QString location_arg(const QString &arg);
 void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id);
 void on_atc(const QJsonObject &msg);   // a change reported through the tower (atc.h)
 MainWindow *open_window(const QStringList &paths);
+MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 void apply_thumb_settings(ThumbnailManager *t);
 int kes_main(int argc, char **argv);

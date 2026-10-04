@@ -5,6 +5,7 @@
 #include "archive.h"
 #include "archive_ui.h"
 #include "atc.h"
+#include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "fm1.h"
@@ -149,7 +150,19 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     attach(model);
     set_view_mode(settings().value("view_mode", "grid").toString());
+    if (win->chooser)
+        set_type_filter(win->chooser->type_filter());
     set_path(start);
+}
+
+void Pane::set_type_filter(const QStringList &globs)
+{
+    type_filters = globs;
+    QDir::Filters f = model->filter();
+    // name filters also hide folders unless AllDirs is set
+    model->setFilter(globs.isEmpty() ? f & ~QDir::AllDirs : f | QDir::AllDirs);
+    if (!in_search && !search_bar->isVisible())
+        model->setNameFilters(globs);
 }
 
 Pane::~Pane()
@@ -393,7 +406,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     stack->setCurrentWidget(mode_view);
     thumbs->cancel_pending();
     animator->clear();
-    model->setNameFilters({});
+    model->setNameFilters(type_filters);
     QModelIndex root = model->setRootPath(p);
     grid->setRootIndex(root);
     tree->setRootIndex(root);
@@ -692,6 +705,8 @@ void Pane::apply_hidden()
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
     if (win->show_hidden)
         f |= QDir::Hidden;
+    if (!type_filters.isEmpty())
+        f |= QDir::AllDirs;   // a chooser's file types don't hide folders
     model->setFilter(f);
 }
 
@@ -743,7 +758,7 @@ void Pane::close_search(bool refocus, bool navigating)
     search_edit->blockSignals(false);
     search_bar->hide();
     stop_search();
-    model->setNameFilters({});
+    model->setNameFilters(type_filters);
     if (in_search) {
         in_search = false;
         attach(model);
@@ -800,7 +815,7 @@ void Pane::do_search()
         return;
     }
     if (text.isEmpty()) {
-        model->setNameFilters({});
+        model->setNameFilters(type_filters);
         if (in_search) {
             in_search = false;
             attach(model);
@@ -1118,6 +1133,26 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_) : th
         new_tab(OVERVIEW);
 }
 
+void MainWindow::make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done)
+{
+    // a file chooser window: a normal window with the chooser's bar at the bottom (see chooser.h)
+    chooser = new ChooserBar(this, req, std::move(done));
+    auto *box = new QWidget;
+    auto *lay = new QVBoxLayout(box);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(0);
+    takeCentralWidget();
+    lay->addWidget(split, 1);
+    lay->addWidget(chooser);
+    setCentralWidget(box);
+    setWindowTitle(req.title.isEmpty() ? chooser::button_text(req) : req.title);
+    for (Pane *p : panes())
+        p->set_type_filter(chooser->type_filter());
+    resize(1100, 700);
+    if (chooser->name)
+        chooser->name->setFocus();
+}
+
 // -- toolbar & actions
 
 void MainWindow::build_toolbar()
@@ -1350,8 +1385,11 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
     int i = tabs->addTab(p, p->title());
     connect(p, &Pane::path_changed, this, [this, p]() { pane_path_changed(p); });
     connect(p, &Pane::selection_changed, this, [this, p]() {
-        if (p == pane())
+        if (p == pane()) {
             update_status();
+            if (chooser)
+                chooser->selection_changed();
+        }
     });
     if (activate) {
         tabs->setCurrentIndex(i);
@@ -1674,6 +1712,13 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     QStringList dirs, files;
     for (const QString &x : paths)
         (isdir(x) ? dirs : files) << x;
+    if (chooser) {   // a file chooser: folders open as usual, files are the choice
+        if (!dirs.isEmpty())
+            p->set_path(dirs.first());
+        else if (!files.isEmpty())
+            chooser->activated(files);
+        return;
+    }
     places::add_recent(files);
     if (!dirs.isEmpty()) {
         if (dirs.size() == 1 && !new_tab_ && files.isEmpty()) {
@@ -2727,8 +2772,12 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         }
         return;
     }
-    settings().setValue("geometry", saveGeometry());
-    settings().setValue("splitter", split->saveState());
+    if (chooser) {
+        chooser->finish(false);   // closed without choosing: cancelled
+    } else {
+        settings().setValue("geometry", saveGeometry());
+        settings().setValue("splitter", split->saveState());
+    }
     for (Pane *p : panes())
         p->stop_search();
     if (builder) {
@@ -2975,6 +3024,22 @@ QString location_arg(const QString &arg)
     return abspath(expanduser(arg));
 }
 
+MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done)
+{
+    // not in WINDOWS: a chooser isn't a window other Kestrels hand folders to
+    QString start = req.current_folder;
+    if (!isdir(start))
+        start = settings().value("chooser_folder").toString();   // where the last chooser picked something
+    if (!isdir(start))
+        start = HOME();
+    auto *w = new MainWindow({start}, g_thumbs);
+    w->make_chooser(req, std::move(done));
+    w->show();
+    w->raise();
+    w->activateWindow();
+    return w;
+}
+
 MainWindow *open_window(const QStringList &paths)
 {
     auto *w = new MainWindow(paths, g_thumbs);
@@ -3014,6 +3079,19 @@ int kes_main(int argc, char **argv)
     settings();
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);
+    for (int i = 1; i < argc; ++i)
+        if (QByteArray(argv[i]) == "--file-chooser") {
+            // started by D-Bus for the system's file chooser (see chooser.h): only chooser windows
+            app.setQuitOnLastWindowClosed(false);   // the service quits after a minute without dialogs
+            chooser::serve([](const chooser::Request &req, std::function<void(const chooser::Result &)> done) {
+                QPointer<MainWindow> w = open_chooser(req, std::move(done));
+                return std::function<void()>([w]() {
+                    if (w)
+                        w->close();
+                });
+            });
+            return app.exec();
+        }
     QStringList paths;
     for (int i = 1; i < argc; ++i) {
         QString a = QString::fromLocal8Bit(argv[i]);
