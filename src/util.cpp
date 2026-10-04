@@ -1011,6 +1011,28 @@ QIcon icon_for_path(const QString &path, int is_dir)
     return theme_icon({m.iconName(), m.genericIconName(), "text-x-generic"});
 }
 
+bool has_schema_key(const QString &schema, const QString &key)
+{
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *s = src ? g_settings_schema_source_lookup(src, schema.toUtf8().constData(), TRUE) : nullptr;
+    if (!s)
+        return false;
+    bool ok = key.isEmpty() || g_settings_schema_has_key(s, key.toUtf8().constData());
+    g_settings_schema_unref(s);
+    return ok;
+}
+
+QString desktop_schema(const QString &gnome_schema)
+{
+    QStringList desktops = QString::fromLocal8Bit(qgetenv("XDG_CURRENT_DESKTOP")).toLower().split(':');
+    if (desktops.contains("x-cinnamon") && gnome_schema.startsWith("org.gnome.")) {
+        QString cinnamon = "org.cinnamon." + gnome_schema.mid(10);
+        if (has_schema_key(cinnamon))
+            return cinnamon;
+    }
+    return gnome_schema;
+}
+
 void setup_icon_theme()
 {
     QStringList paths = QIcon::themeSearchPaths();
@@ -1024,7 +1046,7 @@ void setup_icon_theme()
     QIcon::setThemeSearchPaths(paths);
     if (QIcon::themeName().isEmpty() || QIcon::themeName() == "hicolor") {
         QString theme = "Adwaita";
-        auto r = proc::run({"gsettings", "get", "org.gnome.desktop.interface", "icon-theme"}, 2000);
+        auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
         QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
         if (r.rc == 0 && !out.isEmpty())
             theme = out;
@@ -1287,12 +1309,14 @@ bool open_terminal(const QString &directory)
 
 void set_wallpaper(const QString &path)
 {
-    // through UWP when it's installed (a new UWP profile with the image on every monitor), else GNOME's own
+    // through UWP when it's installed (a new UWP profile with the image on every monitor), else the desktop's own
     if (uwp::set_wallpaper(path))
         return;
     QString uri = file_uri(path);
-    for (const char *key : {"picture-uri", "picture-uri-dark"})
-        proc::run({"gsettings", "set", "org.gnome.desktop.background", key, uri}, 5000);
+    QString schema = desktop_schema("org.gnome.desktop.background");
+    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
+        if (has_schema_key(schema, key))
+            proc::run({"gsettings", "set", schema, key, uri}, 5000);
 }
 
 void trash(const QString &path)

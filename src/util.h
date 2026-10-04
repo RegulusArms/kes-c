@@ -181,6 +181,10 @@ inline QIcon theme_icon(const QString &name) { return theme_icon(QStringList{nam
 QIcon icon_for_path(const QString &path, int is_dir = -1);
 const QHash<QString, QString> &special_dir_icons();
 void setup_icon_theme();
+// The desktop's settings schema for a GNOME one: Cinnamon (Linux Mint) keeps its own copies, org.cinnamon.desktop.*,
+// and uses those; everything else uses GNOME's. has_schema_key: installed, and with that key (empty: any).
+QString desktop_schema(const QString &gnome_schema);
+bool has_schema_key(const QString &schema, const QString &key = QString());
 
 // ---------------------------------------------------------------- theme
 // Colours derived from the desktop's palette, so they suit any theme, light or dark.
