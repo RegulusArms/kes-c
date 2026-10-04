@@ -3080,6 +3080,7 @@ int kes_main(int argc, char **argv)
     QApplication app(argc, argv);
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
+    follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
     app.setWindowIcon(theme_icon("folder"));
     migrate_legacy();
     ensure_desktop_entry();

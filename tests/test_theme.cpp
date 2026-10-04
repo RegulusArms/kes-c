@@ -73,6 +73,24 @@ int main(int argc, char **argv)
     }
     qputenv("XDG_CURRENT_DESKTOP", desktop);
 
+    // -- the GTK theme's colours (Qt before 6.5)
+    check(needs_gtk_palette("6.4.2") && needs_gtk_palette("6.4.0") && !needs_gtk_palette("6.5.0") &&
+              !needs_gtk_palette("6.10.2"),
+          "Qt before 6.5 needs Kestrel to read the GTK theme's colours; 6.5 and newer do it themselves");
+    bool ok = false;
+    QPalette gp = gtk_palette_from(
+        QJsonObject{{"theme_bg_color", "#2b2b2b"}, {"theme_fg_color", "#dadada"}, {"theme_base_color", "#323232"},
+                    {"theme_text_color", "#ffffff"}, {"theme_selected_bg_color", "#35a854"},
+                    {"theme_selected_fg_color", "#ffffff"}, {"insensitive_fg_color", "#888888"}},
+        &ok);
+    check(ok && gp.color(QPalette::Window) == QColor("#2b2b2b") && gp.color(QPalette::WindowText) == QColor("#dadada") &&
+              gp.color(QPalette::Base) == QColor("#323232") && gp.color(QPalette::Text) == QColor("#ffffff") &&
+              gp.color(QPalette::Highlight) == QColor("#35a854") &&
+              gp.color(QPalette::Disabled, QPalette::Text) == QColor("#888888"),
+          "a GTK theme's colours become the palette (window, text, selection, disabled text)");
+    gtk_palette_from(QJsonObject{{"theme_fg_color", "#dadada"}}, &ok);
+    check(!ok, "a theme without the basic colours changes nothing");
+
     const QPalette LIGHT = palette_of("#fafafa", "#e95420"), DARK = palette_of("#2a2a2a", "#3584e4");
     QApplication::setPalette(LIGHT);
     MainWindow *w = open_window({HOME()});
