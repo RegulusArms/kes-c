@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include "atc.h"
+
 #include "proc.h"
 #include "uwp.h"
 
@@ -79,6 +81,60 @@ const QSet<QString> VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v
 const QSet<QString> RAW_EXTS = {".3fr", ".arw", ".crw", ".cr2", ".cr3", ".dcr", ".dng", ".erf", ".fff", ".iiq",
                                 ".k25", ".kdc", ".mdc", ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".pef",
                                 ".raf", ".raw", ".rw2", ".rwl", ".sr2", ".srf", ".srw", ".x3f"};
+
+bool explicit_conda_env()
+{
+    QByteArray env = qgetenv("CONDA_DEFAULT_ENV");
+    return !env.isEmpty() && env != "base";
+}
+
+void prefer_system_environment()
+{
+    if (explicit_conda_env())
+        return;
+    // conda installs that aren't named in the environment variables (e.g. a PATH entry left by a shell profile)
+    static const QRegularExpression conda_dir("/(ana|mini)conda\\d*(/|$)|/miniforge\\d*(/|$)|/mambaforge(/|$)|/micromamba(/|$)");
+    QStringList roots;
+    QByteArray prefix = qgetenv("CONDA_PREFIX");
+    if (!prefix.isEmpty())
+        roots << rstrip(QString::fromLocal8Bit(prefix), '/');
+    for (const char *var : {"CONDA_EXE", "CONDA_PYTHON_EXE"}) {   // <root>/bin/conda
+        QByteArray exe = qgetenv(var);
+        if (!exe.isEmpty())
+            roots << rstrip(dirname(dirname(QString::fromLocal8Bit(exe))), '/');
+    }
+    roots.removeAll(QString());
+    auto is_conda = [&](const QString &p) {
+        for (const QString &r : roots)
+            if (p == r || p.startsWith(r + "/"))
+                return true;
+        return conda_dir.match(p).hasMatch();
+    };
+    for (const char *var : {"PATH", "LD_LIBRARY_PATH", "XDG_DATA_DIRS"}) {
+        QByteArray value = qgetenv(var);
+        if (value.isEmpty())
+            continue;
+        QStringList keep, conda;
+        for (const QString &p : QString::fromLocal8Bit(value).split(':'))
+            (!p.isEmpty() && is_conda(p) ? conda : keep) << p;
+        if (!conda.isEmpty())
+            qputenv(var, (keep + conda).join(':').toLocal8Bit());
+    }
+    for (const char *var : {"GSETTINGS_SCHEMA_DIR", "GIO_MODULE_DIR", "GIO_EXTRA_MODULES", "QT_PLUGIN_PATH",
+                            "QT_QPA_PLATFORM_PLUGIN_PATH"}) {
+        QByteArray value = qgetenv(var);
+        if (value.isEmpty())
+            continue;
+        QStringList keep;
+        for (const QString &p : QString::fromLocal8Bit(value).split(':'))
+            if (!p.isEmpty() && !is_conda(p))
+                keep << p;
+        if (keep.isEmpty())
+            qunsetenv(var);
+        else
+            qputenv(var, keep.join(':').toLocal8Bit());
+    }
+}
 
 QSettings &settings()
 {
@@ -1295,6 +1351,7 @@ void write_bookmarks(const QList<QPair<QString, QString>> &items)
         lines << uri + (label == def ? QString() : " " + label);
     }
     write_text(GTK_BOOKMARKS(), (lines.join('\n') + "\n").toUtf8());
+    atc::announce("bookmarks");
 }
 
 QList<QUrl> url_list(const QStringList &paths)
@@ -1321,10 +1378,10 @@ void ensure_desktop_entry()
     try {
         makedirs(dirname(entry), true);
         write_text(entry, QString("[Desktop Entry]\nType=Application\nName=%1\nGenericName=File Manager\n"
-                                  "Comment=Browse files and image galleries with folder previews\n"
+                                  "Comment=Manage files, with archive, admin, permission and metadata tools built in\n"
                                   "Exec=%2 %U\nIcon=folder\nTerminal=false\n"
                                   "Categories=System;FileTools;FileManager;Viewer;\n"
-                                  "MimeType=inode/directory;\nStartupWMClass=%3\n")
+                                  "MimeType=inode/directory;x-directory/normal;\nStartupWMClass=%3\n")
                                   .arg(APP_NAME, launcher, APP_ID)
                                   .toUtf8());
     } catch (const OSError &) {

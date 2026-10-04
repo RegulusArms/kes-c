@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "fileops.h"
+#include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
 
@@ -394,7 +395,12 @@ QWidget *PropertiesDialog::general_tab()
     icon->setAlignment(Qt::AlignCenter);
     icon->setPixmap(icon_for_path(path).pixmap(96, 96));
     form->addRow(icon);
-    if (single && (is_image(path) || is_video(path))) {
+    if (ThumbnailManager *t = ThumbnailManager::instance(); single && isdir(path) && t) {
+        QPixmap pm = t->folder_pixmap(path, QFileInfo(path).lastModified().toSecsSinceEpoch(), 128);
+        if (!pm.isNull())
+            icon->setPixmap(t->scaled(pm, 128));
+    }
+    if (single && !isdir(path) && thumbs::can_thumbnail(path)) {
         struct stat st;
         if (stat_(path, st)) {
             QString p = path;
@@ -443,6 +449,8 @@ QWidget *PropertiesDialog::general_tab()
                                                      .arg(qulonglong(st.st_ino))
                                                      .arg(qulonglong(st.st_nlink))
                                                      .arg(qulonglong(st.st_dev))));
+        if (is_dir)
+            folder_style_rows(form);
         if (isfile(path)) {
             AppRef app = default_app(path);
             auto *row = new QHBoxLayout;
@@ -485,6 +493,39 @@ QWidget *PropertiesDialog::general_tab()
                                               .arg(vol.rootPath(), QString::fromUtf8(vol.fileSystemType()),
                                                    human_size(vol.bytesAvailable()), human_size(vol.bytesTotal()))));
     return w;
+}
+
+void PropertiesDialog::folder_style_rows(QFormLayout *form)
+{
+    // folder colour and image previews for this folder (also in the folder's right-click menu)
+    ThumbnailManager *t = ThumbnailManager::instance();
+    if (!t)
+        return;
+    style_color = new QComboBox;
+    style_color->addItem(thumbs::color_swatch(t->folder_color), "Default", QString());
+    for (const auto &[name, color] : thumbs::FOLDER_COLORS)
+        style_color->addItem(thumbs::color_swatch(color), name, color);
+    QString cur = t->custom_color(path);
+    if (!cur.isEmpty() && style_color->findData(cur) < 0)
+        style_color->addItem(thumbs::color_swatch(cur), QString("Custom (%1)").arg(cur), cur);
+    style_color->setCurrentIndex(std::max(0, style_color->findData(cur)));
+    form->addRow("Folder colour:", style_color);
+    style_previews = new QCheckBox("Show image previews on this folder's icon");
+    style_previews->setChecked(t->previews_for(path));
+    form->addRow("", style_previews);
+}
+
+void PropertiesDialog::apply_folder_style()
+{
+    ThumbnailManager *t = ThumbnailManager::instance();
+    if (!t || !style_color)
+        return;
+    QString color = style_color->currentData().toString();
+    if (color != t->custom_color(path))
+        t->set_folder_color({path}, color);
+    bool on = style_previews->isChecked();
+    if (on != t->previews_for(path))
+        t->set_folder_previews({path}, on);
 }
 
 void PropertiesDialog::show_dir_size(const QVariant &res)
@@ -918,6 +959,7 @@ QWidget *PropertiesDialog::checksum_tab()
 void PropertiesDialog::apply()
 {
     if (single) {
+        apply_folder_style();   // before a rename: styles are kept by path
         QWidget *owner = parentWidget() ? parentWidget() : this;
         if (!perm_boxes.isEmpty()) {
             mode_t m = mode();
@@ -942,6 +984,8 @@ void PropertiesDialog::apply()
         QString new_name = name_edit->text().trimmed();
         if (!new_name.isEmpty() && new_name != basename(rstrip(path, '/'))) {
             auto res = dialogs::do_rename(path, new_name);
+            if (!res.denied && res.error.isEmpty())
+                undo::record("rename", "Rename", {qMakePair(path, join(dirname(path), new_name))});
             if (res.denied) {
                 QString p = path, target = join(dirname(path), new_name);
                 admin::retry_as_admin(owner, "Rename",
@@ -1188,6 +1232,11 @@ void BatchRenameDialog::apply()
         }
         for (int i = 0; i < temps.size(); ++i)
             util::rename(temps[i].first, join(dirname(temps[i].second), names[i]));
+        QList<QPair<QString, QString>> renamed;
+        for (int i = 0; i < temps.size(); ++i)
+            if (basename(temps[i].second) != names[i])
+                renamed << qMakePair(temps[i].second, join(dirname(temps[i].second), names[i]));
+        undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
     } catch (const OSError &e) {
         for (const auto &[tmp, p] : temps)
             if (exists(tmp))
@@ -1250,6 +1299,21 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     slide->setRange(1, 120);
     slide->setSuffix(" s");
     slide->setValue(s.value("slideshow_secs", 4).toInt());
+    play_gifs = new QCheckBox("Play animated GIFs in the file view");
+    play_gifs->setChecked(s.value("play_gifs", false).toBool());
+    play_webm = new QCheckBox("Play WebM videos in the file view (silent looping previews)");
+    play_webm->setChecked(s.value("play_webm", false).toBool());
+    if (!which("ffmpeg")) {
+        play_webm->setEnabled(false);
+        play_webm->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
+    }
+    shared_undo = new QCheckBox("Share undo between all Kestrel windows");
+    shared_undo->setChecked(s.value("shared_undo", false).toBool());
+    shared_undo->setToolTip("On: Ctrl+Z in any Kestrel window undoes the newest action from any of them.\nOff: each Kestrel undoes only what was done in it.");
+    open_in_tabs = new QCheckBox("Open folders from other apps as tabs in an open Kestrel window");
+    open_in_tabs->setChecked(s.value("open_in_tabs", false).toBool());
+    open_in_tabs->setToolTip("On: a folder opened from another app (or with “Show in folder”) becomes a tab in the "
+                             "Kestrel window you used last.\nOff: it opens in a new window.");
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
     form->addRow("Folder colour:", color_btn);
@@ -1259,6 +1323,10 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow("Open videos with:", vid_opener);
     form->addRow(single_click);
     form->addRow(list_previews);
+    form->addRow(play_gifs);
+    form->addRow(play_webm);
+    form->addRow(shared_undo);
+    form->addRow(open_in_tabs);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1340,6 +1408,10 @@ void PreferencesDialog::save()
     s.setValue("single_click", single_click->isChecked());
     s.setValue("list_folder_previews", list_previews->isChecked());
     s.setValue("slideshow_secs", slide->value());
+    s.setValue("play_gifs", play_gifs->isChecked());
+    s.setValue("play_webm", play_webm->isChecked());
+    s.setValue("shared_undo", shared_undo->isChecked());
+    s.setValue("open_in_tabs", open_in_tabs->isChecked());
     accept();
 }
 

@@ -1,11 +1,13 @@
 #include "thumbs.h"
 
 #include "proc.h"
+#include "atc.h"
 #include "util.h"
 
 #include <QDateTime>
 #include <QFile>
 #include <QImageReader>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPainter>
@@ -31,6 +33,24 @@ static const QHash<int, QString> FLAVORS = {{128, "normal"}, {256, "large"}, {51
 const QStringList COVER_NAMES = {"cover", "folder", ".cover", ".folder", "front", "poster"};
 
 QString covers_file() { return join(CONFIG_DIR(), "covers.json"); }
+QString styles_file() { return join(CONFIG_DIR(), "folder_styles.json"); }
+
+const QList<QPair<QString, QString>> FOLDER_COLORS = {
+    {"Red", "#e01b24"},  {"Orange", "#ff7800"}, {"Yellow", "#f6d32d"}, {"Green", "#33d17a"}, {"Teal", "#2aa198"},
+    {"Blue", "#3584e4"}, {"Purple", "#9141ac"}, {"Pink", "#e66ba5"},   {"Brown", "#986a44"}, {"Grey", "#77767b"}};
+
+QIcon color_swatch(const QString &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QColor(0, 0, 0, 80));
+    p.setBrush(QColor(color));
+    p.drawRoundedRect(QRectF(0.5, 0.5, size - 1, size - 1), 3, 3);
+    p.end();
+    return QIcon(pm);
+}
 
 int bucket_for(int size)
 {
@@ -99,6 +119,121 @@ QImage video_frame(const QString &path, int size)
     return QImage();
 }
 
+// ---------------------------------------------------------------- system thumbnailers (PDF, fonts, audio, …)
+
+const QHash<QString, QStringList> &thumbnailers()
+{
+    // the same .thumbnailer files GNOME Files uses, in order of preference: ~/.local/share/thumbnailers first
+    static const QHash<QString, QStringList> table = [] {
+        QHash<QString, QStringList> t;
+        QByteArray home = qgetenv("XDG_DATA_HOME"), dirs = qgetenv("XDG_DATA_DIRS");
+        QStringList data_dirs{home.isEmpty() ? HOME() + "/.local/share" : QString::fromLocal8Bit(home)};
+        data_dirs += (dirs.isEmpty() ? QString("/usr/local/share:/usr/share") : QString::fromLocal8Bit(dirs)).split(':');
+        for (const QString &d : data_dirs) {
+            QStringList names;
+            try {
+                names = listdir(join(d, "thumbnailers"));
+            } catch (const OSError &) {
+                continue;
+            }
+            names.sort();
+            for (const QString &name : names) {
+                if (!name.endsWith(".thumbnailer"))
+                    continue;
+                QHash<QString, QString> entry;
+                bool ok = false;
+                for (const QByteArray &line : read_file(join(join(d, "thumbnailers"), name), &ok).split('\n')) {
+                    int eq = line.indexOf('=');
+                    if (eq > 0)
+                        entry.insert(QString::fromUtf8(line.left(eq)).trimmed(), QString::fromUtf8(line.mid(eq + 1)).trimmed());
+                }
+                QString exe = entry.value("Exec"), try_exec = entry.value("TryExec");
+                if (exe.isEmpty() || (!try_exec.isEmpty() && !which(try_exec)))
+                    continue;
+                for (const QString &mt : entry.value("MimeType").split(';', Qt::SkipEmptyParts))
+                    if (!t[mt].contains(exe))
+                        t[mt] << exe;
+            }
+        }
+        return t;
+    }();
+    return table;
+}
+
+QStringList thumbnailers_for(const QString &path)
+{
+    const QHash<QString, QStringList> &table = thumbnailers();
+    if (table.isEmpty())
+        return {};
+    QMimeType m = mime_for(path, 0);
+    for (const QString &name : QStringList{m.name()} + m.aliases() + m.allAncestors())
+        if (table.contains(name))
+            return table.value(name);
+    return {};
+}
+
+bool can_thumbnail(const QString &path)
+{
+    return is_image(path) || is_video(path) || !thumbnailers_for(path).isEmpty();
+}
+
+static QMutex tries_lock;
+static QHash<QString, QPair<int, int>> tries;   // Exec line -> (successes, failures): one that only fails is skipped
+
+static QImage run_thumbnailer(const QString &exe, const QString &path, int size)
+{
+    // The output goes to /tmp/gnome-desktop-thumbnailer-*.png like GNOME's own: Ubuntu's AppArmor profiles only let
+    // thumbnailers such as evince/papers write there.
+    QByteArray tmpl = "/tmp/gnome-desktop-thumbnailer-XXXXXX.png";
+    int fd = ::mkstemps(tmpl.data(), 4);
+    if (fd < 0)
+        return QImage();
+    ::close(fd);
+    QString out = dec(tmpl.constData());
+    bool ok = false;
+    QStringList args = shlex_split(exe, &ok);
+    QImage img;
+    if (ok && !args.isEmpty()) {
+        QStringList argv;
+        for (QString a : args) {
+            a.replace("%%", QString(QChar(0xFFFF)));
+            a.replace("%i", abspath(path)).replace("%u", file_uri(path)).replace("%o", out).replace("%s", QString::number(size));
+            argv << a.replace(QChar(0xFFFF), "%");
+        }
+        proc::Options o;
+        o.out = proc::DEVNULL;
+        o.err = proc::DEVNULL;
+        auto r = proc::run(argv, 30000, o);
+        if (!r.failed && !r.timed_out)
+            img = QImage(out);
+    }
+    ::unlink(tmpl.constData());
+    return img;
+}
+
+QImage system_thumb(const QString &path, int size)
+{
+    for (const QString &exe : thumbnailers_for(path)) {
+        {
+            QMutexLocker g(&tries_lock);
+            QPair<int, int> t = tries.value(exe);
+            if (!t.first && t.second >= 3)
+                continue;
+        }
+        QImage img = run_thumbnailer(exe, path, size);
+        {
+            QMutexLocker g(&tries_lock);
+            (img.isNull() ? tries[exe].second : tries[exe].first) += 1;
+        }
+        if (!img.isNull()) {
+            if (img.width() > size || img.height() > size)
+                img = img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            return img;
+        }
+    }
+    return QImage();
+}
+
 QImage file_thumb(const QString &path, qint64 mtime, int size)
 {
     QString flavor = FLAVORS.value(bucket_for(size));
@@ -116,10 +251,13 @@ QImage file_thumb(const QString &path, qint64 mtime, int size)
         img = load_scaled(path, size);
     else if (is_video(path))
         img = video_frame(path, size);
+    bool own = !img.isNull();
+    if (img.isNull())   // PDFs, fonts, … (and images Qt can't decode): the system thumbnailers
+        img = system_thumb(path, size);
     if (img.isNull())
         return QImage();
     // don't bother caching images that are already thumbnail sized
-    if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path))) {
+    if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
             makedirs(cache_dir, true, 0700);
             img.setText("Thumb::URI", uri);
@@ -259,6 +397,10 @@ QImage compose_folder(const QList<QImage> &images, int size, const QString &colo
     QRectF body(m, m + s * 0.19, s - 2 * m, s * 0.75);
     p.setBrush(front);
     p.drawRoundedRect(body, s * 0.06, s * 0.06);
+    if (images.isEmpty()) {   // a plain folder in this colour (no previews)
+        p.end();
+        return canvas;
+    }
     // mosaic
     QRectF inner = body.adjusted(s * 0.035, s * 0.035, -s * 0.035, -s * 0.035);
     QPainterPath clip;
@@ -372,7 +514,8 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
             return true;
         });
     };
-    collect(join(APP_CACHE(), "folders"));
+    collect(join(APP_CACHE(), "folders"));    // folder mosaics
+    collect(join(APP_CACHE(), "animated"));   // looping video previews
     for (const QString &flavor : FLAVORS) {
         QString d = join(THUMB_DIR(), flavor);
         if (!isdir(d))
@@ -405,11 +548,18 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
 
 // ---------------------------------------------------------------- manager (main thread)
 
+static ThumbnailManager *first_manager = nullptr;
+
+ThumbnailManager *ThumbnailManager::instance() { return first_manager; }
+
 ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 {
+    if (!first_manager)
+        first_manager = this;
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     image_exts();                    // initialise on the main thread
+    thumbs::thumbnailers();
     progress_timer.setSingleShot(true);
     progress_timer.setInterval(100);
     connect(&progress_timer, &QTimer::timeout, this, &ThumbnailManager::emit_progress);
@@ -420,14 +570,95 @@ ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 void ThumbnailManager::load_covers()
 {
     bool ok = false;
+    covers.clear();
+    styles.clear();
     QByteArray data = read_file(thumbs::covers_file(), &ok);
     QJsonObject obj = QJsonDocument::fromJson(data).object();
     for (auto it = obj.begin(); it != obj.end(); ++it)
         covers[it.key()] = it.value().toString();
+    QJsonObject st = QJsonDocument::fromJson(read_file(thumbs::styles_file(), &ok)).object();
+    for (auto it = st.begin(); it != st.end(); ++it)
+        styles[it.key()] = it.value().toObject().toVariantMap();
+}
+
+QString ThumbnailManager::custom_color(const QString &folder) const
+{
+    return styles.value(folder).value("color").toString();
+}
+
+QString ThumbnailManager::color_for(const QString &folder) const
+{
+    QString c = custom_color(folder);
+    return c.isEmpty() ? folder_color : c;
+}
+
+bool ThumbnailManager::previews_for(const QString &folder) const
+{
+    return styles.value(folder).value("previews", true).toBool();
+}
+
+void ThumbnailManager::reload_styles() { load_covers(); }
+
+void ThumbnailManager::set_style(const QStringList &folders, const QString &key, const QVariant &value)
+{
+    load_covers();   // another Kestrel may have changed them since
+    for (const QString &f : folders) {
+        QVariantMap st = styles.value(f);
+        if (value.isValid())
+            st[key] = value;
+        else
+            st.remove(key);
+        if (st.isEmpty())
+            styles.remove(f);
+        else
+            styles[f] = st;
+    }
+    QJsonObject obj;
+    for (auto it = styles.begin(); it != styles.end(); ++it)
+        obj[it.key()] = QJsonObject::fromVariantMap(it.value());
+    try {
+        makedirs(dirname(thumbs::styles_file()), true);
+        write_text(thumbs::styles_file(), QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    } catch (const OSError &) {
+    }
+    for (const QString &f : folders)
+        invalidate(f);
+    atc::announce("folders", {{"paths", QJsonArray::fromStringList(folders)}});
+}
+
+void ThumbnailManager::set_folder_color(const QStringList &folders, const QString &color)
+{
+    set_style(folders, "color", color.isEmpty() ? QVariant() : QVariant(color));
+}
+
+void ThumbnailManager::set_folder_previews(const QStringList &folders, bool on)
+{
+    set_style(folders, "previews", on ? QVariant() : QVariant(false));
+}
+
+QPixmap ThumbnailManager::plain_folder(const QString &color, int size)
+{
+    QPair<QString, int> k(color, thumbs::bucket_for(size));
+    auto it = plain_cache.find(k);
+    if (it == plain_cache.end())
+        it = plain_cache.insert(k, QPixmap::fromImage(thumbs::compose_folder({}, k.second, color, {})));
+    return *it;
+}
+
+QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews)
+{
+    if (previews && previews_for(path)) {
+        QPixmap pm = get(path, mtime, true, size);
+        if (!pm.isNull())
+            return pm;
+    }
+    QString color = custom_color(path);
+    return color.isEmpty() ? QPixmap() : plain_folder(color, size);
 }
 
 void ThumbnailManager::set_cover(const QString &folder, const QString &image)
 {
+    load_covers();
     if (!image.isEmpty())
         covers[folder] = image;
     else
@@ -441,6 +672,7 @@ void ThumbnailManager::set_cover(const QString &folder, const QString &image)
     } catch (const OSError &) {
     }
     invalidate(folder);
+    atc::announce("folders", {{"paths", QJsonArray{folder}}});
 }
 
 QString ThumbnailManager::key(const QString &path, qint64 mtime, bool is_dir, int size) const
@@ -448,7 +680,7 @@ QString ThumbnailManager::key(const QString &path, qint64 mtime, bool is_dir, in
     int b = thumbs::bucket_for(size);
     if (is_dir)
         return QStringList{path, "d", QString::number(b), QString::number(mtime), QString::number(folder_count),
-                           folder_order, folder_color, covers.value(path)}
+                           folder_order, color_for(path), covers.value(path)}
             .join('\x1f');
     return QStringList{path, "f", QString::number(b), QString::number(mtime)}.join('\x1f');
 }
@@ -472,7 +704,7 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
         }
         pending << k;
         prio += 1;
-        thumbs::FolderOpts opts{folder_count, folder_order, folder_color, covers.value(path)};
+        thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);
         auto job = [this, k, path, mtime, is_dir, b, opts]() {
             QImage img;
@@ -540,7 +772,7 @@ void ThumbnailManager::emit_progress()
     Q_EMIT progress(batch_done, batch_total);
 }
 
-void ThumbnailManager::invalidate(const QString &path)
+void ThumbnailManager::invalidate(const QString &path, bool disk)
 {
     for (auto it = lru.begin(); it != lru.end();) {
         if (key_path(it->first) == path) {
@@ -556,7 +788,8 @@ void ThumbnailManager::invalidate(const QString &path)
     for (auto it = failed.begin(); it != failed.end();)
         it = key_path(*it) == path ? failed.erase(it) : std::next(it);
     for (int size : {128, 256, 512})
-        ::unlink(enc(join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size))).constData());
+        if (disk)
+            ::unlink(enc(join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size))).constData());
     Q_EMIT updated(path);
 }
 
@@ -614,6 +847,12 @@ RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManag
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
     covers = manager->covers;
+    for (auto it = manager->styles.begin(); it != manager->styles.end(); ++it) {
+        if (!it.value().value("color").toString().isEmpty())
+            colors[it.key()] = it.value().value("color").toString();
+        if (!it.value().value("previews", true).toBool())
+            no_previews << it.key();
+    }
 }
 
 void RecursiveBuilder::emit_progress(bool force)
@@ -643,6 +882,7 @@ void RecursiveBuilder::one(char kind, const QString &path)
             if (kind == 'd') {
                 thumbs::FolderOpts o = opts;
                 o.cover = covers.value(path);
+                o.color = colors.value(path, opts.color);
                 thumbs::folder_thumb(path, st.st_mtime, size, o);
             } else if (st.st_size <= max_bytes || is_video(path)) {
                 thumbs::file_thumb(path, st.st_mtime, size);
@@ -694,7 +934,7 @@ void RecursiveBuilder::run()
             if (!f.startsWith('.') && exts.contains(ext_of(f)))
                 if (!submit('f', join(dir, f)))
                     return false;
-        if (stop || !submit('d', dir))
+        if (stop || (!no_previews.contains(dir) && !submit('d', dir)))
             return false;
         emit_progress();
         return true;

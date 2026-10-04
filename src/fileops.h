@@ -2,6 +2,8 @@
 #pragma once
 
 #include <QDialog>
+#include <QJsonObject>
+#include <QMap>
 #include <QPointer>
 #include <QThread>
 #include <QVariant>
@@ -14,6 +16,7 @@
 class QCheckBox;
 class QLabel;
 class QProgressBar;
+class QTimer;
 class QToolButton;
 
 // A background job shown in its window's status bar (TaskPanel).
@@ -28,6 +31,8 @@ public:
     Task(const QString &title, Fn fn, bool cancellable = true);
 
     QString title;
+    QString id;           // unique in this process (for the shared task list)
+    bool admin = false;   // runs in this window's admin session
     bool cancellable;
     std::atomic<bool> cancelled{false};
     bool was_cancelled = false;
@@ -51,7 +56,39 @@ private:
     qint64 last = 0;
 };
 
-// Status-bar widget: the running tasks' title, status and progress, with a cancel button.
+// A running task as the shared task list knows it: one of ours (local), or another Kestrel's.
+struct TaskInfo {
+    QString flight, id, title, text;
+    double fraction = -1.0;
+    bool cancellable = false, cancelling = false, admin = false;
+    Task *local = nullptr;
+};
+
+// Every running task: this Kestrel's (all its windows) and, through the tower (atc.h), the other Kestrels'. Ours are
+// reported to the others whenever one starts or ends, and at most twice a second while they make progress.
+class TaskBoard : public QObject {
+    Q_OBJECT
+public:
+    static TaskBoard *instance();
+    void add(Task *task);
+    QList<TaskInfo> others(const QList<Task *> &mine) const;   // all but `mine`: our other windows', then other Kestrels'
+    void cancel(const TaskInfo &task);   // another Kestrel's task: asks it to cancel
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    TaskBoard();
+    void schedule(int ms);
+    void publish();
+    void on_heard(const QJsonObject &msg);
+    QList<Task *> local;
+    QMap<QString, QList<TaskInfo>> remote;   // flight -> its tasks
+    QTimer *timer;
+};
+
+// Status-bar widget: the running tasks' title, status and progress, with a cancel button. This window's tasks come
+// first; tasks running in other windows (and other Kestrels) are counted after them, or shown when there are none here.
 class TaskPanel : public QWidget {
     Q_OBJECT
 public:
@@ -88,7 +125,10 @@ struct Job {
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
 // permission can be retried as administrator.
-Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr);
+// With undo_label, the moves and copies that succeed (also when cancelled part-way) can be undone with Ctrl+Z; merges
+// into existing folders can't.
+Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
+                const QString &undo_label = QString());
 
 // Resolve conflicts interactively; the job list for start_ops (nullopt if cancelled).
 std::optional<QList<Job>> plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir,

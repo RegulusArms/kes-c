@@ -2,6 +2,7 @@
 
 #include "dialogs.h"
 #include "fileops.h"
+#include "places.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -50,7 +51,9 @@ static const QSet<QString> NON_MOUNTABLE_FS = {"zfs_member", "linux_raid_member"
 bool is_uri(const QString &target)
 {
     static const QRegularExpression re("^[a-zA-Z][a-zA-Z0-9+.-]*://");
-    return re.match(target).hasMatch() && !target.startsWith("file://") && target != OVERVIEW;
+    // a network location to mount (smb://, sftp://, …), not a local path, the Overview, Starred or Recent
+    return re.match(target).hasMatch() && !target.startsWith("file://") && target != OVERVIEW &&
+           !places::is_virtual(target);
 }
 
 static QString gstr(char *s)
@@ -563,7 +566,7 @@ void BookmarkCard::update_pic()
     if (local) {
         if (isdir(target)) {
             QFileInfo fi(target);
-            QPixmap pm = thumbs->get(target, fi.lastModified().toSecsSinceEpoch(), true, 128);
+            QPixmap pm = thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128);
             if (!pm.isNull()) {
                 pic->setPixmap(thumbs->scaled(pm, 128));
                 return;
