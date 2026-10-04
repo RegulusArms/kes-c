@@ -35,10 +35,11 @@ LEGACY_DESKTOP="$HOME/.local/share/applications/folder-explorer.desktop"
 BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev libglib2.0-dev)
 # Recommended apt packages (see "Dependencies" in README.md). Most come with a standard Ubuntu desktop;
 # kimageformat6-plugins (camera RAW, HEIC, AVIF, JPEG XL, PSD previews) usually doesn't.
-RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-formats-plugins qt6-svg-plugins
+RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-formats-plugins 'qt6-svg-plugins|libqt6svg6'
              kimageformat6-plugins adwaita-icon-theme qt6-gtk-platformtheme
              '7zip|p7zip-full' unrar zip unzip pigz zpaq zstd xz-utils bzip2 lzip)   # archives (unrar is in multiverse)
-# a|b: the first of these the system has (7zip is p7zip-full on Debian and older Ubuntu releases)
+# a|b: the first of these the system has (7zip is p7zip-full on Debian 12 and older Ubuntu releases; the SVG plugins
+# come with libqt6svg6 on Ubuntu 24.04 / Linux Mint 22)
 
 # MIME types for folders: inode/directory, plus the older alias some apps still ask for
 FOLDER_TYPES=(inode/directory x-directory/normal)
