@@ -26,3 +26,6 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+
+# Benchmark output (bench/README.md)
+bench/results.json
