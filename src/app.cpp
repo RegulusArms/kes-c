@@ -2619,6 +2619,7 @@ static void apply_preferences()
 void MainWindow::preferences_saved()
 {
     apply_preferences();
+    settings().sync();   // other Kestrels read the file as soon as they hear the report
     atc::announce("settings");
 }
 
@@ -2890,6 +2891,12 @@ void on_atc(const QJsonObject &m)
     // a change reported by another Kestrel through the tower (see atc.h), or by this one ("own")
     QString type = m.value("type").toString();
     bool own = m.value("own").toBool();
+    if (type == "sidebar") {   // its order or collapsed sections; also refreshes this process's other windows
+        if (!own)
+            settings().sync();
+        for (MainWindow *w : WINDOWS)
+            w->sidebar->refresh();
+    }
     if (type == "bookmarks") {   // also refreshes this process's other windows
         for (MainWindow *w : WINDOWS) {
             w->sidebar->refresh();
