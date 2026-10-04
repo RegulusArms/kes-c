@@ -49,8 +49,7 @@ Everything `install.sh` needs to build, plus a few tools a normal Ubuntu desktop
 - `dbus-run-session` (`dbus-daemon`);
 - `gio` and `gsettings` (`libglib2.0-bin`);
 - `xdg-mime` (`xdg-utils`);
-- `script` (`util-linux`);
-- `python3-pyqt6`, which one check uses to change a setting from a second process.
+- `script` (`util-linux`).
 
 ## How the tests work
 

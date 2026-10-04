@@ -8,6 +8,12 @@ int main(int argc, char **argv)
     int rc;
     if (is_tower(argc, argv, &rc))
         return rc;
+    if (argc == 4 && QByteArray(argv[1]) == "--set-setting") {   // plays another Kestrel saving its Preferences
+        QSettings s(APP_ID, APP_ID);
+        s.setValue(argv[2], QString::fromLocal8Bit(argv[3]));
+        s.sync();
+        return 0;
+    }
     QApplication app(argc, argv);
     QString home = HOME();
     for (const QString &d : {"d1", "d2"})
@@ -62,8 +68,7 @@ int main(int argc, char **argv)
     fake.report({{"type", "folders"}, {"paths", QJsonArray{d1}}});
     check(wait_for([&]() { return thumbs->custom_color(d1) == "#abcdef"; }), "Another Kestrel's folder colour is picked up");
     check(thumbs->covers.value(d1).isEmpty(), "...and its cover change");
-    QProcess::execute("/usr/bin/python3", {"-c", "from PyQt6.QtCore import QSettings; s = QSettings('kestrel-explorer', "
-                                                 "'kestrel-explorer'); s.setValue('folder_count', 2); s.sync()"});
+    QProcess::execute(QCoreApplication::applicationFilePath(), {"--set-setting", "folder_count", "2"});   // another process
     fake.report({{"type", "settings"}});
     check(wait_for([&]() { return thumbs->folder_count == 2; }), "Another Kestrel's Preferences are applied");
     write_text(GTK_BOOKMARKS(), ("file://" + home + "/d1 Theirs\n").toUtf8());
