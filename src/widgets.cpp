@@ -9,6 +9,7 @@
 #include "thumbs.h"
 #include "util.h"
 
+#include <QFocusEvent>
 #include <QClipboard>
 #include <QCompleter>
 #include <QDir>
@@ -500,7 +501,9 @@ bool PathBar::eventFilter(QObject *obj, QEvent *ev)
         cancel_edit();
         return true;
     }
-    if (obj == edit && ev->type() == QEvent::FocusOut && !edit->completer()->popup()->isVisible())
+    // a popup (the right-click menu, the completer) takes focus while still editing
+    if (obj == edit && ev->type() == QEvent::FocusOut && static_cast<QFocusEvent *>(ev)->reason() != Qt::PopupFocusReason
+        && !edit->completer()->popup()->isVisible())
         QTimer::singleShot(0, this, &PathBar::cancel_edit);
     return false;
 }
