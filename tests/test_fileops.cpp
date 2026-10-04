@@ -1,6 +1,8 @@
 // File operations: copy, move, merge, replace, delete, cancel, trash, links, unique names, and undoing them.
 #include "common.h"
 
+#include "archive_ui.h"
+
 #include <QMessageBox>
 
 #include <sys/stat.h>
@@ -188,5 +190,24 @@ int main(int argc, char **argv)
     check(ds.files == 5 && ds.dirs == 3, QString("folder size counts files and folders (%1 files, %2 folders)")
                                               .arg(ds.files)
                                               .arg(ds.dirs));
+
+    // ---- opening an archive
+    check(archive::opens_as_archive(P("photos.tar.gz")) && !archive::opens_as_archive(P("app.deb")) &&
+              !archive::opens_as_archive(P("disk.iso")) && !archive::opens_as_archive(P("game.apk")),
+          "a .tar.gz opens as an archive; .deb, .iso and .apk open with their own apps");
+    make(P("arc/in.txt"));
+    proc::run({"tar", "czf", P("arc.tar.gz"), "-C", P("arc"), "in.txt"});
+    bool extract_shown = false;
+    QTimer extract_closer;   // the Extract dialog is modal: note it and close it
+    QObject::connect(&extract_closer, &QTimer::timeout, [&extract_shown]() {
+        if (auto *d = qobject_cast<ExtractDialog *>(QApplication::activeModalWidget())) {
+            extract_shown = true;
+            d->reject();
+        }
+    });
+    extract_closer.start(50);
+    w->open_paths(w->pane(), {P("arc.tar.gz")});
+    check(wait_for([&]() { return extract_shown; }), "double-clicking an archive opens Kestrel's Extract dialog");
+    extract_closer.stop();
     finish();
 }

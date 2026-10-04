@@ -1685,7 +1685,9 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     }
     QStringList images, videos, fetch, others;
     for (const QString &f : files) {
-        if (is_image(f))
+        if (archive::opens_as_archive(f))
+            archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
+        else if (is_image(f))
             images << f;
         else if (is_video(f))
             (needs_local_copy(f) ? fetch : videos) << f;   // a player would download it again on every open/seek
