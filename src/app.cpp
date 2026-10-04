@@ -99,13 +99,15 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     search_contents->setToolTip("Search inside files too, using the desktop's search index (localsearch).\n"
                                 "Includes subfolders; only finds files in indexed folders.");
     search_contents->setChecked(settings().value("search_contents", false).toBool());
-    search_contents->setVisible(can_search_contents());
     connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
         settings().setValue("search_contents", v);
         do_search();
     });
     sl->addWidget(search_sub);
     sl->addWidget(search_contents);
+    // only once it has a parent: showing a parentless widget opens it as a window of its own, which on Wayland
+    // uses up the launch's activation token and leaves GNOME's busy cursor spinning until it times out
+    search_contents->setVisible(can_search_contents());
     sl->addWidget(close);
     search_bar->hide();
     search_timer = new QTimer(this);
