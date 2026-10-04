@@ -18,7 +18,7 @@ target_include_directories(kes_core PUBLIC ${SRC})
 target_compile_definitions(kes_core PUBLIC QT_NO_KEYWORDS KES_VERSION="test")
 target_link_libraries(kes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO)
 
-foreach(name fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar)
+foreach(name fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme)
     add_executable(test_${name} test_${name}.cpp)
     target_link_libraries(test_${name} PRIVATE kes_core)
 endforeach()

@@ -1,6 +1,7 @@
 // Shared helpers: paths, file-system calls, mime types, icons, desktop integration, trash, bookmarks.
 #pragma once
 
+#include <QColor>
 #include <QIcon>
 #include <QMimeType>
 #include <QSet>
@@ -180,6 +181,20 @@ inline QIcon theme_icon(const QString &name) { return theme_icon(QStringList{nam
 QIcon icon_for_path(const QString &path, int is_dir = -1);
 const QHash<QString, QString> &special_dir_icons();
 void setup_icon_theme();
+
+// ---------------------------------------------------------------- theme
+// Colours derived from the desktop's palette, so they suit any theme, light or dark.
+
+bool dark_theme();                                            // the window background is dark
+QColor blend(const QColor &a, const QColor &b, double t);     // t = 0: a, 1: b
+QColor card_color();    // a card (Overview) that stands out a little from the window background
+QColor card_border();
+QColor error_color();   // red text that is readable on the window background
+QColor accent_color();  // the desktop's accent (the theme's selection colour)
+// Call fn whenever the desktop's colours change (a light/dark switch, another theme). Qt updates its palette, but a
+// stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)
+// are reapplied first, then fn runs. Stops when owner is deleted.
+void on_palette_change(QObject *owner, std::function<void()> fn);
 
 // ---------------------------------------------------------------- applications (GIO)
 

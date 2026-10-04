@@ -657,6 +657,7 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     connect(this, &QListWidget::itemClicked, this, &Sidebar::clicked);
     setStyleSheet("QListWidget { background: palette(window); } QListWidget::item { padding: 3px; }");
     refresh();
+    on_palette_change(this, [this]() { refresh(); });   // the headers' colour is set per item
     timer.setInterval(4000);
     connect(&timer, &QTimer::timeout, this, &Sidebar::check_mounts);
     timer.start();

@@ -5,7 +5,12 @@
 #include "proc.h"
 #include "uwp.h"
 
+#include <QApplication>
 #include <QCoreApplication>
+#include <QPalette>
+#include <QPointer>
+#include <QTimer>
+#include <QWidget>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -1026,6 +1031,83 @@ void setup_icon_theme()
         QIcon::setThemeName(theme);
     }
     QIcon::setFallbackThemeName("Adwaita");
+}
+
+// ---------------------------------------------------------------- theme
+
+bool dark_theme() { return QGuiApplication::palette().color(QPalette::Window).lightness() < 128; }
+
+QColor blend(const QColor &a, const QColor &b, double t)
+{
+    return QColor::fromRgbF(float(a.redF() + (b.redF() - a.redF()) * t), float(a.greenF() + (b.greenF() - a.greenF()) * t),
+                            float(a.blueF() + (b.blueF() - a.blueF()) * t));
+}
+
+QColor card_color()
+{
+    // the theme's base colour when it differs from the window's (most light themes); otherwise a shade towards the text
+    QPalette pal = QGuiApplication::palette();
+    QColor base = pal.color(QPalette::Base), window = pal.color(QPalette::Window);
+    if (std::abs(base.lightness() - window.lightness()) >= 8)
+        return base;
+    return blend(window, pal.color(QPalette::Text), 0.05);
+}
+
+QColor card_border()
+{
+    QPalette pal = QGuiApplication::palette();
+    return blend(pal.color(QPalette::Window), pal.color(QPalette::Text), 0.14);
+}
+
+QColor error_color() { return QColor(dark_theme() ? "#ff7b63" : "#c01c28"); }   // GNOME's error colours
+
+QColor accent_color() { return QGuiApplication::palette().color(QPalette::Highlight); }
+
+namespace {
+
+// Hears the application's palette change: every widget gets ApplicationPaletteChange, this hidden one included.
+class PaletteWatcher : public QWidget {
+public:
+    QList<QPair<QPointer<QObject>, std::function<void()>>> fns;
+
+protected:
+    bool event(QEvent *ev) override
+    {
+        if (ev->type() == QEvent::ApplicationPaletteChange && !queued) {
+            queued = true;   // a theme switch can change the palette several times in a row
+            QTimer::singleShot(0, this, [this]() {
+                queued = false;
+                apply();
+            });
+        }
+        return QWidget::event(ev);
+    }
+
+private:
+    bool queued = false;
+    void apply()
+    {
+        for (QWidget *w : QApplication::allWidgets()) {
+            QString ss = w->styleSheet();
+            if (ss.contains("palette(")) {
+                w->setStyleSheet(QString());
+                w->setStyleSheet(ss);
+            }
+        }
+        fns.removeIf([](const auto &f) { return f.first.isNull(); });
+        auto now = fns;
+        for (const auto &[owner, fn] : now)
+            if (owner)
+                fn();
+    }
+};
+
+}  // namespace
+
+void on_palette_change(QObject *owner, std::function<void()> fn)
+{
+    static PaletteWatcher *watcher = new PaletteWatcher;
+    watcher->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
 }
 
 // ---------------------------------------------------------------- applications (GIO)

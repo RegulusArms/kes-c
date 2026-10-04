@@ -546,6 +546,11 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
     return {files, size};
 }
 
+bool follows_accent(const QString &setting)
+{
+    return setting.isEmpty() || setting == "accent" || setting.toLower() == "#d9652f";
+}
+
 // ---------------------------------------------------------------- phones and cameras
 
 QImage device_preview(const QString &uri, int size)

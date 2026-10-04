@@ -542,8 +542,10 @@ Card::Card(QWidget *parent) : QFrame(parent)
 {
     setObjectName("card");
     setCursor(Qt::PointingHandCursor);
-    setStyleSheet("QFrame#card { background: palette(base); border: 1px solid palette(midlight); border-radius: 10px; }"
-                  "QFrame#card:hover { border: 1px solid palette(highlight); }");
+    // colours from the theme (the page rebuilds its cards when the desktop's colours change)
+    setStyleSheet(QString("QFrame#card { background: %1; border: 1px solid %2; border-radius: 10px; }"
+                          "QFrame#card:hover { border: 1px solid palette(highlight); }")
+                      .arg(card_color().name(), card_border().name()));
 }
 
 void Card::mouseReleaseEvent(QMouseEvent *ev)
@@ -610,9 +612,9 @@ DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), in
         bar->setTextVisible(false);
         bar->setFixedHeight(8);
         QString color = pct >= 90 ? "#c01c28" : (pct >= 75 ? "#e5a50a" : "palette(highlight)");
-        bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: palette(midlight); }"
-                                   "QProgressBar::chunk { border-radius: 4px; background: %1; }")
-                               .arg(color));
+        bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: %1; }"
+                                   "QProgressBar::chunk { border-radius: 4px; background: %2; }")
+                               .arg(card_border().name(), color));
         col->addWidget(bar);
         col->addWidget(small(new QLabel(QString("%1 free of %2  (%3% used)")
                                             .arg(human_size(free), human_size(total))
@@ -693,6 +695,7 @@ OverviewPage::OverviewPage(ThumbnailManager *thumbs, QWidget *parent) : QScrollA
     usage_timer.setInterval(15000);
     connect(&usage_timer, &QTimer::timeout, this, &OverviewPage::refresh);
     connect(thumbs, &ThumbnailManager::updated, this, &OverviewPage::thumb_ready);
+    on_palette_change(this, [this]() { rebuild(); });   // a light/dark switch: cards and icons in the new colours
     monitor = g_volume_monitor_get();
     for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
                             "mount-changed"})

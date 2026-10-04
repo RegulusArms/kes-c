@@ -2764,8 +2764,20 @@ void apply_thumb_settings(ThumbnailManager *t)
     QSettings &s = settings();
     t->folder_count = s.value("folder_count", 4).toInt();
     t->folder_order = s.value("folder_order", "name").toString();
-    t->folder_color = s.value("folder_color", "#d9652f").toString();
+    QString color = s.value("folder_color", "accent").toString();
+    t->folder_accent = thumbs::follows_accent(color);
+    t->folder_color = t->folder_accent ? accent_color().name() : color;
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
+    static ThumbnailManager *watched = nullptr;
+    if (!watched) {   // runs before the windows' own updates, which then draw folders in the new accent
+        watched = t;
+        on_palette_change(t, [t]() {
+            if (t->folder_accent && t->folder_color != accent_color().name()) {
+                t->folder_color = accent_color().name();
+                repaint_all();
+            }
+        });
+    }
 }
 
 // ---- Preferences → "Open folders from other apps as tabs in an open Kestrel window"

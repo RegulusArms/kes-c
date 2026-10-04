@@ -56,6 +56,10 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
 // none. Worker thread.
 QImage device_preview(const QString &uri, int size);
 
+// The default folder colour setting (folder_color): "accent", unset, or the old fixed default (#d9652f, which
+// Preferences used to save every time) follow the desktop's accent colour; anything else is a fixed colour.
+bool follows_accent(const QString &setting);
+
 // Delete every thumbnail this app may have written. Returns (files, bytes).
 QPair<qint64, qint64> purge_thumbnails(bool include_shared = false);
 
@@ -95,7 +99,8 @@ public:
     int max_file_mb = 200;
     int folder_count = 4;
     QString folder_order = "name";
-    QString folder_color = "#d9652f";
+    QString folder_color = "#d9652f";   // the default colour in use (the accent's, when folder_accent)
+    bool folder_accent = true;
 
 Q_SIGNALS:
     void updated(const QString &path);
