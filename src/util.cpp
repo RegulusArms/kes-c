@@ -1378,7 +1378,7 @@ void ensure_desktop_entry()
     try {
         makedirs(dirname(entry), true);
         write_text(entry, QString("[Desktop Entry]\nType=Application\nName=%1\nGenericName=File Manager\n"
-                                  "Comment=Browse files and image galleries with folder previews\n"
+                                  "Comment=Manage files, with archive, admin, permission and metadata tools built in\n"
                                   "Exec=%2 %U\nIcon=folder\nTerminal=false\n"
                                   "Categories=System;FileTools;FileManager;Viewer;\n"
                                   "MimeType=inode/directory;x-directory/normal;\nStartupWMClass=%3\n")
