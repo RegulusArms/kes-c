@@ -9,11 +9,11 @@
 #include "thumbs.h"
 #include "util.h"
 
-#include <QFocusEvent>
 #include <QClipboard>
 #include <QCompleter>
 #include <QDir>
 #include <QDragEnterEvent>
+#include <QFocusEvent>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -29,6 +29,7 @@
 
 #include <cmath>
 #include <fnmatch.h>
+#include <gio/gio.h>
 
 using namespace util;
 
@@ -633,6 +634,14 @@ void PathBar::fit(bool force)
 
 Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
 {
+    // phones and cameras come and go through GIO's volume monitor (QStorageInfo doesn't see them)
+    monitor = g_volume_monitor_get();
+    for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
+                            "mount-changed"})
+        g_signal_connect(monitor, sig, G_CALLBACK(&Sidebar::monitor_changed), this);
+    phone_timer.setSingleShot(true);
+    phone_timer.setInterval(300);
+    connect(&phone_timer, &QTimer::timeout, this, &Sidebar::refresh);
     setIconSize(QSize(18, 18));
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -649,6 +658,14 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     connect(&timer, &QTimer::timeout, this, &Sidebar::check_mounts);
     timer.start();
 }
+
+Sidebar::~Sidebar()
+{
+    g_signal_handlers_disconnect_by_data(monitor, this);
+    g_object_unref(monitor);
+}
+
+void Sidebar::monitor_changed(void *, void *, void *self) { static_cast<Sidebar *>(self)->phone_timer.start(); }
 
 void Sidebar::header(const QString &text)
 {
@@ -743,6 +760,14 @@ void Sidebar::refresh()
         bool removable = m.root.startsWith("/media/") || m.root.startsWith("/run/media/");
         add(label, m.root, theme_icon({removable ? "drive-removable-media" : "drive-harddisk", "folder"}), "mount", m.dev);
     }
+    phones = overview::phone_infos(monitor);
+    for (int i = 0; i < phones.size(); ++i) {
+        const DriveInfo &ph = phones[i];
+        // a phone that isn't mounted yet opens its URI: open_location mounts it
+        QIcon icon = ph.icon.isNull() ? theme_icon({"phone", "drive-removable-media"}) : ph.icon;
+        add(ph.name, ph.mounted ? ph.root : ph.uri, icon, "phone", i);
+        item(count() - 1)->setToolTip(ph.mounted ? ph.fs : ph.fs + " — click to connect");
+    }
     if (!current.isEmpty())
         select_path(current);
 }
@@ -791,7 +816,7 @@ void Sidebar::menu(const QPoint &pos)
     QMenu m(this);
     m.addAction("Open", this, [this, path]() { Q_EMIT open_path(path, false); });
     m.addAction("Open in New Tab", this, [this, path]() { Q_EMIT open_path(path, true); });
-    if (isdir(path))
+    if (kind != "phone" && isdir(path))   // a stat on a phone can wait behind its transfers
         m.addAction("Open in Terminal", this, [path]() { open_terminal(path); });
     if (kind == "bookmark") {
         int i = extra.toInt();
@@ -806,6 +831,11 @@ void Sidebar::menu(const QPoint &pos)
     } else if (kind == "mount") {
         m.addSeparator();
         m.addAction("Unmount", this, [this, path]() { unmount(path); });
+    } else if (kind == "phone" && phones.value(extra.toInt()).mount) {
+        int i = extra.toInt();
+        m.addSeparator();
+        QString label = g_mount_can_eject(phones[i].mount.get()) ? "Eject" : "Unmount";
+        m.addAction(label, this, [this, i]() { eject_phone(i); });
     }
     m.exec(viewport()->mapToGlobal(pos));
 }
@@ -820,6 +850,20 @@ void Sidebar::unmount(const QString &path)
         QMessageBox::warning(this, "Unmount", err.isEmpty() ? "Unmount failed" : err);
     }
     refresh();
+}
+
+void Sidebar::eject_phone(int i)
+{
+    if (i < 0 || i >= phones.size() || !phones[i].mount)
+        return;
+    QPointer<Sidebar> self(this);
+    overview::unmount(this, phones[i].mount, [self](const QString &err) {
+        if (!self)
+            return;
+        if (!err.isEmpty())
+            QMessageBox::warning(self, "Unmount", err);
+        self->refresh();
+    });
 }
 
 void Sidebar::edit_bookmark(const QString &path)

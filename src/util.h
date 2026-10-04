@@ -159,6 +159,15 @@ const QSet<QString> &image_exts();
 bool is_image(const QString &path);
 bool is_raw(const QString &path);
 bool is_video(const QString &path);
+// a phone or camera mounted by gvfs (/run/user/<uid>/gvfs/afc:…, gphoto2:…, mtp:…): each read is slow (gphoto2
+// downloads the whole file) and the backend serves one request at a time, so nothing may scan it in bulk
+bool is_device_path(const QString &path);
+// on a device whose backend downloads the whole file on every open (gvfs gphoto2), so a player that opens and seeks
+// it repeatedly downloads it again each time: open a local copy instead (fileops::fetch_local)
+bool needs_local_copy(const QString &path);
+// the gvfs URI (gphoto2://…, mtp://…) of a file on a device, from the mount that holds its FUSE path; empty if none.
+// Main thread: uses GIO's volume monitor.
+QString device_uri(const QString &path);
 QMimeType mime_for(const QString &path, int is_dir = -1);
 QMimeType mime_for_content(const QString &path);
 

@@ -872,6 +872,42 @@ bool is_image(const QString &path) { return image_exts().contains(ext_of(path));
 bool is_raw(const QString &path) { return RAW_EXTS.contains(ext_of(path)); }
 bool is_video(const QString &path) { return VIDEO_EXTS.contains(ext_of(path)); }
 
+bool is_device_path(const QString &path)
+{
+    static const QRegularExpression re("^/run/user/\\d+/gvfs/(afc|gphoto2|mtp):");
+    return re.match(path).hasMatch();
+}
+
+bool needs_local_copy(const QString &path)
+{
+    static const QRegularExpression re("^/run/user/\\d+/gvfs/gphoto2:");
+    return re.match(path).hasMatch();
+}
+
+QString device_uri(const QString &path)
+{
+    QString out;
+    GVolumeMonitor *mon = g_volume_monitor_get();
+    GList *mounts = g_volume_monitor_get_mounts(mon);
+    for (GList *l = mounts; l && out.isEmpty(); l = l->next) {
+        GFile *root = g_mount_get_root(G_MOUNT(l->data));
+        char *rp = g_file_get_path(root);
+        QString r = rp ? QString::fromUtf8(rp) : QString();
+        g_free(rp);
+        if (!r.isEmpty() && path.startsWith(r + "/")) {
+            GFile *f = g_file_resolve_relative_path(root, path.mid(r.size() + 1).toUtf8().constData());
+            char *u = g_file_get_uri(f);
+            out = QString::fromUtf8(u);
+            g_free(u);
+            g_object_unref(f);
+        }
+        g_object_unref(root);
+    }
+    g_list_free_full(mounts, g_object_unref);
+    g_object_unref(mon);
+    return out;
+}
+
 static QMimeDatabase &mime_db()
 {
     static QMimeDatabase db;

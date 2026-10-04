@@ -1,6 +1,8 @@
 // Models, delegates and widgets used by the main window.
 #pragma once
 
+#include "overview.h"
+
 #include <QAbstractFileIconProvider>
 #include <QFileSystemModel>
 #include <QFormLayout>
@@ -181,6 +183,7 @@ class Sidebar : public QListWidget {
     Q_OBJECT
 public:
     explicit Sidebar(QWidget *parent = nullptr);
+    ~Sidebar() override;
     void refresh();
     void select_path(const QString &path);
     void add_bookmark(const QString &path);
@@ -213,11 +216,15 @@ private:
     void clicked(QListWidgetItem *it);
     void menu(const QPoint &pos);
     void unmount(const QString &path);
+    void eject_phone(int i);
+    static void monitor_changed(void *, void *, void *self);
     void edit_bookmark(const QString &path);
     void remove_bookmark(int i);
     void move_bookmark(int i, int d);
     QList<Mount> mounts;
-    QTimer timer;
+    QList<DriveInfo> phones;   // phones and cameras (GIO), in the order shown
+    QTimer timer, phone_timer;
+    GVolumeMonitor *monitor = nullptr;
 };
 
 // ---------------------------------------------------------------- info panel

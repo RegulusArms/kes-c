@@ -1399,7 +1399,7 @@ void MainWindow::pane_path_changed(Pane *p)
     sync_zoom_slider();
     QString d = p->dir();
     QStorageInfo vol;
-    if (!d.isEmpty())
+    if (!d.isEmpty() && !is_device_path(d))   // statfs on a phone waits behind its file transfers
         vol = QStorageInfo(d);
     free_label->setText(!d.isEmpty() && vol.isValid() ? human_size(vol.bytesAvailable()) + " free" : QString());
     update_status();
@@ -1438,7 +1438,12 @@ void MainWindow::open_location(const QString &target_in, bool new_tab_)
                 return;
             self->statusBar()->clearMessage();
             if (!err.isEmpty()) {
-                QMessageBox::warning(self, "Connect to Server", QString("Could not open %1:\n\n%2").arg(target, err));
+                QString scheme = target.section(':', 0, 0);
+                QString msg = QString("Could not open %1:\n\n%2").arg(target, err);
+                if (overview::is_phone_scheme(scheme))
+                    msg += "\n\n" + overview::phone_hint(scheme, target);
+                QString title = overview::is_phone_scheme(scheme) ? "Connect to Device" : "Connect to Server";
+                QMessageBox::warning(self, title, msg);
             } else if (!path.isEmpty()) {
                 self->remember_server(target);
                 self->sidebar->refresh();
@@ -1678,14 +1683,21 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
                 new_tab(d, false);
         }
     }
-    QStringList images, videos, others;
+    QStringList images, videos, fetch, others;
     for (const QString &f : files) {
         if (is_image(f))
             images << f;
         else if (is_video(f))
-            videos << f;
+            (needs_local_copy(f) ? fetch : videos) << f;   // a player would download it again on every open/seek
         else
             others << f;
+    }
+    if (!fetch.isEmpty()) {
+        QPointer<MainWindow> self(this);
+        fileops::fetch_local(this, fetch, [self](const QStringList &local) {
+            if (self)
+                self->open_videos(local);
+        });
     }
     QString img_choice = settings().value("image_opener", "system").toString();
     if (!images.isEmpty() && img_choice == "builtin") {
@@ -1703,8 +1715,15 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         others += open_with_choice(images, img_choice);
     }
     if (!videos.isEmpty())
-        others += open_with_choice(videos, settings().value("video_opener", "system").toString());
+        open_videos(videos);
     for (const QString &f : others)
+        if (!open_file(f))
+            QMessageBox::warning(this, "Open", "Could not open " + f);
+}
+
+void MainWindow::open_videos(const QStringList &videos)
+{
+    for (const QString &f : open_with_choice(videos, settings().value("video_opener", "system").toString()))
         if (!open_file(f))
             QMessageBox::warning(this, "Open", "Could not open " + f);
 }

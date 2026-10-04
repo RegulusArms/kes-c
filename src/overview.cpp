@@ -384,6 +384,101 @@ void unmount(QWidget *parent, const MountRef &mount, std::function<void(const QS
         g_mount_unmount_with_operation(mount.get(), G_MOUNT_UNMOUNT_NONE, cb->op, nullptr, finished, cb);
 }
 
+// ---------------------------------------------------------------- phones and cameras
+
+const QString NO_PHONES_HINT = "No phones or cameras connected. Plug one in and unlock it: on an iPhone, tap “Trust”; "
+                               "on Android, choose “File transfer” in the USB notification.";
+
+bool is_phone_scheme(const QString &scheme) { return scheme == "afc" || scheme == "gphoto2" || scheme == "mtp"; }
+
+QString phone_kind(const QString &scheme)
+{
+    // what a phone/camera mount holds (an iPhone has two: its photos via gphoto2, its apps' files via afc)
+    return scheme == "gphoto2" ? QString("Photos and videos") : QString("Files");
+}
+
+QString phone_hint(const QString &scheme, const QString &name)
+{
+    bool apple = scheme == "afc";
+    for (const char *w : {"iPhone", "iPad", "iPod", "Apple"})
+        apple = apple || name.contains(w, Qt::CaseInsensitive);
+    if (apple)
+        return "Unlock the iPhone or iPad and tap “Trust” if it asks whether to trust this computer, then try again.";
+    if (scheme == "mtp")
+        return "Unlock the phone and choose “File transfer” in its USB notification, then try again.";
+    return "Make sure the camera is switched on and set to photo transfer (PTP) mode, then try again.";
+}
+
+MountGroup mount_group(const QString &scheme, const QString &path, bool shadowed, bool known_root)
+{
+    if (shadowed)
+        return MountGroup::Skip;   // hidden behind its volume's own mount (gvfs lists both)
+    if (!path.isEmpty() && known_root)
+        return MountGroup::Local;
+    if (is_phone_scheme(scheme))
+        return MountGroup::Phone;
+    if (scheme != "file" || path.contains("/gvfs/"))
+        return MountGroup::Network;   // gvfs network mount (smb, sftp, ...)
+    return MountGroup::Skip;
+}
+
+QList<DriveInfo> phone_infos(GVolumeMonitor *monitor)
+{
+    QList<DriveInfo> out;
+    GList *mounts = g_volume_monitor_get_mounts(monitor);
+    for (GList *l = mounts; l; l = l->next) {
+        MountRef m = mount_ref(G_MOUNT(l->data));
+        GFile *root = g_mount_get_root(m.get());
+        QString scheme = gstr(g_file_get_uri_scheme(root));
+        if (!g_mount_is_shadowed(m.get()) && is_phone_scheme(scheme)) {
+            DriveInfo info;
+            info.name = gstr(g_mount_get_name(m.get()));
+            info.root = gstr(g_file_get_path(root));
+            info.uri = gstr(g_file_get_uri(root));
+            info.fs = phone_kind(scheme);
+            GIcon *gi = g_mount_get_icon(m.get());
+            info.icon = gicon_to_qicon(gi);
+            g_object_unref(gi);
+            info.mount = m;
+            info.status = "Connected";
+            info.kind = "phone";
+            out << info;
+        }
+        g_object_unref(root);
+    }
+    g_list_free(mounts);
+    GList *volumes = g_volume_monitor_get_volumes(monitor);
+    for (GList *l = volumes; l; l = l->next) {
+        VolumeRef v = volume_ref(G_VOLUME(l->data));
+        GMount *vm = g_volume_get_mount(v.get());
+        if (vm) {
+            g_object_unref(vm);
+            continue;
+        }
+        GFile *act = g_volume_get_activation_root(v.get());
+        if (!act)
+            continue;
+        QString scheme = gstr(g_file_get_uri_scheme(act));
+        QString uri = gstr(g_file_get_uri(act));
+        g_object_unref(act);
+        if (!is_phone_scheme(scheme) || !g_volume_can_mount(v.get()))
+            continue;
+        DriveInfo info;
+        info.name = gstr(g_volume_get_name(v.get()));
+        info.uri = uri;
+        info.fs = phone_kind(scheme);
+        info.mounted = false;
+        GIcon *gi = g_volume_get_icon(v.get());
+        info.icon = gicon_to_qicon(gi);
+        g_object_unref(gi);
+        info.volume = v;
+        info.kind = "phone";
+        out << info;
+    }
+    g_list_free(volumes);
+    return out;
+}
+
 }  // namespace overview
 
 // ---------------------------------------------------------------- widgets
@@ -499,7 +594,7 @@ DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), in
     }
     col->addLayout(top);
     QStringList sub;
-    QString where = !info.root.isEmpty() ? info.root : info.device;
+    QString where = info.kind == "phone" ? QString() : !info.root.isEmpty() ? info.root : info.device;
     if (!where.isEmpty())
         sub << where;
     if (!info.fs.isEmpty())
@@ -682,12 +777,20 @@ void OverviewPage::rebuild()
     int scroll = verticalScrollBar()->value();
     clear_layout(lay);
     bookmark_cards.clear();
-    auto [local, network] = drive_infos();
+    auto [local, phones, network] = drive_infos();
     FlowLayout *flow = section("Drives");
     for (const DriveInfo &info : local)
         flow->addWidget(drive_card(info));
     if (local.isEmpty())
         flow->addWidget(small(new QLabel("Scanning…")));
+    FlowLayout *pflow = section("Phones & Cameras");
+    for (const DriveInfo &info : phones)
+        pflow->addWidget(drive_card(info));
+    if (phones.isEmpty()) {
+        auto *hint = small(new QLabel(overview::NO_PHONES_HINT));
+        hint->setWordWrap(true);
+        lay->addWidget(hint);
+    }
     FlowLayout *nflow = section("Network");
     for (const DriveInfo &info : network)
         nflow->addWidget(drive_card(info));
@@ -726,7 +829,7 @@ void OverviewPage::rebuild()
     QTimer::singleShot(0, this, [this, scroll]() { verticalScrollBar()->setValue(scroll); });
 }
 
-QPair<QList<DriveInfo>, QList<DriveInfo>> OverviewPage::drive_infos()
+DriveLists OverviewPage::drive_infos()
 {
     QHash<QString, QVariantMap> roots;
     for (const QVariant &v : fs) {
@@ -741,10 +844,10 @@ QPair<QList<DriveInfo>, QList<DriveInfo>> OverviewPage::drive_infos()
         GFile *root = g_mount_get_root(m.get());
         QString path = gstr(g_file_get_path(root));
         QString scheme = gstr(g_file_get_uri_scheme(root));
-        if (!path.isEmpty() && roots.contains(path)) {
+        auto group = overview::mount_group(scheme, path, g_mount_is_shadowed(m.get()), roots.contains(path));
+        if (group == overview::MountGroup::Local) {
             gio_by_root.insert(path, m);
-        } else if (scheme != "file" || path.contains("/gvfs/")) {
-            // gvfs network mount (smb, sftp, ...)
+        } else if (group == overview::MountGroup::Network) {
             DriveInfo info;
             info.name = gstr(g_mount_get_name(m.get()));
             info.root = path;
@@ -804,6 +907,12 @@ QPair<QList<DriveInfo>, QList<DriveInfo>> OverviewPage::drive_infos()
         }
         if (!g_volume_can_mount(v.get()))
             continue;
+        GFile *act = g_volume_get_activation_root(v.get());
+        QString act_scheme = act ? gstr(g_file_get_uri_scheme(act)) : QString();
+        if (act)
+            g_object_unref(act);
+        if (overview::is_phone_scheme(act_scheme))
+            continue;   // phone_infos
         QString dev = gstr(g_volume_get_identifier(v.get(), G_VOLUME_IDENTIFIER_KIND_UNIX_DEVICE));
         QString fstype = dev.isEmpty() ? QString() : overview::udev_fstype(dev);
         if (NON_MOUNTABLE_FS.contains(fstype))
@@ -822,7 +931,7 @@ QPair<QList<DriveInfo>, QList<DriveInfo>> OverviewPage::drive_infos()
         local << info;
     }
     g_list_free(volumes);
-    return {local, network};
+    return {local, overview::phone_infos(monitor), network};
 }
 
 DriveCard *OverviewPage::drive_card(DriveInfo info)
@@ -881,11 +990,18 @@ QHBoxLayout *OverviewPage::connect_row()
 void OverviewPage::do_mount(const overview::VolumeRef &volume)
 {
     QPointer<OverviewPage> self(this);
-    overview::mount_volume(this, volume, [self](const QString &path, const QString &err) {
+    GFile *act = g_volume_get_activation_root(volume.get());
+    QString scheme = act ? gstr(g_file_get_uri_scheme(act)) : QString();
+    if (act)
+        g_object_unref(act);
+    QString hint = overview::is_phone_scheme(scheme)
+                       ? overview::phone_hint(scheme, gstr(g_volume_get_name(volume.get())))
+                       : QString();
+    overview::mount_volume(this, volume, [self, hint](const QString &path, const QString &err) {
         if (!self)
             return;
         if (!err.isEmpty())
-            QMessageBox::warning(self, "Mount", err);
+            QMessageBox::warning(self, "Mount", hint.isEmpty() ? err : err + "\n\n" + hint);
         Q_EMIT self->sidebar_changed();
         self->refresh();
         if (!path.isEmpty())

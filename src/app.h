@@ -225,6 +225,7 @@ private:
     void build_finished(int done, int total, bool cancelled);
     void on_thumb_progress(int done, int total);
     void toggle_panel(QWidget *w, const QString &key, bool on);
+    void open_videos(const QStringList &videos);
     QStringList open_with_choice(const QStringList &files, const QString &choice);
     void uwp_add(const QString &path);
     void folder_style_menu(QMenu *m, const QStringList &folders);

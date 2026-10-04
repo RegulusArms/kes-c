@@ -4,6 +4,7 @@
 #include "atc.h"
 #include "util.h"
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QFile>
 #include <QImageReader>
@@ -16,6 +17,7 @@
 
 #include <cstdlib>
 #include <fcntl.h>
+#include <gio/gio.h>
 #include <unistd.h>
 
 using namespace util;
@@ -544,6 +546,40 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
     return {files, size};
 }
 
+// ---------------------------------------------------------------- phones and cameras
+
+QImage device_preview(const QString &uri, int size)
+{
+    // the phone's own small preview (gvfs's preview::icon: gphoto2 and mtp have one, afc doesn't), scaled to fit size
+    if (uri.isEmpty())
+        return QImage();
+    QImage img;
+    GFile *f = g_file_new_for_uri(uri.toUtf8().constData());
+    GFileInfo *info = g_file_query_info(f, G_FILE_ATTRIBUTE_PREVIEW_ICON, G_FILE_QUERY_INFO_NONE, nullptr, nullptr);
+    GObject *icon = info ? g_file_info_get_attribute_object(info, G_FILE_ATTRIBUTE_PREVIEW_ICON) : nullptr;
+    if (icon && G_IS_LOADABLE_ICON(icon)) {
+        GInputStream *in = g_loadable_icon_load(G_LOADABLE_ICON(icon), size, nullptr, nullptr, nullptr);
+        if (in) {
+            QByteArray data;
+            char buf[65536];
+            gssize n;
+            while ((n = g_input_stream_read(in, buf, sizeof buf, nullptr, nullptr)) > 0 && data.size() < 20000000)
+                data.append(buf, n);
+            g_object_unref(in);
+            QBuffer b(&data);
+            QImageReader reader(&b);
+            reader.setAutoTransform(true);
+            img = reader.read();
+        }
+    }
+    if (info)
+        g_object_unref(info);
+    g_object_unref(f);
+    if (!img.isNull() && img.width() < size && img.height() < size)
+        img = img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return img;
+}
+
 }  // namespace thumbs
 
 // ---------------------------------------------------------------- manager (main thread)
@@ -558,6 +594,7 @@ ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
         first_manager = this;
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
+    device_pool.setMaxThreadCount(1);   // phones and cameras serve one request at a time (is_device_path)
     image_exts();                    // initialise on the main thread
     thumbs::thumbnailers();
     progress_timer.setSingleShot(true);
@@ -685,6 +722,8 @@ QString ThumbnailManager::key(const QString &path, qint64 mtime, bool is_dir, in
     return QStringList{path, "f", QString::number(b), QString::number(mtime)}.join('\x1f');
 }
 
+static const qint64 DEVICE_MAX_BYTES = 30000000;   // larger files on a phone are only shown by their preview
+
 static QString key_path(const QString &key) { return key.section('\x1f', 0, 0); }
 
 QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize)
@@ -698,7 +737,13 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
     if (failed.contains(k))
         return QPixmap();
     if (!pending.contains(k)) {
+        bool device = is_device_path(path);
         if (!is_dir && fsize > qint64(max_file_mb) * 1000000 && !is_video(path)) {
+            failed << k;
+            return QPixmap();
+        }
+        // a phone: one file at a time, and no folder mosaics (they would download every file)
+        if (device && is_dir) {
             failed << k;
             return QPixmap();
         }
@@ -706,16 +751,24 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
         prio += 1;
         thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);
-        auto job = [this, k, path, mtime, is_dir, b, opts]() {
+        QString uri = device ? device_uri(path) : QString();
+        auto job = [this, k, path, mtime, is_dir, b, opts, device, uri, fsize]() {
             QImage img;
             try {
-                img = is_dir ? thumbs::folder_thumb(path, mtime, b, opts) : thumbs::file_thumb(path, mtime, b);
+                if (device) {
+                    img = thumbs::device_preview(uri, b);
+                    // no preview: read the file itself if it's an image that isn't too big (a read downloads it all)
+                    if (img.isNull() && !is_video(path) && fsize <= DEVICE_MAX_BYTES)
+                        img = thumbs::file_thumb(path, mtime, b);
+                } else {
+                    img = is_dir ? thumbs::folder_thumb(path, mtime, b, opts) : thumbs::file_thumb(path, mtime, b);
+                }
             } catch (...) {
                 img = QImage();
             }
             Q_EMIT job_done(k, path, img, mtime, is_dir);
         };
-        (is_dir ? dir_pool : pool).start(job, prio);
+        (device ? device_pool : is_dir ? dir_pool : pool).start(job, prio);
         batch_total += 1;
         schedule_progress();
     }
@@ -754,6 +807,7 @@ void ThumbnailManager::cancel_pending()
 {
     pool.clear();
     dir_pool.clear();
+    device_pool.clear();
     pending.clear();
     batch_total = batch_done = 0;
     schedule_progress();
