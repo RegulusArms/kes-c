@@ -288,7 +288,8 @@ void start_session(QWidget *parent)
             if (!err.toString().isEmpty())
                 QMessageBox::warning(p, "Admin Session", err.toString());
         },
-        false);
+        false)
+        ->admin = true;
 }
 
 void retry_as_admin(QWidget *parent, const QString &title, const QString &message,
@@ -334,7 +335,7 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
         if (on_done)
             on_done(res.isValid() && errors.isEmpty());
     };
-    fileops::run_job(parent, title + " (as administrator)", job, done);
+    fileops::run_job(parent, title + " (as administrator)", job, done)->admin = true;
 }
 
 }  // namespace admin

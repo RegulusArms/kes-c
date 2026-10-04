@@ -1,12 +1,15 @@
 // Main window and browser panes.
 #pragma once
 
+#include <QJsonObject>
 #include <QMainWindow>
 #include <QPointer>
 #include <QSet>
 #include <QWidget>
 
+class Animator;
 class FSModel;
+class PreferencesDialog;
 class GridDelegate;
 class ImageViewer;
 class InfoPanel;
@@ -54,6 +57,8 @@ public:
     QAbstractItemView *view() const;
     bool is_overview() const;
     bool is_trash() const;
+    bool is_virtual() const;   // Starred or Recent: files from anywhere, not a folder
+    bool is_listing() const;   // a list of files from many folders (Trash, Starred, Recent) in the results model
     QString dir() const;   // the current folder, or empty on the overview page
     void set_view_mode(const QString &mode);
     void apply_folder_previews();
@@ -65,6 +70,7 @@ public:
     void try_select();
     void select_later(const QString &path);
     void select_paths(const QStringList &paths);
+    void scroll_to_current(const QString &path);
     void go_back();
     void go_forward();
     void go_up();
@@ -89,6 +95,7 @@ public:
     QTreeView *tree;
     QListView *grid;
     int grid_size, list_size;
+    Animator *animator;   // GIF / WebM playing in the grid
 
 Q_SIGNALS:
     void path_changed();
@@ -118,6 +125,7 @@ private:
     void clicked(const QModelIndex &idx);
     void double_clicked(const QModelIndex &idx);
     void use_model_root();
+    void starred_changed();
 
     ThumbnailManager *thumbs;
     bool search_recorded = false;   // the folder as it was before the active search is on back_stack
@@ -128,6 +136,7 @@ private:
     QWidget *search_bar;
     QLineEdit *search_edit;
     QCheckBox *search_sub;
+    QCheckBox *search_contents;
     QTimer *search_timer;
     QStackedWidget *stack;
     QAbstractItemView *mode_view;   // grid or tree; stays set while the overview page is shown
@@ -189,6 +198,7 @@ public:
     void show_shortcuts();
 
     ThumbnailManager *thumbs;
+    QTabWidget *tabs;
     QSet<QString> cut_paths;
     bool show_hidden;
     bool folder_previews;
@@ -217,10 +227,12 @@ private:
     void toggle_panel(QWidget *w, const QString &key, bool on);
     QStringList open_with_choice(const QStringList &files, const QString &choice);
     void uwp_add(const QString &path);
+    void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
+    void sync_undo();
+    void preferences_saved();
 
     QList<QPointer<ImageViewer>> viewers;
-    QTabWidget *tabs;
     QSplitter *split;
     QLabel *status_label, *free_label, *build_label;
     QSlider *zoom_slider;
@@ -230,10 +242,14 @@ private:
     QWidget *build_box;
     QToolButton *build_stop, *view_btn, *sort_btn, *menu_btn;
     QMenu *sort_menu;
-    QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info;
+    QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info, *a_undo;
     bool closing = false;
+    QPointer<PreferencesDialog> prefs;   // the open Preferences window
 };
 
+QString location_arg(const QString &arg);
+void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id);
+void on_atc(const QJsonObject &msg);   // a change reported through the tower (atc.h)
 MainWindow *open_window(const QStringList &paths);
 void apply_thumb_settings(ThumbnailManager *t);
 int kes_main(int argc, char **argv);

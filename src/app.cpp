@@ -1,11 +1,17 @@
 #include "app.h"
 
 #include "admin.h"
+#include "animate.h"
 #include "archive.h"
 #include "archive_ui.h"
+#include "atc.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "fm1.h"
 #include "overview.h"
+#include "places.h"
+#include "sharing.h"
+#include "undo.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -17,11 +23,14 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImageReader>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -43,6 +52,7 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QWindow>
 
 #include <csignal>
 #include <cstdio>
@@ -54,6 +64,9 @@ static const int GRID_MIN = 48, GRID_MAX = 320;
 static const int LIST_MIN = 16, LIST_MAX = 128;
 static const QStringList SORT_COLUMNS = {"Name", "Size", "Type", "Modified"};
 static QList<MainWindow *> WINDOWS;
+static QPointer<MainWindow> last_active;   // the window used most recently
+static qint64 last_active_ms = 0;
+static void report_windows();
 static ThumbnailManager *g_thumbs = nullptr;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
@@ -82,7 +95,19 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     close->setAutoRaise(true);
     connect(close, &QToolButton::clicked, this, [this]() { close_search(); });
     sl->addWidget(search_edit, 1);
+    search_contents = new QCheckBox("File contents");
+    search_contents->setToolTip("Search inside files too, using the desktop's search index (localsearch).\n"
+                                "Includes subfolders; only finds files in indexed folders.");
+    search_contents->setChecked(settings().value("search_contents", false).toBool());
+    connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
+        settings().setValue("search_contents", v);
+        do_search();
+    });
     sl->addWidget(search_sub);
+    sl->addWidget(search_contents);
+    // only once it has a parent: showing a parentless widget opens it as a window of its own, which on Wayland
+    // uses up the launch's activation token and leaves GNOME's busy cursor spinning until it times out
+    search_contents->setVisible(can_search_contents());
     sl->addWidget(close);
     search_bar->hide();
     search_timer = new QTimer(this);
@@ -121,6 +146,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
 
     model = make_model();
     search_model = new SearchModel(thumbs, this);
+    connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     attach(model);
     set_view_mode(settings().value("view_mode", "grid").toString());
     set_path(start);
@@ -169,6 +195,8 @@ void Pane::setup_grid()
     g->setFrameShape(QFrame::NoFrame);
     MainWindow *w = win;
     delegate = new GridDelegate(this, thumbs, [w](const QString &p) { return w->cut_paths.contains(p); }, g);
+    animator = new Animator(g, this);
+    delegate->animator = animator;
     delegate->icon_size = grid_size;
     g->setItemDelegate(delegate);
     setup_common(g);
@@ -241,7 +269,9 @@ bool Pane::is_grid() const { return mode_view == grid; }
 QAbstractItemView *Pane::view() const { return mode_view; }
 bool Pane::is_overview() const { return path == OVERVIEW; }
 bool Pane::is_trash() const { return path == join(TRASH_DIR(), "files"); }
-QString Pane::dir() const { return is_overview() ? QString() : path; }
+bool Pane::is_virtual() const { return places::is_virtual(path); }
+bool Pane::is_listing() const { return is_trash() || is_virtual(); }
+QString Pane::dir() const { return is_overview() || is_virtual() ? QString() : path; }   // empty: no folder
 
 void Pane::set_view_mode(const QString &mode)
 {
@@ -323,6 +353,21 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         Q_EMIT path_changed();
         return true;
     }
+    if (places::is_virtual(target)) {
+        if (record && !path.isEmpty() && path != target) {
+            back_stack << snapshot(target);
+            fwd_stack.clear();
+        }
+        if (in_search || search_bar->isVisible())
+            close_search(false, true);
+        path = target;
+        stack->setCurrentWidget(mode_view);
+        view()->selectionModel()->clear();
+        pending_select = select;
+        Q_EMIT path_changed();
+        show_trash();
+        return true;
+    }
     QString p = abspath(expanduser(target));
     if (isfile(p)) {
         select = p;
@@ -347,6 +392,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     path = p;
     stack->setCurrentWidget(mode_view);
     thumbs->cancel_pending();
+    animator->clear();
     model->setNameFilters({});
     QModelIndex root = model->setRootPath(p);
     grid->setRootIndex(root);
@@ -368,23 +414,31 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
 void Pane::show_trash()
 {
     // list the items of every trash folder (home + each drive's .Trash-$uid) in the results model, with the folder
-    // each item was deleted from as its Location; loaded on a thread
+    // each item was deleted from as its Location; or the Starred / Recent files with their folder. Loaded on a thread.
     trash_gen += 1;
     int gen = trash_gen;
+    QString place = is_trash() ? QString() : path;
     fileops::run_task(
         this, "",
-        []() {
+        [place]() {
             QVariantList items;
-            for (const auto &[p, o] : trashed_items())
+            for (const auto &[p, o] : place.isEmpty() ? trashed_items() : places::items(place))
                 items << QVariant(QStringList{p, o});
             return QVariant(items);
         },
         [this, gen](const QVariant &items) { fill_trash(items, gen); }, true);
 }
 
+void Pane::starred_changed()
+{
+    if (path == places::STARRED)
+        show_trash();
+    view()->viewport()->update();
+}
+
 void Pane::fill_trash(const QVariant &items_v, int gen)
 {
-    if (gen != trash_gen || !is_trash())
+    if (gen != trash_gen || !is_listing())
         return;
     QString text = search_bar->isVisible() ? search_edit->text().trimmed().toLower() : QString();
     QStringList paths;
@@ -423,7 +477,7 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
 void Pane::add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel)
 {
     // in chunks, so a trash with tens of thousands of items doesn't block the window
-    if (gen != trash_gen || !is_trash())
+    if (gen != trash_gen || !is_listing())
         return;
     search_model->add_paths(paths.mid(0, 1000), locations);
     if (paths.size() > 1000) {
@@ -503,7 +557,20 @@ void Pane::select_paths(const QStringList &paths)
     if (first.isValid()) {
         sm->setCurrentIndex(first, QItemSelectionModel::NoUpdate);
         view()->scrollTo(first);
+        // large folders are laid out in batches, so the item may not have its final position yet: scroll again once
+        // layout has caught up (unless the user has moved on to another item)
+        QString target = first.siblingAtColumn(0).data(PathRole).toString();
+        for (int ms : {50, 250, 700})
+            QTimer::singleShot(ms, this, [this, target]() { scroll_to_current(target); });
     }
+}
+
+void Pane::scroll_to_current(const QString &p)
+{
+    QModelIndex idx = index_for(p);
+    QModelIndex cur = view()->currentIndex();
+    if (idx.isValid() && cur.isValid() && cur.siblingAtColumn(0) == idx.siblingAtColumn(0))
+        view()->scrollTo(idx);
 }
 
 QModelIndex Pane::index_for(const QString &p) const
@@ -586,7 +653,7 @@ void Pane::go_forward()
 
 void Pane::go_up()
 {
-    if (is_overview())
+    if (is_overview() || is_virtual())
         return;
     QString parent = dirname(path);
     if (parent != path)
@@ -599,7 +666,7 @@ void Pane::refresh()
         overview->refresh();
         return;
     }
-    if (is_trash()) {
+    if (is_listing()) {
         show_trash();
         return;
     }
@@ -635,10 +702,11 @@ void Pane::update_empty()
         return;
     }
     QString text;
-    if (in_search && is_trash()) {
+    if (in_search && is_listing()) {
+        bool searching_text = search_bar->isVisible() && !search_edit->text().trimmed().isEmpty();
+        QString none = is_trash() ? QString("Trash is empty") : places::empty_text(path);
         if (!search_model->rowCount())
-            text = search_bar->isVisible() && !search_edit->text().trimmed().isEmpty() ? "No matches in the trash"
-                                                                                       : "Trash is empty";
+            text = searching_text ? QString("No matches") : none;
     } else if (in_search) {
         if (search_model->rowCount() == 0 && !searching())
             text = "No results";
@@ -727,7 +795,7 @@ void Pane::do_search()
         record_search();
     else
         unrecord_search();
-    if (is_trash()) {   // filter the combined trash list by name
+    if (is_listing()) {   // filter the combined trash / Starred / Recent list by name
         show_trash();
         return;
     }
@@ -741,7 +809,8 @@ void Pane::do_search()
         update_empty();
         return;
     }
-    if (search_sub->isChecked()) {
+    bool contents = can_search_contents() && search_contents->isChecked();
+    if (search_sub->isChecked() || contents) {
         if (!in_search) {
             in_search = true;
             attach(search_model);
@@ -749,7 +818,7 @@ void Pane::do_search()
             tree->setRootIndex(QModelIndex());
         }
         search_model->clear_results();
-        auto *t = new SearchThread(path, text, win->show_hidden);
+        auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents);
         connect(t, &SearchThread::found, this, [this, t](const QStringList &paths) {
             if (t != search_thread)
                 return;   // a search that was replaced
@@ -943,6 +1012,8 @@ QString Pane::title() const
 {
     if (is_overview())
         return OVERVIEW_TITLE;
+    if (is_listing() && !(search_bar->isVisible() && !search_edit->text().trimmed().isEmpty()))
+        return is_trash() ? QString("Trash") : places::title(path);
     if (in_search)
         return "Search: " + search_edit->text();
     QString b = basename(rstrip(path, '/'));
@@ -1168,6 +1239,10 @@ void MainWindow::build_actions()
     A("Quit", {"Ctrl+Q"}, []() { QApplication::quit(); }, fm);
 
     QMenu *em = menu->addMenu("Edit");
+    a_undo = A("Undo", {"Ctrl+Z"}, [this]() { undo::undo(this); }, em, {"edit-undo"});
+    connect(undo::signals_(), &undo::Signals::changed, this, &MainWindow::sync_undo);
+    sync_undo();
+    em->addSeparator();
     A("Cut", {"Ctrl+X"}, [this]() { clip(true, pane()->selected_paths()); }, em, {"edit-cut"});
     A("Copy", {"Ctrl+C"}, [this]() { clip(false, pane()->selected_paths()); }, em, {"edit-copy"});
     A("Paste", {"Ctrl+V"}, [this]() { paste(); }, em, {"edit-paste"});
@@ -1319,7 +1394,7 @@ void MainWindow::pane_path_changed(Pane *p)
     setWindowTitle(QString("%1 — %2").arg(p->title(), APP_NAME));
     a_back->setEnabled(!p->back_stack.isEmpty());
     a_fwd->setEnabled(!p->fwd_stack.isEmpty());
-    a_up->setEnabled(!p->is_overview() && p->path != "/");
+    a_up->setEnabled(!p->is_overview() && !p->is_virtual() && p->path != "/");
     sync_view_btn();
     sync_zoom_slider();
     QString d = p->dir();
@@ -1594,6 +1669,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     QStringList dirs, files;
     for (const QString &x : paths)
         (isdir(x) ? dirs : files) << x;
+    places::add_recent(files);
     if (!dirs.isEmpty()) {
         if (dirs.size() == 1 && !new_tab_ && files.isEmpty()) {
             p->set_path(dirs.first());
@@ -1754,6 +1830,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 {
     auto *m = new QMenu(this);
     QString cur = p->path;
+    if (paths.isEmpty() && p->is_virtual()) {
+        m->addAction("Select All", this, [p]() { p->view()->selectAll(); });
+        return m;
+    }
     if (paths.isEmpty()) {
         m->addAction(icon({"folder-new"}), "New Folder…", this, [this]() { new_folder(); });
         QMenu *nd = m->addMenu(icon({"document-new"}), "New Document");
@@ -1797,6 +1877,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
         if (in_trash(join(cur, "x")))
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
+        sharing::add_scripts_menu(m, {}, cur, [this](const QString &d) { navigate(d); });
         m->addSeparator();
         m->addAction(icon({"document-properties"}), "Properties", this, [this, cur]() { properties({cur}); });
         return m;
@@ -1820,6 +1901,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                 new_tab(x, false);
         });
         m->addAction("Open in New Window", this, [paths]() { open_window(paths); });
+    }
+    if (is_dir) {
+        sharing::add_open_folder_menu(m, single, [this, paths]() { OpenWithDialog(this, paths).exec(); });
     }
     QStringList imgs;
     for (const QString &x : paths)
@@ -1873,16 +1957,25 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         copy_text(uris);
     });
 
+    bool starred = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_starred(x); });
+    m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
+                 starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); });
+
+    QString here = p->dir();   // empty in Starred / Recent: no "… Here" there
     QMenu *lm = m->addMenu(icon({"emblem-symbolic-link", "insert-link"}), "Links && Shortcuts");
-    lm->addAction("Create Symbolic Link Here", this, [this, paths, cur]() { make_links(paths, cur, "sym"); });
-    lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, cur]() { make_links(paths, cur, "rel"); });
-    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
-        lm->addAction("Create Hard Link Here", this, [this, paths, cur]() { make_links(paths, cur, "hard"); });
+    if (!here.isEmpty()) {
+        lm->addAction("Create Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "sym"); });
+        lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "rel"); });
+    }
+    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
+        lm->addAction("Create Hard Link Here", this, [this, paths, here]() { make_links(paths, here, "hard"); });
     lm->addAction("Create Symbolic Link In…", this, [this, paths]() { make_links(paths, QString(), "sym"); });
     lm->addSeparator();
     QString desktop = xdg_user_dir("DESKTOP");
     lm->addAction("Send Link to Desktop", this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); });
-    lm->addAction("Create Desktop Shortcut (.desktop) Here", this, [this, paths, cur]() { make_links(paths, cur, "desktop"); });
+    if (!here.isEmpty())
+        lm->addAction("Create Desktop Shortcut (.desktop) Here", this,
+                      [this, paths, here]() { make_links(paths, here, "desktop"); });
     lm->addAction("Send Shortcut (.desktop) to Desktop", this,
                   [this, paths, desktop]() { make_links(paths, desktop, "desktop"); });
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); })) {
@@ -1925,10 +2018,24 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         im->addAction("Use as Folder Cover", this, [this, single]() { thumbs->set_cover(dirname(single), single); });
         im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); });
     }
+    QStringList folders;
+    for (const QString &x : paths)
+        if (isdir(x))
+            folders << x;
+    if (!folders.isEmpty() && folders.size() == paths.size())
+        folder_style_menu(m, folders);
     if (is_dir && thumbs->covers.contains(single))
         m->addAction("Reset Folder Cover", this, [this, single]() { thumbs->set_cover(single, QString()); });
+    sharing::add_send_to_menu(m, paths);
+    if (is_dir && sharing::can_share())
+        m->addAction(icon({"folder-remote", "network-workgroup"}), "Network Sharing…", this,
+                     [this, single]() { sharing::share_dialog(this, single); });
+    sharing::add_scripts_menu(m, paths, here, [this](const QString &d) { navigate(d); });
     if (is_dir) {
-        m->addAction("Regenerate Preview", this, [this, single]() { thumbs->invalidate(single); });
+        m->addAction("Regenerate Preview", this, [this, single]() {
+            thumbs->invalidate(single);
+            atc::announce("folders", {{"paths", QJsonArray{single}}});
+        });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
                      [this, single]() { build_previews(single); });
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
@@ -1939,6 +2046,32 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     m->addSeparator();
     m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); });
     return m;
+}
+
+void MainWindow::folder_style_menu(QMenu *m, const QStringList &folders)
+{
+    // Folder Colour submenu and the Show Image Previews switch for one or more folders
+    ThumbnailManager *t = thumbs;
+    QSet<QString> current;
+    for (const QString &f : folders)
+        current << t->custom_color(f);
+    QMenu *cm = m->addMenu(icon({"preferences-color", "applications-graphics"}), "Folder Colour");
+    for (const auto &[name, color] : thumbs::FOLDER_COLORS) {
+        QString c = color;
+        QAction *a = cm->addAction(thumbs::color_swatch(c), name, this, [t, folders, c]() { t->set_folder_color(folders, c); });
+        a->setCheckable(true);
+        a->setChecked(current == QSet<QString>{c});
+    }
+    cm->addSeparator();
+    QAction *a = cm->addAction(thumbs::color_swatch(t->folder_color), "Default", this,
+                               [t, folders]() { t->set_folder_color(folders, QString()); });
+    a->setCheckable(true);
+    a->setChecked(current == QSet<QString>{QString()});
+    bool on = std::all_of(folders.begin(), folders.end(), [t](const QString &f) { return t->previews_for(f); });
+    a = m->addAction("Show Image Previews", this, [t, folders, on]() { t->set_folder_previews(folders, !on); });
+    a->setCheckable(true);
+    a->setChecked(on);
+    a->setToolTip("Show a mosaic of the images inside on this folder's icon");
 }
 
 // -- file actions
@@ -2020,7 +2153,8 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         const QMimeData *md = QGuiApplication::clipboard()->mimeData();
         if (md && md->hasImage()) {
             QString dst = unique_path(target, "Pasted image.png", "num");
-            QGuiApplication::clipboard()->image().save(dst, "PNG");
+            if (QGuiApplication::clipboard()->image().save(dst, "PNG"))
+                undo::record_paths("create", "Paste", {dst});
             pane()->select_later(dst);
         }
         return;
@@ -2086,7 +2220,7 @@ void MainWindow::duplicate(const QStringList &paths)
     QList<fileops::Job> jobs;
     for (const QString &p : paths)
         jobs << fileops::Job{"copy", p, unique_path(dirname(p), basename(p))};
-    fileops::start_ops(this, jobs, "Duplicating");
+    fileops::start_ops(this, jobs, "Duplicating", nullptr, "Duplicate");
 }
 
 void MainWindow::new_folder()
@@ -2102,6 +2236,7 @@ void MainWindow::new_folder()
     QString p = join(cur, name.trimmed());
     try {
         makedirs(p);
+        undo::record_paths("create", "New Folder", {p});
         pane()->select_later(p);
     } catch (const OSError &e) {
         if (e.permission()) {
@@ -2143,6 +2278,7 @@ void MainWindow::new_file(const QString &tmpl)
             copyfile(tmpl, p);
         else
             write_text(p, QByteArray(), true);
+        undo::record_paths("create", "New File", {p});
         pane()->select_later(p);
     } catch (const OSError &e) {
         if (e.permission()) {
@@ -2199,8 +2335,10 @@ void MainWindow::rename(const QStringList &paths)
     }
     if (!res.error.isEmpty())
         QMessageBox::warning(this, "Rename", res.error);
-    else
+    else {
+        undo::record("rename", "Rename", {qMakePair(paths.first(), target)});
         renamed(true);
+    }
 }
 
 void MainWindow::trash_paths(const QStringList &paths)
@@ -2211,21 +2349,25 @@ void MainWindow::trash_paths(const QStringList &paths)
         delete_paths(paths);
         return;
     }
-    auto work = [paths](Task *task) -> QVariant {
+    auto trashed = std::make_shared<QStringList>();
+    auto work = [paths, trashed](Task *task) -> QVariant {
         QVariantList failed;
         for (int i = 0; i < paths.size(); ++i) {
-            task->check();
+            if (task->cancelled)
+                break;   // items already moved stay in the trash (and can be undone)
             task->report(i, paths.size(),
                          QString("%1 of %2 — %3").arg(group_digits(i), group_digits(paths.size()), basename(paths[i])));
             try {
                 util::trash(paths[i]);
+                *trashed << paths[i];
             } catch (const OSError &e) {
                 failed << QVariant(QStringList{paths[i], e.message()});
             }
         }
-        return failed;
+        return task->cancelled ? QVariant() : QVariant(failed);
     };
-    auto done = [this, paths](const QVariant &res) {
+    auto done = [this, paths, trashed](const QVariant &res) {
+        undo::record_paths("trash", "Move to Trash", *trashed);
         sidebar->refresh();
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
@@ -2365,6 +2507,7 @@ void MainWindow::make_links(const QStringList &paths, QString dest, const QStrin
     }
     if (!errors.isEmpty())
         QMessageBox::warning(this, "Create Link", errors.join('\n'));
+    undo::record_paths("create", "Create Link", made);
     QPointer<MainWindow> self(this);
     auto finish = [self, made, denied, dest](bool) {
         if (!self)
@@ -2420,23 +2563,52 @@ void MainWindow::properties(const QStringList &paths, QWidget *parent)
 
 void MainWindow::preferences()
 {
-    if (PreferencesDialog(this).exec()) {
-        apply_thumb_settings(thumbs);
-        thumbs->clear_memory();
-        for (MainWindow *w : WINDOWS)
-            for (Pane *p : w->panes()) {
-                p->apply_folder_previews();
-                p->view()->viewport()->update();
-            }
+    // A separate, non-modal window: GNOME attaches modal dialogs to their parent ("attach-modal-dialogs"), so
+    // dragging a modal Preferences would drag the whole Kestrel window with it.
+    if (prefs) {
+        prefs->raise();
+        prefs->activateWindow();
+        return;
     }
+    prefs = new PreferencesDialog(this);
+    prefs->setWindowModality(Qt::NonModal);
+    prefs->setAttribute(Qt::WA_DeleteOnClose);
+    connect(prefs, &QDialog::accepted, this, &MainWindow::preferences_saved);
+    prefs->show();
+}
+
+static void repaint_all()
+{
+    for (MainWindow *w : WINDOWS)
+        for (Pane *p : w->panes())
+            p->view()->viewport()->update();
+}
+
+static void apply_preferences()
+{
+    apply_thumb_settings(g_thumbs);
+    g_thumbs->clear_memory();
+    for (MainWindow *w : WINDOWS)
+        for (Pane *p : w->panes()) {
+            p->animator->clear();
+            p->apply_folder_previews();
+            p->view()->viewport()->update();
+        }
+    Q_EMIT undo::signals_()->changed();   // "Share undo…" may have changed what Ctrl+Z undoes
+}
+
+void MainWindow::preferences_saved()
+{
+    apply_preferences();
+    atc::announce("settings");
 }
 
 void MainWindow::clear_cache()
 {
     rmtree(join(APP_CACHE(), "folders"));
     thumbs->clear_memory();
-    for (Pane *p : panes())
-        p->view()->viewport()->update();
+    repaint_all();
+    atc::announce("thumbs_cleared");
     statusBar()->showMessage("Folder preview cache cleared", 3000);
 }
 
@@ -2466,9 +2638,8 @@ void MainWindow::purge_thumbnails()
         [this](const QVariant &res) {
             QVariantList r = res.toList();
             thumbs->clear_memory();
-            for (MainWindow *w : WINDOWS)
-                for (Pane *p : w->panes())
-                    p->view()->viewport()->update();
+            repaint_all();
+            atc::announce("thumbs_cleared");
             statusBar()->showMessage(QString("Deleted %1 thumbnails (%2)")
                                          .arg(group_digits(r.value(0).toLongLong()), human_size(r.value(1).toLongLong())),
                                      6000);
@@ -2546,7 +2717,15 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         if (v)
             v->close();
     WINDOWS.removeAll(this);
+    report_windows();
     QMainWindow::closeEvent(ev);
+}
+
+void MainWindow::sync_undo()
+{
+    QString what = undo::label();
+    a_undo->setText(what.isEmpty() ? QString("Undo") : "Undo " + what);
+    a_undo->setEnabled(!what.isEmpty());
 }
 
 void MainWindow::close_when_idle()
@@ -2569,16 +2748,205 @@ void apply_thumb_settings(ThumbnailManager *t)
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
 }
 
+// ---- Preferences → "Open folders from other apps as tabs in an open Kestrel window"
+
+static void report_windows()
+{
+    // for the tower's Handoff: whether we have windows, and when one was last used
+    atc::announce("windows", {{"count", int(WINDOWS.size())}, {"active", double(last_active_ms)}}, true);
+}
+
+static bool open_in_tabs()
+{
+    // never from a conda environment the user activated: the Kestrel taking over may run in a different one
+    return settings().value("open_in_tabs", false).toBool() && !explicit_conda_env();
+}
+
+static MainWindow *recent_window()
+{
+    if (last_active && WINDOWS.contains(last_active.data()))
+        return last_active;
+    return WINDOWS.isEmpty() ? nullptr : WINDOWS.last();
+}
+
+static void use_token(const QString &token)
+{
+    // the launcher's activation token: without it GNOME (Wayland) won't let the window come to the front
+    if (!token.isEmpty()) {
+        qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
+        qputenv("DESKTOP_STARTUP_ID", token.toUtf8());
+    }
+}
+
+static void open_as_tabs(MainWindow *w, const QStringList &folders, const QStringList &select)
+{
+    // folders as new tabs (selecting select[i] in folders[i] when given); the first becomes current
+    int first = w->tabs->count();
+    for (int i = 0; i < folders.size(); ++i) {
+        if (select.value(i).isEmpty()) {
+            w->open_location(folders[i], true);
+        } else if (Pane *p = w->new_tab(folders[i], false)) {
+            p->select_later(select[i]);
+        }
+    }
+    if (w->tabs->count() > first) {
+        w->tabs->setCurrentIndex(first);
+        w->pane()->view()->setFocus();
+    }
+    w->setWindowState(w->windowState() & ~Qt::WindowMinimized);
+    w->raise();
+    w->activateWindow();
+}
+
+static bool tabs_instead(const QStringList &folders, const QStringList &select)
+{
+    // true if the folders went to an open window as tabs: one of ours, or another Kestrel's (through the tower)
+    if (!open_in_tabs())
+        return false;
+    if (MainWindow *w = recent_window()) {
+        open_as_tabs(w, folders, select);
+        return true;
+    }
+    return !atc::hand_off(folders, select).isEmpty();
+}
+
+void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id)
+{
+    // a request to the org.freedesktop.FileManager1 service (see fm1.h), e.g. a browser's "Show in folder"
+    QStringList paths;
+    for (const QString &u : uris) {
+        QString p = uri_to_path(u);
+        if (!p.isEmpty())
+            paths << p;
+    }
+    if (paths.isEmpty())
+        return;
+    if (!startup_id.isEmpty()) {
+        // the caller's activation token: without it GNOME (Wayland) won't let the new window take focus
+        qputenv("XDG_ACTIVATION_TOKEN", startup_id.toUtf8());
+        qputenv("DESKTOP_STARTUP_ID", startup_id.toUtf8());
+    }
+    if (method == "ShowItemProperties") {
+        MainWindow *w = WINDOWS.isEmpty() ? open_window({dirname(paths.first())}) : WINDOWS.last();
+        w->properties(paths);
+        return;
+    }
+    MainWindow *w;
+    if (method == "ShowFolders") {
+        if (tabs_instead(paths, {}))
+            return;
+        w = open_window(paths);
+    } else {
+        // ShowItems: each item's folder in a tab, with the item selected, scrolled to and focused (folders too:
+        // they're shown in their parent, not opened)
+        QStringList folders, firsts;
+        for (const QString &p : paths) {
+            QString folder = dirname(rstrip(p, '/'));
+            if (folder.isEmpty())
+                folder = "/";
+            if (!folders.contains(folder)) {
+                folders << folder;
+                firsts << p;
+            }
+        }
+        if (tabs_instead(folders, firsts))
+            return;
+        w = open_window({folders.first()});
+        for (int i = 0; i < folders.size(); ++i) {
+            Pane *pane = i == 0 ? w->pane() : w->new_tab(folders[i], false);
+            if (pane)
+                pane->select_later(firsts[i]);
+        }
+    }
+    w->raise();
+    w->activateWindow();
+    if (w->pane()) {
+        w->tabs->setCurrentIndex(0);
+        w->pane()->view()->setFocus();
+    }
+}
+
+void on_atc(const QJsonObject &m)
+{
+    // a change reported by another Kestrel through the tower (see atc.h), or by this one ("own")
+    QString type = m.value("type").toString();
+    bool own = m.value("own").toBool();
+    if (type == "bookmarks") {   // also refreshes this process's other windows
+        for (MainWindow *w : WINDOWS) {
+            w->sidebar->refresh();
+            for (Pane *p : w->panes())
+                if (p->is_overview())
+                    p->refresh();
+        }
+    }
+    if (own)
+        return;   // the rest was already applied where it was changed
+    if (type == "open" && m.value("flight").toString() == atc::radio()->flight()) {
+        // folders another Kestrel handed over (open_in_tabs)
+        QStringList folders, select;
+        for (const QJsonValue &v : m.value("folders").toArray())
+            folders << v.toString();
+        for (const QJsonValue &v : m.value("select").toArray())
+            select << v.toString();
+        if (folders.isEmpty())
+            return;
+        use_token(m.value("token").toString());
+        if (MainWindow *w = recent_window()) {
+            open_as_tabs(w, folders, select);
+        } else {   // our last window closed in the meantime
+            MainWindow *nw = open_window(folders.mid(0, 1));
+            open_as_tabs(nw, folders.mid(1), select.mid(1));
+            if (nw->pane() && !select.value(0).isEmpty())
+                nw->pane()->select_later(select[0]);
+        }
+    } else if (type == "settings") {
+        settings().sync();
+        apply_preferences();
+    } else if (type == "starred") {
+        places::reload_starred();
+    } else if (type == "folders") {
+        g_thumbs->reload_styles();
+        for (const QJsonValue &v : m.value("paths").toArray())
+            g_thumbs->invalidate(v.toString(), false);   // the sender already removed the cached mosaic
+    } else if (type == "thumbs_cleared") {
+        g_thumbs->clear_memory();
+        for (MainWindow *w : WINDOWS)
+            for (Pane *p : w->panes())
+                p->animator->clear();
+        repaint_all();
+    }
+}
+
+QString location_arg(const QString &arg)
+{
+    // a command-line argument (as passed by xdg-open, the file chooser or GNOME) as a location for open_location:
+    // a local path, OVERVIEW, or a network URI to mount; empty if it can't be opened
+    if (arg.startsWith("file:"))
+        return uri_to_path(arg);
+    QString scheme = is_uri(arg) ? arg.section(':', 0, 0).toLower() : QString();
+    if (scheme == "trash")
+        return join(TRASH_DIR(), "files");
+    if (scheme == "recent" || scheme == "starred")
+        return scheme == "recent" ? places::RECENT : places::STARRED;
+    if (scheme == "computer" || scheme == "x-nautilus-desktop" || scheme == "other-locations")
+        return OVERVIEW;
+    if (is_uri(arg))
+        return arg;   // smb://, sftp://, … are mounted through gvfs by open_location
+    return abspath(expanduser(arg));
+}
+
 MainWindow *open_window(const QStringList &paths)
 {
     auto *w = new MainWindow(paths, g_thumbs);
     WINDOWS << w;
     w->show();
+    report_windows();
     return w;
 }
 
 int kes_main(int argc, char **argv)
 {
+    prefer_system_environment();   // before GLib or Qt load anything: see util.h
     // LibRaw (RAW image plugin) uses OpenMP; by default each decode spawns one busy-waiting thread per core, which
     // starves the UI. Must be set before the plugin is loaded.
     setenv("OMP_NUM_THREADS", "2", 0);
@@ -2588,6 +2956,8 @@ int kes_main(int argc, char **argv)
             std::printf("%s %s\n", APP_NAME, VERSION);
             return 0;
         }
+        if (QByteArray(argv[i]) == "--atc")
+            return atc::run_tower(argc, argv);   // the tower: no window (see atc.h)
     }
     std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel while we write to it
     QApplication::setApplicationName(APP_ID);
@@ -2609,10 +2979,34 @@ int kes_main(int argc, char **argv)
         QString a = QString::fromLocal8Bit(argv[i]);
         if (a.startsWith('-'))
             continue;
-        if (a.startsWith("file://"))
-            a = uri_to_path(a);
-        paths << abspath(expanduser(a));
+        QString loc = location_arg(a);
+        if (!loc.isEmpty())
+            paths << loc;
     }
-    open_window(paths);
+    bool service = false;
+    for (int i = 1; i < argc; ++i)
+        service = service || QByteArray(argv[i]) == "--dbus-service";
+    if (!service && !paths.isEmpty() && open_in_tabs() && !atc::hand_off(paths).isEmpty())
+        return 0;   // an open Kestrel window took the folders as tabs
+    QObject::connect(qApp, &QGuiApplication::focusWindowChanged, qApp, [](QWindow *win) {
+        for (MainWindow *w : WINDOWS)
+            if (win && w->windowHandle() == win) {
+                last_active = w;
+                last_active_ms = QDateTime::currentMSecsSinceEpoch();
+                report_windows();
+            }
+    });
+    QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
+    atc::radio()->start();
+    fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);
+    if (service) {
+        // started by D-Bus for a "show in folder" request: no window of our own; quit if none is asked for
+        QTimer::singleShot(30000, qApp, []() {
+            if (WINDOWS.isEmpty())
+                QApplication::quit();
+        });
+    } else {
+        open_window(paths);
+    }
     return app.exec();
 }

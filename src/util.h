@@ -70,6 +70,18 @@ extern const QSet<QString> RAW_EXTS;
 
 QSettings &settings();
 
+// Prefer the system's programs and libraries over Anaconda's (or Miniconda's, Miniforge's…).
+//
+// Shell profiles set up by `conda init` put Anaconda's bin folder ahead of /usr/bin, with copies of gsettings, gio,
+// ffmpeg, xz, zstd… that don't match the desktop: Anaconda's gsettings can't see your real settings (no dconf), so
+// "Set as Wallpaper" silently does nothing, and its libraries and Qt plugins can break the tools Kestrel runs. So at
+// startup Kestrel moves Anaconda's folders to the end of PATH and similar search paths, and drops the conda-only
+// overrides for GLib and Qt modules — unless you deliberately run Kestrel from an activated conda environment
+// (`conda activate myenv`, anything but the auto-activated "base"): then the environment is left as it is.
+// Call before GLib or Qt are used.
+bool explicit_conda_env();
+void prefer_system_environment();
+
 // ---------------------------------------------------------------- paths (os.path semantics)
 
 QByteArray enc(const QString &path);    // file-system encoding of a path
