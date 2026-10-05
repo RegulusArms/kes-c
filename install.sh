@@ -31,7 +31,7 @@ LEGACY_BIN="$HOME/.local/bin/folder-explorer"
 LEGACY_DESKTOP="$HOME/.local/share/applications/folder-explorer.desktop"
 
 # Packages needed to build (all in Ubuntu's main archive)
-BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev libglib2.0-dev)
+BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev)
 # Recommended apt packages (see "Dependencies" in README.md). Most come with a standard Ubuntu desktop;
 # kimageformat6-plugins (camera RAW, HEIC, AVIF, JPEG XL, PSD previews) usually doesn't.
 RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-formats-plugins 'qt6-svg-plugins|libqt6svg6'
