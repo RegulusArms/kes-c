@@ -38,6 +38,7 @@ struct Request {
     int current_filter = -1;
     QStringList files;                            // SaveFiles: the names to save into the chosen folder
     QList<QPair<QString, QString>> choices;   // (id, default): returned as given
+    QString parent_window;                         // the app's window: "x11:<hex id>" or "wayland:<handle>"
     bool saving() const { return method != "OpenFile"; }
 };
 
@@ -50,6 +51,9 @@ struct Result {
 Request parse(const QString &method, const QString &title, GVariant *options);   // options: a{sv}
 GVariant *results(const Request &req, const Result &res);                          // a{sv}, floating
 QString button_text(const Request &req);   // accept_label without its GTK mnemonic, or Open / Save / Select
+// The X11 window id in a parent_window ("x11:<hex>"), 0 for anything else. On X11 the chooser becomes that window's
+// dialog (on top of it, and focused by the window manager); Wayland handles need xdg-foreign, which Qt doesn't offer.
+quintptr x11_parent(const QString &parent_window);
 
 // Own the portal backend's name and answer each request with open(request, done); done(result) may be called once.
 // The returned function closes the dialog (the app cancelled). Quits after a minute without dialogs.

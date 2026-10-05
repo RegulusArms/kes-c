@@ -137,6 +137,9 @@ int main(int argc, char **argv)
           "image/* stands for every image type");
     req.accept_label = "_Save";
     check(chooser::button_text(req) == "Save", "a GTK mnemonic is dropped from the button label");
+    check(chooser::x11_parent("x11:1a2b") == 0x1a2b && chooser::x11_parent("wayland:abc") == 0 &&
+              chooser::x11_parent("") == 0 && chooser::x11_parent("x11:zz") == 0,
+          "an X11 app's window id is read from the portal's handle (the chooser becomes its dialog)");
 
     // -- saving
     call("SaveFile", options({{"current_folder", folder(dir)}, {"current_name", g_variant_new_string("new.png")}}), &r);

@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMutex>
 #include <QScrollArea>
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
@@ -47,6 +48,7 @@ public:
 
 private:
     mutable QHash<QString, QString> types;
+    mutable QMutex mutex;
 };
 
 // QFileSystemModel that serves thumbnails and folder previews.
@@ -54,7 +56,6 @@ class FSModel : public QFileSystemModel {
     Q_OBJECT
 public:
     explicit FSModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    ~FSModel() override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
                       const QModelIndex &parent) override;
@@ -68,7 +69,6 @@ private:
     QIcon plain_icon(const QModelIndex &index) const;
     void thumb_ready(const QString &path);
     ThumbnailManager *thumbs;
-    FastIconProvider *icon_provider;
     mutable QHash<QString, QIcon> suffix_icons;
 };
 

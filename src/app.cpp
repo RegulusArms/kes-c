@@ -3034,6 +3034,14 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
         start = HOME();
     auto *w = new MainWindow({start}, g_thumbs);
     w->make_chooser(req, std::move(done));
+    if (quintptr id = chooser::x11_parent(req.parent_window); id && QGuiApplication::platformName() == "xcb") {
+        // the app's window (X11): the chooser is its dialog
+        w->winId();   // create the native window, to give it a transient parent before it is shown
+        if (QWindow *app_window = QWindow::fromWinId(WId(id))) {
+            w->windowHandle()->setTransientParent(app_window);
+            QObject::connect(w, &QObject::destroyed, app_window, &QObject::deleteLater);
+        }
+    }
     w->show();
     w->raise();
     w->activateWindow();
@@ -3072,6 +3080,7 @@ int kes_main(int argc, char **argv)
     QApplication app(argc, argv);
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
+    follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
     app.setWindowIcon(theme_icon("folder"));
     migrate_legacy();
     ensure_desktop_entry();

@@ -123,9 +123,9 @@ int main(int argc, char **argv)
     bool finished = false;
     Task *t = fileops::start_ops(w, {{"copy", P("big"), P("big2")}}, "Test", [&finished]() { finished = true; });
     QPointer<Task> tp(t);
-    wait_for([&]() { return !tp || tp->fraction > 0; }, 5000);
-    if (tp)
-        tp->cancel();
+    // at once: on a fast disk (the test's home is in /tmp, often in memory) the whole copy can finish before the
+    // first progress report arrives
+    tp->cancel();
     check(wait_for([&]() { return !tp; }, 10000), "a cancelled copy stops");
     QStringList copied = isdir(P("big2")) ? listdir(P("big2")) : QStringList();
     bool whole = true;

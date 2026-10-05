@@ -162,6 +162,15 @@ GVariant *results(const Request &req, const Result &res)
     return g_variant_builder_end(&b);
 }
 
+quintptr x11_parent(const QString &parent_window)
+{
+    if (!parent_window.startsWith("x11:"))
+        return 0;
+    bool ok = false;
+    quintptr id = parent_window.mid(4).toULongLong(&ok, 16);
+    return ok ? id : 0;
+}
+
 QString button_text(const Request &req)
 {
     if (!req.accept_label.isEmpty()) {
@@ -254,6 +263,7 @@ static void on_call(GDBusConnection *conn, const gchar *, const gchar *, const g
     GVariant *options = nullptr;
     g_variant_get(params, "(&o&s&s&s@a{sv})", &handle, &app_id, &parent, &title, &options);
     auto *p = new Pending{invocation, conn, 0, parse(QString::fromUtf8(method), QString::fromUtf8(title), options), {}};
+    p->req.parent_window = QString::fromUtf8(parent);
     g_variant_unref(options);
     p->request_id = g_dbus_connection_register_object(conn, handle, service->node->interfaces[1], &request_vtable, p,
                                                       nullptr, nullptr);
