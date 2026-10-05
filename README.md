@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.2.0-alpha.** This is an early alpha release, so expect rough edges.
+**Version 0.2.1-alpha.** This is an early alpha release, so expect rough edges.
 
 A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jobs you'd normally do in a terminal into the window. It also adds quality-of-life improvements over GNOME Files. It's written in C++ with Qt 6.
 
@@ -38,6 +38,40 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 
 This is a port of the Python/PyQt6 [Kestrel Explorer](../kestrel-explorer) to C++. It has the same features, menus, shortcuts and dialogs, and it reads and writes the same settings, bookmarks and caches, so you can switch between the two versions.
 
+## Install with apt
+
+Ubuntu 24.04, Linux Mint 22 and newer (amd64) can install it from the apt repository at https://regulusarms.github.io/kes-c/ and get updates with the system's others. There are two channels; pick one.
+
+**Releases** (each merge to `main`):
+
+```bash
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+  | sudo tee /etc/apt/sources.list.d/kestrel.sources
+sudo apt update && sudo apt install kestrel-explorer
+```
+
+**Development builds** (the newest build of the `DEV` branch, updated on every push):
+
+```bash
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: dev\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+  | sudo tee /etc/apt/sources.list.d/kestrel.sources
+sudo apt update && sudo apt install kestrel-explorer
+```
+
+Then, optionally, make it your file manager (see below); `kes-setup --undo` puts things back:
+
+```bash
+kes-setup --default
+```
+
+`sudo apt upgrade` keeps you on the channel you picked. To switch, run the other channel's commands; they replace `kestrel.sources`. Going from releases to development builds upgrades at the next `apt upgrade`. Going back doesn't, because a development build has a higher version than the release it came after: you stay on it until the next release, or go back now with `sudo apt install --allow-downgrades kestrel-explorer=<version>` (`apt policy kestrel-explorer` lists the versions).
+
+The packages are built by GitHub Actions (`.github/workflows/deb.yml`), which also attaches each one to a [GitHub release](https://github.com/RegulusArms/kes-c/releases). Remove it with `sudo apt remove kestrel-explorer` (run `kes-setup --undo` first if you used `--default`).
+
 ## Build / install
 
 ```bash
@@ -59,6 +93,8 @@ If `~/.local/bin` isn't on your PATH yet (on Ubuntu and Mint it's only added at 
 It also makes Kestrel the system's **file chooser**: the Open and Save dialogs that apps get through the desktop portal (xdg-desktop-portal), such as a browser's "Save image as", Flatpak and Snap apps, and GTK 4 and Qt apps that use the portal. Those dialogs open as a Kestrel window with a bar at the bottom for the file name, the file type, Cancel and Save/Open, so you browse with the sidebar, previews and search as usual. Saving over a file asks first, and the next dialog starts where the last one picked something. The portal chooses its file chooser per desktop, not per app, so this applies to every app that uses it. The installer adds a D-Bus activation file for `kes --file-chooser`, installs the portal definition `/usr/share/xdg-desktop-portal/portals/kestrel.portal` (the portal reads these only from there, so this one file asks for your password), writes `~/.config/xdg-desktop-portal/<desktop>-portals.conf` with your desktop's current choices plus Kestrel for the file chooser (GNOME's stays as the fallback; a portals.conf you already had is kept and changed), and restarts the portal. `--uninstall` puts it all back.
 
 It also makes Kestrel the app for `trash:///` (the dock's Trash icon, `gio open trash:///`), remembering which app had it so `--uninstall` can put it back. If GNOME Files is pinned in the dock, `--default` asks whether to put Kestrel in its place; `--dock` does that without asking. `--uninstall` puts GNOME Files back if the installer swapped it.
+
+The installer does all of this (everything but the PATH) by running `kes-setup`, which you can also run on its own: `kes-setup --default`, `kes-setup --dock`, and `kes-setup --undo` to put back what they changed. It sets things up for the `kes` next to it, or the one given with `--kes PATH`.
 
 To build by hand:
 
@@ -359,7 +395,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 220 checks in 10 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
+There are 227 checks in 10 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
 
 ## Layout
 
@@ -389,7 +425,10 @@ There are 220 checks in 10 tests: file operations (copy, move, merge, delete, ca
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
 | `tests/` | The test suite (see [Tests](#tests)) |
 | `bench/` | The benchmark against GNOME Files and Nemo (see Performance: [vs GNOME Files](#performance-kestrel-vs-gnome-files), [vs Nemo](#performance-kestrel-vs-nemo)) |
-| `CMakeLists.txt` | Build configuration |
+| `CMakeLists.txt` | Build configuration, and the .deb (CPack) |
+| `kes-setup` | Makes Kestrel the default file manager for the current user, and puts things back (run by `install.sh`; also in the .deb) |
+| `data/` | The .deb's app menu entry and file chooser portal files |
+| `.github/workflows/deb.yml` | Builds the .deb and publishes releases and the apt repository |
 
 ## Performance: Kestrel vs GNOME Files
 

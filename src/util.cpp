@@ -1617,6 +1617,10 @@ void ensure_desktop_entry()
     QString entry = desktop_entry_path();
     if (exists(entry))
         return;
+    // the .deb's entry in /usr/share/applications: a user one would hide it
+    for (const QString &dir : env_or("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(':', Qt::SkipEmptyParts))
+        if (exists(join(join(dir, "applications"), QString(APP_ID) + ".desktop")))
+            return;
     QString launcher = QCoreApplication::applicationFilePath();
     try {
         makedirs(dirname(entry), true);
