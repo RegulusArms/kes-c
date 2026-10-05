@@ -3,6 +3,8 @@
 
 #include <QColor>
 #include <QIcon>
+#include <QJsonObject>
+#include <QPalette>
 #include <QMimeType>
 #include <QSet>
 #include <QSettings>
@@ -181,6 +183,10 @@ inline QIcon theme_icon(const QString &name) { return theme_icon(QStringList{nam
 QIcon icon_for_path(const QString &path, int is_dir = -1);
 const QHash<QString, QString> &special_dir_icons();
 void setup_icon_theme();
+// The desktop's settings schema for a GNOME one: Cinnamon (Linux Mint) keeps its own copies, org.cinnamon.desktop.*,
+// and uses those; everything else uses GNOME's. has_schema_key: installed, and with that key (empty: any).
+QString desktop_schema(const QString &gnome_schema);
+bool has_schema_key(const QString &schema, const QString &key = QString());
 
 // ---------------------------------------------------------------- theme
 // Colours derived from the desktop's palette, so they suit any theme, light or dark.
@@ -195,6 +201,13 @@ QColor accent_color();  // the desktop's accent (the theme's selection colour)
 // stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)
 // are reapplied first, then fn runs. Stops when owner is deleted.
 void on_palette_change(QObject *owner, std::function<void()> fn);
+// Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
+// 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's
+// python3 with GTK's bindings) and follows the desktop's theme setting. follow_gtk_theme() does nothing on newer Qt.
+extern const char *GTK_COLORS_SCRIPT;
+bool needs_gtk_palette(const QString &qt_version);
+QPalette gtk_palette_from(const QJsonObject &colors, bool *ok);   // ok: the theme had the basic colours
+void follow_gtk_theme();   // after QApplication: apply the theme's colours now, then follow changes
 
 // ---------------------------------------------------------------- applications (GIO)
 

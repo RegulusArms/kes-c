@@ -43,6 +43,7 @@ QString FastIconProvider::type(const QFileInfo &fi) const
     if (fi.isDir())
         return "Folder";
     QString suf = fi.suffix().toLower();
+    QMutexLocker lock(&mutex);   // every model's file-info thread asks the one provider
     auto it = types.constFind(suf);
     if (it != types.constEnd())
         return *it;
@@ -56,15 +57,11 @@ QString FastIconProvider::type(const QFileInfo &fi) const
 FSModel::FSModel(ThumbnailManager *thumbs, QObject *parent) : QFileSystemModel(parent), thumbs(thumbs)
 {
     setReadOnly(false);
-    icon_provider = new FastIconProvider;   // the model doesn't take ownership
-    setIconProvider(icon_provider);
+    // One provider for every model, never deleted: the model doesn't own it, and its file-info thread may still use
+    // it while the model is being destroyed. (Unsetting it first crashes on Qt 6.4.)
+    static FastIconProvider *provider = new FastIconProvider;
+    setIconProvider(provider);
     connect(thumbs, &ThumbnailManager::updated, this, &FSModel::thumb_ready);
-}
-
-FSModel::~FSModel()
-{
-    setIconProvider(nullptr);
-    delete icon_provider;
 }
 
 QPixmap FSModel::thumb(const QModelIndex &index) const

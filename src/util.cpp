@@ -7,7 +7,9 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QJsonDocument>
 #include <QPalette>
+#include <QProcess>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -1011,6 +1013,28 @@ QIcon icon_for_path(const QString &path, int is_dir)
     return theme_icon({m.iconName(), m.genericIconName(), "text-x-generic"});
 }
 
+bool has_schema_key(const QString &schema, const QString &key)
+{
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *s = src ? g_settings_schema_source_lookup(src, schema.toUtf8().constData(), TRUE) : nullptr;
+    if (!s)
+        return false;
+    bool ok = key.isEmpty() || g_settings_schema_has_key(s, key.toUtf8().constData());
+    g_settings_schema_unref(s);
+    return ok;
+}
+
+QString desktop_schema(const QString &gnome_schema)
+{
+    QStringList desktops = QString::fromLocal8Bit(qgetenv("XDG_CURRENT_DESKTOP")).toLower().split(':');
+    if (desktops.contains("x-cinnamon") && gnome_schema.startsWith("org.gnome.")) {
+        QString cinnamon = "org.cinnamon." + gnome_schema.mid(10);
+        if (has_schema_key(cinnamon))
+            return cinnamon;
+    }
+    return gnome_schema;
+}
+
 void setup_icon_theme()
 {
     QStringList paths = QIcon::themeSearchPaths();
@@ -1024,7 +1048,7 @@ void setup_icon_theme()
     QIcon::setThemeSearchPaths(paths);
     if (QIcon::themeName().isEmpty() || QIcon::themeName() == "hicolor") {
         QString theme = "Adwaita";
-        auto r = proc::run({"gsettings", "get", "org.gnome.desktop.interface", "icon-theme"}, 2000);
+        auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
         QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
         if (r.rc == 0 && !out.isEmpty())
             theme = out;
@@ -1108,6 +1132,105 @@ void on_palette_change(QObject *owner, std::function<void()> fn)
 {
     static PaletteWatcher *watcher = new PaletteWatcher;
     watcher->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
+}
+
+// ---------------------------------------------------------------- the GTK theme's colours (Qt < 6.5)
+
+// prints the theme's named colours as JSON (GTK 3 reads the desktop's current theme when it starts)
+const char *GTK_COLORS_SCRIPT = R"(import json, gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+ctx = Gtk.Window().get_style_context()
+out = {}
+for name in ("theme_bg_color", "theme_fg_color", "theme_base_color", "theme_text_color", "theme_selected_bg_color",
+             "theme_selected_fg_color", "insensitive_fg_color", "link_color"):
+    found, c = ctx.lookup_color(name)
+    if found:
+        out[name] = "#%02x%02x%02x" % (round(c.red * 255), round(c.green * 255), round(c.blue * 255))
+print(json.dumps(out))
+)";
+
+bool needs_gtk_palette(const QString &qt_version)
+{
+    QStringList v = qt_version.split('.');
+    return v.value(0).toInt() == 6 && v.value(1).toInt() < 5;
+}
+
+QPalette gtk_palette_from(const QJsonObject &colors, bool *ok)
+{
+    auto color = [&](const char *name, const QColor &fallback = QColor()) {
+        QColor c(colors.value(name).toString());
+        return c.isValid() ? c : fallback;
+    };
+    QColor bg = color("theme_bg_color"), fg = color("theme_fg_color"), sel = color("theme_selected_bg_color");
+    *ok = bg.isValid() && fg.isValid() && sel.isValid();
+    if (!*ok)
+        return QPalette();
+    QColor base = color("theme_base_color", bg), text = color("theme_text_color", fg);
+    QColor sel_text = color("theme_selected_fg_color", QColor(sel.lightness() < 150 ? Qt::white : Qt::black));
+    QColor disabled = color("insensitive_fg_color", blend(fg, bg, 0.5)), link = color("link_color", sel);
+    QPalette p(bg, bg);   // derives the frame shades (light, mid, dark, shadow) from the background
+    p.setColor(QPalette::Window, bg);
+    p.setColor(QPalette::WindowText, fg);
+    p.setColor(QPalette::Button, bg);
+    p.setColor(QPalette::ButtonText, fg);
+    p.setColor(QPalette::Base, base);
+    p.setColor(QPalette::AlternateBase, blend(base, text, 0.04));
+    p.setColor(QPalette::Text, text);
+    p.setColor(QPalette::PlaceholderText, blend(text, base, 0.45));
+    p.setColor(QPalette::Highlight, sel);
+    p.setColor(QPalette::HighlightedText, sel_text);
+    p.setColor(QPalette::Link, link);
+    p.setColor(QPalette::LinkVisited, link);
+    p.setColor(QPalette::ToolTipBase, base);
+    p.setColor(QPalette::ToolTipText, text);
+    for (QPalette::ColorRole r : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        p.setColor(QPalette::Disabled, r, disabled);
+    p.setColor(QPalette::Disabled, QPalette::Highlight, blend(sel, bg, 0.5));
+    return p;
+}
+
+static void apply_gtk_palette(bool wait)
+{
+    // read the theme's colours with GTK in a helper process (Kestrel itself doesn't link GTK)
+    auto *proc = new QProcess(qApp);
+    auto apply = [proc]() {
+        bool ok = false;
+        QPalette p = gtk_palette_from(QJsonDocument::fromJson(proc->readAllStandardOutput()).object(), &ok);
+        if (ok && p != QGuiApplication::palette())
+            QApplication::setPalette(p);   // on_palette_change() then updates what was drawn in the old colours
+        proc->deleteLater();
+    };
+    if (wait) {   // at startup: the first window opens in the theme's colours
+        proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+        proc->waitForFinished(3000);
+        apply();
+        return;
+    }
+    QObject::connect(proc, &QProcess::finished, qApp, apply);
+    QObject::connect(proc, &QProcess::errorOccurred, proc, &QObject::deleteLater);
+    proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+}
+
+void follow_gtk_theme()
+{
+    QString platform = QGuiApplication::platformName();
+    if (!needs_gtk_palette(QString::fromLatin1(qVersion())) || (platform != "xcb" && platform != "wayland"))
+        return;
+    apply_gtk_palette(true);
+    static QTimer *later = nullptr;   // the desktop changes several settings at once; GTK picks them up shortly after
+    later = new QTimer(qApp);
+    later->setSingleShot(true);
+    later->setInterval(600);
+    QObject::connect(later, &QTimer::timeout, qApp, []() { apply_gtk_palette(false); });
+    QString schema = desktop_schema("org.gnome.desktop.interface");   // GNOME's, or Cinnamon's own
+    if (!has_schema_key(schema))
+        return;
+    GSettings *s = g_settings_new(schema.toUtf8().constData());   // kept for the life of the app
+    for (const char *key : {"gtk-theme", "color-scheme"})
+        if (has_schema_key(schema, key))
+            g_signal_connect(s, QString("changed::%1").arg(key).toUtf8().constData(),
+                             G_CALLBACK(+[](GSettings *, gchar *, gpointer) { later->start(); }), nullptr);
 }
 
 // ---------------------------------------------------------------- applications (GIO)
@@ -1287,12 +1410,14 @@ bool open_terminal(const QString &directory)
 
 void set_wallpaper(const QString &path)
 {
-    // through UWP when it's installed (a new UWP profile with the image on every monitor), else GNOME's own
+    // through UWP when it's installed (a new UWP profile with the image on every monitor), else the desktop's own
     if (uwp::set_wallpaper(path))
         return;
     QString uri = file_uri(path);
-    for (const char *key : {"picture-uri", "picture-uri-dark"})
-        proc::run({"gsettings", "set", "org.gnome.desktop.background", key, uri}, 5000);
+    QString schema = desktop_schema("org.gnome.desktop.background");
+    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
+        if (has_schema_key(schema, key))
+            proc::run({"gsettings", "set", schema, key, uri}, 5000);
 }
 
 void trash(const QString &path)

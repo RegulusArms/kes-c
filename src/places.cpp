@@ -159,12 +159,11 @@ QStringList recent_files(int limit)
 
 static bool remember_recent()
 {
-    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
-    GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.privacy", TRUE) : nullptr;
-    if (!schema)
+    // the desktop's "File History" privacy switch (GNOME's, or Cinnamon's own)
+    QString schema = desktop_schema("org.gnome.desktop.privacy");
+    if (!has_schema_key(schema, "remember-recent-files"))
         return true;
-    g_settings_schema_unref(schema);
-    GSettings *s = g_settings_new("org.gnome.desktop.privacy");
+    GSettings *s = g_settings_new(schema.toUtf8().constData());
     bool on = g_settings_get_boolean(s, "remember-recent-files");
     g_object_unref(s);
     return on;
