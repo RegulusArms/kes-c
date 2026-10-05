@@ -67,8 +67,9 @@ set(CPACK_PACKAGE_CONTACT "RegulusAlpha <ross@regulusarms.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "File manager with archive, admin, permission and metadata tools built in")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RegulusArms/kes-c")
 set(CPACK_DEBIAN_PACKAGE_SECTION utils)
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)   # Depends: the Qt and GLib libraries, from the binaries
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-qpa-plugins")
+# Depends written out rather than from dpkg-shlibdeps: the libraries' package names differ between releases
+# (Ubuntu 24.04 has libqt6gui6t64, 26.04 libqt6gui6 again), and one .deb is built for all of them
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins")
 # install.sh's RECOMMENDED list
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
 set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg")
