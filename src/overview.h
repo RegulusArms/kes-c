@@ -1,4 +1,4 @@
-// Overview page: drives with usage, network locations, connect-to-server, bookmarks.
+// Overview page: drives with usage, phones and cameras, network locations, connect-to-server, bookmarks.
 //
 // Modelled on the old "Other Locations" page in GNOME Files. Volume discovery uses GIO's GVolumeMonitor (same
 // source as Nautilus, so unmounted and encrypted drives can be mounted/unlocked) merged with QStorageInfo for
@@ -90,6 +90,27 @@ struct DriveInfo {
     std::function<void()> on_action;
 };
 
+struct DriveLists {
+    QList<DriveInfo> local, phones, network;
+};
+
+namespace overview {
+
+// Phones and cameras: gvfs's afc (Apple devices), gphoto2 (cameras, and an iPhone's photos) and mtp (Android).
+bool is_phone_scheme(const QString &scheme);
+QString phone_kind(const QString &scheme);                       // what the mount holds, e.g. "Photos and videos"
+QString phone_hint(const QString &scheme, const QString &name);   // what to do on the device when it won't mount
+extern const QString NO_PHONES_HINT;
+
+// Where the Overview lists a GIO mount. known_root: its path is one of the scanned filesystems.
+enum class MountGroup { Skip, Local, Phone, Network };
+MountGroup mount_group(const QString &scheme, const QString &path, bool shadowed, bool known_root);
+
+// Connected phones (mounted, with their FUSE path) and ones that can be mounted (uri = where to mount them).
+QList<DriveInfo> phone_infos(GVolumeMonitor *monitor);
+
+}  // namespace overview
+
 class DriveCard : public Card {
     Q_OBJECT
 public:
@@ -133,7 +154,7 @@ private:
     void clear_layout(QLayout *lay);
     FlowLayout *section(const QString &title);
     void rebuild();
-    QPair<QList<DriveInfo>, QList<DriveInfo>> drive_infos();
+    DriveLists drive_infos();
     DriveCard *drive_card(DriveInfo info);
     QHBoxLayout *connect_row();
     void do_mount(const overview::VolumeRef &volume);

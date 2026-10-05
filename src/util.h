@@ -1,7 +1,10 @@
 // Shared helpers: paths, file-system calls, mime types, icons, desktop integration, trash, bookmarks.
 #pragma once
 
+#include <QColor>
 #include <QIcon>
+#include <QJsonObject>
+#include <QPalette>
 #include <QMimeType>
 #include <QSet>
 #include <QSettings>
@@ -159,6 +162,15 @@ const QSet<QString> &image_exts();
 bool is_image(const QString &path);
 bool is_raw(const QString &path);
 bool is_video(const QString &path);
+// a phone or camera mounted by gvfs (/run/user/<uid>/gvfs/afc:…, gphoto2:…, mtp:…): each read is slow (gphoto2
+// downloads the whole file) and the backend serves one request at a time, so nothing may scan it in bulk
+bool is_device_path(const QString &path);
+// on a device whose backend downloads the whole file on every open (gvfs gphoto2), so a player that opens and seeks
+// it repeatedly downloads it again each time: open a local copy instead (fileops::fetch_local)
+bool needs_local_copy(const QString &path);
+// the gvfs URI (gphoto2://…, mtp://…) of a file on a device, from the mount that holds its FUSE path; empty if none.
+// Main thread: uses GIO's volume monitor.
+QString device_uri(const QString &path);
 QMimeType mime_for(const QString &path, int is_dir = -1);
 QMimeType mime_for_content(const QString &path);
 
@@ -171,6 +183,31 @@ inline QIcon theme_icon(const QString &name) { return theme_icon(QStringList{nam
 QIcon icon_for_path(const QString &path, int is_dir = -1);
 const QHash<QString, QString> &special_dir_icons();
 void setup_icon_theme();
+// The desktop's settings schema for a GNOME one: Cinnamon (Linux Mint) keeps its own copies, org.cinnamon.desktop.*,
+// and uses those; everything else uses GNOME's. has_schema_key: installed, and with that key (empty: any).
+QString desktop_schema(const QString &gnome_schema);
+bool has_schema_key(const QString &schema, const QString &key = QString());
+
+// ---------------------------------------------------------------- theme
+// Colours derived from the desktop's palette, so they suit any theme, light or dark.
+
+bool dark_theme();                                            // the window background is dark
+QColor blend(const QColor &a, const QColor &b, double t);     // t = 0: a, 1: b
+QColor card_color();    // a card (Overview) that stands out a little from the window background
+QColor card_border();
+QColor error_color();   // red text that is readable on the window background
+QColor accent_color();  // the desktop's accent (the theme's selection colour)
+// Call fn whenever the desktop's colours change (a light/dark switch, another theme). Qt updates its palette, but a
+// stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)
+// are reapplied first, then fn runs. Stops when owner is deleted.
+void on_palette_change(QObject *owner, std::function<void()> fn);
+// Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
+// 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's
+// python3 with GTK's bindings) and follows the desktop's theme setting. follow_gtk_theme() does nothing on newer Qt.
+extern const char *GTK_COLORS_SCRIPT;
+bool needs_gtk_palette(const QString &qt_version);
+QPalette gtk_palette_from(const QJsonObject &colors, bool *ok);   // ok: the theme had the basic colours
+void follow_gtk_theme();   // after QApplication: apply the theme's colours now, then follow changes
 
 // ---------------------------------------------------------------- applications (GIO)
 

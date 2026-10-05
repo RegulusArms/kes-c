@@ -1211,7 +1211,7 @@ void BatchRenameDialog::preview()
         bool bad = nw.trimmed().isEmpty() || nw.contains('/') || dupes.contains(nw) ||
                    (nw != basename(p) && lexists(target) && !paths.contains(target));
         if (bad) {
-            it->setForeground(QColor("#c01c28"));
+            it->setForeground(error_color());
             problems += 1;
         }
         table->setItem(i, 1, it);
@@ -1281,10 +1281,21 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     order = new QComboBox;
     order->addItems({"First by name", "Newest first"});
     order->setCurrentIndex(s.value("folder_order", "name").toString() == "newest" ? 1 : 0);
-    color = QColor(s.value("folder_color", "#d9652f").toString());
+    QString color_setting = s.value("folder_color", "accent").toString();
+    color_accent = new QCheckBox("Use the desktop's accent colour");
+    color_accent->setChecked(thumbs::follows_accent(color_setting));
+    color = color_accent->isChecked() ? accent_color() : QColor(color_setting);
     color_btn = new QPushButton;
     paint_color();
     connect(color_btn, &QPushButton::clicked, this, &PreferencesDialog::pick_color);
+    connect(color_accent, &QCheckBox::toggled, this, [this](bool on) {
+        if (on)
+            color = accent_color();
+        paint_color();
+    });
+    auto *color_row = new QHBoxLayout;
+    color_row->addWidget(color_btn);
+    color_row->addWidget(color_accent, 1);
     max_mb = new QSpinBox;
     max_mb->setRange(1, 10000);
     max_mb->setSuffix(" MB");
@@ -1316,7 +1327,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
                              "Kestrel window you used last.\nOff: it opens in a new window.");
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
-    form->addRow("Folder colour:", color_btn);
+    form->addRow("Folder colour:", color_row);
     form->addRow("Don't thumbnail files larger than:", max_mb);
     form->addRow("Slideshow interval:", slide);
     form->addRow("Open images with:", img_opener);
@@ -1368,6 +1379,8 @@ void PreferencesDialog::browse_home()
 void PreferencesDialog::paint_color()
 {
     color_btn->setStyleSheet(QString("background:%1; min-width:60px; min-height:20px").arg(color.name()));
+    color_btn->setEnabled(!color_accent->isChecked());
+    color_btn->setToolTip(color_accent->isChecked() ? "Follows the desktop's accent colour" : "Choose the colour");
 }
 
 void PreferencesDialog::pick_color()
@@ -1401,7 +1414,7 @@ void PreferencesDialog::save()
     }
     s.setValue("folder_count", count->value());
     s.setValue("folder_order", order->currentIndex() == 1 ? "newest" : "name");
-    s.setValue("folder_color", color.name());
+    s.setValue("folder_color", color_accent->isChecked() ? QString("accent") : color.name());
     s.setValue("thumb_max_mb", max_mb->value());
     s.setValue("image_opener", img_opener->currentData());
     s.setValue("video_opener", vid_opener->currentData());
@@ -1447,7 +1460,7 @@ QString ask_rename(QWidget *parent, const QString &path)
     edit->setMinimumWidth(380);
     lay->addWidget(edit);
     auto *err = new QLabel;
-    err->setStyleSheet("color: #c01c28");
+    err->setStyleSheet(QString("color: %1").arg(error_color().name()));
     lay->addWidget(err);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     bb->button(QDialogButtonBox::Ok)->setText("Rename");

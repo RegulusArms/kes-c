@@ -261,7 +261,11 @@ Indicator::Indicator(QWidget *parent) : QToolButton(parent)
     auto *m = new QMenu(this);
     m->addAction("End Admin Session", []() { session().end(); });
     setMenu(m);
-    setStyleSheet("QToolButton { color: #c01c28; font-weight: bold; }");
+    auto style = [this]() {
+        setStyleSheet(QString("QToolButton { color: %1; font-weight: bold; }").arg(util::error_color().name()));
+    };
+    style();
+    util::on_palette_change(this, style);
     connect(&session(), &AdminSession::changed, this, &QWidget::setVisible);
     setVisible(session().active());
 }

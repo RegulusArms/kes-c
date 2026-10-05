@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(kestrel-explorer VERSION 0.1.3 LANGUAGES CXX)
+project(kestrel-explorer VERSION 0.2.0 LANGUAGES CXX)
 
-set(KES_VERSION "0.1.3-alpha")
+set(KES_VERSION "0.2.0-alpha")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 
@@ -23,6 +23,7 @@ add_executable(kes
     src/uwp.cpp
     src/fileops.cpp
     src/fm1.cpp
+    src/chooser.cpp
     src/places.cpp
     src/sharing.cpp
     src/undo.cpp

@@ -250,6 +250,17 @@ QString extract_tool(const QString &path)
 
 bool can_extract(const QString &path) { return !kind(path).first.isEmpty(); }
 
+bool opens_as_archive(const QString &path)
+{
+    static const QStringList NOT_ARCHIVES = {".jar", ".apk", ".xpi", ".iso", ".deb", ".rpm", ".dmg", ".vhd",
+                                             ".vhdx", ".msi", ".chm", ".squashfs", ".wim"};
+    QString low = path.toLower();
+    for (const QString &e : NOT_ARCHIVES)
+        if (low.endsWith(e))
+            return false;
+    return can_extract(path) && missing_extract_tool(path).isEmpty();
+}
+
 QString missing_extract_tool(const QString &path)
 {
     if (!extract_tool(path).isEmpty())

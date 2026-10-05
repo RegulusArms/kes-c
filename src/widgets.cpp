@@ -1,6 +1,7 @@
 #include "widgets.h"
 
 #include "animate.h"
+#include "atc.h"
 #include "dialogs.h"
 #include "metadata.h"
 #include "overview.h"
@@ -9,10 +10,13 @@
 #include "thumbs.h"
 #include "util.h"
 
+#include <QApplication>
 #include <QClipboard>
 #include <QCompleter>
 #include <QDir>
+#include <QDrag>
 #include <QDragEnterEvent>
+#include <QFocusEvent>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -28,6 +32,7 @@
 
 #include <cmath>
 #include <fnmatch.h>
+#include <gio/gio.h>
 
 using namespace util;
 
@@ -38,6 +43,7 @@ QString FastIconProvider::type(const QFileInfo &fi) const
     if (fi.isDir())
         return "Folder";
     QString suf = fi.suffix().toLower();
+    QMutexLocker lock(&mutex);   // every model's file-info thread asks the one provider
     auto it = types.constFind(suf);
     if (it != types.constEnd())
         return *it;
@@ -51,15 +57,11 @@ QString FastIconProvider::type(const QFileInfo &fi) const
 FSModel::FSModel(ThumbnailManager *thumbs, QObject *parent) : QFileSystemModel(parent), thumbs(thumbs)
 {
     setReadOnly(false);
-    icon_provider = new FastIconProvider;   // the model doesn't take ownership
-    setIconProvider(icon_provider);
+    // One provider for every model, never deleted: the model doesn't own it, and its file-info thread may still use
+    // it while the model is being destroyed. (Unsetting it first crashes on Qt 6.4.)
+    static FastIconProvider *provider = new FastIconProvider;
+    setIconProvider(provider);
     connect(thumbs, &ThumbnailManager::updated, this, &FSModel::thumb_ready);
-}
-
-FSModel::~FSModel()
-{
-    setIconProvider(nullptr);
-    delete icon_provider;
 }
 
 QPixmap FSModel::thumb(const QModelIndex &index) const
@@ -500,7 +502,9 @@ bool PathBar::eventFilter(QObject *obj, QEvent *ev)
         cancel_edit();
         return true;
     }
-    if (obj == edit && ev->type() == QEvent::FocusOut && !edit->completer()->popup()->isVisible())
+    // a popup (the right-click menu, the completer) takes focus while still editing
+    if (obj == edit && ev->type() == QEvent::FocusOut && static_cast<QFocusEvent *>(ev)->reason() != Qt::PopupFocusReason
+        && !edit->completer()->popup()->isVisible())
         QTimer::singleShot(0, this, &PathBar::cancel_edit);
     return false;
 }
@@ -630,6 +634,14 @@ void PathBar::fit(bool force)
 
 Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
 {
+    // phones and cameras come and go through GIO's volume monitor (QStorageInfo doesn't see them)
+    monitor = g_volume_monitor_get();
+    for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
+                            "mount-changed"})
+        g_signal_connect(monitor, sig, G_CALLBACK(&Sidebar::monitor_changed), this);
+    phone_timer.setSingleShot(true);
+    phone_timer.setInterval(300);
+    connect(&phone_timer, &QTimer::timeout, this, &Sidebar::refresh);
     setIconSize(QSize(18, 18));
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -642,31 +654,103 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     connect(this, &QListWidget::itemClicked, this, &Sidebar::clicked);
     setStyleSheet("QListWidget { background: palette(window); } QListWidget::item { padding: 3px; }");
     refresh();
+    on_palette_change(this, [this]() { refresh(); });   // the headers' colour is set per item
     timer.setInterval(4000);
     connect(&timer, &QTimer::timeout, this, &Sidebar::check_mounts);
     timer.start();
 }
 
-void Sidebar::header(const QString &text)
+Sidebar::~Sidebar()
 {
-    auto *it = new QListWidgetItem(text);
-    it->setFlags(Qt::NoItemFlags);
+    g_signal_handlers_disconnect_by_data(monitor, this);
+    g_object_unref(monitor);
+}
+
+void Sidebar::monitor_changed(void *, void *, void *self) { static_cast<Sidebar *>(self)->phone_timer.start(); }
+
+// ---------------------------------------------------------------- sidebar order (shared with the Python version)
+
+namespace sidebar {
+
+const QStringList SECTIONS = {"places", "bookmarks", "devices"};
+
+QStringList section_order(const QStringList &saved)
+{
+    QStringList out;
+    for (const QString &id : saved)
+        if (SECTIONS.contains(id) && !out.contains(id))
+            out << id;
+    for (const QString &id : SECTIONS)
+        if (!out.contains(id))
+            out << id;
+    return out;
+}
+
+QStringList ordered(const QStringList &keys, const QStringList &saved)
+{
+    QStringList out;
+    for (const QString &k : saved)
+        if (keys.contains(k) && !out.contains(k))
+            out << k;
+    for (const QString &k : keys)
+        if (!out.contains(k))
+            out << k;
+    return out;
+}
+
+QStringList moved(QStringList keys, const QString &key, int index)
+{
+    int from = keys.indexOf(key);
+    if (from < 0)
+        return keys;
+    int to = std::clamp(index, 0, int(keys.size()));
+    if (to > from)
+        to -= 1;
+    keys.move(from, to);
+    return keys;
+}
+
+}  // namespace sidebar
+
+static const int SectionRole = Qt::UserRole + 1;
+static const int KeyRole = Qt::UserRole + 2;
+static const char *SIDEBAR_MIME = "application/x-kestrel-sidebar";
+
+void Sidebar::header(const QString &section, const QString &title, bool collapsed)
+{
+    auto *it = new QListWidgetItem(QString(collapsed ? "▸  " : "▾  ") + title);
+    it->setFlags(Qt::ItemIsEnabled);   // clickable (collapse), not selectable
     QFont f = it->font();
     f.setBold(true);
     f.setPointSizeF(f.pointSizeF() * 0.85);
     it->setFont(f);
     it->setForeground(palette().color(QPalette::PlaceholderText));
+    it->setData(Qt::UserRole, QVariantList{"header", section});
+    it->setData(SectionRole, section);
+    it->setToolTip(collapsed ? "Click to expand · drag to move the section" : "Click to collapse · drag to move the section");
     addItem(it);
 }
 
-void Sidebar::add(const QString &label, const QString &path, const QIcon &icon, const QString &kind,
-                  const QVariant &extra)
+void Sidebar::add(const Entry &e, const QString &section)
 {
-    auto *it = new QListWidgetItem(icon, label);
-    it->setData(PathRole, path);
-    it->setData(Qt::UserRole, QVariantList{kind, extra});
-    it->setToolTip(path);
+    auto *it = new QListWidgetItem(e.icon, e.label);
+    it->setData(PathRole, e.path);
+    it->setData(Qt::UserRole, QVariantList{e.kind, e.extra});
+    it->setData(SectionRole, section);
+    it->setData(KeyRole, e.key.isEmpty() ? e.path : e.key);
+    it->setToolTip(e.tip.isEmpty() ? e.path : e.tip);
     addItem(it);
+}
+
+QList<Sidebar::Entry> Sidebar::in_order(const QList<Entry> &entries, const QString &setting) const
+{
+    QStringList keys;
+    for (const Entry &e : entries)
+        keys << (e.key.isEmpty() ? e.path : e.key);
+    QList<Entry> out;
+    for (const QString &k : sidebar::ordered(keys, settings().value(setting).toStringList()))
+        out << entries[keys.indexOf(k)];
+    return out;
 }
 
 QList<Sidebar::Mount> Sidebar::mount_list() const
@@ -705,43 +789,175 @@ void Sidebar::refresh()
 {
     QString current = currentItem() ? currentItem()->data(PathRole).toString() : QString();
     clear();
-    header("PLACES");
-    add(OVERVIEW_TITLE, OVERVIEW, theme_icon({"computer", "folder"}), "overview");
-    add("Home", HOME(), theme_icon({"user-home", "folder"}));
-    add("Recent", places::RECENT, theme_icon({"document-open-recent", "folder-recent", "folder"}), "recent");
-    add("Starred", places::STARRED, theme_icon({"starred", "starred-symbolic", "folder"}), "starred");
-    const QList<QStringList> places = {{"DESKTOP", "Desktop", "user-desktop"},
-                                       {"DOCUMENTS", "Documents", "folder-documents"},
-                                       {"DOWNLOAD", "Downloads", "folder-download"},
-                                       {"MUSIC", "Music", "folder-music"},
-                                       {"PICTURES", "Pictures", "folder-pictures"},
-                                       {"VIDEOS", "Videos", "folder-videos"}};
-    for (const QStringList &pl : places) {
+    QList<Entry> place_list;
+    place_list << Entry{OVERVIEW_TITLE, OVERVIEW, theme_icon({"computer", "folder"}), "overview"};
+    place_list << Entry{"Home", HOME(), theme_icon({"user-home", "folder"})};
+    place_list << Entry{"Recent", places::RECENT, theme_icon({"document-open-recent", "folder-recent", "folder"}), "recent"};
+    place_list << Entry{"Starred", places::STARRED, theme_icon({"starred", "starred-symbolic", "folder"}), "starred"};
+    const QList<QStringList> xdg = {{"DESKTOP", "Desktop", "user-desktop"},
+                                    {"DOCUMENTS", "Documents", "folder-documents"},
+                                    {"DOWNLOAD", "Downloads", "folder-download"},
+                                    {"MUSIC", "Music", "folder-music"},
+                                    {"PICTURES", "Pictures", "folder-pictures"},
+                                    {"VIDEOS", "Videos", "folder-videos"}};
+    for (const QStringList &pl : xdg) {
         QString p = xdg_user_dir(pl[0]);
         if (isdir(p))
-            add(pl[1], p, theme_icon({pl[2], "folder"}));
+            place_list << Entry{pl[1], p, theme_icon({pl[2], "folder"})};
     }
     bool empty = trash_is_empty();   // home trash and every drive's trash
-    add("Trash", join(TRASH_DIR(), "files"), theme_icon({empty ? "user-trash" : "user-trash-full", "folder"}), "trash");
+    place_list << Entry{"Trash", join(TRASH_DIR(), "files"),
+                        theme_icon({empty ? "user-trash" : "user-trash-full", "folder"}), "trash"};
+    QList<Entry> bookmark_list;   // in the bookmarks file's order (moving one rewrites the file)
     auto bms = read_bookmarks();
-    if (!bms.isEmpty()) {
-        header("BOOKMARKS");
-        for (int i = 0; i < bms.size(); ++i) {
-            const auto &[path, label] = bms[i];
-            bool remote = !path.startsWith('/') || path.startsWith("/run/user/");
-            add(label, path, theme_icon({remote ? "folder-remote" : "folder", "folder"}), "bookmark", i);
-        }
+    for (int i = 0; i < bms.size(); ++i) {
+        const auto &[path, label] = bms[i];
+        bool remote = !path.startsWith('/') || path.startsWith("/run/user/");
+        bookmark_list << Entry{label, path, theme_icon({remote ? "folder-remote" : "folder", "folder"}), "bookmark", i};
     }
-    header("DEVICES");
-    add("Computer", "/", theme_icon({"drive-harddisk", "folder"}), "root");
+    QList<Entry> device_list;
+    device_list << Entry{"Computer", "/", theme_icon({"drive-harddisk", "folder"}), "root"};
     mounts = mount_list();
     for (const Mount &m : mounts) {
         QString label = m.total ? QString("%1 (%2)").arg(m.name, human_size(m.total)) : m.name;
         bool removable = m.root.startsWith("/media/") || m.root.startsWith("/run/media/");
-        add(label, m.root, theme_icon({removable ? "drive-removable-media" : "drive-harddisk", "folder"}), "mount", m.dev);
+        device_list << Entry{label, m.root, theme_icon({removable ? "drive-removable-media" : "drive-harddisk", "folder"}),
+                             "mount", m.dev};
+    }
+    phones = overview::phone_infos(monitor);
+    for (int i = 0; i < phones.size(); ++i) {
+        const DriveInfo &ph = phones[i];
+        // a phone that isn't mounted yet opens its URI: open_location mounts it
+        QIcon icon = ph.icon.isNull() ? theme_icon({"phone", "drive-removable-media"}) : ph.icon;
+        device_list << Entry{ph.name, ph.mounted ? ph.root : ph.uri, icon, "phone", i, "phone:" + ph.name,
+                             ph.mounted ? ph.fs : ph.fs + " — click to connect"};
+    }
+    QStringList collapsed = settings().value("sidebar_collapsed").toStringList();
+    for (const QString &id : sidebar::section_order(settings().value("sidebar_sections").toStringList())) {
+        QList<Entry> entries = id == "places"      ? in_order(place_list, "sidebar_places_order")
+                               : id == "devices" ? in_order(device_list, "sidebar_devices_order")
+                                                 : bookmark_list;
+        if (entries.isEmpty())
+            continue;
+        bool shut = collapsed.contains(id);
+        header(id, id == "places" ? "PLACES" : id == "devices" ? "DEVICES" : "BOOKMARKS", shut);
+        if (!shut)
+            for (const Entry &e : entries)
+                add(e, id);
     }
     if (!current.isEmpty())
         select_path(current);
+}
+
+QStringList Sidebar::shown_sections() const
+{
+    QStringList out;
+    for (int i = 0; i < count(); ++i)
+        if (item(i)->data(Qt::UserRole).toList().value(0) == "header")
+            out << item(i)->data(SectionRole).toString();
+    return out;
+}
+
+QStringList Sidebar::entry_keys(const QString &section) const
+{
+    QStringList out;
+    for (int i = 0; i < count(); ++i)
+        if (item(i)->data(SectionRole) == section && item(i)->data(Qt::UserRole).toList().value(0) != "header")
+            out << item(i)->data(KeyRole).toString();
+    return out;
+}
+
+int Sidebar::section_row(const QString &section) const
+{
+    for (int i = 0; i < count(); ++i)
+        if (item(i)->data(SectionRole) == section)
+            return i;
+    return -1;
+}
+
+int Sidebar::section_end(const QString &section) const
+{
+    int end = section_row(section);
+    if (end < 0)
+        return -1;
+    while (end < count() && item(end)->data(SectionRole) == section)
+        ++end;
+    return end;
+}
+
+void Sidebar::save_order(const QString &setting, const QStringList &keys)
+{
+    // keep the places of entries that aren't shown now (a drive that isn't plugged in)
+    QStringList all = keys;
+    for (const QString &k : settings().value(setting).toStringList())
+        if (!all.contains(k))
+            all << k;
+    settings().setValue(setting, all);
+    settings().sync();   // other Kestrels read the file as soon as they hear the report
+    atc::announce("sidebar");   // refreshes every sidebar, here and in other Kestrels
+}
+
+void Sidebar::move_entry(const QString &section, const QString &key, int index)
+{
+    QStringList keys = entry_keys(section);
+    if (!keys.contains(key))
+        return;
+    if (section == "bookmarks") {
+        auto bms = read_bookmarks();
+        int from = -1;
+        for (int i = 0; i < bms.size() && from < 0; ++i)
+            if (bms[i].first == key)
+                from = i;
+        if (from < 0)
+            return;
+        int to = std::clamp(index, 0, int(bms.size()));
+        if (to > from)
+            to -= 1;
+        if (to == from)
+            return;
+        bms.move(from, to);
+        write_bookmarks(bms);   // announces "bookmarks": every sidebar refreshes
+        return;
+    }
+    QStringList now = sidebar::moved(keys, key, index);
+    if (now != keys)
+        save_order(section == "places" ? "sidebar_places_order" : "sidebar_devices_order", now);
+}
+
+void Sidebar::move_section(const QString &section, int index)
+{
+    QStringList order = sidebar::section_order(settings().value("sidebar_sections").toStringList());
+    // index counts the sections shown; hidden ones (no bookmarks) keep their place relative to the next shown one
+    QStringList shown = shown_sections();
+    QStringList now_shown = sidebar::moved(shown, section, index);
+    if (now_shown == shown)
+        return;
+    QStringList now;
+    for (const QString &id : now_shown) {
+        int at = order.indexOf(id);
+        for (int i = 0; i < at; ++i)   // hidden sections that came before it
+            if (!shown.contains(order[i]) && !now.contains(order[i]))
+                now << order[i];
+        now << id;
+    }
+    for (const QString &id : order)
+        if (!now.contains(id))
+            now << id;
+    settings().setValue("sidebar_sections", now);
+    settings().sync();
+    atc::announce("sidebar");
+}
+
+void Sidebar::toggle_section(const QString &section)
+{
+    QStringList collapsed = settings().value("sidebar_collapsed").toStringList();
+    if (collapsed.contains(section))
+        collapsed.removeAll(section);
+    else
+        collapsed << section;
+    settings().setValue("sidebar_collapsed", collapsed);
+    settings().sync();
+    atc::announce("sidebar");
 }
 
 void Sidebar::select_path(const QString &path)
@@ -759,13 +975,54 @@ void Sidebar::select_path(const QString &path)
 
 void Sidebar::clicked(QListWidgetItem *it)
 {
+    if (it->data(Qt::UserRole).toList().value(0) == "header") {
+        toggle_section(it->data(SectionRole).toString());
+        return;
+    }
     QString p = it->data(PathRole).toString();
     if (!p.isEmpty())
         Q_EMIT open_path(p, QGuiApplication::keyboardModifiers() & Qt::ControlModifier);
 }
 
+void Sidebar::mousePressEvent(QMouseEvent *ev)
+{
+    if (ev->button() == Qt::LeftButton) {
+        press_pos = ev->position().toPoint();
+        press_index = indexAt(press_pos);
+    }
+    QListWidget::mousePressEvent(ev);
+}
+
+void Sidebar::mouseMoveEvent(QMouseEvent *ev)
+{
+    // press and drag an entry (within its section) or a header (the whole section) to rearrange
+    if ((ev->buttons() & Qt::LeftButton) && press_index.isValid() &&
+        (ev->position().toPoint() - press_pos).manhattanLength() >= QApplication::startDragDistance()) {
+        QListWidgetItem *it = item(press_index.row());
+        press_index = QPersistentModelIndex();
+        if (!it)
+            return;
+        bool is_header = it->data(Qt::UserRole).toList().value(0) == "header";
+        QString section = it->data(SectionRole).toString();
+        QString key = is_header ? QString() : it->data(KeyRole).toString();
+        auto *mime = new QMimeData;
+        mime->setData(SIDEBAR_MIME, (section + "\n" + key).toUtf8());
+        auto *drag = new QDrag(this);
+        drag->setMimeData(mime);
+        QRect r = visualItemRect(it);
+        drag->setPixmap(viewport()->grab(r));
+        drag->setHotSpot(press_pos - r.topLeft());
+        drag->exec(Qt::MoveAction);
+        drop_line = -1;
+        viewport()->update();
+        return;
+    }
+    QListWidget::mouseMoveEvent(ev);
+}
+
 void Sidebar::mouseReleaseEvent(QMouseEvent *ev)
 {
+    press_index = QPersistentModelIndex();
     if (ev->button() == Qt::MiddleButton) {
         QListWidgetItem *it = itemAt(ev->position().toPoint());
         if (it && !it->data(PathRole).toString().isEmpty()) {
@@ -788,7 +1045,7 @@ void Sidebar::menu(const QPoint &pos)
     QMenu m(this);
     m.addAction("Open", this, [this, path]() { Q_EMIT open_path(path, false); });
     m.addAction("Open in New Tab", this, [this, path]() { Q_EMIT open_path(path, true); });
-    if (isdir(path))
+    if (kind != "phone" && isdir(path))   // a stat on a phone can wait behind its transfers
         m.addAction("Open in Terminal", this, [path]() { open_terminal(path); });
     if (kind == "bookmark") {
         int i = extra.toInt();
@@ -803,6 +1060,11 @@ void Sidebar::menu(const QPoint &pos)
     } else if (kind == "mount") {
         m.addSeparator();
         m.addAction("Unmount", this, [this, path]() { unmount(path); });
+    } else if (kind == "phone" && phones.value(extra.toInt()).mount) {
+        int i = extra.toInt();
+        m.addSeparator();
+        QString label = g_mount_can_eject(phones[i].mount.get()) ? "Eject" : "Unmount";
+        m.addAction(label, this, [this, i]() { eject_phone(i); });
     }
     m.exec(viewport()->mapToGlobal(pos));
 }
@@ -817,6 +1079,20 @@ void Sidebar::unmount(const QString &path)
         QMessageBox::warning(this, "Unmount", err.isEmpty() ? "Unmount failed" : err);
     }
     refresh();
+}
+
+void Sidebar::eject_phone(int i)
+{
+    if (i < 0 || i >= phones.size() || !phones[i].mount)
+        return;
+    QPointer<Sidebar> self(this);
+    overview::unmount(this, phones[i].mount, [self](const QString &err) {
+        if (!self)
+            return;
+        if (!err.isEmpty())
+            QMessageBox::warning(self, "Unmount", err);
+        self->refresh();
+    });
 }
 
 void Sidebar::edit_bookmark(const QString &path)
@@ -861,14 +1137,67 @@ void Sidebar::add_bookmark(const QString &path)
 }
 
 // drag & drop onto places
+Sidebar::Drop Sidebar::drop_for(const QPoint &pos, const QString &section, const QString &key) const
+{
+    // the insertion point under pos: between the section's entries, or (for a section) between sections
+    Drop d;
+    d.section = section;
+    d.key = key;
+    int n = count();
+    int row = n;
+    if (QListWidgetItem *it = itemAt(pos)) {
+        QRect r = visualItemRect(it);
+        row = this->row(it) + (pos.y() >= r.center().y() ? 1 : 0);
+    } else if (n && pos.y() < visualItemRect(item(0)).top()) {
+        row = 0;
+    }
+    if (!key.isEmpty()) {
+        int first = section_row(section) + 1, end = section_end(section);
+        if (first <= 0)
+            return Drop();
+        d.row = std::clamp(row, first, end);
+        d.index = d.row - first;
+        return d;
+    }
+    // a whole section: snap to the nearer edge of the section under the pointer
+    QStringList shown = shown_sections();
+    int target = shown.size();
+    if (row < n) {
+        QString over = item(row)->data(SectionRole).toString();
+        int i = shown.indexOf(over);
+        if (i >= 0) {
+            int top = section_row(over), end = section_end(over);
+            target = (row - top) * 2 <= end - top ? i : i + 1;
+        }
+    }
+    d.index = target;
+    d.row = target < shown.size() ? section_row(shown[target]) : n;
+    return d;
+}
+
 void Sidebar::dragEnterEvent(QDragEnterEvent *ev)
 {
-    if (ev->mimeData()->hasUrls())
+    if (ev->mimeData()->hasFormat(SIDEBAR_MIME) && ev->source() == this)
+        ev->acceptProposedAction();
+    else if (ev->mimeData()->hasUrls())
         ev->acceptProposedAction();
 }
 
 void Sidebar::dragMoveEvent(QDragMoveEvent *ev)
 {
+    if (ev->mimeData()->hasFormat(SIDEBAR_MIME)) {
+        QStringList sk = QString::fromUtf8(ev->mimeData()->data(SIDEBAR_MIME)).split('\n');
+        Drop d = ev->source() == this ? drop_for(ev->position().toPoint(), sk.value(0), sk.value(1)) : Drop();
+        if (d.row < 0) {
+            drop_line = -1;
+            ev->ignore();
+        } else {
+            drop_line = d.row < count() ? visualItemRect(item(d.row)).top() : visualItemRect(item(count() - 1)).bottom() + 1;
+            ev->acceptProposedAction();
+        }
+        viewport()->update();
+        return;
+    }
     QListWidgetItem *it = itemAt(ev->position().toPoint());
     QString p = it ? it->data(PathRole).toString() : QString();
     if (p.startsWith('/') && isdir(p))
@@ -877,8 +1206,32 @@ void Sidebar::dragMoveEvent(QDragMoveEvent *ev)
         ev->ignore();
 }
 
+void Sidebar::dragLeaveEvent(QDragLeaveEvent *ev)
+{
+    drop_line = -1;
+    viewport()->update();
+    QListWidget::dragLeaveEvent(ev);
+}
+
 void Sidebar::dropEvent(QDropEvent *ev)
 {
+    if (ev->mimeData()->hasFormat(SIDEBAR_MIME)) {
+        drop_line = -1;
+        viewport()->update();
+        QStringList sk = QString::fromUtf8(ev->mimeData()->data(SIDEBAR_MIME)).split('\n');
+        Drop d = ev->source() == this ? drop_for(ev->position().toPoint(), sk.value(0), sk.value(1)) : Drop();
+        if (d.row < 0)
+            return;
+        ev->acceptProposedAction();
+        // after the drag has finished: moving rebuilds the list
+        QTimer::singleShot(0, this, [this, d]() {
+            if (d.key.isEmpty())
+                move_section(d.section, d.index);
+            else
+                move_entry(d.section, d.key, d.index);
+        });
+        return;
+    }
     QListWidgetItem *it = itemAt(ev->position().toPoint());
     if (!it || it->data(PathRole).toString().isEmpty())
         return;
@@ -889,6 +1242,16 @@ void Sidebar::dropEvent(QDropEvent *ev)
     QString target = it->data(PathRole).toString();
     ev->acceptProposedAction();
     QTimer::singleShot(0, this, [this, paths, target]() { Q_EMIT dropped(paths, target); });
+}
+
+void Sidebar::paintEvent(QPaintEvent *ev)
+{
+    QListWidget::paintEvent(ev);
+    if (drop_line < 0)
+        return;
+    QPainter p(viewport());
+    p.setPen(QPen(palette().color(QPalette::Highlight), 2));
+    p.drawLine(4, drop_line, viewport()->width() - 4, drop_line);
 }
 
 // ---------------------------------------------------------------- info panel

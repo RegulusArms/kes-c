@@ -2,10 +2,13 @@
 #pragma once
 
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QJsonObject>
 #include <QMap>
 #include <QPointer>
+#include <QProgressBar>
 #include <QThread>
+#include <QTimer>
 #include <QVariant>
 #include <QWidget>
 
@@ -15,8 +18,6 @@
 
 class QCheckBox;
 class QLabel;
-class QProgressBar;
-class QTimer;
 class QToolButton;
 
 // A background job shown in its window's status bar (TaskPanel).
@@ -89,6 +90,23 @@ private:
 
 // Status-bar widget: the running tasks' title, status and progress, with a cancel button. This window's tasks come
 // first; tasks running in other windows (and other Kestrels) are counted after them, or shown when there are none here.
+// The task panel's bar. Busy (no percentage): a block glides back and forth, so a long wait doesn't look stuck
+// (styles draw busy bars differently, some barely moving).
+class PulseBar : public QProgressBar {
+public:
+    explicit PulseBar(QWidget *parent = nullptr);
+    void set_busy(bool on);
+    bool busy() const { return pulsing; }
+
+protected:
+    void paintEvent(QPaintEvent *ev) override;
+
+private:
+    bool pulsing = false;
+    QTimer frame;
+    QElapsedTimer clock;
+};
+
 class TaskPanel : public QWidget {
     Q_OBJECT
 public:
@@ -102,7 +120,7 @@ private:
     void on_finished(Task *task);
     void cancel_first();
     QLabel *label;
-    QProgressBar *bar;
+    PulseBar *bar;
     QToolButton *stop;
 };
 
@@ -135,6 +153,11 @@ std::optional<QList<Job>> plan_transfer(QWidget *parent, const QStringList &sour
                                         const QString &op);
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
               std::function<void()> on_done = nullptr);
+
+// Copy files from a device (needs_local_copy) into ~/.cache/kestrel-explorer/device-files, as a busy task ("will
+// launch once ready") with Cancel, then call on_done(local paths) on the UI thread (not after a cancel or an error). A copy is reused while its
+// size matches the file's; copies not opened for a day are deleted.
+void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(const QStringList &)> on_done);
 
 // What creating a link of `kind` ("sym", "rel", "hard" or "desktop") to target in dest_dir means, as an
 // admin-helper request ({"op": "symlink" | "hardlink" | "write", ...}). The name is made unique.

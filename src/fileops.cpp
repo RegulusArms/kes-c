@@ -13,6 +13,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QTimer>
@@ -20,11 +21,15 @@
 #include <QVBoxLayout>
 
 #include <cerrno>
+#include <cmath>
 #include <dirent.h>
 #include <fcntl.h>
+#include <gio/gio.h>
 #include <memory>
+#include <thread>
 #include <time.h>
 #include <unistd.h>
+#include <utime.h>
 
 using namespace util;
 
@@ -196,13 +201,55 @@ void TaskBoard::on_heard(const QJsonObject &m)
 
 // ---------------------------------------------------------------- TaskPanel
 
+PulseBar::PulseBar(QWidget *parent) : QProgressBar(parent)
+{
+    frame.setInterval(16);
+    connect(&frame, &QTimer::timeout, this, qOverload<>(&QWidget::update));
+}
+
+void PulseBar::set_busy(bool on)
+{
+    if (on == pulsing)
+        return;
+    pulsing = on;
+    if (on) {
+        clock.start();
+        frame.start();
+    } else {
+        frame.stop();
+    }
+    update();
+}
+
+void PulseBar::paintEvent(QPaintEvent *ev)
+{
+    if (!pulsing) {
+        QProgressBar::paintEvent(ev);
+        return;
+    }
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    p.setPen(palette().color(QPalette::Mid));
+    p.setBrush(palette().color(QPalette::Base));
+    p.drawRoundedRect(r, 3, 3);
+    // there and back every 2.4 s, slowing at the ends
+    double t = (clock.elapsed() % 2400) / 2400.0;
+    double x = 0.5 - 0.5 * std::cos(2 * M_PI * t);
+    double w = r.width() * 0.3;
+    QRectF block(r.x() + 1.5 + x * (r.width() - 3 - w), r.y() + 1.5, w, r.height() - 3);
+    p.setPen(Qt::NoPen);
+    p.setBrush(palette().color(QPalette::Highlight));
+    p.drawRoundedRect(block, 2, 2);
+}
+
 TaskPanel::TaskPanel(QWidget *parent) : QWidget(parent)
 {
     auto *lay = new QHBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(4);
     label = new QLabel;
-    bar = new QProgressBar;
+    bar = new PulseBar;
     bar->setFixedWidth(200);
     bar->setMaximumHeight(16);
     bar->setRange(0, 1000);
@@ -287,12 +334,9 @@ void TaskPanel::refresh()
     for (const TaskInfo &x : others)
         tips << line(x) + " — in another window";
     setToolTip(tips.join('\n'));
-    if (first.fraction < 0) {
-        bar->setRange(0, 0);
-    } else {
-        bar->setRange(0, 1000);
+    bar->set_busy(first.fraction < 0);
+    if (first.fraction >= 0)
         bar->setValue(int(first.fraction * 1000));
-    }
     stop->setVisible(first.cancellable);
     stop->setEnabled(!first.cancelling);
     stop->setToolTip("Cancel " + first.title.toLower() + where);
@@ -799,6 +843,108 @@ DirStats dir_stats(const QString &path, std::function<bool()> cancel)
         ::closedir(dir);
     }
     return s;
+}
+
+// ---------------------------------------------------------------- local copies of device files
+
+void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(const QStringList &)> on_done)
+{
+    struct Item {
+        QString path, uri, dst;
+    };
+    QString root = join(APP_CACHE(), "device-files");
+    QList<Item> items;
+    for (const QString &p : paths) {
+        QString uri = device_uri(p);   // main thread (volume monitor); the copy then talks to gvfs directly
+        items << Item{p, uri, join(join(root, md5(uri.isEmpty() ? p : uri)), basename(p))};
+    }
+    auto fn = [items, root](Task *task) -> QVariant {
+        QSet<QString> keep;
+        for (const Item &it : items)
+            keep << dirname(it.dst);
+        // drop the copies nobody has opened for a day
+        try {
+            for (const QString &n : listdir(root)) {
+                QString d = join(root, n);
+                struct stat st;
+                if (!keep.contains(d) && stat_(d, st) && ::time(nullptr) - st.st_mtime > 86400)
+                    rmtree(d);
+            }
+        } catch (const OSError &) {
+        }
+        QList<GFile *> srcs;
+        QList<qint64> sizes;
+        for (const Item &it : items) {
+            GFile *f = it.uri.isEmpty() ? g_file_new_for_path(enc(it.path).constData())
+                                        : g_file_new_for_uri(it.uri.toUtf8().constData());
+            GFileInfo *info = g_file_query_info(f, G_FILE_ATTRIBUTE_STANDARD_SIZE, G_FILE_QUERY_INFO_NONE, nullptr, nullptr);
+            qint64 size = info ? g_file_info_get_size(info) : -1;
+            if (info)
+                g_object_unref(info);
+            srcs << f;
+            sizes << size;
+        }
+        auto release = [&srcs]() {
+            for (GFile *f : srcs)
+                g_object_unref(f);
+        };
+        QStringList out;
+        for (int i = 0; i < items.size(); ++i) {
+            const Item &it = items[i];
+            QString name = basename(it.path);
+            struct stat st;
+            if (stat_(it.dst, st) && st.st_size == sizes[i]) {   // copied before
+                ::utime(enc(dirname(it.dst)).constData(), nullptr);
+                out << it.dst;
+                continue;
+            }
+            if (task->cancelled) {
+                release();
+                throw Cancelled();
+            }
+            makedirs(dirname(it.dst), true);
+            QString part = it.dst + ".part";
+            // the device sends the whole file before the copy starts, so a cancel has to interrupt the wait
+            GCancellable *cancel = g_cancellable_new();
+            std::atomic<bool> finished{false};
+            std::thread watch([&]() {
+                while (!finished) {
+                    if (task->cancelled) {
+                        g_cancellable_cancel(cancel);
+                        return;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            });
+            // busy, not a percentage: the device sends nothing until it has the whole file, then it arrives at once
+            task->report(0, 0, name + " — will launch once ready");
+            GFile *dst = g_file_new_for_path(enc(part).constData());
+            GError *err = nullptr;
+            gboolean ok = g_file_copy(srcs[i], dst, G_FILE_COPY_OVERWRITE, cancel, nullptr, nullptr, &err);
+            finished = true;
+            watch.join();
+            g_object_unref(dst);
+            g_object_unref(cancel);
+            if (!ok) {
+                bool cancelled = g_error_matches(err, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+                QString msg = QString::fromUtf8(err->message);
+                g_error_free(err);
+                ::unlink(enc(part).constData());
+                release();
+                if (cancelled || task->cancelled)
+                    throw Cancelled();
+                throw Error(QString("Could not copy %1 from the device: %2").arg(name, msg));
+            }
+            rename(part, it.dst);
+            out << it.dst;
+        }
+        release();
+        return out;
+    };
+    run_job(parent, "Loading from device", fn, [on_done](const QVariant &res) {
+        if (res.isValid())
+            on_done(res.toStringList());
+    });
 }
 
 }  // namespace fileops
