@@ -76,6 +76,9 @@ QString first_volume(const QString &path);
 QString extract_tool(const QString &path);
 bool can_extract(const QString &path);
 QString missing_extract_tool(const QString &path);   // package to install, or empty if a tool is available
+// Opening it (double-click, Enter) shows Kestrel's Extract dialog: an archive whose tool is installed. Not packages,
+// disk images and apps that are archives inside (.deb, .iso, .apk…): those open with the system's app.
+bool opens_as_archive(const QString &path);
 QString archive_stem(const QString &path);
 
 QString command_preview(const Spec &spec);   // shell-like text of what will run (password masked)

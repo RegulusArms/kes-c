@@ -1,12 +1,15 @@
 // Models, delegates and widgets used by the main window.
 #pragma once
 
+#include "overview.h"
+
 #include <QAbstractFileIconProvider>
 #include <QFileSystemModel>
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMutex>
 #include <QScrollArea>
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
@@ -45,6 +48,7 @@ public:
 
 private:
     mutable QHash<QString, QString> types;
+    mutable QMutex mutex;
 };
 
 // QFileSystemModel that serves thumbnails and folder previews.
@@ -52,7 +56,6 @@ class FSModel : public QFileSystemModel {
     Q_OBJECT
 public:
     explicit FSModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    ~FSModel() override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
                       const QModelIndex &parent) override;
@@ -66,7 +69,6 @@ private:
     QIcon plain_icon(const QModelIndex &index) const;
     void thumb_ready(const QString &path);
     ThumbnailManager *thumbs;
-    FastIconProvider *icon_provider;
     mutable QHash<QString, QIcon> suffix_icons;
 };
 
@@ -177,13 +179,32 @@ private:
 
 // ---------------------------------------------------------------- sidebar
 
+// The sidebar's sections and their saved order (settings: sidebar_sections, sidebar_collapsed, sidebar_places_order,
+// sidebar_devices_order; the bookmarks' order is the GTK bookmarks file's).
+namespace sidebar {
+extern const QStringList SECTIONS;   // "places", "bookmarks", "devices": the default order
+QStringList section_order(const QStringList &saved);   // the saved order, without unknown ids, plus any missing
+// keys in the saved order (those present), then the rest in their natural order
+QStringList ordered(const QStringList &keys, const QStringList &saved);
+// keys with `key` moved to insertion point `index` (0 = first, keys.size() = last, counted before the move)
+QStringList moved(QStringList keys, const QString &key, int index);
+}  // namespace sidebar
+
 class Sidebar : public QListWidget {
     Q_OBJECT
 public:
     explicit Sidebar(QWidget *parent = nullptr);
+    ~Sidebar() override;
     void refresh();
     void select_path(const QString &path);
     void add_bookmark(const QString &path);
+    // rearranging (what drag and drop does): an entry within its section, or a whole section, to insertion point
+    // `index` (counted before the move); click a header to collapse/expand it
+    void move_entry(const QString &section, const QString &key, int index);
+    void move_section(const QString &section, int index);
+    void toggle_section(const QString &section);
+    QStringList shown_sections() const;                   // in order
+    QStringList entry_keys(const QString &section) const;   // in order; empty when collapsed
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
@@ -191,12 +212,34 @@ Q_SIGNALS:
     void empty_trash_requested();
 
 protected:
+    void mousePressEvent(QMouseEvent *ev) override;
+    void mouseMoveEvent(QMouseEvent *ev) override;
     void mouseReleaseEvent(QMouseEvent *ev) override;
     void dragEnterEvent(QDragEnterEvent *ev) override;
     void dragMoveEvent(QDragMoveEvent *ev) override;
+    void dragLeaveEvent(QDragLeaveEvent *ev) override;
     void dropEvent(QDropEvent *ev) override;
+    void paintEvent(QPaintEvent *ev) override;
 
 private:
+    struct Entry {
+        Entry() = default;
+        Entry(const QString &label, const QString &path, const QIcon &icon, const QString &kind = "place",
+              const QVariant &extra = QVariant(), const QString &key = QString(), const QString &tip = QString())
+            : label(label), path(path), icon(icon), kind(kind), extra(extra), key(key), tip(tip)
+        {
+        }
+        QString label, path;
+        QIcon icon;
+        QString kind = "place";
+        QVariant extra;
+        QString key, tip;   // key: what the saved order lists (the path; "phone:<name>" for a phone)
+    };
+    struct Drop {
+        int row = -1;            // insertion row (count() = after the last)
+        QString section, key;    // what moves (key empty: the whole section)
+        int index = -1;          // for move_entry / move_section
+    };
     struct Mount {
         QString name, root, dev;
         qint64 total;
@@ -205,19 +248,30 @@ private:
             return name == o.name && root == o.root && dev == o.dev && total == o.total;
         }
     };
-    void header(const QString &text);
-    void add(const QString &label, const QString &path, const QIcon &icon, const QString &kind = "place",
-             const QVariant &extra = QVariant());
+    void header(const QString &section, const QString &title, bool collapsed);
+    void add(const Entry &e, const QString &section);
+    QList<Entry> in_order(const QList<Entry> &entries, const QString &setting) const;
+    int section_row(const QString &section) const;   // its header's row, -1 if not shown
+    int section_end(const QString &section) const;   // the row after its last entry
+    Drop drop_for(const QPoint &pos, const QString &section, const QString &key) const;
+    void save_order(const QString &setting, const QStringList &keys);
     QList<Mount> mount_list() const;
     void check_mounts();
     void clicked(QListWidgetItem *it);
     void menu(const QPoint &pos);
     void unmount(const QString &path);
+    void eject_phone(int i);
+    static void monitor_changed(void *, void *, void *self);
     void edit_bookmark(const QString &path);
     void remove_bookmark(int i);
     void move_bookmark(int i, int d);
     QList<Mount> mounts;
-    QTimer timer;
+    QList<DriveInfo> phones;   // phones and cameras (GIO)
+    QTimer timer, phone_timer;
+    GVolumeMonitor *monitor = nullptr;
+    QPoint press_pos;
+    QPersistentModelIndex press_index;
+    int drop_line = -1;   // y of the drop indicator while rearranging, -1 = none
 };
 
 // ---------------------------------------------------------------- info panel

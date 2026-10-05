@@ -5,6 +5,7 @@
 #include "archive.h"
 #include "archive_ui.h"
 #include "atc.h"
+#include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "fm1.h"
@@ -149,7 +150,19 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     attach(model);
     set_view_mode(settings().value("view_mode", "grid").toString());
+    if (win->chooser)
+        set_type_filter(win->chooser->type_filter());
     set_path(start);
+}
+
+void Pane::set_type_filter(const QStringList &globs)
+{
+    type_filters = globs;
+    QDir::Filters f = model->filter();
+    // name filters also hide folders unless AllDirs is set
+    model->setFilter(globs.isEmpty() ? f & ~QDir::AllDirs : f | QDir::AllDirs);
+    if (!in_search && !search_bar->isVisible())
+        model->setNameFilters(globs);
 }
 
 Pane::~Pane()
@@ -393,7 +406,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     stack->setCurrentWidget(mode_view);
     thumbs->cancel_pending();
     animator->clear();
-    model->setNameFilters({});
+    model->setNameFilters(type_filters);
     QModelIndex root = model->setRootPath(p);
     grid->setRootIndex(root);
     tree->setRootIndex(root);
@@ -692,6 +705,8 @@ void Pane::apply_hidden()
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
     if (win->show_hidden)
         f |= QDir::Hidden;
+    if (!type_filters.isEmpty())
+        f |= QDir::AllDirs;   // a chooser's file types don't hide folders
     model->setFilter(f);
 }
 
@@ -743,7 +758,7 @@ void Pane::close_search(bool refocus, bool navigating)
     search_edit->blockSignals(false);
     search_bar->hide();
     stop_search();
-    model->setNameFilters({});
+    model->setNameFilters(type_filters);
     if (in_search) {
         in_search = false;
         attach(model);
@@ -800,7 +815,7 @@ void Pane::do_search()
         return;
     }
     if (text.isEmpty()) {
-        model->setNameFilters({});
+        model->setNameFilters(type_filters);
         if (in_search) {
             in_search = false;
             attach(model);
@@ -1118,6 +1133,26 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_) : th
         new_tab(OVERVIEW);
 }
 
+void MainWindow::make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done)
+{
+    // a file chooser window: a normal window with the chooser's bar at the bottom (see chooser.h)
+    chooser = new ChooserBar(this, req, std::move(done));
+    auto *box = new QWidget;
+    auto *lay = new QVBoxLayout(box);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(0);
+    takeCentralWidget();
+    lay->addWidget(split, 1);
+    lay->addWidget(chooser);
+    setCentralWidget(box);
+    setWindowTitle(req.title.isEmpty() ? chooser::button_text(req) : req.title);
+    for (Pane *p : panes())
+        p->set_type_filter(chooser->type_filter());
+    resize(1100, 700);
+    if (chooser->name)
+        chooser->name->setFocus();
+}
+
 // -- toolbar & actions
 
 void MainWindow::build_toolbar()
@@ -1350,8 +1385,11 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
     int i = tabs->addTab(p, p->title());
     connect(p, &Pane::path_changed, this, [this, p]() { pane_path_changed(p); });
     connect(p, &Pane::selection_changed, this, [this, p]() {
-        if (p == pane())
+        if (p == pane()) {
             update_status();
+            if (chooser)
+                chooser->selection_changed();
+        }
     });
     if (activate) {
         tabs->setCurrentIndex(i);
@@ -1399,7 +1437,7 @@ void MainWindow::pane_path_changed(Pane *p)
     sync_zoom_slider();
     QString d = p->dir();
     QStorageInfo vol;
-    if (!d.isEmpty())
+    if (!d.isEmpty() && !is_device_path(d))   // statfs on a phone waits behind its file transfers
         vol = QStorageInfo(d);
     free_label->setText(!d.isEmpty() && vol.isValid() ? human_size(vol.bytesAvailable()) + " free" : QString());
     update_status();
@@ -1438,7 +1476,12 @@ void MainWindow::open_location(const QString &target_in, bool new_tab_)
                 return;
             self->statusBar()->clearMessage();
             if (!err.isEmpty()) {
-                QMessageBox::warning(self, "Connect to Server", QString("Could not open %1:\n\n%2").arg(target, err));
+                QString scheme = target.section(':', 0, 0);
+                QString msg = QString("Could not open %1:\n\n%2").arg(target, err);
+                if (overview::is_phone_scheme(scheme))
+                    msg += "\n\n" + overview::phone_hint(scheme, target);
+                QString title = overview::is_phone_scheme(scheme) ? "Connect to Device" : "Connect to Server";
+                QMessageBox::warning(self, title, msg);
             } else if (!path.isEmpty()) {
                 self->remember_server(target);
                 self->sidebar->refresh();
@@ -1669,6 +1712,13 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     QStringList dirs, files;
     for (const QString &x : paths)
         (isdir(x) ? dirs : files) << x;
+    if (chooser) {   // a file chooser: folders open as usual, files are the choice
+        if (!dirs.isEmpty())
+            p->set_path(dirs.first());
+        else if (!files.isEmpty())
+            chooser->activated(files);
+        return;
+    }
     places::add_recent(files);
     if (!dirs.isEmpty()) {
         if (dirs.size() == 1 && !new_tab_ && files.isEmpty()) {
@@ -1678,14 +1728,23 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
                 new_tab(d, false);
         }
     }
-    QStringList images, videos, others;
+    QStringList images, videos, fetch, others;
     for (const QString &f : files) {
-        if (is_image(f))
+        if (archive::opens_as_archive(f))
+            archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
+        else if (is_image(f))
             images << f;
         else if (is_video(f))
-            videos << f;
+            (needs_local_copy(f) ? fetch : videos) << f;   // a player would download it again on every open/seek
         else
             others << f;
+    }
+    if (!fetch.isEmpty()) {
+        QPointer<MainWindow> self(this);
+        fileops::fetch_local(this, fetch, [self](const QStringList &local) {
+            if (self)
+                self->open_videos(local);
+        });
     }
     QString img_choice = settings().value("image_opener", "system").toString();
     if (!images.isEmpty() && img_choice == "builtin") {
@@ -1703,8 +1762,15 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         others += open_with_choice(images, img_choice);
     }
     if (!videos.isEmpty())
-        others += open_with_choice(videos, settings().value("video_opener", "system").toString());
+        open_videos(videos);
     for (const QString &f : others)
+        if (!open_file(f))
+            QMessageBox::warning(this, "Open", "Could not open " + f);
+}
+
+void MainWindow::open_videos(const QStringList &videos)
+{
+    for (const QString &f : open_with_choice(videos, settings().value("video_opener", "system").toString()))
         if (!open_file(f))
             QMessageBox::warning(this, "Open", "Could not open " + f);
 }
@@ -2600,6 +2666,7 @@ static void apply_preferences()
 void MainWindow::preferences_saved()
 {
     apply_preferences();
+    settings().sync();   // other Kestrels read the file as soon as they hear the report
     atc::announce("settings");
 }
 
@@ -2705,8 +2772,12 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         }
         return;
     }
-    settings().setValue("geometry", saveGeometry());
-    settings().setValue("splitter", split->saveState());
+    if (chooser) {
+        chooser->finish(false);   // closed without choosing: cancelled
+    } else {
+        settings().setValue("geometry", saveGeometry());
+        settings().setValue("splitter", split->saveState());
+    }
     for (Pane *p : panes())
         p->stop_search();
     if (builder) {
@@ -2744,8 +2815,20 @@ void apply_thumb_settings(ThumbnailManager *t)
     QSettings &s = settings();
     t->folder_count = s.value("folder_count", 4).toInt();
     t->folder_order = s.value("folder_order", "name").toString();
-    t->folder_color = s.value("folder_color", "#d9652f").toString();
+    QString color = s.value("folder_color", "accent").toString();
+    t->folder_accent = thumbs::follows_accent(color);
+    t->folder_color = t->folder_accent ? accent_color().name() : color;
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
+    static ThumbnailManager *watched = nullptr;
+    if (!watched) {   // runs before the windows' own updates, which then draw folders in the new accent
+        watched = t;
+        on_palette_change(t, [t]() {
+            if (t->folder_accent && t->folder_color != accent_color().name()) {
+                t->folder_color = accent_color().name();
+                repaint_all();
+            }
+        });
+    }
 }
 
 // ---- Preferences → "Open folders from other apps as tabs in an open Kestrel window"
@@ -2871,6 +2954,12 @@ void on_atc(const QJsonObject &m)
     // a change reported by another Kestrel through the tower (see atc.h), or by this one ("own")
     QString type = m.value("type").toString();
     bool own = m.value("own").toBool();
+    if (type == "sidebar") {   // its order or collapsed sections; also refreshes this process's other windows
+        if (!own)
+            settings().sync();
+        for (MainWindow *w : WINDOWS)
+            w->sidebar->refresh();
+    }
     if (type == "bookmarks") {   // also refreshes this process's other windows
         for (MainWindow *w : WINDOWS) {
             w->sidebar->refresh();
@@ -2935,6 +3024,30 @@ QString location_arg(const QString &arg)
     return abspath(expanduser(arg));
 }
 
+MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done)
+{
+    // not in WINDOWS: a chooser isn't a window other Kestrels hand folders to
+    QString start = req.current_folder;
+    if (!isdir(start))
+        start = settings().value("chooser_folder").toString();   // where the last chooser picked something
+    if (!isdir(start))
+        start = HOME();
+    auto *w = new MainWindow({start}, g_thumbs);
+    w->make_chooser(req, std::move(done));
+    if (quintptr id = chooser::x11_parent(req.parent_window); id && QGuiApplication::platformName() == "xcb") {
+        // the app's window (X11): the chooser is its dialog
+        w->winId();   // create the native window, to give it a transient parent before it is shown
+        if (QWindow *app_window = QWindow::fromWinId(WId(id))) {
+            w->windowHandle()->setTransientParent(app_window);
+            QObject::connect(w, &QObject::destroyed, app_window, &QObject::deleteLater);
+        }
+    }
+    w->show();
+    w->raise();
+    w->activateWindow();
+    return w;
+}
+
 MainWindow *open_window(const QStringList &paths)
 {
     auto *w = new MainWindow(paths, g_thumbs);
@@ -2967,6 +3080,7 @@ int kes_main(int argc, char **argv)
     QApplication app(argc, argv);
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
+    follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
     app.setWindowIcon(theme_icon("folder"));
     migrate_legacy();
     ensure_desktop_entry();
@@ -2974,6 +3088,19 @@ int kes_main(int argc, char **argv)
     settings();
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);
+    for (int i = 1; i < argc; ++i)
+        if (QByteArray(argv[i]) == "--file-chooser") {
+            // started by D-Bus for the system's file chooser (see chooser.h): only chooser windows
+            app.setQuitOnLastWindowClosed(false);   // the service quits after a minute without dialogs
+            chooser::serve([](const chooser::Request &req, std::function<void(const chooser::Result &)> done) {
+                QPointer<MainWindow> w = open_chooser(req, std::move(done));
+                return std::function<void()>([w]() {
+                    if (w)
+                        w->close();
+                });
+            });
+            return app.exec();
+        }
     QStringList paths;
     for (int i = 1; i < argc; ++i) {
         QString a = QString::fromLocal8Bit(argv[i]);

@@ -52,6 +52,14 @@ QImage file_thumb(const QString &path, qint64 mtime, int size);
 QStringList pick_folder_images(const QString &folder, int count, const QString &order, const QString &cover = QString());
 QImage compose_folder(const QList<QImage> &images, int size, const QString &color, const QList<bool> &videos);
 QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts);
+// The phone's own small preview of a file (is_device_path; uri from device_uri), scaled to fit size; null if it has
+// none. Worker thread.
+QImage device_preview(const QString &uri, int size);
+
+// The default folder colour setting (folder_color): "accent", unset, or the old fixed default (#d9652f, which
+// Preferences used to save every time) follow the desktop's accent colour; anything else is a fixed colour.
+bool follows_accent(const QString &setting);
+
 // Delete every thumbnail this app may have written. Returns (files, bytes).
 QPair<qint64, qint64> purge_thumbnails(bool include_shared = false);
 
@@ -91,7 +99,8 @@ public:
     int max_file_mb = 200;
     int folder_count = 4;
     QString folder_order = "name";
-    QString folder_color = "#d9652f";
+    QString folder_color = "#d9652f";   // the default colour in use (the accent's, when folder_accent)
+    bool folder_accent = true;
 
 Q_SIGNALS:
     void updated(const QString &path);
@@ -108,7 +117,7 @@ private:
     QHash<QPair<QString, int>, QPixmap> plain_cache;
     void cache_put(const QString &key, const QPixmap &pm);
 
-    QThreadPool pool, dir_pool;
+    QThreadPool pool, dir_pool, device_pool;
     int batch_total = 0, batch_done = 0;
     QTimer progress_timer;
     std::list<std::pair<QString, QPixmap>> lru;   // most recently used at the back
