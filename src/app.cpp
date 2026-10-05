@@ -6,6 +6,7 @@
 #include "archive_ui.h"
 #include "atc.h"
 #include "chooser.h"
+#include "focus.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "fm1.h"
@@ -25,6 +26,7 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QDateTime>
+#include <QDrag>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -39,6 +41,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
@@ -75,6 +78,60 @@ static ThumbnailManager *g_thumbs = nullptr;
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
 // ---------------------------------------------------------------- pane
+
+// The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h).
+template <class View>
+class FileView : public View {
+protected:
+    void startDrag(Qt::DropActions supported) override
+    {
+        QModelIndexList indexes;
+        for (const QModelIndex &i : this->selectedIndexes())
+            if (this->model()->flags(i) & Qt::ItemIsDragEnabled)
+                indexes << i;
+        QMimeData *data = indexes.isEmpty() ? nullptr : this->model()->mimeData(indexes);
+        if (!data)
+            return;
+        auto *drag = new QDrag(this);
+        drag->setMimeData(data);
+        QPoint hot;
+        drag->setPixmap(drag_pixmap(indexes, &hot));
+        drag->setHotSpot(hot);
+        Qt::DropAction def = this->defaultDropAction();
+        if (def == Qt::IgnoreAction || !(supported & def))
+            def = supported & Qt::CopyAction ? Qt::CopyAction : Qt::IgnoreAction;
+        if (drag->exec(supported, def) != Qt::IgnoreAction && !drag->target())   // dropped into another app
+            focus::activate_at_pointer();
+    }
+
+private:
+    QPixmap drag_pixmap(const QModelIndexList &indexes, QPoint *hot) const
+    {
+        // the dragged items as they look in the view (what Qt draws)
+        QRect all;
+        for (const QModelIndex &i : indexes)
+            all |= this->visualRect(i).intersected(this->viewport()->rect());
+        *hot = this->viewport()->mapFromGlobal(QCursor::pos()) - all.topLeft();
+        if (all.isEmpty())
+            return QPixmap();
+        qreal dpr = this->devicePixelRatioF();
+        QPixmap pm(all.size() * dpr);
+        pm.setDevicePixelRatio(dpr);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        for (const QModelIndex &i : indexes) {
+            QRect r = this->visualRect(i);
+            if (!r.intersects(this->viewport()->rect()))
+                continue;
+            QStyleOptionViewItem opt;
+            this->initViewItemOption(&opt);
+            opt.rect = r.translated(-all.topLeft());
+            opt.state |= QStyle::State_Selected;
+            this->itemDelegateForIndex(i)->paint(&p, opt, i);
+        }
+        return pm;
+    }
+};
 
 Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs)
 {
@@ -126,8 +183,8 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     lay->addWidget(search_bar);
 
     stack = new QStackedWidget;
-    grid = new QListView;
-    tree = new QTreeView;
+    grid = new FileView<QListView>;
+    tree = new FileView<QTreeView>;
     setup_grid();
     setup_tree();
     stack->addWidget(grid);
