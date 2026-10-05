@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(kestrel-explorer VERSION 0.2.0 LANGUAGES CXX)
+project(kestrel-explorer VERSION 0.2.1 LANGUAGES CXX)
 
-set(KES_VERSION "0.2.0-alpha")
+set(KES_VERSION "0.2.1-alpha")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)

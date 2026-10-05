@@ -63,6 +63,8 @@ using namespace util;
 
 static const int GRID_MIN = 48, GRID_MAX = 320;
 static const int LIST_MIN = 16, LIST_MAX = 128;
+static const int GRID_DEFAULT = 160, LIST_DEFAULT = 28;
+static const int CHOOSER_GRID = 96, CHOOSER_LIST = 24;   // a chooser window starts with smaller icons
 static const QStringList SORT_COLUMNS = {"Name", "Size", "Type", "Modified"};
 static QList<MainWindow *> WINDOWS;
 static QPointer<MainWindow> last_active;   // the window used most recently
@@ -76,8 +78,8 @@ static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
 Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs)
 {
-    grid_size = settings().value("grid_size", 160).toInt();
-    list_size = settings().value("list_size", 28).toInt();
+    grid_size = win->view_value("grid_size").toInt();
+    list_size = win->view_value("list_size").toInt();
 
     auto *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
@@ -90,7 +92,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     search_edit->setPlaceholderText("Search… (supports * and ? wildcards)");
     search_edit->setClearButtonEnabled(true);
     search_sub = new QCheckBox("Include subfolders");
-    search_sub->setChecked(settings().value("search_recursive", false).toBool());
+    search_sub->setChecked(win->view_value("search_recursive", false).toBool());
     auto *close = new QToolButton;
     close->setIcon(icon({"window-close-symbolic", "window-close"}));
     close->setAutoRaise(true);
@@ -99,9 +101,9 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     search_contents = new QCheckBox("File contents");
     search_contents->setToolTip("Search inside files too, using the desktop's search index (localsearch).\n"
                                 "Includes subfolders; only finds files in indexed folders.");
-    search_contents->setChecked(settings().value("search_contents", false).toBool());
+    search_contents->setChecked(win->view_value("search_contents", false).toBool());
     connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
-        settings().setValue("search_contents", v);
+        this->win->set_view_value("search_contents", v);
         do_search();
     });
     sl->addWidget(search_sub);
@@ -117,7 +119,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(search_timer, &QTimer::timeout, this, &Pane::do_search);
     connect(search_edit, &QLineEdit::textChanged, this, [this]() { search_timer->start(); });
     connect(search_sub, &QCheckBox::toggled, this, [this](bool v) {
-        settings().setValue("search_recursive", v);
+        this->win->set_view_value("search_recursive", v);
         do_search();
     });
     search_edit->installEventFilter(this);
@@ -149,7 +151,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     search_model = new SearchModel(thumbs, this);
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     attach(model);
-    set_view_mode(settings().value("view_mode", "grid").toString());
+    set_view_mode(win->view_value("view_mode", "grid").toString());
     if (win->chooser)
         set_type_filter(win->chooser->type_filter());
     set_path(start);
@@ -226,8 +228,8 @@ void Pane::setup_tree()
     t->setSortingEnabled(true);
     t->setFrameShape(QFrame::NoFrame);
     t->setIconSize(QSize(list_size, list_size));
-    int col = settings().value("sort_col", 0).toInt();
-    auto order = Qt::SortOrder(settings().value("sort_order", 0).toInt());
+    int col = win->view_value("sort_col", 0).toInt();
+    auto order = Qt::SortOrder(win->view_value("sort_order", 0).toInt());
     t->header()->setSortIndicator(col, order);
     connect(t->header(), &QHeaderView::sortIndicatorChanged, this, &Pane::sort_changed);
     setup_common(t);
@@ -317,14 +319,14 @@ void Pane::zoom(int step, int absolute)
         int nw = absolute >= 0 ? absolute : int(cur * (step > 0 ? 1.15 : 1 / 1.15));
         grid_size = std::max(GRID_MIN, std::min(GRID_MAX, nw));
         delegate->icon_size = grid_size;
-        settings().setValue("grid_size", grid_size);
+        win->set_view_value("grid_size", grid_size);
         update_grid_size();
     } else {
         int cur = list_size;
         int nw = absolute >= 0 ? absolute : cur + (step > 0 ? 8 : -8);
         list_size = std::max(LIST_MIN, std::min(LIST_MAX, nw));
         tree->setIconSize(QSize(list_size, list_size));
-        settings().setValue("list_size", list_size);
+        win->set_view_value("list_size", list_size);
     }
     apply_folder_previews();
     view()->viewport()->update();
@@ -924,8 +926,8 @@ void Pane::invert_selection()
 
 void Pane::sort_changed(int col, Qt::SortOrder order)
 {
-    settings().setValue("sort_col", col);
-    settings().setValue("sort_order", int(order));
+    win->set_view_value("sort_col", col);
+    win->set_view_value("sort_order", int(order));
 }
 
 void Pane::sort_by(int col, int order)
@@ -1037,14 +1039,18 @@ QString Pane::title() const
 
 // ---------------------------------------------------------------- main window
 
-MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_) : thumbs(thumbs_)
+MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool chooser_mode_)
+    : thumbs(thumbs_), chooser_mode(chooser_mode_)
 {
     setAttribute(Qt::WA_DeleteOnClose);
-    show_hidden = settings().value("show_hidden", false).toBool();
-    folder_previews = settings().value("folder_previews", true).toBool();
+    show_hidden = view_value("show_hidden", false).toBool();
+    folder_previews = view_value("folder_previews", true).toBool();
     setWindowTitle(APP_NAME);
     setWindowIcon(icon({"folder"}));
-    resize(1280, 820);
+    if (chooser_mode)
+        resize(960, 620);   // a dialog: smaller than a main window
+    else
+        resize(1280, 820);
 
     build_toolbar();
     sidebar = new Sidebar;
@@ -1068,8 +1074,8 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_) : th
     split->setSizes({220, 900, 300});
     split->setCollapsible(1, false);
     setCentralWidget(split);
-    sidebar->setVisible(settings().value("sidebar", true).toBool());
-    info->setVisible(settings().value("info_panel", false).toBool());
+    sidebar->setVisible(view_value("sidebar", true).toBool());
+    info->setVisible(view_value("info_panel", false).toBool());
 
     status_label = new QLabel;
     free_label = new QLabel;
@@ -1120,10 +1126,10 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_) : th
     statusBar()->addPermanentWidget(zoom_slider);
 
     build_actions();
-    QVariant geo = settings().value("geometry");
+    QVariant geo = view_value("geometry");
     if (geo.isValid())
         restoreGeometry(geo.toByteArray());
-    QVariant st = settings().value("splitter");
+    QVariant st = view_value("splitter");
     if (st.isValid())
         split->restoreState(st.toByteArray());
     QStringList start = paths.isEmpty() ? QStringList{homepage()} : paths;
@@ -1148,9 +1154,37 @@ void MainWindow::make_chooser(const chooser::Request &req, std::function<void(co
     setWindowTitle(req.title.isEmpty() ? chooser::button_text(req) : req.title);
     for (Pane *p : panes())
         p->set_type_filter(chooser->type_filter());
-    resize(1100, 700);
     if (chooser->name)
         chooser->name->setFocus();
+}
+
+// A file chooser window keeps its own view settings, under "chooser/": changing the zoom, view, sort, panels and so on
+// there leaves the main windows alone, and the next chooser starts from them. Until changed in a chooser they follow
+// the main windows', apart from the size (never the main windows' maximized one) and the smaller icons.
+QVariant MainWindow::view_value(const QString &key, const QVariant &def) const
+{
+    QSettings &s = settings();
+    if (chooser_mode && s.contains("chooser/" + key))
+        return s.value("chooser/" + key);
+    if (key == "grid_size" || key == "list_size") {
+        bool grid = key == "grid_size";
+        return chooser_mode ? default_zoom(grid) : s.value(key, default_zoom(grid));
+    }
+    if (chooser_mode && (key == "geometry" || key == "splitter"))
+        return QVariant();
+    return s.value(key, def);
+}
+
+void MainWindow::set_view_value(const QString &key, const QVariant &value)
+{
+    settings().setValue(chooser_mode ? "chooser/" + key : key, value);
+}
+
+int MainWindow::default_zoom(bool grid) const
+{
+    if (chooser_mode)
+        return grid ? CHOOSER_GRID : CHOOSER_LIST;
+    return grid ? GRID_DEFAULT : LIST_DEFAULT;
 }
 
 // -- toolbar & actions
@@ -1314,7 +1348,7 @@ void MainWindow::build_actions()
     vm->addSeparator();
     A("Zoom In", {"Ctrl++", "Ctrl+="}, [this]() { pane()->zoom(1); }, vm);
     A("Zoom Out", {"Ctrl+-"}, [this]() { pane()->zoom(-1); }, vm);
-    A("Reset Zoom", {"Ctrl+0"}, [this]() { pane()->zoom(0, pane()->is_grid() ? 160 : 28); }, vm);
+    A("Reset Zoom", {"Ctrl+0"}, [this]() { pane()->zoom(0, default_zoom(pane()->is_grid())); }, vm);
     vm->addSeparator();
     A("Toggle Folder Previews", {"Ctrl+Shift+P"}, [this]() { preview_box->toggle(); }, vm);
     a_hidden = A("Show Hidden Files", {"Ctrl+H"}, [this]() { toggle_hidden(a_hidden->isChecked()); }, vm, {}, true);
@@ -1512,7 +1546,7 @@ void MainWindow::remember_server(const QString &uri)
 
 void MainWindow::set_view(const QString &mode)
 {
-    settings().setValue("view_mode", mode);
+    set_view_value("view_mode", mode);
     pane()->set_view_mode(mode);
     sync_view_btn();
     sync_zoom_slider();
@@ -1544,8 +1578,8 @@ void MainWindow::sync_zoom_slider()
 
 void MainWindow::set_folder_previews(bool on)
 {
-    // global switch for folder mosaics; off means no directory scanning at all
-    QList<MainWindow *> wins = WINDOWS;
+    // global switch for folder mosaics; off means no directory scanning at all (a chooser's is its own)
+    QList<MainWindow *> wins = chooser_mode ? QList<MainWindow *>() : WINDOWS;
     if (!wins.contains(this))
         wins << this;
     for (MainWindow *w : wins) {
@@ -1561,7 +1595,7 @@ void MainWindow::set_folder_previews(bool on)
             p->view()->viewport()->update();
         }
     }
-    settings().setValue("folder_previews", on);
+    set_view_value("folder_previews", on);
     if (!on)
         thumbs->cancel_pending();
 }
@@ -1643,7 +1677,7 @@ void MainWindow::on_thumb_progress(int done, int total)
 void MainWindow::toggle_hidden(bool on)
 {
     show_hidden = on;
-    settings().setValue("show_hidden", on);
+    set_view_value("show_hidden", on);
     for (Pane *p : panes())
         p->apply_hidden();
 }
@@ -1651,7 +1685,7 @@ void MainWindow::toggle_hidden(bool on)
 void MainWindow::toggle_panel(QWidget *w, const QString &key, bool on)
 {
     w->setVisible(on);
-    settings().setValue(key, on);
+    set_view_value(key, on);
     if (on && w == info)
         update_status();
 }
@@ -2772,12 +2806,11 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         }
         return;
     }
-    if (chooser) {
+    if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
+        set_view_value("geometry", saveGeometry());
+    set_view_value("splitter", split->saveState());
+    if (chooser)
         chooser->finish(false);   // closed without choosing: cancelled
-    } else {
-        settings().setValue("geometry", saveGeometry());
-        settings().setValue("splitter", split->saveState());
-    }
     for (Pane *p : panes())
         p->stop_search();
     if (builder) {
@@ -3032,7 +3065,7 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
         start = settings().value("chooser_folder").toString();   // where the last chooser picked something
     if (!isdir(start))
         start = HOME();
-    auto *w = new MainWindow({start}, g_thumbs);
+    auto *w = new MainWindow({start}, g_thumbs, true);
     w->make_chooser(req, std::move(done));
     if (quintptr id = chooser::x11_parent(req.parent_window); id && QGuiApplication::platformName() == "xcb") {
         // the app's window (X11): the chooser is its dialog
