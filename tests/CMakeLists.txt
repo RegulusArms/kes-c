@@ -7,6 +7,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
+pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 file(GLOB APP_SOURCES ${SRC}/*.cpp ${SRC}/*.h)
@@ -16,7 +17,7 @@ list(REMOVE_ITEM APP_SOURCES ${SRC}/main.cpp ${SRC}/admin_helper.cpp ${SRC}/app.
 add_library(kes_core OBJECT ${APP_SOURCES})
 target_include_directories(kes_core PUBLIC ${SRC})
 target_compile_definitions(kes_core PUBLIC QT_NO_KEYWORDS KES_VERSION="test")
-target_link_libraries(kes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO)
+target_link_libraries(kes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
 
 foreach(name fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser)
     add_executable(test_${name} test_${name}.cpp)
