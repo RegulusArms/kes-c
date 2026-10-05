@@ -49,6 +49,7 @@ target_link_libraries(kes-admin-helper PRIVATE Qt6::Core)
 target_compile_options(kes-admin-helper PRIVATE -Wall -Wextra)
 
 install(TARGETS kes kes-admin-helper RUNTIME DESTINATION bin)
+install(PROGRAMS kes-setup DESTINATION bin)   # kes-setup --default: what install.sh --default does, for the .deb
 # For the .deb (cpack): the app menu entry, and the file chooser's portal backend (used only once portals.conf picks it,
 # which `install.sh --default` does). The FileManager1 service isn't installed: GNOME Files ships that file.
 install(FILES data/kestrel-explorer.desktop DESTINATION share/applications)
