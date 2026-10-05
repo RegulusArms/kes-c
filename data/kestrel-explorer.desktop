@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Kestrel Explorer
+GenericName=File Manager
+Comment=Manage files, with archive, admin, permission and metadata tools built in
+Exec=kes %U
+Icon=folder
+Terminal=false
+Categories=System;FileTools;FileManager;Viewer;
+MimeType=inode/directory;x-directory/normal;x-scheme-handler/trash;
+StartupWMClass=kestrel-explorer
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=kes
