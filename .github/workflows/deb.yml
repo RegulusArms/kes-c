@@ -1,4 +1,5 @@
-# Builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs there and on newer).
+# Runs the tests, then builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs
+# there and on newer). A failing test stops the run: no package, release or apt update.
 #   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
 #   pull request to main  → build only (the .deb is kept as a workflow artifact)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
@@ -21,7 +22,24 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # never stop a release halfway
 
 jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        # dbus: each test's private session bus; libglib2.0-bin, xdg-utils, desktop-file-utils: the installer test;
+        # gnome-shell-common: GNOME Shell's settings, for the dock and extension checks (skipped without them)
+        run: |
+          sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev \
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common
+
+      - name: Run the tests
+        # the cross-version checks (the Python version, ../kestrel-explorer) are skipped here
+        run: tests/run.sh
+
   deb:
+    needs: test
     runs-on: ubuntu-24.04
     outputs:
       artifact: kestrel-explorer-${{ steps.ver.outputs.deb }}
