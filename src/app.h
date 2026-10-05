@@ -157,7 +157,7 @@ private:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    MainWindow(const QStringList &paths, ThumbnailManager *thumbs);
+    MainWindow(const QStringList &paths, ThumbnailManager *thumbs, bool chooser_mode = false);
     void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 
     Pane *pane() const;
@@ -216,6 +216,12 @@ public:
     PathBar *pathbar;
     QCheckBox *preview_box;
     ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
+    bool chooser_mode = false;       // a chooser window: has its own view settings (view_value)
+    // the window's and its tabs' view settings (size, zoom, view, sort, panels, hidden files, folder previews, search
+    // options); a chooser window keeps its own (see view_value in app.cpp)
+    QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
+    void set_view_value(const QString &key, const QVariant &value);
+    int default_zoom(bool grid) const;
 
 protected:
     void closeEvent(QCloseEvent *ev) override;

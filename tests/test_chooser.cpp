@@ -225,6 +225,32 @@ int main(int argc, char **argv)
               r.uris == QStringList({file_uri(join(dir, "one.txt")), file_uri(join(dir, "two.txt"))}),
           "saving several files: each goes into the chosen folder");
 
+    // -- its own settings
+    QWidget big;   // a main window's saved size
+    big.resize(1500, 1000);
+    settings().setValue("geometry", big.saveGeometry());
+    settings().setValue("grid_size", 200);
+    call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
+    w = wait_window();
+    check(w && w->width() < 1500 && w->pane() && w->pane()->grid_size == 96,
+          "a chooser opens smaller than a main window, with smaller icons");
+    if (w) {
+        w->pane()->zoom(0, 120);
+        w->toggle_hidden(true);
+        w->close();
+    }
+    wait_for([&]() { return r.got; });
+    check(settings().value("grid_size").toInt() == 200 && !settings().value("show_hidden", false).toBool() &&
+              settings().value("chooser/grid_size").toInt() == 120,
+          "zooming and showing hidden files in a chooser leave the main windows' settings alone");
+    call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
+    w = wait_window();
+    check(w && w->pane() && w->pane()->grid_size == 120 && w->show_hidden,
+          "...and the next chooser starts from its own settings");
+    if (w)
+        w->close();
+    wait_for([&]() { return r.got; });
+
     // -- cancelling
     call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
     w = wait_window();
