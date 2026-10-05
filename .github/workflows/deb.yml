@@ -1,0 +1,124 @@
+# Builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs there and on newer).
+#   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
+#   pull request to main  → build only (the .deb is kept as a workflow artifact)
+#   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
+# DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch, suites "dev" and "stable"),
+# signed with the APT_GPG_PRIVATE_KEY secret.
+name: Build .deb
+
+on:
+  push:
+    branches: [DEV, main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to create releases and tags
+
+concurrency:
+  group: deb-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # never stop a release halfway
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact: kestrel-explorer-${{ steps.ver.outputs.deb }}
+      suite: ${{ steps.dev.outcome == 'success' && 'dev' || steps.release.outputs.released == 'true' && 'stable' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        run: |
+          version=$(sed -n 's/^set(KES_VERSION "\(.*\)")/\1/p' CMakeLists.txt)
+          [[ -n "$version" ]] || { echo "KES_VERSION not found in CMakeLists.txt" >&2; exit 1; }
+          deb="${version//-/\~}"
+          # dev builds sort after the version's last release build: 0.2.0~alpha+dev42.g1a2b3c4
+          [[ "$GITHUB_REF" == refs/heads/main ]] || deb="$deb+dev${GITHUB_RUN_NUMBER}.g${GITHUB_SHA::7}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "deb=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config dpkg-dev qt6-base-dev libglib2.0-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+                -DKES_DEB_VERSION="${{ steps.ver.outputs.deb }}"
+          cmake --build build -j"$(nproc)"
+          cd build && cpack
+          dpkg-deb -I ./*.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kestrel-explorer-${{ steps.ver.outputs.deb }}
+          path: build/*.deb
+
+      - name: Replace the dev pre-release
+        id: dev
+        if: github.event_name == 'push' && github.ref == 'refs/heads/DEV'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev-latest --cleanup-tag --yes || true
+          gh release create dev-latest build/*.deb --prerelease --target "$GITHUB_SHA" \
+            --title "Development build (${{ steps.ver.outputs.deb }})" \
+            --notes "Latest build of the DEV branch, commit $GITHUB_SHA. Replaced on every push to DEV."
+
+      - name: Release
+        id: release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.ver.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::warning::$TAG exists already, so no release was made. Raise KES_VERSION in CMakeLists.txt for a new one."
+            exit 0
+          fi
+          prerelease=()
+          [[ "$TAG" == *-* ]] && prerelease=(--prerelease)   # 0.2.0-alpha, -beta, -rc1…
+          gh release create "$TAG" build/*.deb "${prerelease[@]}" --target "$GITHUB_SHA" \
+            --title "Kestrel Explorer ${{ steps.ver.outputs.version }}" --generate-notes
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+  apt:
+    needs: deb
+    if: needs.deb.outputs.suite != ''
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: apt-repo   # one update of gh-pages at a time, DEV and main alike
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: repo
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.deb.outputs.artifact }}
+          path: debs
+
+      - name: Add the package
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y reprepro
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          # replaces the suite's previous version; reprepro deletes pool files nothing refers to any more
+          reprepro -b repo includedeb "${{ needs.deb.outputs.suite }}" debs/*.deb
+          reprepro -b repo list dev; reprepro -b repo list stable
+
+      - name: Publish
+        # one commit, force-pushed: old .debs would otherwise stay in the branch's history for good
+        run: |
+          cd repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan publish
+          git add -A
+          git commit -q -m "apt repo: ${{ needs.deb.outputs.suite }} ${{ needs.deb.outputs.artifact }}"
+          git push --force origin publish:gh-pages

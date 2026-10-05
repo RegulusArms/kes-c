@@ -49,3 +49,31 @@ target_link_libraries(kes-admin-helper PRIVATE Qt6::Core)
 target_compile_options(kes-admin-helper PRIVATE -Wall -Wextra)
 
 install(TARGETS kes kes-admin-helper RUNTIME DESTINATION bin)
+# For the .deb (cpack): the app menu entry, and the file chooser's portal backend (used only once portals.conf picks it,
+# which `install.sh --default` does). The FileManager1 service isn't installed: GNOME Files ships that file.
+install(FILES data/kestrel-explorer.desktop DESTINATION share/applications)
+install(FILES data/kestrel.portal DESTINATION share/xdg-desktop-portal/portals)
+install(FILES data/org.freedesktop.impl.portal.desktop.kestrel.service DESTINATION share/dbus-1/services)
+
+# .deb package: cmake -DCMAKE_INSTALL_PREFIX=/usr ... && cd build && cpack
+# KES_DEB_VERSION overrides the package version (CI's dev builds); by default it's KES_VERSION with "-" → "~",
+# so 0.2.0~alpha sorts before 0.2.0
+string(REPLACE "-" "~" KES_DEB_VERSION_DEFAULT "${KES_VERSION}")
+set(KES_DEB_VERSION "${KES_DEB_VERSION_DEFAULT}" CACHE STRING "Debian package version")
+set(CPACK_GENERATOR DEB)
+set(CPACK_PACKAGE_NAME kestrel-explorer)
+set(CPACK_PACKAGE_VERSION "${KES_DEB_VERSION}")
+set(CPACK_PACKAGE_CONTACT "RegulusAlpha <ross@regulusarms.com>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "File manager with archive, admin, permission and metadata tools built in")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RegulusArms/kes-c")
+set(CPACK_DEBIAN_PACKAGE_SECTION utils)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)   # Depends: the Qt and GLib libraries, from the binaries
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "qt6-qpa-plugins")
+# install.sh's RECOMMENDED list
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_STRIP_FILES ON)
+set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+include(CPack)
