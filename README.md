@@ -40,7 +40,9 @@ This is a port of the Python/PyQt6 [Kestrel Explorer](../kestrel-explorer) to C+
 
 ## Install with apt
 
-Ubuntu 24.04, Linux Mint 22 and newer (amd64) can install it from the apt repository at https://regulusarms.github.io/kes-c/ and get updates with the system's others:
+Ubuntu 24.04, Linux Mint 22 and newer (amd64) can install it from the apt repository at https://regulusarms.github.io/kes-c/ and get updates with the system's others. There are two channels; pick one.
+
+**Releases** (each merge to `main`):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
@@ -48,10 +50,27 @@ sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes
 printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
-kes-setup --default      # optional: make it your file manager (see below); kes-setup --undo puts things back
 ```
 
-`stable` has the releases (each merge to `main`); `Suites: dev` gets the newest build of the `DEV` branch instead. The packages are built by GitHub Actions (`.github/workflows/deb.yml`), which also attaches each one to a [GitHub release](https://github.com/RegulusArms/kes-c/releases). Remove it with `sudo apt remove kestrel-explorer` (run `kes-setup --undo` first if you used `--default`).
+**Development builds** (the newest build of the `DEV` branch, updated on every push):
+
+```bash
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: dev\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+  | sudo tee /etc/apt/sources.list.d/kestrel.sources
+sudo apt update && sudo apt install kestrel-explorer
+```
+
+Then, optionally, make it your file manager (see below); `kes-setup --undo` puts things back:
+
+```bash
+kes-setup --default
+```
+
+`sudo apt upgrade` keeps you on the channel you picked. To switch, run the other channel's commands; they replace `kestrel.sources`. Going from releases to development builds upgrades at the next `apt upgrade`. Going back doesn't, because a development build has a higher version than the release it came after: you stay on it until the next release, or go back now with `sudo apt install --allow-downgrades kestrel-explorer=<version>` (`apt policy kestrel-explorer` lists the versions).
+
+The packages are built by GitHub Actions (`.github/workflows/deb.yml`), which also attaches each one to a [GitHub release](https://github.com/RegulusArms/kes-c/releases). Remove it with `sudo apt remove kestrel-explorer` (run `kes-setup --undo` first if you used `--default`).
 
 ## Build / install
 
