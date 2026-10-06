@@ -196,6 +196,9 @@ int main(int argc, char **argv)
               ok(h.call({{"op", "hardlink"}, {"target", join(W, "w.txt")}, {"link", join(W, "hl")}})) &&
               read_file(join(W, "hl")) == "hello",
           "symlink and hardlink make links");
+    QJsonObject other = h.call({{"op", "hardlink"}, {"target", "/etc/hostname"}, {"link", join(W, "not-mine")}});
+    check(!ok(other) && other.value("error").toString().contains("isn't yours") && !QFile::exists(join(W, "not-mine")),
+          "hardlink refuses a file that isn't the user's (the helper's own rule, before the kernel's)");
     check(ok(h.call({{"op", "chmod"}, {"path", join(W, "c.txt")}, {"mode", 0640}})) && mode_of(join(W, "c.txt")) == 0640,
           "chmod changes permissions");
     check(ok(h.call({{"op", "delete"}, {"path", join(W, "tree3")}})) && !QFile::exists(join(W, "tree3")),
