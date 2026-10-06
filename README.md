@@ -486,10 +486,11 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 
 | File | Purpose |
 |---|---|
-| `src/app.cpp` | Main window, tabs, browser pane (including the combined trash view), menus and shortcuts, context menus |
+| `src/app.cpp` | Main window: tabs, toolbar, menus and shortcuts, context menus, preferences, starting up |
 | `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
 | `src/incoming.cpp` | Requests from outside this Kestrel: changes other Kestrels report through the tower, folders handed over to open as tabs, and other apps' "Show in folder" (FileManager1) |
+| `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
 | `src/viewer.cpp` | Image viewer |
