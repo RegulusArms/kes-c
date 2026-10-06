@@ -332,7 +332,7 @@ static void write_all(int fd, const char *data, qsizetype n)
 {
     qsizetype off = 0;
     while (off < n) {
-        ssize_t w = ::write(fd, data + off, size_t(n - off));
+        ssize_t w = proc::write_pipe(fd, data + off, size_t(n - off));
         if (w < 0 && errno == EINTR)
             continue;
         if (w < 0)

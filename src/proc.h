@@ -46,6 +46,10 @@ private:
     void set_status(int status);
 };
 
+// write() to a program's input pipe that can't raise SIGPIPE (which would kill Kestrel, unless it's ignored): if the
+// program has closed its end, it fails with EPIPE instead. Works whatever the process does with SIGPIPE.
+ssize_t write_pipe(int fd, const void *data, size_t n);
+
 // Start argv[0] (searched on PATH). Raises OSError if it can't be started.
 std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts = Options());
 

@@ -69,6 +69,30 @@ int Process::wait()
     return returncode;
 }
 
+ssize_t write_pipe(int fd, const void *data, size_t n)
+{
+    // SIGPIPE is blocked in this thread for the write; one the write raised is then taken off the pending set, so it
+    // isn't delivered when the mask is restored. (A write the program stops reading partway through returns what it
+    // wrote, not EPIPE, and still raises SIGPIPE: so it's the pending signal that counts, not the result.)
+    sigset_t pipe_set, old, pending;
+    sigemptyset(&pipe_set);
+    sigaddset(&pipe_set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_set, &old);
+    sigpending(&pending);
+    bool was_pending = sigismember(&pending, SIGPIPE);
+    ssize_t w = ::write(fd, data, n);
+    int e = errno;
+    sigpending(&pending);
+    if (!sigismember(&old, SIGPIPE) && !was_pending && sigismember(&pending, SIGPIPE)) {
+        struct timespec now = {0, 0};
+        while (::sigtimedwait(&pipe_set, nullptr, &now) < 0 && errno == EINTR) {
+        }
+    }
+    pthread_sigmask(SIG_SETMASK, &old, nullptr);
+    errno = e;
+    return w;
+}
+
 bool Process::wait_for(int ms)
 {
     // a pidfd becomes readable when the process exits (Linux 5.3+); without one, check every 10 ms
@@ -294,7 +318,7 @@ Result run(const QStringList &argv, int timeout_ms, const Options &opts_in, cons
                 continue;
             int fd = fds[i].fd;
             if (fd == p->in) {
-                ssize_t w = ::write(fd, input.constData() + written, size_t(input.size() - written));
+                ssize_t w = write_pipe(fd, input.constData() + written, size_t(input.size() - written));
                 if (w > 0)
                     written += w;
                 if (w < 0 || written >= input.size())

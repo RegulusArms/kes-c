@@ -3162,7 +3162,7 @@ int kes_main(int argc, char **argv)
         if (QByteArray(argv[i]) == "--atc")
             return atc::run_tower(argc, argv);   // the tower: no window (see atc.h)
     }
-    std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel while we write to it
+    std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel (proc::write_pipe also guards)
     QApplication::setApplicationName(APP_ID);
     QApplication::setApplicationVersion(VERSION);
     QApplication::setApplicationDisplayName(APP_NAME);

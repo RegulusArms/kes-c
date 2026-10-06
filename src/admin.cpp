@@ -194,7 +194,7 @@ void AdminSession::send(const QByteArray &line)
     QByteArray data = line + "\n";
     qsizetype off = 0;
     while (off < data.size()) {
-        ssize_t w = ::write(helper->p->in, data.constData() + off, size_t(data.size() - off));
+        ssize_t w = proc::write_pipe(helper->p->in, data.constData() + off, size_t(data.size() - off));
         if (w < 0 && errno == EINTR)
             continue;
         if (w < 0)
