@@ -4,6 +4,7 @@
 #include "proc.h"
 
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -26,6 +27,42 @@ static qint64 monotonic_s()
 }
 
 QString helper_path() { return util::join(QCoreApplication::applicationDirPath(), "kes-admin-helper"); }
+
+// A path with its symlinks resolved, as far as it exists (the rest is kept as it is).
+static QString resolve_existing(const QString &p)
+{
+    QString head = p, tail;
+    for (;;) {
+        QString real = QFileInfo(head).canonicalFilePath();
+        if (!real.isEmpty())
+            return tail.isEmpty() ? real : util::join(real, tail);
+        if (head == "/" || head.isEmpty())
+            return p;
+        QString name = util::basename(head);
+        tail = tail.isEmpty() ? name : util::join(name, tail);
+        head = util::dirname(head);
+    }
+}
+
+// The helper refuses to follow a symlink that root doesn't control (see admin_helper.cpp), so the folders in each
+// path are resolved here first, as the user: their own symlinked folders (~/Shared → /mnt/data) keep working. The
+// last part stays as it is (a symlink there is worked on as the link), except where the op means what a link points
+// to: chmod, and copyfile's template.
+QVariantMap resolve_paths(const QString &op, QVariantMap args)
+{
+    static const QMap<QString, QStringList> PATHS = {
+        {"delete", {"path"}},  {"copy", {"src", "dst"}},   {"move", {"src", "dst"}},       {"rename", {"src", "dst"}},
+        {"mkdir", {"path"}},   {"touch", {"path"}},        {"copyfile", {"src", "dst"}},   {"symlink", {"link"}},
+        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}};
+    for (const QString &key : PATHS.value(op)) {
+        QString p = args.value(key).toString();
+        if (!p.startsWith('/'))
+            continue;   // the helper refuses it
+        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src");
+        args[key] = whole ? resolve_existing(p) : util::join(resolve_existing(util::dirname(p)), util::basename(p));
+    }
+    return args;
+}
 
 struct AdminSession::Helper {
     std::unique_ptr<proc::Process> p;
@@ -188,7 +225,7 @@ void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
             s->last_used = monotonic_s();
         }
     } fin{this, rid};
-    QJsonObject req = QJsonObject::fromVariantMap(args);
+    QJsonObject req = QJsonObject::fromVariantMap(resolve_paths(op, args));
     req["id"] = rid;
     req["op"] = op;
     send(QJsonDocument(req).toJson(QJsonDocument::Compact));
