@@ -3,8 +3,10 @@
 
 #include "archive_ui.h"
 
+#include <QElapsedTimer>
 #include <QMessageBox>
 
+#include <signal.h>
 #include <sys/stat.h>
 #include <utime.h>
 
@@ -209,5 +211,21 @@ int main(int argc, char **argv)
     w->open_paths(w->pane(), {P("arc.tar.gz")});
     check(wait_for([&]() { return extract_shown; }), "double-clicking an archive opens Kestrel's Extract dialog");
     extract_closer.stop();
+
+    // -- running programs: a timeout holds even without pipes, or once the program has closed its output
+    proc::Options quiet;
+    quiet.out = proc::DEVNULL;
+    quiet.err = proc::DEVNULL;
+    QElapsedTimer clock;
+    clock.start();
+    auto r = proc::run({"sh", "-c", "echo $$ > \"$0\"; exec sleep 5", P("sleeper.pid")}, 300, quiet);
+    pid_t pid = pid_t(QString::fromUtf8(read_file(P("sleeper.pid"))).trimmed().toInt());
+    check(r.timed_out && clock.elapsed() < 2000 && pid > 0 && ::kill(pid, 0) != 0,
+          "a program's timeout holds without pipes, and it's stopped");
+    clock.restart();
+    r = proc::run({"sh", "-c", "exec >&- 2>&-; sleep 5"}, 300);
+    check(r.timed_out && clock.elapsed() < 2000, "a program's timeout holds after it closes its output");
+    r = proc::run({"sh", "-c", "echo hi"}, 5000);
+    check(!r.timed_out && r.rc == 0 && r.out == "hi\n", "a program that finishes in time isn't affected");
     finish();
 }
