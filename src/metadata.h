@@ -1,4 +1,4 @@
-// Image metadata: EXIF summary, AI-generation parameters, full exiftool dump, exiftool editing and the tag catalog
+// Image metadata: EXIF summary, image-generation prompts and settings (read from the file), full exiftool dump, exiftool editing and the tag catalog
 // for the Add Tag picker.
 #pragma once
 

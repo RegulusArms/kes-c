@@ -30,3 +30,4 @@ Thumbs.db
 
 # Benchmark output (bench/README.md)
 bench/results.json
+bench/results.md
