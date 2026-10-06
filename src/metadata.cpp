@@ -424,7 +424,6 @@ Rows basic_info(const QString &path)
     return out;
 }
 
-static QList<QPair<QString, QJsonValue>> ordered_first_object(const QByteArray &json);
 
 static void set_default(Rows &rows, const QString &k, const QString &v)
 {
@@ -493,7 +492,7 @@ Rows ai_info(const QString &path)
         if (QJsonDocument::fromJson(json).isObject()) {
             QStringList texts, settings;
             // the nodes in the order they were written (QJsonObject would sort them by id)
-            for (const auto &[id, value] : ordered_first_object(json)) {
+            for (const auto &[id, value] : ordered_object(json)) {
                 QJsonObject node = value.toObject();
                 QString ct = node.value("class_type").toString();
                 QJsonObject inputs = node.value("inputs").toObject();
@@ -583,71 +582,83 @@ static QString dumps(const QJsonValue &v)
     }
 }
 
-// The key/value pairs of the first object in exiftool's -j output, in exiftool's order (QJsonObject sorts keys).
-static QList<QPair<QString, QJsonValue>> ordered_first_object(const QByteArray &json)
+// An object's keys in the order they were written (QJsonObject sorts them), with their values: the object `json` is,
+// or the first one in an array of them (exiftool's [{…}]). As Python's json.loads: each key once, where it first
+// appears, with its last value. Qt's parser reads the JSON (empty if it isn't valid); a small tokenizer then only
+// reads off the keys' order, which it can do simply because the text is known to be valid.
+QList<QPair<QString, QJsonValue>> ordered_object(const QByteArray &json)
 {
-    QList<QPair<QString, QJsonValue>> out;
-    int i = json.indexOf('{');
-    if (i < 0)
-        return out;
-    ++i;
+    QJsonDocument doc = QJsonDocument::fromJson(json);
+    QJsonObject obj;
+    if (doc.isObject())
+        obj = doc.object();
+    else if (doc.isArray() && doc.array().first().isObject())
+        obj = doc.array().first().toObject();
+    if (obj.isEmpty())
+        return {};
+    qsizetype i = 0;
     auto skip_ws = [&]() {
-        while (i < json.size() && QChar(json[i]).isSpace())
+        while (i < json.size() && (json[i] == ' ' || json[i] == '\t' || json[i] == '\n' || json[i] == '\r'))
             ++i;
     };
-    auto value_end = [&](int start) {
-        int depth = 0;
-        bool in_str = false;
-        for (int k = start; k < json.size(); ++k) {
-            char c = json[k];
-            if (in_str) {
-                if (c == '\\')
-                    ++k;
-                else if (c == '"')
-                    in_str = false;
-                continue;
-            }
-            if (c == '"')
-                in_str = true;
-            else if (c == '[' || c == '{')
-                ++depth;
-            else if (c == ']' || c == '}') {
-                if (depth == 0)
-                    return k;
-                --depth;
-            } else if (c == ',' && depth == 0)
-                return k;
-        }
-        return int(json.size());
+    auto skip_string = [&]() {   // at the opening quote; ends after the closing one
+        for (++i; i < json.size() && json[i] != '"'; ++i)
+            if (json[i] == '\\')
+                ++i;
+        ++i;
     };
+    auto skip_value = [&]() {   // a string, an object or array (nested), or a number / true / false / null
+        skip_ws();
+        if (json[i] == '"') {
+            skip_string();
+            return;
+        }
+        int depth = 0;
+        for (; i < json.size(); ++i) {
+            char c = json[i];
+            if (c == '"') {
+                skip_string();
+                --i;
+            } else if (c == '{' || c == '[') {
+                ++depth;
+            } else if (c == '}' || c == ']') {
+                if (depth == 0)
+                    return;
+                if (--depth == 0) {
+                    ++i;
+                    return;
+                }
+            } else if (c == ',' && depth == 0) {
+                return;
+            }
+        }
+    };
+    skip_ws();
+    if (json[i] == '[') {
+        ++i;
+        skip_ws();
+    }
+    ++i;   // the object's {
+    QList<QPair<QString, QJsonValue>> out;
+    QSet<QString> seen;
     for (;;) {
         skip_ws();
         if (i >= json.size() || json[i] != '"')
             break;
-        int kend = value_end(i);
-        int colon = json.indexOf(':', i + 1);
-        // the key is a JSON string up to the colon that follows its closing quote
-        int q = i + 1;
-        while (q < json.size() && json[q] != '"') {
-            if (json[q] == '\\')
-                ++q;
-            ++q;
+        qsizetype start = i;
+        skip_string();
+        QString key = QJsonDocument::fromJson("[" + json.mid(start, i - start) + "]").array().first().toString();
+        if (!seen.contains(key)) {
+            seen << key;
+            out << qMakePair(key, obj.value(key));
         }
-        colon = json.indexOf(':', q);
-        if (colon < 0)
-            break;
-        QJsonArray karr = QJsonDocument::fromJson("[" + json.mid(i, q - i + 1) + "]").array();
-        QString key = karr.isEmpty() ? QString() : karr.first().toString();
-        i = colon + 1;
         skip_ws();
-        kend = value_end(i);
-        QJsonArray varr = QJsonDocument::fromJson("[" + json.mid(i, kend - i) + "]").array();
-        out << qMakePair(key, varr.isEmpty() ? QJsonValue() : varr.first());
-        i = kend;
-        if (i < json.size() && json[i] == ',')
-            ++i;
-        else
+        ++i;   // :
+        skip_value();
+        skip_ws();
+        if (i >= json.size() || json[i] != ',')
             break;
+        ++i;
     }
     return out;
 }
@@ -658,7 +669,7 @@ QList<MetaRow> full_metadata(const QString &path)
     if (which("exiftool")) {
         auto r = proc::run({"exiftool", "-j", "-G1", "-a", "-charset", "filename=utf8", path}, 30000);
         if (r.rc == 0 || !r.out.isEmpty()) {
-            for (const auto &[key, val] : ordered_first_object(r.out)) {
+            for (const auto &[key, val] : ordered_object(r.out)) {
                 if (key == "SourceFile")
                     continue;
                 int c = key.indexOf(':');

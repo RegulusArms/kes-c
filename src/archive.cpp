@@ -2,6 +2,7 @@
 
 #include "fileops.h"
 #include "proc.h"
+#include "stats.h"
 
 #include <QElapsedTimer>
 #include <QRegularExpression>
@@ -727,8 +728,15 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
     }
 }
 
+// KESTREL_STATS: how long a compress or extract job took (however it ends)
+struct JobClock {
+    qint64 started = stats::now_ms();
+    ~JobClock() { stats::sample("archive job (s)", (stats::now_ms() - started) / 1000.0); }
+};
+
 QString compress(Task *task, const Spec &spec)
 {
+    JobClock clock;
     QString out = spec.out;
     QString label = "Compressing " + basename(out);
     try {
@@ -975,6 +983,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
 QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
                 const QString &overwrite, int threads)
 {
+    JobClock clock;
     QString path = first_volume(path_in);
     auto [k, suf] = kind(path);
     QString label = "Extracting " + basename(path);

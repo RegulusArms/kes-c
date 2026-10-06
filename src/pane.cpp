@@ -10,6 +10,7 @@
 #include "overview.h"
 #include "places.h"
 #include "thumbs.h"
+#include "stats.h"
 #include "util.h"
 #include "widgets.h"
 
@@ -107,11 +108,14 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     sl->setContentsMargins(6, 4, 6, 4);
     search_edit = new QLineEdit;
     search_edit->setPlaceholderText("Search… (supports * and ? wildcards)");
+    search_edit->setAccessibleName("Search");
     search_edit->setClearButtonEnabled(true);
     search_sub = new QCheckBox("Include subfolders");
     search_sub->setChecked(win->view_value("search_recursive", false).toBool());
     auto *close = new QToolButton;
     close->setIcon(icon({"window-close-symbolic", "window-close"}));
+    close->setToolTip("Close the search (Esc)");
+    close->setAccessibleName("Close the search");
     close->setAutoRaise(true);
     connect(close, &QToolButton::clicked, this, [this]() { close_search(); });
     sl->addWidget(search_edit, 1);
@@ -196,6 +200,7 @@ Pane::~Pane()
 
 void Pane::setup_common(QAbstractItemView *v)
 {
+    v->setAccessibleName("Files");
     v->setSelectionMode(QAbstractItemView::ExtendedSelection);
     v->setEditTriggers(QAbstractItemView::NoEditTriggers);
     v->setDragEnabled(true);
@@ -243,6 +248,7 @@ void Pane::setup_tree()
     t->setAlternatingRowColors(true);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
     t->setSortingEnabled(true);
+    t->header()->setAccessibleName("Columns");
     t->setFrameShape(QFrame::NoFrame);
     t->setIconSize(QSize(list_size, list_size));
     int col = win->view_value("sort_col", 0).toInt();
@@ -370,6 +376,7 @@ void Pane::update_grid_size()
 
 bool Pane::set_path(const QString &target, bool record, const QString &select_in)
 {
+    listing_since = stats::now_ms();
     QString select = select_in;
     if (target == OVERVIEW) {
         if (record && !path.isEmpty() && path != OVERVIEW) {
@@ -545,6 +552,9 @@ void Pane::trash_changed()
 void Pane::dir_loaded(const QString &p)
 {
     if (p == path) {
+        if (listing_since >= 0)
+            stats::sample("folder listing (ms)", double(stats::now_ms() - listing_since));
+        listing_since = -1;
         update_empty();
         if (win->pane() == this)
             win->update_status();

@@ -513,21 +513,47 @@ void move(const QString &src, const QString &dst)
     }
 }
 
-void rmtree(const QString &p)
+// rmtree below: a folder's contents through the open folder, by name (never following a symlink, and stopping at a
+// folder swapped for one while it runs); best effort, like shutil.rmtree(ignore_errors=True)
+static void rmtree_at(int dirfd, const QByteArray &name)
 {
     struct stat st;
-    if (!lstat_(p, st))
+    if (::fstatat(dirfd, name.constData(), &st, AT_SYMLINK_NOFOLLOW) != 0)
         return;
     if (S_ISDIR(st.st_mode)) {
-        try {
-            for (const QString &n : listdir(p))
-                rmtree(join(p, n));
-        } catch (const OSError &) {
+        int fd = ::openat(dirfd, name.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat now;
+        if (fd < 0)
+            return;
+        if (::fstat(fd, &now) != 0 || now.st_dev != st.st_dev || now.st_ino != st.st_ino) {
+            ::close(fd);
+            return;
         }
-        ::rmdir(enc(p).constData());
+        if (DIR *d = ::fdopendir(fd)) {   // owns fd now
+            QList<QByteArray> names;
+            while (struct dirent *e = ::readdir(d))
+                if (std::strcmp(e->d_name, ".") != 0 && std::strcmp(e->d_name, "..") != 0)
+                    names << QByteArray(e->d_name);
+            for (const QByteArray &n : names)
+                rmtree_at(::dirfd(d), n);
+            ::closedir(d);
+        } else {
+            ::close(fd);
+        }
+        ::unlinkat(dirfd, name.constData(), AT_REMOVEDIR);
     } else {
-        ::unlink(enc(p).constData());
+        ::unlinkat(dirfd, name.constData(), 0);
     }
+}
+
+void rmtree(const QString &p)
+{
+    QString dir = dirname(p);
+    int fd = ::open(enc(dir.isEmpty() ? QString("/") : dir).constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0)
+        return;
+    rmtree_at(fd, enc(basename(p)));
+    ::close(fd);
 }
 
 void write_text(const QString &p, const QByteArray &data, bool exclusive)
@@ -792,15 +818,14 @@ QStringList shlex_split(const QString &s, bool *ok, QString *err)
         if (!quote.isNull()) {
             if (c == quote) {
                 quote = QChar();
-            } else if (quote == '"' && c == '\\' && i + 1 < s.size() &&
-                       QString("\\\"$`\n").contains(s[i + 1])) {
+            } else if (quote == '"' && c == '\\' && i + 1 < s.size() && (s[i + 1] == '\\' || s[i + 1] == '"')) {
                 cur += s[++i];
             } else {
                 cur += c;
             }
             continue;
         }
-        if (c.isSpace()) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
             if (in_word) {
                 out << cur;
                 cur.clear();

@@ -2,6 +2,7 @@
 
 #include "proc.h"
 #include "atc.h"
+#include "stats.h"
 #include "util.h"
 
 #include <QBuffer>
@@ -245,8 +246,10 @@ QImage file_thumb(const QString &path, qint64 mtime, int size)
     bool in_cache_dir = path.startsWith(THUMB_DIR());
     if (!in_cache_dir && exists(cache_path)) {
         QImage img(cache_path);
-        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime))
+        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
+            stats::count("thumbnails from the disk cache");
             return img;
+        }
     }
     QImage img;
     if (is_image(path))
@@ -258,6 +261,7 @@ QImage file_thumb(const QString &path, qint64 mtime, int size)
         img = system_thumb(path, size);
     if (img.isNull())
         return QImage();
+    stats::count("thumbnails made");
     // don't bother caching images that are already thumbnail sized
     if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
@@ -440,8 +444,10 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
     QString cache = join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size));
     if (exists(cache)) {
         QImage img(cache);
-        if (!img.isNull() && img.text("FE::Tag") == tag)
+        if (!img.isNull() && img.text("FE::Tag") == tag) {
+            stats::count("folder previews from the disk cache");
             return img;
+        }
         if (!img.isNull() && img.text("FE::Tag") == "empty|" + tag)
             return QImage();
     }
@@ -473,6 +479,7 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
     QImage img = compose_folder(images, size, opts.color, videos);
     img.setText("FE::Tag", tag);
     img.save(cache, "PNG");
+    stats::count("folder previews made");
     return img;
 }
 
@@ -753,6 +760,8 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             return QPixmap();
         }
         pending << k;
+        stats::count("thumbnails not in memory");
+        stats::peak("thumbnail queue", pending.size());
         prio += 1;
         thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);

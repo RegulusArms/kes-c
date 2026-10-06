@@ -2,12 +2,14 @@
 #include "common.h"
 
 #include "archive_ui.h"
+#include "stats.h"
 
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QMessageBox>
 
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <utime.h>
@@ -54,6 +56,7 @@ int main(int argc, char **argv)
         return rc;
     QApplication app(argc, argv);
     setup_app();
+    stats::enable();   // KESTREL_STATS: checked at the end
     MainWindow *w = open_window({HOME()});
     QTimer closer;   // error boxes are modal: note their text and close them
     QObject::connect(&closer, &QTimer::timeout, []() {
@@ -216,6 +219,91 @@ int main(int argc, char **argv)
     w->open_paths(w->pane(), {P("arc.tar.gz")});
     check(wait_for([&]() { return extract_shown; }), "double-clicking an archive opens Kestrel's Extract dialog");
     extract_closer.stop();
+
+    // -- symlinks inside a tree: never followed, even when one is swapped in while a job runs
+    QString victim = P("victim");   // stands for files elsewhere that a job mustn't touch
+    auto reset_victim = [&]() {
+        QDir(victim).removeRecursively();
+        make(join(victim, "keep"), "keep");
+        make(join(victim, "sub/deeper"), "deeper");
+    };
+    auto victim_intact = [&]() {
+        return text_of(join(victim, "keep")) == "keep" && text_of(join(victim, "sub/deeper")) == "deeper" &&
+               listdir(victim).size() == 2;
+    };
+    reset_victim();
+    make(P("mc_src/sub/new.txt"), "new");
+    makedirs(P("mc_dst"), true);
+    ::symlink(victim.toLocal8Bit().constData(), P("mc_dst/sub").toLocal8Bit().constData());
+    run_ops(w, {{"merge_copy", P("mc_src"), P("mc_dst")}});
+    check(victim_intact() && islink(P("mc_dst/sub")), "a merge copy doesn't write through a symlink in the destination");
+    reset_victim();
+    make(P("lk_src.txt"), "new");
+    ::symlink(join(victim, "keep").toLocal8Bit().constData(), P("lk_dst.txt").toLocal8Bit().constData());
+    run_ops(w, {{"copy", P("lk_src.txt"), P("lk_dst.txt")}});
+    check(victim_intact() && !islink(P("lk_dst.txt")) && text_of(P("lk_dst.txt")) == "new",
+          "copying onto a symlink replaces the link, not the file it points to");
+    // a folder swapped for a symlink to the victim (renameat2 exchange: the path always exists) while a delete runs
+    bool safe = true;
+    QElapsedTimer race_clock;
+    race_clock.start();
+    for (int round = 0; race_clock.elapsed() < 4000 && safe; ++round) {
+        reset_victim();
+        QString race = P(QString("race%1").arg(round)), links = P(QString("links%1").arg(round));
+        for (int d = 0; d < 30; ++d)
+            for (int f = 0; f < 5; ++f)
+                make(join(race, QString("d%1/f%2").arg(d).arg(f)));
+        makedirs(links, true);
+        for (int d = 0; d < 30; ++d)
+            ::symlink(victim.toLocal8Bit().constData(), join(links, QString("d%1").arg(d)).toLocal8Bit().constData());
+        std::atomic<bool> stop{false};
+        std::thread swapper([&]() {
+            while (!stop) {
+                for (int d = 0; d < 30 && !stop; ++d) {
+                    QByteArray a = join(race, QString("d%1").arg(d)).toLocal8Bit();
+                    QByteArray b = join(links, QString("d%1").arg(d)).toLocal8Bit();
+                    if (renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE) == 0) {
+                        usleep(200);
+                        renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE);
+                    }
+                }
+            }
+        });
+        run_ops(w, {{"delete", race, ""}});
+        stop = true;
+        swapper.join();
+        safe = victim_intact();
+    }
+    check(safe, "a folder swapped for a symlink during a delete doesn't let it delete outside the tree");
+
+    // -- crafted archives (tests/fixtures, make_evil_archives.sh): "../" names, absolute paths, and a symlink out of
+    // the destination with a file written through it, extracted by whichever tool Kestrel picks
+    for (const QString &ext : QStringList{"tar.gz", "zip", "7z", "rar"}) {
+        QString label = "a crafted " + ext + " archive can't write outside the folder it's extracted into";
+        QString base = P("evil-" + QString(ext).replace('.', '-')), archive_path = join(base, "evil." + ext);
+        makedirs(join(base, "dest"), true);
+        makedirs(join(base, "outside"), true);
+        QFile::copy(join(QString(TESTS_DIR), "fixtures/evil." + ext), archive_path);
+        if (archive::extract_tool(archive_path).isEmpty()) {
+            skip(label + " (no tool for it is installed)");
+            continue;
+        }
+        ::unlink("/tmp/kestrel-evil-abs.txt");
+        Task task("test", [](Task *) { return QVariant(); });
+        try {
+            archive::extract(&task, archive_path, join(base, "dest"), QString(), "overwrite");
+        } catch (const Error &) {   // refusing an entry may fail the job: fine, as long as nothing got out
+        }
+        check(!listdir(join(base, "dest")).isEmpty() && listdir(join(base, "outside")).isEmpty() &&
+                  !lexists(join(base, "escape.txt")) && !lexists("/tmp/kestrel-evil-abs.txt"),
+              label);
+    }
+
+    // -- KESTREL_STATS: what this test did was counted
+    QString report = stats::summary();
+    check(report.contains("  folder listing (ms): ") && report.contains("  copy speed (MB/s): ") &&
+              report.contains("  archive job (s): ") && report.contains("  tasks at once: most "),
+          "with KESTREL_STATS, folder listings, copy speed, archive jobs and tasks at once are counted");
 
     // -- running programs: a timeout holds even without pipes, or once the program has closed its output
     proc::Options quiet;

@@ -16,6 +16,7 @@
 #include "undo.h"
 #include "proc.h"
 #include "thumbs.h"
+#include "stats.h"
 #include "util.h"
 #include "uwp.h"
 #include "viewer.h"
@@ -105,6 +106,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     zoom_slider = new QSlider(Qt::Horizontal);
     zoom_slider->setFixedWidth(140);
     zoom_slider->setToolTip("Zoom (Ctrl+scroll)");
+    zoom_slider->setAccessibleName("Zoom");
     connect(zoom_slider, &QSlider::valueChanged, this, [this](int v) {
         if (pane() && pane()->zoom_value() != v)
             pane()->zoom(0, v);
@@ -234,13 +236,14 @@ void MainWindow::build_toolbar()
     a_search = tb->addAction(icon({"system-search-symbolic", "edit-find"}), "Search (Ctrl+F)", this,
                              [this]() { pane()->start_search(); });
     view_btn = new QToolButton;
-    view_btn->setAutoRaise(true);
+    view_btn->setAutoRaise(true);   // its name and tooltip follow the view (sync_view_btn)
     connect(view_btn, &QToolButton::clicked, this, &MainWindow::toggle_view);
     tb->addWidget(view_btn);
     sort_btn = new QToolButton;
     sort_btn->setAutoRaise(true);
     sort_btn->setIcon(icon({"view-sort-ascending-symbolic", "view-sort-ascending"}));
     sort_btn->setToolTip("Sort");
+    sort_btn->setAccessibleName("Sort");
     sort_btn->setPopupMode(QToolButton::InstantPopup);
     sort_menu = new QMenu(this);
     connect(sort_menu, &QMenu::aboutToShow, this, &MainWindow::fill_sort_menu);
@@ -249,6 +252,8 @@ void MainWindow::build_toolbar()
     menu_btn = new QToolButton;
     menu_btn->setAutoRaise(true);
     menu_btn->setIcon(icon({"open-menu-symbolic", "application-menu", "preferences-system"}));
+    menu_btn->setToolTip("Menu");
+    menu_btn->setAccessibleName("Menu");
     menu_btn->setPopupMode(QToolButton::InstantPopup);
     tb->addWidget(menu_btn);
 }
@@ -583,6 +588,7 @@ void MainWindow::sync_view_btn()
     view_btn->setIcon(g ? icon({"view-list-symbolic", "view-list-details"})
                         : icon({"view-grid-symbolic", "view-grid", "view-list-icons"}));
     view_btn->setToolTip(g ? "Switch to list view (Ctrl+2)" : "Switch to grid view (Ctrl+1)");
+    view_btn->setAccessibleName(g ? "Switch to list view" : "Switch to grid view");
 }
 
 void MainWindow::sync_zoom_slider()
@@ -1299,6 +1305,19 @@ MainWindow *open_window(const QStringList &paths)
     return w;
 }
 
+// The app-wide objects, and their order. Each is created once and lives until the process exits (none is deleted,
+// so none can be used after it's gone, also by a worker thread finishing late):
+//   settings()        util.cpp; first use here, right after QApplication, before any thread starts. Used from the UI
+//                     thread only. Other Kestrels change the same file: on_atc("settings") re-reads it.
+//   g_thumbs          here, after settings() (apply_thumb_settings reads it). Its thread pool runs for the process.
+//   TaskBoard         fileops.cpp, on first use (the first task, or the first window's task panel).
+//   atc::radio()      atc.cpp, on first use; start() here, after focus tracking and on_atc are connected, so the
+//                     first messages from other Kestrels find them. The tower is a separate process.
+//   admin::session()  admin.cpp, on first use (a "Retry as Administrator" or the menu); the helper process it starts
+//                     ends when its pipe closes, at the latest when this process exits.
+//   WINDOWS           app.cpp; a window is added when opened and removed when it closes (choosers aren't in it).
+//   last used window  incoming.cpp (window_focused), a QPointer: cleared by Qt when that window is deleted.
+// A file-chooser process (--file-chooser) makes settings() and g_thumbs, then only chooser windows.
 int kes_main(int argc, char **argv)
 {
     prefer_system_environment();   // before GLib or Qt load anything: see util.h
@@ -1320,6 +1339,7 @@ int kes_main(int argc, char **argv)
     QApplication::setApplicationDisplayName(APP_NAME);
     QApplication::setDesktopFileName(APP_ID);
     QApplication app(argc, argv);
+    stats::print_at_quit();   // KESTREL_STATS=1
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
     follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
