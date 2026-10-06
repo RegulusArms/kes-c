@@ -235,5 +235,13 @@ int main(int argc, char **argv)
         left = pid_t(QString::fromUtf8(read_file(P("left.pid"))).trimmed().toInt());
     }   // nothing refers to it any more
     check(left > 0 && ::kill(left, 0) != 0, "a tool still running when nothing refers to it any more is stopped");
+    // with SIGPIPE at its default, which kills (kes ignores it, and so does GLib once D-Bus is used, but proc mustn't
+    // rely on either)
+    struct sigaction dfl = {}, saved = {};
+    dfl.sa_handler = SIG_DFL;
+    sigaction(SIGPIPE, &dfl, &saved);
+    r = proc::run({"true"}, 10000, proc::Options(), QByteArray(4 << 20, 'x'));
+    sigaction(SIGPIPE, &saved, nullptr);
+    check(!r.failed && !r.timed_out && r.rc == 0, "writing to a program that exits without reading its input doesn't kill Kestrel");
     finish();
 }
