@@ -1103,7 +1103,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     show_hidden = view_value("show_hidden", false).toBool();
     folder_previews = view_value("folder_previews", true).toBool();
     setWindowTitle(APP_NAME);
-    setWindowIcon(icon({"folder"}));
+    setWindowIcon(app_icon());
     if (chooser_mode)
         resize(960, 620);   // a dialog: smaller than a main window
     else
@@ -3171,7 +3171,7 @@ int kes_main(int argc, char **argv)
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
     follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
-    app.setWindowIcon(theme_icon("folder"));
+    app.setWindowIcon(app_icon());
     migrate_legacy();
     ensure_desktop_entry();
     QImageReader::setAllocationLimit(2048);

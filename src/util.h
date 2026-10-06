@@ -180,6 +180,7 @@ extern QHash<QString, QString> SPECIAL_DIR_ICONS;
 QString xdg_user_dir(const QString &key);
 QIcon theme_icon(const QStringList &names);
 inline QIcon theme_icon(const QString &name) { return theme_icon(QStringList{name}); }
+QIcon app_icon();   // Kestrel's own icon
 QIcon icon_for_path(const QString &path, int is_dir = -1);
 const QHash<QString, QString> &special_dir_icons();
 void setup_icon_theme();
