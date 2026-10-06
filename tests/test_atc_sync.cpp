@@ -85,6 +85,51 @@ int main(int argc, char **argv)
     check(st.value(home_path("d2")).toObject().value("color").toString() == "#00ff00",
           "Saving a folder style keeps another Kestrel's change");
 
+    // ---- the protocol: other programs on the session bus can talk to the tower, so messages are checked
+    int before = fake.heard.size();
+    QByteArray big = QJsonDocument(QJsonObject{{"type", "starred"}, {"pad", QString(atc::MAX_MESSAGE, 'x')}})
+                         .toJson(QJsonDocument::Compact);
+    for (const QByteArray &raw : QList<QByteArray>{"not json", "[1,2]", R"({"type":"nonsense"})",
+                                                   R"({"type":"folders","paths":"/not/a/list"})",
+                                                   R"({"type":"folders","paths":["relative"]})",
+                                                   R"({"type":"tasks","tasks":[{"id":5}]})", R"({"type":"left"})", big})
+        fake.call("Report", raw);
+    fake.report({{"type", "folders"}, {"paths", QJsonArray{d1}}, {"unknown_field", 1}, {"marker", "good"}});
+    auto mine_since = [&](int from) {
+        QList<QJsonObject> out;
+        for (int i = from; i < fake.heard.size(); ++i)
+            if (fake.heard[i].first == fake.name())
+                out << fake.heard[i].second;
+        return out;
+    };
+    wait_for([&]() { return !mine_since(before).isEmpty(); });
+    spin(300);
+    QList<QJsonObject> passed = mine_since(before);
+    check(passed.size() == 1 && passed[0].value("marker").toString() == "good",
+          "the tower drops malformed, unknown and oversized messages, and passes on the next good one");
+    check(atc::valid_message({{"type", "tasks"}, {"tasks", QJsonArray{QJsonObject{{"id", "1"}, {"fraction", 0.5}}}}}) &&
+              !atc::valid_message({{"type", "cancel"}, {"task", 7}}) &&
+              !atc::valid_message({{"type", "open"}, {"folders", QJsonArray{"rel"}}}) &&
+              !atc::valid_message({{"type", "settings"}, {"keep", "yes"}}) &&
+              atc::valid_message({{"type", "settings"}, {"from_the_future", QJsonArray{1, 2}}}) &&
+              atc::valid_undo({{"kind", "trash"}, {"label", "Trash"}, {"items", QJsonArray{QJsonArray{"/a", ""}}}}) &&
+              !atc::valid_undo({{"kind", "move"}, {"label", "Move"}, {"items", QJsonArray{QJsonArray{"/a", "b"}}}}),
+          "message fields are checked: wrong types and relative paths are refused, unknown fields are allowed");
+    fake.call("UndoPush", R"({"kind":"wipe","label":"x","items":[["/a","/b"]]})");
+    fake.call("UndoPush", R"({"kind":"move","label":"x","items":[["a","b"]]})");
+    bool none = fake.call("UndoPop") == "";
+    fake.call("UndoPush", R"({"kind":"move","label":"Move","items":[["/a","/b"]]})");
+    check(none && QJsonDocument::fromJson(fake.call("UndoPop").toUtf8()).object().value("label").toString() == "Move",
+          "the tower keeps only valid undo entries");
+    FakeFlight other;
+    other.call("CheckIn", R"({"pid":2,"impl":"fake","protocol":999})");
+    other.report({{"type", "starred"}});
+    spin(500);
+    bool from_other = false;
+    for (const auto &[f, m] : fake.heard)
+        from_other = from_other || f == other.name();
+    check(!from_other, "a flight speaking another protocol version isn't passed on");
+
     // ---- the tower goes down: the Kestrel starts a new one and checks in again
     qint64 old = fake.tower_pid();
     ::kill(old, SIGKILL);
