@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "atc.h"
+#include "proc.h"
 #include "undo.h"
 #include "stats.h"
 #include "util.h"
@@ -958,6 +959,64 @@ QString make_link(const QVariantMap &plan)
 }
 
 // ---------------------------------------------------------------- misc
+
+QStringList trash_contents()
+{
+    QStringList out;
+    for (const QString &root : trash_dirs()) {
+        for (const char *sub : {"files", "info", "expunged"}) {
+            QString d = join(root, sub);
+            if (!isdir(d))
+                continue;
+            try {
+                for (const QString &n : listdir(d))
+                    out << join(d, n);
+            } catch (const OSError &) {
+            }
+        }
+    }
+    return out;
+}
+
+bool can_shred() { return which("bleachbit"); }
+
+static QStringList still_there(const QStringList &paths)
+{
+    QStringList out;
+    for (const QString &p : paths) {
+        struct stat st;
+        if (lstat_(p, st))
+            out << p;
+    }
+    return out;
+}
+
+Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
+            std::function<void(const QStringList &)> on_done)
+{
+    auto fn = [paths](Task *task) -> QVariant {
+        int total = paths.size();
+        task->report(0, total, "Starting BleachBit…");
+        proc::Options opts;
+        opts.out = opts.err = proc::DEVNULL;   // it lists every file; what's left afterwards is checked instead
+        auto p = proc::spawn(QStringList{"bleachbit", "--shred", "--"} + paths, opts);
+        try {
+            while (!p->wait_for(250)) {
+                task->check();
+                int n = total - still_there(paths).size();
+                task->report(n, total, QString("%1 of %2 shredded").arg(group_digits(n), group_digits(total)));
+            }
+        } catch (const Cancelled &) {
+            p->kill_group();
+            throw;
+        }
+        return still_there(paths);
+    };
+    return run_job(parent, title, fn, [on_done](const QVariant &r) {
+        if (r.isValid() && on_done)
+            on_done(r.toStringList());
+    });
+}
 
 DirStats dir_stats(const QString &path, std::function<bool()> cancel)
 {
