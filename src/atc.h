@@ -18,6 +18,16 @@ namespace atc {
 
 extern const char *NAME;   // the tower's bus name
 
+// The protocol (the same in the Python version; see "the protocol" in atc.cpp for the message types and fields).
+// A flight checks in with {"pid", "impl", "version", "protocol"}; one speaking another protocol is ignored (one that
+// names none predates the version and speaks 1). Messages from other programs on the session bus are checked by the
+// tower and again by each radio: a JSON object of at most MAX_MESSAGE bytes, a known "type", each known field of the
+// right type, absolute paths. Unknown fields are allowed (and ignored), so a newer Kestrel can add some.
+constexpr int PROTOCOL = 1;
+constexpr int MAX_MESSAGE = 1 << 20;
+bool valid_message(const QJsonObject &msg);   // a Report / Broadcast message
+bool valid_undo(const QJsonObject &op);       // a shared undo entry: {"kind", "label", "items": [[a, b], …]}
+
 int run_tower(int argc, char **argv);   // `kes --atc`: run the tower until the last flight has left
 
 // Preferences → "Open folders from other apps as tabs": give folders to the Kestrel whose window was used last (it

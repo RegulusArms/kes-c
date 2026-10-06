@@ -37,6 +37,98 @@ static const int UNDO_MAX = 50;   // the tower lands this long after the last fl
 
 static QByteArray compact(const QJsonObject &o) { return QJsonDocument(o).toJson(QJsonDocument::Compact); }
 
+// ---------------------------------------------------------------- the protocol
+
+// Each message type and its fields. A field that's missing is fine (the receiver uses a default); one that's there
+// must have this type. PATHS: a list of absolute paths; STRS: a list of strings; TASKS: a list of tasks (fields below).
+enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS };
+static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
+    {"settings", {}},        // Preferences were saved
+    {"sidebar", {}},         // the sidebar's order or collapsed sections changed
+    {"bookmarks", {}},       // the GTK bookmarks changed
+    {"starred", {}},         // starred.json changed
+    {"thumbs_cleared", {}},  // the preview cache was cleared
+    {"left", {}},            // (the tower's) a flight has gone
+    {"folders", {{"paths", PATHS}}},   // folder colours, covers or previews changed
+    {"tasks", {{"tasks", TASKS}}},     // keep: the flight's running jobs
+    {"cancel", {{"flight", STR}, {"task", STR}}},   // cancel a job of that flight
+    {"windows", {{"count", NUM}, {"active", NUM}}},   // keep: how many windows, when one was last used
+    {"undo_changed", {{"label", STR}}},   // keep (the tower's): what Ctrl+Z would undo now
+    {"open", {{"flight", STR}, {"folders", PATHS}, {"select", STRS}, {"token", STR}}},   // (the tower's) a hand-off
+};
+static const QList<QPair<QString, Field>> TASK_FIELDS = {{"id", STR},          {"title", STR},      {"text", STR},
+                                                         {"fraction", NUM},    {"cancellable", BOOL},
+                                                         {"cancelling", BOOL}, {"admin", BOOL}};
+static const QStringList UNDO_KINDS = {"move", "rename", "trash", "create"};
+
+static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
+
+static bool valid_field(const QJsonValue &v, Field f)
+{
+    switch (f) {
+    case STR:
+        return v.isString();
+    case NUM:
+        return v.isDouble();
+    case BOOL:
+        return v.isBool();
+    case PATHS:
+    case STRS:
+    case TASKS:
+        if (!v.isArray())
+            return false;
+        for (const QJsonValue &e : v.toArray()) {
+            if (f == TASKS ? !e.isObject() || !valid_fields(e.toObject(), TASK_FIELDS)
+                           : !e.isString() || (f == PATHS && !e.toString().startsWith('/')))
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields)
+{
+    for (const auto &[name, f] : fields)
+        if (o.contains(name) && !valid_field(o.value(name), f))
+            return false;
+    return true;
+}
+
+bool valid_message(const QJsonObject &msg)
+{
+    auto it = TYPES.constFind(msg.value("type").toString());
+    return it != TYPES.constEnd() && valid_fields(msg, *it) && (!msg.contains("keep") || msg.value("keep").isBool());
+}
+
+bool valid_undo(const QJsonObject &op)
+{
+    if (!UNDO_KINDS.contains(op.value("kind").toString()) || !op.value("label").isString() || !op.value("items").isArray())
+        return false;
+    for (const QJsonValue &v : op.value("items").toArray()) {   // [a, b]: absolute paths (b is "" for trash and create)
+        QJsonArray pair = v.toArray();
+        QString b = pair.at(1).toString();
+        if (pair.size() != 2 || !pair.at(0).isString() || !pair.at(1).isString() || !pair.at(0).toString().startsWith('/') ||
+            !(b.isEmpty() || b.startsWith('/')))
+            return false;
+    }
+    return true;
+}
+
+// a JSON object from a message argument, or an empty one if it's too big or isn't one
+static QJsonObject parse(const char *arg)
+{
+    QByteArray raw(arg);
+    if (raw.size() > MAX_MESSAGE)
+        return QJsonObject();
+    return QJsonDocument::fromJson(raw).object();
+}
+
+static bool speaks_our_protocol(const QJsonObject &info)
+{
+    return !info.contains("protocol") || info.value("protocol").toInt(-1) == PROTOCOL;
+}
+
 // ---------------------------------------------------------------- the tower
 
 struct Tower {
@@ -89,15 +181,18 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
         double best_active = -1;
         for (auto f = tower->kept.begin(); f != tower->kept.end(); ++f) {
             QJsonObject w = f.value().value("windows");
-            if (tower->flights.contains(f.key()) && w.value("count").toInt() > 0 && w.value("active").toDouble() > best_active) {
+            if (tower->flights.contains(f.key()) && speaks_our_protocol(tower->flights.value(f.key())) &&
+                w.value("count").toInt() > 0 && w.value("active").toDouble() > best_active) {
                 best = f.key();
                 best_active = w.value("active").toDouble();
             }
         }
+        QJsonObject msg = parse(arg);
+        msg["type"] = "open";
+        msg["flight"] = best;
+        if (!valid_message(msg))
+            best.clear();   // not a hand-off: nobody takes it
         if (!best.isEmpty()) {
-            QJsonObject msg = QJsonDocument::fromJson(arg).object();
-            msg["type"] = "open";
-            msg["flight"] = best;
             g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast",
                                           g_variant_new("(ss)", g_dbus_connection_get_unique_name(conn), compact(msg).constData()),
                                           nullptr);
@@ -119,10 +214,10 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
     const gchar *arg = nullptr;
     g_variant_get(params, "(&s)", &arg);
     if (m == "CheckIn") {
-        tower->flights[who] = QJsonDocument::fromJson(arg).object();
+        tower->flights[who] = parse(arg);
     } else if (m == "UndoPush") {
-        QJsonObject op = QJsonDocument::fromJson(arg).object();
-        if (!op.isEmpty()) {
+        QJsonObject op = parse(arg);
+        if (valid_undo(op) && speaks_our_protocol(tower->flights.value(who))) {
             tower->undo << op;
             while (tower->undo.size() > UNDO_MAX)
                 tower->undo.removeFirst();
@@ -131,11 +226,16 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
     } else {   // Report: pass it on to every flight (the sender ignores its own)
         if (!tower->flights.contains(who))
             tower->flights[who] = QJsonObject();
-        QJsonObject msg = QJsonDocument::fromJson(arg).object();
-        if (msg.value("keep").toBool())   // state, not an event: remembered for flights that check in later
-            tower->kept[who][msg.value("type").toString()] = msg;
-        g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast", g_variant_new("(ss)", sender, arg),
-                                      nullptr);
+        QJsonObject msg = parse(arg);
+        // only a flight's own news: "left", "open" and "undo_changed" are the tower's
+        static const QStringList TOWER_ONLY = {"left", "open", "undo_changed"};
+        if (valid_message(msg) && !TOWER_ONLY.contains(msg.value("type").toString()) &&
+            speaks_our_protocol(tower->flights.value(who))) {
+            if (msg.value("keep").toBool())   // state, not an event: remembered for flights that check in later
+                tower->kept[who][msg.value("type").toString()] = msg;
+            g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast", g_variant_new("(ss)", sender, arg),
+                                          nullptr);
+        }
     }
     tower->land.stop();
     g_dbus_method_invocation_return_value(invocation, nullptr);
@@ -211,8 +311,8 @@ static void on_broadcast(GDBusConnection *conn, const gchar *sender, const gchar
     g_variant_get(params, "(&s&s)", &flight, &msg);
     if (g_strcmp0(flight, g_dbus_connection_get_unique_name(conn)) == 0)
         return;   // our own report: already delivered here by announce()
-    QJsonObject o = QJsonDocument::fromJson(msg).object();
-    if (o.value("type").toString().isEmpty())
+    QJsonObject o = parse(msg);
+    if (!valid_message(o))
         return;
     o["from"] = QString::fromUtf8(flight);
     Q_EMIT radio()->heard(o);
@@ -226,7 +326,7 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
     if (!rs.sub)
         rs.sub = g_dbus_connection_signal_subscribe(conn, nullptr, IFACE, "Broadcast", PATH, nullptr,
                                                     G_DBUS_SIGNAL_FLAGS_NONE, on_broadcast, nullptr, nullptr);
-    QJsonObject info{{"pid", qint64(getpid())}, {"impl", "c++"}, {"version", util::VERSION}};
+    QJsonObject info{{"pid", qint64(getpid())}, {"impl", "c++"}, {"version", util::VERSION}, {"protocol", PROTOCOL}};
     g_dbus_connection_call(conn, NAME, PATH, IFACE, "CheckIn", g_variant_new("(s)", compact(info).constData()), nullptr,
                            G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
     for (const QJsonObject &m : rs.kept)   // a new tower: tell it our state again
@@ -248,7 +348,7 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
             for (const QJsonValue &v : list) {
                 QString from = v.toObject().value("flight").toString();
                 QJsonObject m = v.toObject().value("message").toObject();
-                if (from == me || m.value("type").toString().isEmpty())
+                if (from == me || !valid_message(m))
                     continue;
                 m["from"] = from;
                 Q_EMIT radio()->heard(m);
