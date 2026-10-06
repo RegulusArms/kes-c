@@ -17,6 +17,18 @@ check '! ldd /usr/bin/kes /usr/bin/kes-admin-helper | grep -q "not found"' "ever
 check '[[ "$(kes --version)" == "Kestrel Explorer "* ]]' "kes starts and reports its version"
 check '[[ "$(kes-admin-helper </dev/null | head -1)" == *"\"hello\":true"* ]]' "the admin helper starts"
 check 'kes-setup --help >/dev/null' "kes-setup runs"
+# the admin helper's rules that only apply as root (the test suite runs it as a normal user)
+useradd -m kestrel-pkg-test 2>/dev/null
+U="$(id -u kestrel-pkg-test)"
+D="$(mktemp -d)"
+chown kestrel-pkg-test "$D"
+su kestrel-pkg-test -c "cp /bin/true '$D/prog' && chmod 4755 '$D/prog'"
+OUT="$({ printf '%s\n' "{\"id\":1,\"op\":\"copy\",\"src\":\"$D/prog\",\"dst\":\"$D/prog-copy\"}" \
+                      "{\"id\":2,\"op\":\"hardlink\",\"target\":\"/etc/shadow\",\"link\":\"$D/shadow\"}"; sleep 1; } |
+        PKEXEC_UID="$U" kes-admin-helper 2>&1)"
+check '[[ "$(stat -c %A "$D/prog-copy")" == -rwxr-xr-x && "$(stat -c %U "$D/prog-copy")" == root ]]' \
+    "as root, the admin helper's copy of a user's set-user-ID program isn't set-user-ID"
+check '[[ "$OUT" == *"isn'"'"'t yours"* && ! -e "$D/shadow" ]]' "as root, the admin helper won't hard-link a system file for the user"
 check 'desktop-file-validate /usr/share/applications/kestrel-explorer.desktop' "the menu entry is valid"
 check '[[ "$(ls /usr/share/icons/hicolor/*/apps/kestrel-explorer.png | wc -l)" == 8 ]]' "the app icon is installed in every size"
 check '[[ -f /usr/share/xdg-desktop-portal/portals/kestrel.portal &&

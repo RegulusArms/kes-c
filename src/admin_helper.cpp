@@ -22,6 +22,11 @@
 // - Recursive copy and delete go folder by folder through open descriptors, and stop if anything changed under them.
 // - One policy, POLICY below, says which paths an operation may delete, replace or change: never the protected
 //   folders, top-level folders (/data) or home folders themselves (/home/name). It's checked on the real path walked.
+// - hardlink links only the user's own files: a second name for, say, /etc/shadow in their folder would let a later
+//   chmod or write there change the real file.
+// - A copy root makes is root's, so it drops set-user-ID and set-group-ID from a file that wasn't root's (else a
+//   user's program would become a set-user-ID root program). A move between drives keeps the owner instead.
+// - A mount point is never deleted (that would empty the drive mounted there), nor is another drive inside a tree.
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -29,6 +34,7 @@
 
 #include <cerrno>
 #include <climits>
+#include <cstdlib>
 #include <condition_variable>
 #include <cstdio>
 #include <cstring>
@@ -219,6 +225,15 @@ static Walk walk(std::string path, bool make_parents = false)
     }
 }
 
+// the user the session is for: pkexec says who started it (as root, getuid() is 0); run directly, it's the caller
+static uid_t session_uid()
+{
+    const char *v = getenv("PKEXEC_UID");
+    char *end = nullptr;
+    long uid = v && *v ? strtol(v, &end, 10) : -1;
+    return uid >= 0 && end && *end == 0 ? uid_t(uid) : getuid();
+}
+
 static std::string path_arg(const QJsonObject &req, const char *key)
 {
     QJsonValue v = req.value(key);
@@ -281,12 +296,18 @@ static void copy_data(int in, int out)
     }
 }
 
-// the permissions and times of an open file or folder (on a descriptor: never through a symlink)
-static void copy_stat_fd(int fd, const struct stat &st)
+// the permissions and times of an open file or folder (on a descriptor: never through a symlink); keep_owner (a move):
+// its owner too
+static void copy_stat_fd(int fd, const struct stat &st, bool keep_owner)
 {
     struct timespec times[2] = {st.st_atim, st.st_mtim};
     futimens(fd, times);
-    fchmod(fd, st.st_mode & 07777);
+    mode_t mode = st.st_mode & 07777;
+    if (keep_owner)
+        (void)!fchown(fd, st.st_uid, st.st_gid);   // first: chown clears set-user-ID, which fchmod then puts back
+    else if (S_ISREG(st.st_mode) && st.st_uid != geteuid())
+        mode &= ~mode_t(S_ISUID | S_ISGID);   // a copy of someone else's set-user-ID program mustn't run as us
+    fchmod(fd, mode);
 }
 
 class Job {
@@ -335,14 +356,17 @@ public:
     // delete `name` in dirfd, and everything in it, without leaving the filesystem it's on
     void remove(int dirfd, const std::string &name)
     {
-        struct stat st;
+        struct stat st, parent;
         if (!stat_at(dirfd, name, &st))
             fail_errno();
+        if (S_ISDIR(st.st_mode) && fstat(dirfd, &parent) == 0 && parent.st_dev != st.st_dev)
+            throw Failure(name + " is a mount point (another drive); not deleting it");
         remove_tree(dirfd, name, st, st.st_dev);
         done += 1;
     }
 
-    void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge)
+    void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge,
+              bool keep_owner = false)
     {
         struct stat st, dst_st;
         if (!stat_at(src_dir, src, &st))
@@ -362,6 +386,8 @@ public:
                 fail_errno();
             struct timespec times[2] = {st.st_atim, st.st_mtim};
             utimensat(dst_dir, dst.c_str(), times, AT_SYMLINK_NOFOLLOW);
+            if (keep_owner)
+                (void)!fchownat(dst_dir, dst.c_str(), st.st_uid, st.st_gid, AT_SYMLINK_NOFOLLOW);
         } else if (S_ISDIR(st.st_mode)) {
             Fd in = open_dir_at(src_dir, src, st);
             if (dst_exists && (!merge || !S_ISDIR(dst_st.st_mode))) {
@@ -376,8 +402,8 @@ public:
                 fail_errno();
             Fd out = open_dir_at(dst_dir, dst, dst_st);
             for (const std::string &e : list_dir(in.get()))
-                copy(in.get(), e, out.get(), e, merge);
-            copy_stat_fd(out.get(), st);
+                copy(in.get(), e, out.get(), e, merge, keep_owner);
+            copy_stat_fd(out.get(), st, keep_owner);
         } else if (S_ISREG(st.st_mode)) {
             check_cancel();
             Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -392,7 +418,7 @@ public:
             if (out.get() < 0)
                 fail_errno();
             copy_data(in.get(), out.get());
-            copy_stat_fd(out.get(), st);
+            copy_stat_fd(out.get(), st, keep_owner);
         } else {
             throw Failure(src + " isn't a regular file, folder or link");
         }
@@ -408,12 +434,18 @@ public:
             struct stat existing;
             if (stat_at(dst.dir.get(), dst.name, &existing))
                 remove(dst.dir.get(), dst.name);
-            if (renameat(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str()) == 0) {
+            // no-replace: something that appeared there since isn't silently replaced
+            int r = renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE);
+            if (r != 0 && errno == EINVAL)   // a filesystem without RENAME_NOREPLACE
+                r = renameat(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str());
+            if (r == 0) {
                 done = total;
                 return;
             }
+            if (errno == EEXIST)
+                throw Failure(dst.name + " appeared while it was being replaced");
         }
-        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge);
+        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, true);   // a move keeps the owner
         remove(src.dir.get(), src.name);
     }
 
@@ -514,8 +546,17 @@ static void handle(const QJsonObject &req)
         if (symlinkat(target.c_str(), link.dir.get(), link.name.c_str()) != 0)
             fail_errno();
     } else if (op == "hardlink") {
+        // the file itself, opened without following a symlink: its owner is checked, and that same file is linked
+        // (through /proc/self/fd), so it can't be swapped for another between the check and the link
         const Walk &target = w.at("target"), &link = w.at("link");
-        if (linkat(target.dir.get(), target.name.c_str(), link.dir.get(), link.name.c_str(), 0) != 0)
+        Fd fd(openat(target.dir.get(), target.name.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC));
+        struct stat st;
+        if (fd.get() < 0 || fstat(fd.get(), &st) != 0)
+            fail_errno();
+        if (st.st_uid != session_uid())
+            throw Failure("refusing to hard-link a file that isn't yours: " + target.path);
+        std::string proc_path = "/proc/self/fd/" + std::to_string(fd.get());
+        if (linkat(AT_FDCWD, proc_path.c_str(), link.dir.get(), link.name.c_str(), AT_SYMLINK_FOLLOW) != 0)
             fail_errno();
     } else if (op == "write") {
         QByteArray text = req.value("text").toString().toUtf8();

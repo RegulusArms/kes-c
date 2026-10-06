@@ -16,6 +16,7 @@
 #include <QCheckBox>
 #include <QDrag>
 #include <QFileSystemWatcher>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
