@@ -15,6 +15,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - **Metadata:** view and edit EXIF, XMP and other metadata with `exiftool`, from a searchable list of tags.
 - **Search and rename:** search subfolders with wildcards or inside files, and batch rename with templates or regular expressions.
 - **Shortcuts out:** Open in Terminal or VS Code, your Nautilus scripts, and Samba network sharing.
+- **Secure deletion:** with [BleachBit](https://www.bleachbit.org) installed, shred files and folders or empty the trash so they can't be recovered, from the right-click menu; `kes-setup --bleachbit` also adds a cleaner for Kestrel's own cache and history to BleachBit.
 
 **Improvements over GNOME Files:**
 - Undo for moves, renames, Move to Trash and new files.
@@ -70,6 +71,7 @@ Then, optionally, make it your file manager (see below); `kes-setup --undo` puts
 
 ```bash
 kes-setup --default
+kes-setup --bleachbit   # and/or add Kestrel to BleachBit's cleaners (see "Cleaning up with BleachBit" below)
 ```
 
 `sudo apt upgrade` keeps you on the channel you picked. To switch, run the other channel's commands; they replace `kestrel.sources`. Going from releases to development builds upgrades at the next `apt upgrade`. Going back doesn't, because a development build has a higher version than the release it came after: you stay on it until the next release, or go back now with `sudo apt install --allow-downgrades kestrel-explorer=<version>` (`apt policy kestrel-explorer` lists the versions).
