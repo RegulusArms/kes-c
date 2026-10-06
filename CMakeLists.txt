@@ -5,6 +5,7 @@ set(KES_VERSION "0.2.1-alpha.3")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
@@ -41,6 +42,7 @@ add_executable(kes
     src/archive.cpp
     src/archive_ui.cpp
     src/app.cpp
+    data/kestrel.qrc
 )
 target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
 target_compile_options(kes PRIVATE -Wall -Wextra -Wno-unused-parameter)
@@ -55,6 +57,7 @@ install(PROGRAMS kes-setup DESTINATION bin)   # kes-setup --default: what instal
 # For the .deb (cpack): the app menu entry, and the file chooser's portal backend (used only once portals.conf picks it,
 # which `install.sh --default` does). The FileManager1 service isn't installed: GNOME Files ships that file.
 install(FILES data/kestrel-explorer.desktop DESTINATION share/applications)
+install(DIRECTORY data/icons/hicolor DESTINATION share/icons)   # the app icon, "kestrel-explorer"
 install(FILES data/kestrel.portal DESTINATION share/xdg-desktop-portal/portals)
 install(FILES data/org.freedesktop.impl.portal.desktop.kestrel.service DESTINATION share/dbus-1/services)
 # The GNOME Shell extension that focuses a drop target on Wayland (src/focus.h); kes-setup --default enables it

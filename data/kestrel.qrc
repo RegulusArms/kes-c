@@ -1,0 +1,6 @@
+<!-- Kestrel's icon, built into kes for when it isn't installed in the icon theme (util.cpp app_icon) -->
+<RCC>
+    <qresource prefix="/">
+        <file alias="kestrel-explorer.png">icons/hicolor/256x256/apps/kestrel-explorer.png</file>
+    </qresource>
+</RCC>

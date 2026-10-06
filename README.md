@@ -402,7 +402,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 270 checks in 11 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
+There are 272 checks in 11 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
 
 ## Architecture
 
@@ -509,7 +509,7 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 | `bench/` | The benchmark against GNOME Files and Nemo (see Performance: [vs GNOME Files](#performance-kestrel-vs-gnome-files), [vs Nemo](#performance-kestrel-vs-nemo)) |
 | `CMakeLists.txt` | Build configuration, and the .deb (CPack) |
 | `kes-setup` | Makes Kestrel the default file manager for the current user, and puts things back (run by `install.sh`; also in the .deb) |
-| `data/` | The .deb's app menu entry and file chooser portal files, and the GNOME Shell drop focus extension |
+| `data/` | The app icon (`icons/hicolor`, built into `kes` through `kestrel.qrc`), the .deb's app menu entry and file chooser portal files, and the GNOME Shell drop focus extension |
 | `.github/workflows/deb.yml` | Builds the .deb and publishes releases and the apt repository |
 
 ## Performance: Kestrel vs GNOME Files

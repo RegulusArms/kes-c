@@ -1610,6 +1610,16 @@ static QString desktop_entry_path()
     return join(join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"), "applications"), QString(APP_ID) + ".desktop");
 }
 
+// Kestrel's own icon: from the icon theme once installed (install.sh, the .deb), else the copy built into kes
+QIcon app_icon()
+{
+    if (QIcon::hasThemeIcon(APP_ID))
+        return QIcon::fromTheme(APP_ID);
+    if (QFile::exists(":/kestrel-explorer.png"))
+        return QIcon(":/kestrel-explorer.png");
+    return theme_icon("folder");
+}
+
 void ensure_desktop_entry()
 {
     // On GNOME/Wayland the top bar and dock take the app's icon from the .desktop file whose name matches the
@@ -1623,10 +1633,18 @@ void ensure_desktop_entry()
             return;
     QString launcher = QCoreApplication::applicationFilePath();
     try {
+        // the icon the entry names: into the user's icon theme, from the copy built into kes
+        QString icon = join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"),
+                            QString("icons/hicolor/256x256/apps/%1.png").arg(APP_ID));
+        if (!QIcon::hasThemeIcon(APP_ID) && !exists(icon) && QFile::exists(":/kestrel-explorer.png")) {
+            makedirs(dirname(icon), true);
+            QFile::copy(":/kestrel-explorer.png", icon);
+            QFile::setPermissions(icon, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther);
+        }
         makedirs(dirname(entry), true);
         write_text(entry, QString("[Desktop Entry]\nType=Application\nName=%1\nGenericName=File Manager\n"
                                   "Comment=Manage files, with archive, admin, permission and metadata tools built in\n"
-                                  "Exec=%2 %U\nIcon=folder\nTerminal=false\n"
+                                  "Exec=%2 %U\nIcon=%3\nTerminal=false\n"
                                   "Categories=System;FileTools;FileManager;Viewer;\n"
                                   "MimeType=inode/directory;x-directory/normal;\nStartupWMClass=%3\n")
                                   .arg(APP_NAME, launcher, APP_ID)
