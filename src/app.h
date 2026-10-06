@@ -264,8 +264,11 @@ private:
 };
 
 QString location_arg(const QString &arg);
-void handle_fm1(const QString &method, const QStringList &uris, const QString &startup_id);
-void on_atc(const QJsonObject &msg);   // a change reported through the tower (atc.h)
+// The app's state and helpers that incoming.cpp shares
+extern QList<MainWindow *> WINDOWS;   // this process's windows (file choosers aren't in it)
+extern ThumbnailManager *g_thumbs;
+void repaint_all();
+void apply_preferences();   // after Preferences change, here or in another Kestrel
 MainWindow *open_window(const QStringList &paths);
 MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 void apply_thumb_settings(ThumbnailManager *t);
