@@ -33,6 +33,7 @@ public:
 
     bool poll();          // true once it has exited
     int wait();
+    bool wait_for(int ms);   // wait up to ms for it to exit; true if it has
     void kill_group();    // SIGKILL its whole process group, then reap it
     void close_in();
     void close_out();
@@ -53,7 +54,8 @@ struct Result {
     bool failed = false;   // could not start
 };
 
-// subprocess.run(argv, capture_output=True, timeout=...) — never raises
+// subprocess.run(argv, capture_output=True, timeout=...) — never raises. The timeout (ms, -1: none) covers the whole
+// run, with or without pipes: a program still running then is killed, with its process group, and timed_out is set.
 Result run(const QStringList &argv, int timeout_ms = -1, const Options &opts = Options(),
            const QByteArray &input = QByteArray());
 

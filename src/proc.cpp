@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -64,6 +65,28 @@ int Process::wait()
         }
     }
     return returncode;
+}
+
+bool Process::wait_for(int ms)
+{
+    // a pidfd becomes readable when the process exits (Linux 5.3+); without one, check every 10 ms
+    int pidfd = int(::syscall(SYS_pidfd_open, pid, 0));
+    QElapsedTimer timer;
+    timer.start();
+    while (!poll()) {
+        qint64 left = ms - timer.elapsed();
+        if (left <= 0)
+            break;
+        if (pidfd >= 0) {
+            struct pollfd fd = {pidfd, POLLIN, 0};
+            ::poll(&fd, 1, int(left));
+        } else {
+            ::usleep(useconds_t(std::min<qint64>(left, 10) * 1000));
+        }
+    }
+    if (pidfd >= 0)
+        ::close(pidfd);
+    return done;
 }
 
 void Process::kill_group()
@@ -289,6 +312,9 @@ Result run(const QStringList &argv, int timeout_ms, const Options &opts_in, cons
             }
         }
     }
+    // the pipes are closed (or there were none), but the program may still be running
+    if (!res.timed_out && timeout_ms >= 0)
+        res.timed_out = !p->wait_for(int(std::max<qint64>(0, timeout_ms - timer.elapsed())));
     if (res.timed_out) {
         p->kill_group();
         res.rc = -1;
