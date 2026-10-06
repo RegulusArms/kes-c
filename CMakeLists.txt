@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(kestrel-explorer VERSION 0.2.1 LANGUAGES CXX)
 
-set(KES_VERSION "0.2.1-alpha.3")
+set(KES_VERSION "0.3.0-alpha.0")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -85,7 +85,7 @@ set(CPACK_DEBIAN_PACKAGE_SECTION utils)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins")
 # install.sh's RECOMMENDED list
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
-set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_STRIP_FILES ON)
 set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS

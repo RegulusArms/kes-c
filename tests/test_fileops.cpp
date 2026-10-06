@@ -299,6 +299,69 @@ int main(int argc, char **argv)
               label);
     }
 
+    // -- Shred with BleachBit: `bleachbit --shred` on the chosen files and folders, and what's still there afterwards
+    // reported (BleachBit reports success either way); Empty Trash with BleachBit hands it every item in the trash and
+    // its record; ✕ stops it. A stand-in bleachbit here: it only touches this test's home (the trash list also has
+    // other drives' trash folders), leaves anything named "locked" (as BleachBit leaves what it can't change), and
+    // takes its time over anything named "slow"
+    {
+        QString bin = P("stub-bin");
+        makedirs(bin, true);
+        write_text(join(bin, "bleachbit"), "#!/bin/sh\n"
+                                           "printf '%s\\n' \"$@\" > \"$HOME/bleachbit-args\"\n"
+                                           "shift 2\n"
+                                           "for p in \"$@\"; do\n"
+                                           "    case \"$p\" in \"$HOME\"/*) ;; *) continue ;; esac\n"
+                                           "    case \"$p\" in *slow*) sleep 30 ;; esac\n"
+                                           "    case \"$p\" in *locked*) ;; *) rm -rf -- \"$p\" ;; esac\n"
+                                           "done\n");
+        util::chmod(join(bin, "bleachbit"), 0755);
+        QByteArray old_path = qgetenv("PATH");
+        qputenv("PATH", bin.toUtf8() + ":" + old_path);
+        make(P("shred/a.txt"));
+        make(P("shred/dir/sub/b.txt"));
+        make(P("shred/locked.txt"));
+        QStringList paths{P("shred/a.txt"), P("shred/dir"), P("shred/locked.txt")};
+        bool called = false;
+        QStringList left;
+        fileops::shred(w, paths, "Test", [&](const QStringList &l) {
+            called = true;
+            left = l;
+        });
+        wait_for([&]() { return called; }, 10000);
+        check(fileops::can_shred() && called &&
+                  text_of(P("bleachbit-args")).split('\n', Qt::SkipEmptyParts) == QStringList{"--shred", "--"} + paths &&
+                  !lexists(P("shred/a.txt")) && !lexists(P("shred/dir")) && left == QStringList{P("shred/locked.txt")},
+              "Shred with BleachBit runs bleachbit --shred on the chosen files and folders, and reports what's still there");
+
+        make(P("shred/old.txt"));
+        util::trash(P("shred/old.txt"));
+        QString files = join(TRASH_DIR(), "files"), info = join(TRASH_DIR(), "info");
+        QStringList mine;
+        for (const QString &p : fileops::trash_contents())
+            if (p.startsWith(TRASH_DIR() + "/"))
+                mine << p;
+        called = false;
+        fileops::shred(w, mine, "Test", [&](const QStringList &) { called = true; });
+        wait_for([&]() { return called; }, 10000);
+        check(mine.contains(join(files, "old.txt")) && mine.contains(join(info, "old.txt.trashinfo")) && called &&
+                  listdir(files).isEmpty() && listdir(info).isEmpty(),
+              "Empty Trash with BleachBit hands it every item in the trash and its record, and the trash ends up empty");
+
+        make(P("shred/slow.txt"));
+        called = false;
+        Task *t = fileops::shred(w, {P("shred/slow.txt")}, "Test", [&](const QStringList &) { called = true; });
+        QPointer<Task> tp(t);
+        spin(500);
+        t->cancel();
+        QElapsedTimer clock;
+        clock.start();
+        bool stopped = wait_for([&]() { return !tp; }, 5000);
+        check(stopped && clock.elapsed() < 5000 && lexists(P("shred/slow.txt")) && !called,
+              "✕ stops a shred: BleachBit is stopped, and nothing is reported as left");
+        qputenv("PATH", old_path);
+    }
+
     // -- KESTREL_STATS: what this test did was counted
     QString report = stats::summary();
     check(report.contains("  folder listing (ms): ") && report.contains("  copy speed (MB/s): ") &&

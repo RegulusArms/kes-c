@@ -81,6 +81,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     connect(sidebar, &Sidebar::open_path, this, [this](const QString &p, bool nt) { open_location(p, nt); });
     connect(sidebar, &Sidebar::dropped, this, &MainWindow::handle_drop);
     connect(sidebar, &Sidebar::empty_trash_requested, this, &MainWindow::empty_trash);
+    connect(sidebar, &Sidebar::shred_trash_requested, this, &MainWindow::empty_trash_with_bleachbit);
     tabs = new QTabWidget;
     tabs->setDocumentMode(true);
     tabs->setTabsClosable(true);
@@ -832,8 +833,12 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); });
         m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
-        if (in_trash(join(cur, "x")))
+        if (in_trash(join(cur, "x"))) {
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
+            if (fileops::can_shred())
+                m->addAction(icon({"edit-shred", "edit-delete"}), "Empty Trash with BleachBit…", this,
+                             [this]() { empty_trash_with_bleachbit(); });
+        }
         sharing::add_scripts_menu(m, {}, cur, [this](const QString &d) { navigate(d); });
         m->addSeparator();
         m->addAction(icon({"document-properties"}), "Properties", this, [this, cur]() { properties({cur}); });
@@ -845,6 +850,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     if (in_trash(paths.first())) {
         m->addAction(icon({"edit-undo"}), "Restore", this, [this, paths]() { restore(paths); });
         m->addAction(icon({"edit-delete"}), "Delete Permanently", this, [this, paths]() { delete_paths(paths); });
+        if (fileops::can_shred())
+            m->addAction(icon({"edit-shred", "edit-delete"}), "Shred with BleachBit…", this,
+                         [this, paths]() { shred_paths(paths); });
         m->addSeparator();
         m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); });
         return m;
@@ -1000,6 +1008,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     m->addSeparator();
     m->addAction(icon({"user-trash"}), "Move to Trash", this, [this, paths]() { trash_paths(paths); });
     m->addAction(icon({"edit-delete"}), "Delete Permanently…", this, [this, paths]() { delete_paths(paths); });
+    if (fileops::can_shred())
+        m->addAction(icon({"edit-shred", "edit-delete"}), "Shred with BleachBit…", this,
+                     [this, paths]() { shred_paths(paths); });
     m->addSeparator();
     m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); });
     return m;

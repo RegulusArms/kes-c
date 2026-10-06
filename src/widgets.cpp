@@ -1059,6 +1059,8 @@ void Sidebar::menu(const QPoint &pos)
     } else if (kind == "trash") {
         m.addSeparator();
         m.addAction("Empty Trash", this, [this]() { Q_EMIT empty_trash_requested(); });
+        if (which("bleachbit"))   // fileops::can_shred
+            m.addAction("Empty Trash with BleachBit…", this, [this]() { Q_EMIT shred_trash_requested(); });
     } else if (kind == "mount") {
         m.addSeparator();
         m.addAction("Unmount", this, [this, path]() { unmount(path); });

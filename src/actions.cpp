@@ -410,22 +410,80 @@ void MainWindow::empty_trash()
     if (r != QMessageBox::Yes)
         return;
     QList<fileops::Job> jobs;
-    for (const QString &root : trash_dirs()) {
-        for (const char *sub : {"files", "info", "expunged"}) {
-            QString d = join(root, sub);
-            if (!isdir(d))
-                continue;
-            try {
-                for (const QString &n : listdir(d))
-                    jobs << fileops::Job{"delete", join(d, n), QString()};
-            } catch (const OSError &) {
-            }
-        }
-    }
+    for (const QString &p : fileops::trash_contents())
+        jobs << fileops::Job{"delete", p, QString()};
     QPointer<MainWindow> self(this);
     fileops::start_ops(this, jobs, "Emptying trash", [self]() {
         if (self)
             self->sidebar->refresh();
+    });
+}
+
+// -- shredding with BleachBit (only offered when it's installed: fileops::can_shred)
+
+static const char *SHRED_NOTE = "BleachBit overwrites them and then deletes them, so they can't be recovered, not even "
+                                "from the trash. On SSDs and some file systems, overwriting can't guarantee that every "
+                                "old copy of the data is gone.";
+
+static bool confirm_shred(QWidget *parent, const QString &title, const QString &question, const QString &button)
+{
+    QMessageBox box(QMessageBox::Warning, title, question, QMessageBox::Cancel, parent);
+    box.setInformativeText(SHRED_NOTE);
+    QPushButton *yes = box.addButton(button, QMessageBox::DestructiveRole);
+    box.setDefaultButton(QMessageBox::Cancel);
+    box.exec();
+    return box.clickedButton() == yes;
+}
+
+void MainWindow::shred_paths(const QStringList &paths)
+{
+    if (paths.isEmpty())
+        return;
+    QString what = paths.size() == 1 ? "“" + basename(paths.first()) + "”" : QString("%1 items").arg(paths.size());
+    if (!confirm_shred(this, "Shred with BleachBit", "Shred " + what + "?", "Shred"))
+        return;
+    QStringList targets = paths;
+    for (const QString &p : paths) {   // an item in the trash: its record of where it came from too
+        QString info = trash_info_path(p);
+        struct stat st;
+        if (!info.isEmpty() && lstat_(info, st))
+            targets << info;
+    }
+    run_shred(targets, "Shredding with BleachBit");
+}
+
+void MainWindow::empty_trash_with_bleachbit()
+{
+    QStringList items = fileops::trash_contents();
+    if (items.isEmpty()) {
+        QMessageBox::information(this, "Empty Trash with BleachBit", "The trash is empty.");
+        return;
+    }
+    if (!confirm_shred(this, "Empty Trash with BleachBit",
+                       "Shred everything in the trash with BleachBit, on every drive?", "Empty Trash"))
+        return;
+    run_shred(items, "Emptying trash with BleachBit");
+}
+
+void MainWindow::run_shred(const QStringList &targets, const QString &title)
+{
+    QPointer<MainWindow> self(this);
+    fileops::shred(this, targets, title, [self](const QStringList &left) {
+        if (!self)
+            return;
+        self->sidebar->refresh();
+        QStringList names;
+        for (const QString &p : left)
+            if (!p.endsWith(".trashinfo"))
+                names << p;
+        if (names.isEmpty())
+            return;
+        QString list = names.mid(0, 10).join("\n");
+        if (names.size() > 10)
+            list += QString("\n… and %1 more").arg(names.size() - 10);
+        QMessageBox::warning(self, "Shred with BleachBit",
+                             "BleachBit couldn't shred these, so they're still there (you may not have permission to "
+                             "change them):\n\n" + list);
     });
 }
 

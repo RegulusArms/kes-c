@@ -91,6 +91,8 @@ public:
     void delete_paths(const QStringList &paths);
     void restore(const QStringList &paths);
     void empty_trash();
+    void shred_paths(const QStringList &paths);   // with BleachBit
+    void empty_trash_with_bleachbit();
     void make_links(const QStringList &paths, QString dest, const QString &kind);
     void properties(const QStringList &paths, QWidget *parent = nullptr);
     void preferences();
@@ -140,6 +142,7 @@ private:
     void close_when_idle();
     void sync_undo();
     void preferences_saved();
+    void run_shred(const QStringList &targets, const QString &title);
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

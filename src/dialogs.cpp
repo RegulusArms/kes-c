@@ -813,7 +813,7 @@ void PropertiesDialog::meta_remove()
 void PropertiesDialog::meta_clear()
 {
     QMessageBox box(QMessageBox::Warning, "Clear All Metadata",
-                    QString("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, AI generation data…) from “%1”?"
+                    QString("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, image-generation prompts…) from “%1”?"
                             "\n\nThis can't be undone.")
                         .arg(basename(path)),
                     QMessageBox::Cancel, this);

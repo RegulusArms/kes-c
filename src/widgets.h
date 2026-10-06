@@ -210,6 +210,7 @@ Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
     void dropped(const QStringList &sources, const QString &target);
     void empty_trash_requested();
+    void shred_trash_requested();   // Empty Trash with BleachBit
 
 protected:
     void mousePressEvent(QMouseEvent *ev) override;
