@@ -52,6 +52,26 @@ Everything `install.sh` needs to build, plus a few tools a normal Ubuntu desktop
 - `xdg-mime` (`xdg-utils`);
 - `script` (`util-linux`).
 
+## In CI, sanitizers, and the package
+
+GitHub Actions (`.github/workflows/deb.yml`, on Ubuntu 24.04) runs `tests/run.sh` before building the .deb; a failing
+test stops the run. Two more jobs (C++ only):
+
+- **Sanitizers:** the whole suite with AddressSanitizer and UndefinedBehaviorSanitizer, which find memory errors (use
+  after free, overflows) and undefined behaviour that a normal run can miss. Locally:
+  `KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh` (about 7 minutes). Leak checking is
+  off: Qt and GLib keep a lot alive until exit. On Ubuntu 24.04 (GCC 13) the sanitizers can't start with a newer
+  kernel's 32-bit address randomisation; CI sets `vm.mmap_rnd_bits=28`, and locally `setarch -R tests/run.sh` turns
+  randomisation off for the run.
+  ThreadSanitizer isn't used: Qt and GLib aren't built with it, so it reports their own locking as races, and its
+  runtime crashes when a test forks while threads run. Silencing those libraries would also hide races in Kestrel's
+  own threads, which all start from Qt.
+- **The package:** `tests/check_package.sh` installs the built .deb on clean ubuntu:24.04 and 26.04 systems and checks
+  that it installs with its dependencies, that `kes`, the admin helper and `kes-setup` run, that its files are in place
+  and the menu entry is valid, and that removing it leaves nothing behind. Only a package that passes goes into the apt
+  repository. It needs root and a throwaway system:
+  `docker run --rm -v "$PWD":/src:ro ubuntu:24.04 /src/tests/check_package.sh /src/kestrel-explorer_….deb`
+
 ## How the tests work
 
 Each test is one small program in `tests/`, built from `test_<name>.cpp`:

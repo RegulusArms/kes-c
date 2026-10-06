@@ -1,5 +1,8 @@
 # Runs the tests, then builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs
-# there and on newer). A failing test stops the run: no package, release or apt update.
+# there and on newer). A failing test stops the run: no package, release or apt update. The package is then installed
+# on clean 24.04 and 26.04 systems (tests/check_package.sh), and only one that passes goes into the apt repo. The tests
+# also run with AddressSanitizer and UndefinedBehaviorSanitizer, alongside (a finding fails the run, without holding up
+# the package).
 #   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
 #   pull request to main  → build only (the .deb is kept as a workflow artifact)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
@@ -37,6 +40,22 @@ jobs:
       - name: Run the tests
         # the cross-version checks (the Python version, ../kestrel-explorer) are skipped here
         run: tests/run.sh
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev \
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common
+
+      - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
+        # GCC 13's sanitizers can't start with the kernel's 32-bit address randomisation ("unexpected memory mapping")
+        run: |
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh
 
   deb:
     needs: test
@@ -102,8 +121,27 @@ jobs:
             --title "Kestrel Explorer ${{ steps.ver.outputs.version }}" --generate-notes
           echo "released=true" >> "$GITHUB_OUTPUT"
 
-  apt:
+  package:
+    # the .deb on clean systems: installs with its dependencies, runs, is complete, removes cleanly
     needs: deb
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        image: ["ubuntu:24.04", "ubuntu:26.04"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.deb.outputs.artifact }}
+          path: debs
+
+      - name: Install and check the package
+        run: bash tests/check_package.sh debs/*.deb
+
+  apt:
+    needs: [deb, package]
     if: needs.deb.outputs.suite != ''
     runs-on: ubuntu-24.04
     concurrency:
