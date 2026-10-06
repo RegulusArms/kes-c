@@ -124,8 +124,8 @@ int main(int argc, char **argv)
                              "the list view and the info panel open)" +
                                  (missing.isEmpty() ? QString() : " (no name: " + missing.join(", ") + ")"));
 
-    // -- drag and drop: a file dropped onto a folder goes into it, in both views. The events go where a real drag's go:
-    // to the innermost widget under the pointer that accepts drops
+    // -- drag and drop: a file dropped onto a folder goes into it, in both views, and the folder is highlighted while the
+    // file is over it. The events go where a real drag's go: to the innermost widget under the pointer that accepts drops
     w->pane()->close_search();
     auto drop_onto_folder = [&](const QString &mode, const QString &name) {
         w->set_view(mode);
@@ -150,12 +150,15 @@ int main(int argc, char **argv)
         QApplication::sendEvent(target, &enter);
         QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(target, &move);
+        bool lit = v->property("drop_target").toString() == home_path("folder");
         QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(target, &drop);
-        return wait_for([&]() { return exists(join(home_path("folder"), name)) && !exists(home_path(name)); });
+        bool cleared = v->property("drop_target").toString().isEmpty();
+        return lit && cleared && wait_for([&]() { return exists(join(home_path("folder"), name)) && !exists(home_path(name)); });
     };
     bool in_grid = drop_onto_folder("grid", "dropped-in-grid.txt"), in_list = drop_onto_folder("list", "dropped-in-list.txt");
-    check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view" +
+    check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view, and the folder is highlighted "
+                                  "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
 
     QString dump = qEnvironmentVariable("KESTREL_UI_DUMP");

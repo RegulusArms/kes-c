@@ -16,6 +16,7 @@
 
 #include <QCheckBox>
 #include <QDrag>
+#include <QDropEvent>
 #include <QFileSystemWatcher>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -40,10 +41,57 @@ using namespace util;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
-// The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h).
+// The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h)
+// and highlighting the folder a drag is over (where the files will go).
 template <class View>
 class FileView : public View {
 protected:
+    void dragMoveEvent(QDragMoveEvent *ev) override
+    {
+        View::dragMoveEvent(ev);
+        QModelIndex i = this->indexAt(ev->position().toPoint());
+        if (i.isValid())
+            i = i.siblingAtColumn(0);
+        // a folder that takes the drop, and isn't one of the items being dragged
+        bool dragged = ev->source() == this && this->selectionModel()->isSelected(i);
+        bool folder = i.isValid() && (this->model()->flags(i) & Qt::ItemIsDropEnabled);
+        set_drop_target(ev->isAccepted() && folder && !dragged ? i : QModelIndex());
+    }
+
+    void dragLeaveEvent(QDragLeaveEvent *ev) override
+    {
+        set_drop_target(QModelIndex());
+        View::dragLeaveEvent(ev);
+    }
+
+    void dropEvent(QDropEvent *ev) override
+    {
+        set_drop_target(QModelIndex());
+        View::dropEvent(ev);
+    }
+
+    void paintEvent(QPaintEvent *ev) override
+    {
+        View::paintEvent(ev);
+        if (!drop_target.isValid())
+            return;
+        QRectF r = this->visualRect(drop_target);
+        qreal radius = 8;   // as the grid's selection
+        if constexpr (std::is_base_of_v<QTreeView, View>) {
+            r = QRectF(0, r.top(), this->viewport()->width(), r.height());   // the whole row
+            radius = 4;
+        } else {
+            r = r.adjusted(3, 3, -3, -3);
+        }
+        QPainter p(this->viewport());
+        p.setRenderHint(QPainter::Antialiasing);
+        QColor c = this->palette().color(QPalette::Highlight);
+        p.setPen(QPen(c, 2));
+        c.setAlpha(70);
+        p.setBrush(c);
+        p.drawRoundedRect(r.adjusted(1, 1, -1, -1), radius, radius);
+    }
+
     void startDrag(Qt::DropActions supported) override
     {
         QModelIndexList indexes;
@@ -66,6 +114,17 @@ protected:
     }
 
 private:
+    QPersistentModelIndex drop_target;   // the folder highlighted under a drag
+
+    void set_drop_target(const QModelIndex &i)
+    {
+        if (i == drop_target)
+            return;
+        drop_target = i;
+        this->viewport()->update();
+        this->setProperty("drop_target", i.isValid() ? i.data(PathRole).toString() : QString());   // for the tests
+    }
+
     QPixmap drag_pixmap(const QModelIndexList &indexes, QPoint *hot) const
     {
         // the dragged items as they look in the view (what Qt draws)
@@ -205,7 +264,7 @@ void Pane::setup_common(QAbstractItemView *v)
     v->setEditTriggers(QAbstractItemView::NoEditTriggers);
     v->setDragEnabled(true);
     v->setAcceptDrops(true);
-    v->setDropIndicatorShown(true);
+    v->setDropIndicatorShown(false);   // FileView highlights the folder instead (Qt's also marks between rows)
     v->setDragDropMode(QAbstractItemView::DragDrop);
     v->setDefaultDropAction(Qt::MoveAction);
     v->viewport()->setAcceptDrops(true);   // the grid's Static movement turns drops off there (QListView::setMovement)

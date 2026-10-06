@@ -38,7 +38,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - Phones: thumbnails from the phone's own previews, and iPhone videos copied once so they play smoothly.
 - Faster file operations in the benchmark: copying about 14× faster and moving to another drive about 4.9× faster (see [Performance: Kestrel vs Nemo](#performance-kestrel-vs-nemo)).
 
-**Installs alongside GNOME Files:** Kestrel installs next to GNOME Files (or Nemo on Linux Mint) instead of replacing it. The two share bookmarks, thumbnails, the clipboard, the trash and Recent files, so you can use either. `./install.sh --default` makes Kestrel open folders and "Show in folder" requests and show other apps' Open/Save dialogs, and `./install.sh --uninstall` hands them back.
+**Installs alongside GNOME Files:** Kestrel installs next to GNOME Files (or Nemo on Linux Mint) instead of replacing it. The two share bookmarks, thumbnails, the clipboard, the trash and Recent files, so you can use either. `./install.sh --default` (or `kes-setup --default` with the apt package) makes Kestrel open folders and "Show in folder" requests and show other apps' Open/Save dialogs, and `./install.sh --uninstall` (`kes-setup --undo`) hands them back.
 
 This is a port of the Python/PyQt6 [Kestrel Explorer](../kestrel-explorer) to C++. It has the same features, menus, shortcuts and dialogs, and it reads and writes the same settings, bookmarks and caches, so you can switch between the two versions.
 
@@ -112,7 +112,7 @@ cmake --build build -j"$(nproc)"
 
 This produces two programs in `build/`: `kes` (the app) and `kes-admin-helper` (the small root helper for the [admin session](#admin-session)). They must stay in the same folder.
 
-`install.sh` links `~/.local/bin/kes` to `build/kes` and writes `~/.local/share/applications/kestrel-explorer.desktop`. These are the same names the Python version uses, so installing this version replaces the Python version's `kes` command and app-grid entry. Run the Python version's `install.sh` to switch back.
+`install.sh` links `~/.local/bin/kes` to `build/kes` and writes `~/.local/share/applications/kestrel-explorer.desktop`. These are the same names the Python version uses, so installing this version replaces the Python version's `kes` command and app-grid entry. Run the Python version's `install.sh` to switch back. If the .deb is installed too, this per-user entry is the one the app grid and dock use instead of the package's; `./install.sh --uninstall` removes it, and the package's entry takes over again.
 
 After pulling code changes, run `./install.sh` again (or just `cmake --build build`) to rebuild. Your settings, bookmarks and thumbnail cache are kept (`~/.config/kestrel-explorer`, `~/.config/gtk-3.0/bookmarks`, `~/.cache`).
 
@@ -141,7 +141,7 @@ Package names below are Ubuntu's; Linux Mint uses the same ones.
 | `qt6-base-dev` | The whole user interface (Qt 6 Widgets), image decoding, settings |
 | `libglib2.0-dev` | GIO: default and "Open With" apps, file type detection, trash, drive and network mounting, D-Bus for UWP |
 
-At run time these become the ordinary `libqt6widgets6` and `libglib2.0` libraries, which every Ubuntu desktop already has. Python and Pillow are not needed.
+At run time these become the ordinary `libqt6widgets6` and `libglib2.0` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed (only on Qt 6.4 systems is the system's `python3` used, to read the GTK theme's colours; see above).
 
 **Recommended**: run `./install.sh --install-recommended` to install any of these you're missing. Ubuntu already includes most of them. The ones you'll usually need to add are `kimageformat6-plugins` (RAW and HEIC previews) and some of the archive tools, such as `unrar`, `pigz`, `zpaq` and `lzip`.
 
@@ -190,10 +190,12 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 - Drag and drop:
   - Ctrl copies, Shift moves, Ctrl+Shift creates a link, and Alt asks what to do.
   - With no key held, a drop moves files on the same drive and copies them to another drive.
+  - The folder under the pointer is highlighted, so you can see where the files will go.
 - File operations run on background threads, so the window stays responsive even with tens of thousands of files. Copy, move, duplicate, move to trash, permanent delete, restore, empty trash, compress and extract show their status and a progress bar in the status bar at the bottom of the window, with ✕ to cancel. When several run at once, the bar shows the oldest with "+N more" (hover to see them all). Operations running in your other Kestrel windows are counted too ("+N in other windows"), or shown when this window has none; ✕ on one of those asks its window to cancel it, and 🛡 marks admin-session jobs. Closing a window while operations are running asks whether to stop them or keep going.
 - If a name already exists when copying or moving, you can replace, merge, skip or keep both.
 - Trash, permanent delete, and restoring or emptying the trash. The Trash shows everything you've deleted on every drive in one list: your home trash plus the trash folder each drive keeps for files deleted on it (`.Trash-<uid>`, the same as GNOME Files). The Location column shows where each item came from, and Restore, Delete Permanently and Empty Trash work across all of them.
 - Deleting handles read-only folders you own (common in extracted Windows archives): they're made writable and deleted.
+- Copies and deletes never follow a symbolic link inside the folders they work through, so a folder swapped for a link while they run can't send them anywhere else. A delete also stops at another drive mounted inside the folder, instead of emptying it.
 - Links and shortcuts:
   - Symbolic links (absolute or relative) and hard links.
   - Link to the Desktop.
@@ -364,7 +366,7 @@ Running a whole file manager as root (`sudo kes`) is risky and mostly doesn't wo
 ### How it works
 
 1. An operation fails with "permission denied". Kestrel lists what failed and offers **Retry as Administrator**.
-2. The first time, the normal system password prompt appears. It says something like *"Authentication is needed to run `…/build/kes-admin-helper` as the super user"*: that's Kestrel's small helper (`src/admin_helper.cpp`), started through `pkexec`.
+2. The first time, the normal system password prompt appears. It says something like *"Authentication is needed to run `/usr/bin/kes-admin-helper` as the super user"* (`…/build/kes-admin-helper` when built from source): that's Kestrel's small helper (`src/admin_helper.cpp`), started through `pkexec`.
 3. The helper keeps running as root in the background, and the status bar shows 🛡 **Admin**. From then on, operations that need admin rights are handed to it straight away, with no password and no extra question. Progress and ✕ Cancel work as usual.
 4. The session ends when you click 🛡 Admin → **End Admin Session**, after 15 minutes without admin actions, or when Kestrel quits. The next admin operation asks for your password again.
 
@@ -389,7 +391,7 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 - **It only accepts a fixed set of file operations,** on absolute paths. It refuses to delete, replace or change the permissions of `/`, top-level folders (`/usr`, `/etc`, `/home`, `/var`, and any other folder directly under `/`) and home folders themselves (`/home/name`). One table in the helper lists what each operation may do to each of its paths.
 - **It can't be redirected by a symlink.** Files can change while root works on them: another user, or a program, could swap a folder for a symlink to `/etc`. So the helper never trusts a path as text. It opens each folder on the way one at a time without following symlinks, then works on the name inside the folder it opened. It follows a symlink on the way only if root controls it (owned by root, in a folder only root can write to), such as `/lib` → `usr/lib`. Kestrel resolves your own symlinked folders first, so those keep working. Recursive copies and deletes go folder by folder the same way, and stop if a folder is swapped while they run.
 - **It won't hand out root by accident.** A copy it makes is root's, so it drops the set-user-ID bit from someone else's program (a move between drives keeps the owner instead). It only hard-links your own files, and never deletes a mount point (the drive mounted there would be emptied).
-- **The trade-off:** the helper binary is in the Kestrel build folder, which your account can edit. Anything running as you could change that file before your next admin session. That's the same level of trust as typing `sudo` in your own terminal, which is fine on a personal computer.
+- **The trade-off, when built from source:** the helper binary is in the Kestrel build folder, which your account can edit. Anything running as you could change that file before your next admin session. Installed from the .deb, it's `/usr/bin/kes-admin-helper`, which only root can change. That's the same level of trust as typing `sudo` in your own terminal, which is fine on a personal computer.
 
 ## Differences from the Python version
 
@@ -404,7 +406,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 299 checks in 13 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing that must match between the versions, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
+There are 299 checks in 13 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing that must match between the versions, and `install.sh`. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. The [Python version](../kestrel-explorer/tests) has the same tests, and some checks launch the other version to test the two together. Details: [tests/README.md](tests/README.md).
 
 ## Architecture
 
@@ -418,10 +420,10 @@ There are 299 checks in 13 tests: file operations (copy, move, merge, delete, ca
  File UI      File jobs          GIO        External tools    D-Bus services      Radio
  panes,       (worker threads)   mounts,    7z, tar, zpaq,    Show in folder,     its link to
  sidebar,     copy · move ·      Open With, exiftool,         file chooser        the tower
- viewer,      delete · trash ·   trash      ffmpeg                                (see below)
- search       undo · extract
-              progress, cancel
-              and errors shown
+ viewer,      delete · trash ·   trash      ffmpeg, system                        (see below)
+ search,      undo · extract                thumbnailers
+ thumbnails   progress, cancel
+ (threads)    and errors shown
               in this window
    │              │               │              │
    └──────────────┴───────┬───────┴──────────────┘
@@ -462,8 +464,9 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │   covers, bookmarks, cleared caches                           │
        │ • hands folders to an open window ("open folders as tabs")    │
        │                                                               │
-       │ Checks every message (protocol version, known types and       │
-       │ fields, absolute paths, size); so does each Kestrel.          │
+       │ Checks every message (protocol version, known types, the      │
+       │ types of known fields, absolute paths, size); so does each    │
+       │ Kestrel.                                                      │
        │                                                               │
        │ Never touches files, and runs no jobs. Started by the first   │
        │ Kestrel, gone shortly after the last one leaves.              │
@@ -487,6 +490,7 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 
 | File | Purpose |
 |---|---|
+| `src/main.cpp` | The `kes` program's entry point (calls `kes_main` in `app.cpp`) |
 | `src/app.cpp` | Main window: tabs, toolbar, menus and shortcuts, context menus, preferences, starting up |
 | `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
@@ -513,6 +517,7 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |
 | `src/archive_ui.cpp` | Compress and Extract dialogs, password prompts, and the archive job flows |
 | `src/uwp.cpp` | Integration with the UWP wallpaper manager (over D-Bus and the `uwp` command) |
+| `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
 | `tests/` | The test suite (see [Tests](#tests)) |
 | `bench/` | The benchmark against GNOME Files and Nemo (see Performance: [vs GNOME Files](#performance-kestrel-vs-gnome-files), [vs Nemo](#performance-kestrel-vs-nemo)) |
