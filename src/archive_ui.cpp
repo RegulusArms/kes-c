@@ -342,9 +342,10 @@ void CompressDialog::tool_changed()
     zip_enc->setVisible(zip7);
     zip_enc_lbl->setVisible(zip7);
     split->setVisible(f.volumes && !(f.id == "zip" && t == "zip"));
-    bool on_argv = t == "rar" || t == "zpaq" || t == "zip";
-    enc_note->setText(on_argv ? QString(ARGV_NOTE).arg(t)
-                              : QString("The password is passed to 7-Zip privately (not on its command line)."));
+    static const QMap<QString, QString> names = {{"7z", "7-Zip"}, {"rar", "rar"}, {"zip", "zip"}};
+    enc_note->setText(t == "zpaq" ? QString(ARGV_NOTE).arg(t)
+                                  : "The password is passed to " + names.value(t, t) +
+                                        " privately (not on its command line).");
     level_changed();
 }
 

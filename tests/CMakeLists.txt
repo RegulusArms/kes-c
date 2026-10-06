@@ -16,10 +16,10 @@ list(REMOVE_ITEM APP_SOURCES ${SRC}/main.cpp ${SRC}/admin_helper.cpp ${SRC}/app.
 
 add_library(kes_core OBJECT ${APP_SOURCES})
 target_include_directories(kes_core PUBLIC ${SRC})
-target_compile_definitions(kes_core PUBLIC QT_NO_KEYWORDS KES_VERSION="test")
+target_compile_definitions(kes_core PUBLIC QT_NO_KEYWORDS KES_VERSION="test" TESTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(kes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
 
-foreach(name fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser)
+foreach(name fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser admin_helper ui parsing)
     add_executable(test_${name} test_${name}.cpp)
     target_link_libraries(test_${name} PRIVATE kes_core)
 endforeach()

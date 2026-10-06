@@ -15,6 +15,7 @@ compile_commands.json
 # Claude Code
 .claude/
 CLAUDE.md
+ROADMAP.md
 
 # OS clutter
 .DS_Store

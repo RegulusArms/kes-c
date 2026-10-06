@@ -3,6 +3,7 @@
 #include "admin.h"
 #include "atc.h"
 #include "undo.h"
+#include "stats.h"
 #include "util.h"
 
 #include <QApplication>
@@ -21,7 +22,9 @@
 #include <QVBoxLayout>
 
 #include <cerrno>
+#include <climits>
 #include <cmath>
+#include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <gio/gio.h>
@@ -104,6 +107,7 @@ TaskBoard::TaskBoard()
 void TaskBoard::add(Task *task)
 {
     local << task;
+    stats::peak("tasks at once", local.size());
     connect(task, &Task::progress, this, [this]() {
         schedule(500);
         Q_EMIT changed();
@@ -408,6 +412,83 @@ static bool make_writable(const QString &path)
     return changed;
 }
 
+// Within a tree, copies and deletes work through open folders, by name, never by path again: each folder is opened
+// without following a symlink and must still be the folder that was listed, so a folder swapped for a symlink while
+// the job runs (in /tmp, a shared folder, a USB drive) stops the job instead of leading it into the symlink's target.
+// The path you chose itself, symlinked folders on the way included, is used as it is. A delete doesn't cross into
+// another drive mounted inside the tree.
+struct Fd {
+    explicit Fd(int fd) : fd(fd) {}
+    ~Fd() { reset(); }
+    Fd(const Fd &) = delete;
+    void reset()
+    {
+        if (fd >= 0)
+            ::close(fd);
+        fd = -1;
+    }
+    int release()
+    {
+        int f = fd;
+        fd = -1;
+        return f;
+    }
+    int fd;
+};
+
+static int open_parent(const QString &path)   // the folder a path's last part is in
+{
+    QString dir = dirname(path);
+    int fd = ::open(enc(dir.isEmpty() ? QString("/") : dir).constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0)
+        throw_errno(dir);
+    return fd;
+}
+
+static bool stat_at(int dirfd, const QString &name, struct stat &st)   // lstat of a name in an open folder
+{
+    return ::fstatat(dirfd, enc(name).constData(), &st, AT_SYMLINK_NOFOLLOW) == 0;
+}
+
+static int open_dir_at(int dirfd, const QString &name, const struct stat &st, const QString &shown)
+{
+    int fd = ::openat(dirfd, enc(name).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        throw_errno(shown);
+    struct stat now;
+    if (::fstat(fd, &now) != 0 || now.st_dev != st.st_dev || now.st_ino != st.st_ino) {
+        ::close(fd);
+        throw Error(shown + " changed while it was being worked on");
+    }
+    return fd;
+}
+
+static QStringList names_in(int dirfd, const QString &shown)   // the names in an open folder
+{
+    int dup_fd = ::fcntl(dirfd, F_DUPFD_CLOEXEC, 0);
+    DIR *d = dup_fd >= 0 ? ::fdopendir(dup_fd) : nullptr;
+    if (!d) {
+        int e = errno;
+        if (dup_fd >= 0)
+            ::close(dup_fd);
+        throw_errno(shown, e);
+    }
+    ::rewinddir(d);
+    QStringList out;
+    while (struct dirent *e = ::readdir(d))
+        if (strcmp(e->d_name, ".") && strcmp(e->d_name, ".."))
+            out << dec(e->d_name);   // as util::listdir: names that aren't valid UTF-8 survive the round trip
+    ::closedir(d);
+    return out;
+}
+
+static void copy_times_mode(int fd, const struct stat &st)   // on a descriptor: never through a symlink
+{
+    struct timespec times[2] = {st.st_atim, st.st_mtim};
+    ::futimens(fd, times);
+    ::fchmod(fd, st.st_mode & 07777);
+}
+
 // Runs a list of jobs for a Task. Progress is in bytes, or in files when every job is a delete.
 class Ops {
 public:
@@ -430,6 +511,7 @@ public:
                 total += size_of(j.src);
         }
         total = std::max<qint64>(total, 1);
+        qint64 started = stats::now_ms();
         for (const Job &j : jobs) {
             task->check();
             try {
@@ -449,6 +531,9 @@ public:
                 errors << basename(j.src) + ": " + e.message();
             }
         }
+        qint64 ms = stats::now_ms() - started;
+        if (!by_count && done > 0 && ms > 0)
+            stats::sample("copy speed (MB/s)", done / 1e6 / (ms / 1000.0));
         return errors;
     }
 
@@ -522,26 +607,43 @@ private:
         }
     }
 
+    // The tree is worked on through open folders, by name (see "Within a tree" above the class)
     void remove_tree(const QString &path)
     {
-        if (isdir(path) && !islink(path)) {
-            walk(path, [&](const QString &root, QStringList &dirs, QStringList &files) {
-                for (const QString &name : files + dirs) {
-                    task->check();
-                    QString p = join(root, name);
-                    if (dirs.contains(name) && !islink(p))
-                        util::rmdir(p);
-                    else
-                        util::unlink(p);
-                    count(name);
-                }
-                return true;
-            }, false);
-            util::rmdir(path);
-        } else {
-            util::unlink(path);
+        struct stat st;
+        if (!lstat_(path, st))
+            throw_errno(path);
+        if (S_ISDIR(st.st_mode)) {
+            Fd parent(open_parent(path));
+            remove_at(parent.fd, basename(path), st, path, st.st_dev);
+        } else if (::unlink(enc(path).constData()) != 0) {
+            throw_errno(path);
         }
         count(basename(path));
+    }
+
+    void remove_at(int dirfd, const QString &name, const struct stat &st, const QString &shown, dev_t dev)
+    {
+        if (S_ISDIR(st.st_mode)) {
+            if (st.st_dev != dev)
+                throw Error(shown + " is on another drive (a mount point); not deleting it");
+            {
+                Fd d(open_dir_at(dirfd, name, st, shown));
+                for (const QString &e : names_in(d.fd, shown)) {
+                    task->check();
+                    QString p = join(shown, e);
+                    struct stat est;
+                    if (!stat_at(d.fd, e, est))
+                        throw_errno(p);
+                    remove_at(d.fd, e, est, p, dev);
+                    count(e);
+                }
+            }
+            if (::unlinkat(dirfd, enc(name).constData(), AT_REMOVEDIR) != 0)
+                throw_errno(shown);
+        } else if (::unlinkat(dirfd, enc(name).constData(), 0) != 0) {   // a file or a symlink: the name itself
+            throw_errno(shown);
+        }
     }
 
     void count(const QString &name)
@@ -554,70 +656,113 @@ private:
 
     void copy(const QString &src, const QString &dst, bool merge)
     {
-        if (islink(src)) {
-            if (lexists(dst))
-                util::unlink(dst);
-            util::symlink(util::readlink(src), dst);
-        } else if (isdir(src)) {
-            if (exists(dst) && !merge)
-                remove(dst);
-            makedirs(dst, true);
-            for (const QString &name : listdir(src))
-                copy(join(src, name), join(dst, name), merge);
-            copystat(src, dst, false);
+        struct stat st;
+        if (!lstat_(src, st))
+            throw_errno(src);
+        Fd sp(open_parent(src)), dp(open_parent(dst));
+        copy_at(sp.fd, basename(src), st, src, dp.fd, basename(dst), dst, merge);
+    }
+
+    void copy_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
+                 const QString &dname, const QString &dst, bool merge)
+    {
+        struct stat dst_st;
+        bool dst_exists = stat_at(ddir, dname, dst_st);
+        if (dst_exists && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
+            throw Error(dst + " is a folder");
+        if (S_ISLNK(st.st_mode)) {
+            QByteArray target(PATH_MAX, 0);
+            ssize_t n = ::readlinkat(sdir, enc(sname).constData(), target.data(), target.size() - 1);
+            if (n < 0)
+                throw_errno(src);
+            target.truncate(n);
+            if (dst_exists && ::unlinkat(ddir, enc(dname).constData(), 0) != 0)
+                throw_errno(dst);
+            if (::symlinkat(target.constData(), ddir, enc(dname).constData()) != 0)
+                throw_errno(dst);
+        } else if (S_ISDIR(st.st_mode)) {
+            Fd in(open_dir_at(sdir, sname, st, src));
+            if (dst_exists && !merge) {
+                remove_at_or_retry(ddir, dname, dst_st, dst);
+                dst_exists = false;
+            } else if (dst_exists && !S_ISDIR(dst_st.st_mode)) {
+                throw Error(dst + " exists and isn't a folder");
+            }
+            if (!dst_exists && ::mkdirat(ddir, enc(dname).constData(), 0700) != 0)
+                throw_errno(dst);
+            if (!stat_at(ddir, dname, dst_st))
+                throw_errno(dst);
+            Fd out(open_dir_at(ddir, dname, dst_st, dst));
+            for (const QString &e : names_in(in.fd, src)) {
+                struct stat est;
+                if (!stat_at(in.fd, e, est))
+                    throw_errno(join(src, e));
+                copy_at(in.fd, e, est, join(src, e), out.fd, e, join(dst, e), merge);
+            }
+            copy_times_mode(out.fd, st);
+        } else if (S_ISREG(st.st_mode)) {
+            copy_file_at(sdir, sname, st, src, ddir, dname, dst, dst_exists && S_ISLNK(dst_st.st_mode));
         } else {
-            copy_file(src, dst);
+            throw Error(src + " isn't a regular file, folder or link");
         }
     }
 
-    void copy_file(const QString &src, const QString &dst)
+    void copy_file_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
+                      const QString &dname, const QString &dst, bool dst_is_link)
     {
         QString name = basename(src);
-        int in = ::open(enc(src).constData(), O_RDONLY | O_CLOEXEC);
-        if (in < 0)
+        Fd in(::openat(sdir, enc(sname).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        struct stat now;
+        if (in.fd < 0)
             throw_errno(src);
-        int out = ::open(enc(dst).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-        if (out < 0) {
-            int e = errno;
-            ::close(in);
-            throw_errno(dst, e);
-        }
+        if (::fstat(in.fd, &now) != 0 || now.st_dev != st.st_dev || now.st_ino != st.st_ino)
+            throw Error(src + " changed while it was being copied");
+        // a symlink in the way is replaced, never written through; an existing file is overwritten in place
+        if (dst_is_link && ::unlinkat(ddir, enc(dname).constData(), 0) != 0)
+            throw_errno(dst);
+        Fd out(::openat(ddir, enc(dname).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0666));
+        if (out.fd < 0)
+            throw_errno(dst);
         std::unique_ptr<char[]> buf(new char[CHUNK]);
-        auto fail = [&](const QString &p) {
-            int e = errno;
-            ::close(in);
-            ::close(out);
-            throw_errno(p, e);
-        };
         for (;;) {
             if (task->cancelled) {
-                ::close(in);
-                ::close(out);
-                ::unlink(enc(dst).constData());
+                out.reset();
+                ::unlinkat(ddir, enc(dname).constData(), 0);
                 throw Cancelled();
             }
-            ssize_t n = ::read(in, buf.get(), CHUNK);
+            ssize_t n = ::read(in.fd, buf.get(), CHUNK);
             if (n < 0 && errno == EINTR)
                 continue;
             if (n < 0)
-                fail(src);
+                throw_errno(src);
             if (n == 0)
                 break;
             for (ssize_t off = 0; off < n;) {
-                ssize_t w = ::write(out, buf.get() + off, size_t(n - off));
+                ssize_t w = ::write(out.fd, buf.get() + off, size_t(n - off));
                 if (w < 0 && errno == EINTR)
                     continue;
                 if (w < 0)
-                    fail(dst);
+                    throw_errno(dst);
                 off += w;
             }
             done += n;
             report_progress(name);
         }
-        ::close(in);
-        if (::close(out) != 0)
+        copy_times_mode(out.fd, st);
+        if (::close(out.release()) != 0)
             throw_errno(dst);
-        copystat(src, dst);
+    }
+
+    // a folder in the way of a copy: deleted, with the same retry for read-only folders as remove()
+    void remove_at_or_retry(int dirfd, const QString &name, const struct stat &st, const QString &shown)
+    {
+        try {
+            remove_at(dirfd, name, st, shown, st.st_dev);
+        } catch (const OSError &) {
+            if (!make_writable(shown))
+                throw;
+            remove_at(dirfd, name, st, shown, st.st_dev);
+        }
     }
 };
 

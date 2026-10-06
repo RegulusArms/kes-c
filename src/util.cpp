@@ -513,21 +513,47 @@ void move(const QString &src, const QString &dst)
     }
 }
 
-void rmtree(const QString &p)
+// rmtree below: a folder's contents through the open folder, by name (never following a symlink, and stopping at a
+// folder swapped for one while it runs); best effort, like shutil.rmtree(ignore_errors=True)
+static void rmtree_at(int dirfd, const QByteArray &name)
 {
     struct stat st;
-    if (!lstat_(p, st))
+    if (::fstatat(dirfd, name.constData(), &st, AT_SYMLINK_NOFOLLOW) != 0)
         return;
     if (S_ISDIR(st.st_mode)) {
-        try {
-            for (const QString &n : listdir(p))
-                rmtree(join(p, n));
-        } catch (const OSError &) {
+        int fd = ::openat(dirfd, name.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat now;
+        if (fd < 0)
+            return;
+        if (::fstat(fd, &now) != 0 || now.st_dev != st.st_dev || now.st_ino != st.st_ino) {
+            ::close(fd);
+            return;
         }
-        ::rmdir(enc(p).constData());
+        if (DIR *d = ::fdopendir(fd)) {   // owns fd now
+            QList<QByteArray> names;
+            while (struct dirent *e = ::readdir(d))
+                if (std::strcmp(e->d_name, ".") != 0 && std::strcmp(e->d_name, "..") != 0)
+                    names << QByteArray(e->d_name);
+            for (const QByteArray &n : names)
+                rmtree_at(::dirfd(d), n);
+            ::closedir(d);
+        } else {
+            ::close(fd);
+        }
+        ::unlinkat(dirfd, name.constData(), AT_REMOVEDIR);
     } else {
-        ::unlink(enc(p).constData());
+        ::unlinkat(dirfd, name.constData(), 0);
     }
+}
+
+void rmtree(const QString &p)
+{
+    QString dir = dirname(p);
+    int fd = ::open(enc(dir.isEmpty() ? QString("/") : dir).constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0)
+        return;
+    rmtree_at(fd, enc(basename(p)));
+    ::close(fd);
 }
 
 void write_text(const QString &p, const QByteArray &data, bool exclusive)
@@ -792,15 +818,14 @@ QStringList shlex_split(const QString &s, bool *ok, QString *err)
         if (!quote.isNull()) {
             if (c == quote) {
                 quote = QChar();
-            } else if (quote == '"' && c == '\\' && i + 1 < s.size() &&
-                       QString("\\\"$`\n").contains(s[i + 1])) {
+            } else if (quote == '"' && c == '\\' && i + 1 < s.size() && (s[i + 1] == '\\' || s[i + 1] == '"')) {
                 cur += s[++i];
             } else {
                 cur += c;
             }
             continue;
         }
-        if (c.isSpace()) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
             if (in_word) {
                 out << cur;
                 cur.clear();
@@ -1610,6 +1635,16 @@ static QString desktop_entry_path()
     return join(join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"), "applications"), QString(APP_ID) + ".desktop");
 }
 
+// Kestrel's own icon: from the icon theme once installed (install.sh, the .deb), else the copy built into kes
+QIcon app_icon()
+{
+    if (QIcon::hasThemeIcon(APP_ID))
+        return QIcon::fromTheme(APP_ID);
+    if (QFile::exists(":/kestrel-explorer.png"))
+        return QIcon(":/kestrel-explorer.png");
+    return theme_icon("folder");
+}
+
 void ensure_desktop_entry()
 {
     // On GNOME/Wayland the top bar and dock take the app's icon from the .desktop file whose name matches the
@@ -1623,10 +1658,18 @@ void ensure_desktop_entry()
             return;
     QString launcher = QCoreApplication::applicationFilePath();
     try {
+        // the icon the entry names: into the user's icon theme, from the copy built into kes
+        QString icon = join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"),
+                            QString("icons/hicolor/256x256/apps/%1.png").arg(APP_ID));
+        if (!QIcon::hasThemeIcon(APP_ID) && !exists(icon) && QFile::exists(":/kestrel-explorer.png")) {
+            makedirs(dirname(icon), true);
+            QFile::copy(":/kestrel-explorer.png", icon);
+            QFile::setPermissions(icon, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther);
+        }
         makedirs(dirname(entry), true);
         write_text(entry, QString("[Desktop Entry]\nType=Application\nName=%1\nGenericName=File Manager\n"
                                   "Comment=Manage files, with archive, admin, permission and metadata tools built in\n"
-                                  "Exec=%2 %U\nIcon=folder\nTerminal=false\n"
+                                  "Exec=%2 %U\nIcon=%3\nTerminal=false\n"
                                   "Categories=System;FileTools;FileManager;Viewer;\n"
                                   "MimeType=inode/directory;x-directory/normal;\nStartupWMClass=%3\n")
                                   .arg(APP_NAME, launcher, APP_ID)
