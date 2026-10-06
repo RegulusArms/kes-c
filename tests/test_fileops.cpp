@@ -3,12 +3,17 @@
 
 #include "archive_ui.h"
 
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QMessageBox>
 
 #include <signal.h>
 #include <sys/stat.h>
 #include <utime.h>
+
+#include <atomic>
+#include <thread>
 
 using namespace test;
 
@@ -243,5 +248,73 @@ int main(int argc, char **argv)
     r = proc::run({"true"}, 10000, proc::Options(), QByteArray(4 << 20, 'x'));
     sigaction(SIGPIPE, &saved, nullptr);
     check(!r.failed && !r.timed_out && r.rc == 0, "writing to a program that exits without reading its input doesn't kill Kestrel");
+
+    // -- archive passwords: never on a tool's command line (where every user can see it), apart from zpaq's
+    const QString pw = "Kestrel-pw-7731 \"quoted\"";
+    QDir().mkpath(P("pwsrc"));
+    {
+        QFile f(P("pwsrc/data.bin"));
+        f.open(QIODevice::WriteOnly);
+        QFile rnd("/dev/urandom");
+        rnd.open(QIODevice::ReadOnly);
+        f.write(rnd.read(30 << 20));   // big enough that the tool runs a while, for the watcher to see it
+    }
+    for (const QString &t : QStringList{"rar", "zip"}) {
+        QString label = t + ": a password-protected archive is made and opened, and the password is never on a "
+                            "command line";
+        if (archive::tool(t).isEmpty() || archive::tool(t == "rar" ? "unrar" : "7z").isEmpty()) {
+            skip(label + " (" + t + " isn't installed)");
+            continue;
+        }
+        archive::Format fmt;
+        for (const archive::Format &f : archive::formats())
+            if (f.id == t)
+                fmt = f;
+        QString out = P("secret." + t);
+        std::atomic<bool> watching{true};
+        std::atomic<int> seen{0}, leaked{0};
+        std::thread watcher([&]() {   // every command line on the system, while the jobs run
+            QByteArray needle = pw.left(15).toUtf8(), name = QByteArray("secret.") + t.toUtf8();
+            while (watching) {
+                for (const QString &pid : QDir("/proc").entryList(QDir::Dirs)) {
+                    QFile f("/proc/" + pid + "/cmdline");
+                    if (pid.at(0).isDigit() && f.open(QIODevice::ReadOnly)) {
+                        QByteArray line = f.readAll();
+                        if (line.contains(name)) {
+                            seen++;
+                            if (line.contains(needle))
+                                leaked++;
+                        }
+                    }
+                }
+            }
+        });
+        Task task("test", [](Task *) { return QVariant(); });
+        archive::Spec spec;
+        spec.format = fmt;
+        spec.tool = t;
+        spec.base = P("pwsrc");
+        spec.rels = {"data.bin"};
+        spec.out = out;
+        spec.level = 1;
+        spec.password = pw;
+        spec.total = 30 << 20;
+        bool made = false, opened = false, refused = false;
+        try {
+            archive::compress(&task, spec);
+            made = exists(out);
+            QDir().mkpath(P("pwout-" + t));
+            archive::extract(&task, out, P("pwout-" + t), pw, "overwrite");
+            opened = util::read_file(P("pwout-" + t + "/data.bin")) == util::read_file(P("pwsrc/data.bin"));
+            QDir().mkpath(P("pwbad-" + t));
+            archive::extract(&task, out, P("pwbad-" + t), "wrong", "overwrite");
+        } catch (const archive::WrongPassword &) {
+            refused = true;
+        } catch (const Error &) {
+        }
+        watching = false;
+        watcher.join();
+        check(made && opened && refused && seen > 0 && leaked == 0, label);
+    }
     finish();
 }

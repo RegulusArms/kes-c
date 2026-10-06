@@ -173,13 +173,23 @@ std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts)
     cargv.push_back(nullptr);
     std::vector<QByteArray> envs;
     std::vector<char *> cenv;
-    for (char **e = environ; *e; ++e) {
-        if (opts.c_utf8 && std::strncmp(*e, "LC_ALL=", 7) == 0)
-            continue;
-        envs.emplace_back(*e);
-    }
+    std::vector<QByteArray> extra;
+    for (const QString &v : opts.env)
+        extra.push_back(util::enc(v));
     if (opts.c_utf8)
-        envs.emplace_back("LC_ALL=C.UTF-8");
+        extra.emplace_back("LC_ALL=C.UTF-8");
+    for (char **e = environ; *e; ++e) {
+        bool replaced = false;
+        for (const QByteArray &x : extra) {
+            qsizetype eq = x.indexOf('=');
+            if (std::strncmp(*e, x.constData(), size_t(eq + 1)) == 0)
+                replaced = true;
+        }
+        if (!replaced)
+            envs.emplace_back(*e);
+    }
+    for (const QByteArray &x : extra)
+        envs.push_back(x);
     for (auto &e : envs)
         cenv.push_back(e.data());
     cenv.push_back(nullptr);

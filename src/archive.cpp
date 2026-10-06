@@ -355,14 +355,16 @@ static void write_all(int fd, const char *data, qsizetype n)
 // 100% while the real work carries on silently; the bar then shows busy instead of a stuck number.
 static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QString &label, const QString &cwd,
                                          const QString *stdin_text, const QString &read_phase,
-                                         const QString &progress)
+                                         const QString &progress, const QStringList &env = QStringList())
 {
     static const QRegularExpression percent_re("(\\d{1,3})(?:\\.\\d+)?%");
     static const QRegularExpression zip_count_re("(\\d+)/\\s*(\\d+) ");
     QString stdbuf = tool("stdbuf");
     if (!stdbuf.isEmpty())
         argv = QStringList{stdbuf, "-o0", "-e0"} + argv;
-    auto p = proc::spawn(argv, tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL));
+    proc::Options o = tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL);
+    o.env = env;
+    auto p = proc::spawn(argv, o);
     QByteArray out;
     QElapsedTimer start;
     start.start();
@@ -483,9 +485,19 @@ static QStringList safe_rels(const QStringList &rels)
     return out;
 }
 
+// A password goes to the tool on its stdin (7z, rar) or in an environment variable (zip), which only the same user
+// can read; on the command line, every user could see it in the process list. zpaq has no other way.
+static QString env_password(const QString &option, const QString &pw)   // ZIPOPT / UNZIP: -P "pw", quoted
+{
+    QString q = pw;
+    q.replace('\\', "\\\\").replace('"', "\\\"");
+    return option + "=-P \"" + q + "\"";
+}
+
 struct Command {
     QStringList argv;
     std::optional<QString> stdin_text;
+    QStringList env;
     QStringList display;   // with the password masked
     QString cwd;
 };
@@ -524,10 +536,8 @@ static Command compress_command(const Spec &spec)
         c.argv << spec.extra << "--" << spec.out << rels;
     } else if (t == "zip") {
         c.argv = QStringList{exe("zip"), "-r", "-y", "-dc", QString("-%1").arg(lvl)};   // -dc: "done/remaining" count
-        if (!pw.isEmpty()) {
-            c.argv << "-P" << pw;
-            secret = pw;
-        }
+        if (!pw.isEmpty())
+            c.env << env_password("ZIPOPT", pw);
         c.argv << spec.extra << spec.out << "--" << rels;
     } else if (t == "rar") {
         c.argv = QStringList{exe("rar"), "a", "-y", "-idc", "-idd", "-ol", QString("-m%1").arg(lvl), "-r"};   // -ol: links
@@ -539,9 +549,9 @@ static Command compress_command(const Spec &spec)
             c.argv << QString("-rr%1%").arg(spec.recovery);
         if (spec.volume_mb)
             c.argv << QString("-v%1m").arg(spec.volume_mb);
-        if (!pw.isEmpty()) {
-            c.argv << QString("-%1%2").arg(spec.encrypt_names ? "hp" : "p", pw);
-            secret = pw;
+        if (!pw.isEmpty()) {   // -p / -hp without a value: rar reads the password from stdin
+            c.argv << (spec.encrypt_names ? "-hp" : "-p");
+            c.stdin_text = pw + "\n" + pw + "\n";
         }
         c.argv << spec.extra << "--" << spec.out << rels;
     } else if (t == "zpaq") {
@@ -598,8 +608,10 @@ QString command_preview(const Spec &spec)
     QString text = shlex_join(shown);
     if (fmt.id == "tar")
         text += " > " + shlex_quote(basename(spec.out));
-    if (!spec.password.isEmpty() && spec.tool == "7z")
+    if (!spec.password.isEmpty() && (spec.tool == "7z" || spec.tool == "rar"))
         text += "    (password passed on stdin)";
+    else if (!spec.password.isEmpty() && spec.tool == "zip")
+        text += "    (password passed in the ZIPOPT environment variable)";
     return text;
 }
 
@@ -731,7 +743,7 @@ QString compress(Task *task, const Spec &spec)
                     spec.tool == "zpaq" ? "compressing (zpaq reports no progress for this step)" : QString();
                 auto [rc, text] = run_reporting(task, c.argv, label, c.cwd,
                                                 c.stdin_text ? &*c.stdin_text : nullptr, read_phase,
-                                                spec.tool == "zip" ? "zipcount" : "percent");
+                                                spec.tool == "zip" ? "zipcount" : "percent", c.env);
                 bool ok = rc == 0 || ((spec.tool == "7z" || spec.tool == "rar") && rc == 1);   // 1 = warnings
                 if (!ok) {
                     QString t = tail(text);
@@ -793,6 +805,7 @@ struct ExtractCommand {
     QString tool;
     QStringList argv;
     std::optional<QString> stdin_text;
+    QStringList env;
 };
 
 static ExtractCommand extract_command(const QString &path, const QString &dest, const QString &password,
@@ -811,12 +824,14 @@ static ExtractCommand extract_command(const QString &path, const QString &dest, 
     } else if (t == "unzip") {
         c.argv = QStringList{tool("unzip"), overwrite == "overwrite" ? "-o" : "-n"};
         if (!password.isEmpty())
-            c.argv << "-P" << password;
+            c.env << env_password("UNZIP", password);
         c.argv << "--" << path << "-d" << dest;
     } else if (t == "unrar") {
         QString policy = overwrite == "overwrite" ? "-o+" : overwrite == "skip" ? "-o-" : "-or";
-        c.argv = QStringList{tool("unrar"), "x", "-y", "-idc", "-idd", policy,
-                             password.isEmpty() ? QString("-p-") : "-p" + password};
+        // -p without a value: unrar reads the password from stdin; -p-: there's none, don't ask
+        c.argv = QStringList{tool("unrar"), "x", "-y", "-idc", "-idd", policy, password.isEmpty() ? "-p-" : "-p"};
+        if (!password.isEmpty())
+            c.stdin_text = password + "\n";
         if (threads)
             c.argv << QString("-mt%1").arg(threads);
         c.argv << "--" << path << rstrip(dest, '/') + "/";
@@ -967,7 +982,7 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     ExtractCommand c = extract_command(path, dest, password, overwrite, threads);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
-                                    QString(), c.tool == "unzip" ? QString() : "percent");   // unzip's % are ratios
+                                    QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
     const QString &t = c.tool;
     bool wrong = (t == "unrar" && rc == 11) || text.contains("Wrong password") || text.contains("password incorrect") ||
                  text.toLower().contains("incorrect password");
