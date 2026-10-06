@@ -4,7 +4,11 @@
 // KESTREL_UI_DUMP=file writes the list there instead of comparing (to update ui_actions.txt after a deliberate change).
 #include "common.h"
 
+#include <QAbstractSlider>
+#include <QAccessible>
+#include <QComboBox>
 #include <QFile>
+#include <QHeaderView>
 
 using namespace test;
 
@@ -88,6 +92,35 @@ int main(int argc, char **argv)
         walk(m, "context menu, " + name, out);
         delete m;
     }
+
+    // -- accessibility: every control has a name a screen reader can say (Qt's own accessibility layer, which screen
+    // readers use), as the window opens and with the search bar, the list view and the info panel open
+    auto unnamed = [&]() {
+        QStringList out;
+        for (QWidget *wd : w->findChildren<QWidget *>()) {
+            bool control = qobject_cast<QAbstractButton *>(wd) || qobject_cast<QLineEdit *>(wd) ||
+                           qobject_cast<QAbstractSlider *>(wd) || qobject_cast<QComboBox *>(wd) ||
+                           qobject_cast<QAbstractItemView *>(wd) || qobject_cast<QHeaderView *>(wd);
+            if (!control || !wd->isVisibleTo(w))
+                continue;
+            QAccessibleInterface *ai = QAccessible::queryAccessibleInterface(wd);
+            if (!ai || ai->text(QAccessible::Name).trimmed().isEmpty())
+                out << QString(wd->metaObject()->className()) + " \"" + wd->toolTip().section('\n', 0, 0) + "\"";
+        }
+        return out;
+    };
+    QStringList missing = unnamed();
+    w->pane()->start_search();
+    w->set_view("list");
+    for (QAction *a : w->actions())
+        if (a->text() == "Info Panel" && !a->isChecked())
+            a->trigger();
+    spin(200);
+    missing << unnamed();
+    missing.removeDuplicates();
+    check(missing.isEmpty(), "every control in the window has a name a screen reader can say (also with the search bar, "
+                             "the list view and the info panel open)" +
+                                 (missing.isEmpty() ? QString() : " (no name: " + missing.join(", ") + ")"));
 
     QString dump = qEnvironmentVariable("KESTREL_UI_DUMP");
     if (!dump.isEmpty()) {

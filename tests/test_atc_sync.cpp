@@ -1,6 +1,8 @@
 // The tower (atc.h): starting it, checking in, and passing shared-state changes between Kestrels.
 #include "common.h"
 
+#include "stats.h"
+
 using namespace test;
 
 int main(int argc, char **argv)
@@ -21,6 +23,7 @@ int main(int argc, char **argv)
     write_text(home_path("f1"), "a");
     write_text(home_path("f2"), "b");
     setup_app();
+    stats::enable();   // KESTREL_STATS: the tower delay check
     ThumbnailManager *thumbs = g_thumbs;
     QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
     atc::radio()->start();
@@ -63,6 +66,9 @@ int main(int argc, char **argv)
     fake.report({{"type", "starred"}});
     check(wait_for([&]() { return places::is_starred(f2) && !places::is_starred(f1); }) && starred_signals > 0,
           "Another Kestrel's stars are picked up");
+    fake.report({{"type", "starred"}, {"sent", double(QDateTime::currentMSecsSinceEpoch())}});
+    check(wait_for([]() { return stats::summary().contains("  tower delay (ms): "); }),
+          "with KESTREL_STATS, a report's time to arrive through the tower is counted");
     write_text(thumbs::styles_file(), QJsonDocument(QJsonObject{{d1, QJsonObject{{"color", "#abcdef"}}}}).toJson());
     write_text(thumbs::covers_file(), "{}");
     fake.report({{"type", "folders"}, {"paths", QJsonArray{d1}}});

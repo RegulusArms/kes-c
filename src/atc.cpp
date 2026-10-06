@@ -1,5 +1,6 @@
 #include "atc.h"
 
+#include "stats.h"
 #include "util.h"
 
 #include <QCoreApplication>
@@ -314,6 +315,8 @@ static void on_broadcast(GDBusConnection *conn, const gchar *sender, const gchar
     QJsonObject o = parse(msg);
     if (!valid_message(o))
         return;
+    if (o.value("sent").isDouble())   // KESTREL_STATS (both ends): how long it took to get here
+        stats::sample("tower delay (ms)", double(QDateTime::currentMSecsSinceEpoch()) - o.value("sent").toDouble());
     o["from"] = QString::fromUtf8(flight);
     Q_EMIT radio()->heard(o);
 }
@@ -443,9 +446,13 @@ void Radio::announce(const QString &type, const QJsonObject &extra, bool keep)
         m["keep"] = true;
         rs.kept[type] = m;
     }
-    if (rs.conn && !rs.tower.isEmpty())
-        g_dbus_connection_call(rs.conn, NAME, PATH, IFACE, "Report", g_variant_new("(s)", compact(m).constData()),
+    if (rs.conn && !rs.tower.isEmpty()) {
+        QJsonObject sent = m;
+        if (stats::enabled())   // a field other Kestrels ignore unless they count too
+            sent["sent"] = double(QDateTime::currentMSecsSinceEpoch());
+        g_dbus_connection_call(rs.conn, NAME, PATH, IFACE, "Report", g_variant_new("(s)", compact(sent).constData()),
                                nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
+    }
     m["own"] = true;
     QTimer::singleShot(0, this, [this, m]() { Q_EMIT heard(m); });
 }

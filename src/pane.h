@@ -135,4 +135,5 @@ private:
     SearchModel *search_model = nullptr;
     GridDelegate *delegate;
     QStringList type_filters;   // chooser: the chosen file type's globs
+    qint64 listing_since = -1;  // KESTREL_STATS: when the folder now shown started loading
 };

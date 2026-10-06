@@ -46,6 +46,7 @@ add_executable(kes
     src/opening.cpp
     src/incoming.cpp
     src/pane.cpp
+    src/stats.cpp
     data/kestrel.qrc
 )
 target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
