@@ -2,6 +2,8 @@
 // for the Add Tag picker.
 #pragma once
 
+#include <QByteArray>
+#include <QJsonValue>
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -18,6 +20,9 @@ struct MetaRow {
 Rows basic_info(const QString &path);   // fast summary for the info panel
 Rows ai_info(const QString &path);      // Stable Diffusion / ComfyUI generation info
 QList<MetaRow> full_metadata(const QString &path);
+// An object's keys in the order they were written, with their values (each key once, as Python's json.loads): the
+// object `json` is, or the first in an array of them (exiftool's -j output); empty if it isn't valid JSON
+QList<QPair<QString, QJsonValue>> ordered_object(const QByteArray &json);
 
 // ---------------------------------------------------------------- editing (exiftool)
 

@@ -33,6 +33,9 @@ public:
 
 QString helper_path();
 
+// A request's paths with the folders on the way resolved, as the user (the helper follows only symlinks root controls)
+QVariantMap resolve_paths(const QString &op, QVariantMap args);
+
 class AdminSession : public QObject {
     Q_OBJECT
 public:

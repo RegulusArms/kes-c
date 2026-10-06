@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -23,8 +24,10 @@ Process::~Process()
     for (int fd : {in, out, err})
         if (fd >= 0)
             ::close(fd);
-    if (pid > 0 && !done)
-        poll();   // reap if already finished; a still-running child is left alone
+    // still running: nothing will wait for it any more, so stop it (with its process group) and reap it. Programs
+    // meant to outlive Kestrel are started with start_detached().
+    if (pid > 0 && !done && !poll() && (::killpg(pid, SIGKILL) == 0 || ::kill(pid, SIGKILL) == 0))
+        wait();
 }
 
 void Process::set_status(int status)
@@ -64,6 +67,52 @@ int Process::wait()
         }
     }
     return returncode;
+}
+
+ssize_t write_pipe(int fd, const void *data, size_t n)
+{
+    // SIGPIPE is blocked in this thread for the write; one the write raised is then taken off the pending set, so it
+    // isn't delivered when the mask is restored. (A write the program stops reading partway through returns what it
+    // wrote, not EPIPE, and still raises SIGPIPE: so it's the pending signal that counts, not the result.)
+    sigset_t pipe_set, old, pending;
+    sigemptyset(&pipe_set);
+    sigaddset(&pipe_set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_set, &old);
+    sigpending(&pending);
+    bool was_pending = sigismember(&pending, SIGPIPE);
+    ssize_t w = ::write(fd, data, n);
+    int e = errno;
+    sigpending(&pending);
+    if (!sigismember(&old, SIGPIPE) && !was_pending && sigismember(&pending, SIGPIPE)) {
+        struct timespec now = {0, 0};
+        while (::sigtimedwait(&pipe_set, nullptr, &now) < 0 && errno == EINTR) {
+        }
+    }
+    pthread_sigmask(SIG_SETMASK, &old, nullptr);
+    errno = e;
+    return w;
+}
+
+bool Process::wait_for(int ms)
+{
+    // a pidfd becomes readable when the process exits (Linux 5.3+); without one, check every 10 ms
+    int pidfd = int(::syscall(SYS_pidfd_open, pid, 0));
+    QElapsedTimer timer;
+    timer.start();
+    while (!poll()) {
+        qint64 left = ms - timer.elapsed();
+        if (left <= 0)
+            break;
+        if (pidfd >= 0) {
+            struct pollfd fd = {pidfd, POLLIN, 0};
+            ::poll(&fd, 1, int(left));
+        } else {
+            ::usleep(useconds_t(std::min<qint64>(left, 10) * 1000));
+        }
+    }
+    if (pidfd >= 0)
+        ::close(pidfd);
+    return done;
 }
 
 void Process::kill_group()
@@ -124,13 +173,23 @@ std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts)
     cargv.push_back(nullptr);
     std::vector<QByteArray> envs;
     std::vector<char *> cenv;
-    for (char **e = environ; *e; ++e) {
-        if (opts.c_utf8 && std::strncmp(*e, "LC_ALL=", 7) == 0)
-            continue;
-        envs.emplace_back(*e);
-    }
+    std::vector<QByteArray> extra;
+    for (const QString &v : opts.env)
+        extra.push_back(util::enc(v));
     if (opts.c_utf8)
-        envs.emplace_back("LC_ALL=C.UTF-8");
+        extra.emplace_back("LC_ALL=C.UTF-8");
+    for (char **e = environ; *e; ++e) {
+        bool replaced = false;
+        for (const QByteArray &x : extra) {
+            qsizetype eq = x.indexOf('=');
+            if (std::strncmp(*e, x.constData(), size_t(eq + 1)) == 0)
+                replaced = true;
+        }
+        if (!replaced)
+            envs.emplace_back(*e);
+    }
+    for (const QByteArray &x : extra)
+        envs.push_back(x);
     for (auto &e : envs)
         cenv.push_back(e.data());
     cenv.push_back(nullptr);
@@ -269,7 +328,7 @@ Result run(const QStringList &argv, int timeout_ms, const Options &opts_in, cons
                 continue;
             int fd = fds[i].fd;
             if (fd == p->in) {
-                ssize_t w = ::write(fd, input.constData() + written, size_t(input.size() - written));
+                ssize_t w = write_pipe(fd, input.constData() + written, size_t(input.size() - written));
                 if (w > 0)
                     written += w;
                 if (w < 0 || written >= input.size())
@@ -289,6 +348,9 @@ Result run(const QStringList &argv, int timeout_ms, const Options &opts_in, cons
             }
         }
     }
+    // the pipes are closed (or there were none), but the program may still be running
+    if (!res.timed_out && timeout_ms >= 0)
+        res.timed_out = !p->wait_for(int(std::max<qint64>(0, timeout_ms - timer.elapsed())));
     if (res.timed_out) {
         p->kill_group();
         res.rc = -1;

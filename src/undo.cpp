@@ -121,7 +121,9 @@ void undo(MainWindow *win)
 {
     Op op;
     QString got = shared() ? atc::radio()->request("UndoPop") : QString();
-    if (!got.isEmpty()) {
+    // replayed only if it's a valid entry (any program on the session bus can talk to the tower)
+    if (!got.isEmpty() && got.size() <= atc::MAX_MESSAGE &&
+        atc::valid_undo(QJsonDocument::fromJson(got.toUtf8()).object())) {
         op = from_json(got);
     } else {
         if (stack.isEmpty())

@@ -5,7 +5,7 @@
 // files, settings and running Kestrel windows are never touched.
 #pragma once
 
-#include "app.cpp"   // the app's statics (WINDOWS, g_thumbs, on_atc, handle_fm1…)
+#include "app.cpp"   // the app's state and statics (WINDOWS, g_thumbs, open_window…); on_atc, handle_fm1: incoming.h
 #include "atc.h"
 #include "fileops.h"
 #include "undo.h"

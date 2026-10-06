@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run the test suite (see tests/README.md).
 #   tests/run.sh                    every test
-#   tests/run.sh fileops atc_undo   only these (names: fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser installer)
+#   tests/run.sh fileops atc_undo   only these (names: fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser admin_helper ui parsing installer)
 # Each test runs with a throwaway HOME on a private D-Bus session bus: your files, settings, dock and running
 # Kestrel windows are never touched.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
-ALL=(fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser installer)
+ALL=(fileops atc_sync atc_tasks atc_undo atc_tabs devices sidebar theme chooser admin_helper ui parsing installer)
 TESTS=("$@")
 (( ${#TESTS[@]} )) || TESTS=("${ALL[@]}")
 for t in "${TESTS[@]}"; do
@@ -19,9 +19,19 @@ done
 B="${KESTREL_BUILD_DIR:-build}"
 CMAKE=/usr/bin/cmake
 [[ -x "$CMAKE" ]] || CMAKE="$(command -v cmake)"
+# KESTREL_SANITIZE=address,undefined (or thread): build everything with those sanitizers (CI does; give it its own
+# KESTREL_BUILD_DIR). A finding stops the program, so its test fails.
+SAN=(-DCMAKE_BUILD_TYPE=Release)
+if [[ -n "${KESTREL_SANITIZE:-}" ]]; then
+    SAN=(-DCMAKE_BUILD_TYPE=RelWithDebInfo "-DCMAKE_CXX_FLAGS=-fsanitize=$KESTREL_SANITIZE -fno-omit-frame-pointer"
+         "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$KESTREL_SANITIZE")
+    export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=0:abort_on_error=1}"   # leaks: Qt and GLib keep a lot alive
+    export UBSAN_OPTIONS="${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=1}"
+    export TSAN_OPTIONS="${TSAN_OPTIONS:-halt_on_error=1:second_deadlock_stack=1}"
+fi
 echo "Building…"
-{ "$CMAKE" -S "$ROOT" -B "$ROOT/$B" -DCMAKE_BUILD_TYPE=Release && "$CMAKE" --build "$ROOT/$B" -j"$(nproc)" &&
-  "$CMAKE" -S "$HERE" -B "$HERE/$B" && "$CMAKE" --build "$HERE/$B" -j"$(nproc)"; } >"$HERE/build.log" 2>&1 ||
+{ "$CMAKE" -S "$ROOT" -B "$ROOT/$B" "${SAN[@]}" && "$CMAKE" --build "$ROOT/$B" -j"$(nproc)" &&
+  "$CMAKE" -S "$HERE" -B "$HERE/$B" "${SAN[@]}" && "$CMAKE" --build "$HERE/$B" -j"$(nproc)"; } >"$HERE/build.log" 2>&1 ||
     { tail -30 "$HERE/build.log"; echo "Build failed (full log: tests/build.log)"; exit 1; }
 
 export KES_CXX="$ROOT/$B/kes"

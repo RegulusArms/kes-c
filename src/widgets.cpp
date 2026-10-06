@@ -480,6 +480,7 @@ PathBar::PathBar(QWidget *parent) : QWidget(parent)
     edit_btn = new QToolButton;
     edit_btn->setIcon(theme_icon({"document-edit-symbolic", "edit-symbolic", "document-edit"}));
     edit_btn->setToolTip("Type a location (Ctrl+L)");
+    edit_btn->setAccessibleName("Type a location");
     edit_btn->setAutoRaise(true);
     connect(edit_btn, &QToolButton::clicked, this, [this]() {
         if (edit->isVisible())
@@ -634,6 +635,7 @@ void PathBar::fit(bool force)
 
 Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
 {
+    setAccessibleName("Sidebar");
     // phones and cameras come and go through GIO's volume monitor (QStorageInfo doesn't see them)
     monitor = g_volume_monitor_get();
     for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",

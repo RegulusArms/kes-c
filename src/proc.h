@@ -21,8 +21,11 @@ struct Options {
     int err = PIPE;
     bool new_session = true;   // start_new_session=True: no controlling terminal, its own process group
     bool c_utf8 = false;       // LC_ALL=C.UTF-8: English messages, UTF-8 file names
+    QStringList env;           // extra variables, "NAME=value" (replacing the environment's own)
 };
 
+// A running program. Destroying it while the program still runs stops it, with its process group, and reaps it;
+// programs meant to outlive Kestrel are started with start_detached(). Not thread-safe: its owner serialises calls.
 class Process {
 public:
     ~Process();
@@ -33,6 +36,7 @@ public:
 
     bool poll();          // true once it has exited
     int wait();
+    bool wait_for(int ms);   // wait up to ms for it to exit; true if it has
     void kill_group();    // SIGKILL its whole process group, then reap it
     void close_in();
     void close_out();
@@ -42,6 +46,10 @@ public:
 private:
     void set_status(int status);
 };
+
+// write() to a program's input pipe that can't raise SIGPIPE (which would kill Kestrel, unless it's ignored): if the
+// program has closed its end, it fails with EPIPE instead. Works whatever the process does with SIGPIPE.
+ssize_t write_pipe(int fd, const void *data, size_t n);
 
 // Start argv[0] (searched on PATH). Raises OSError if it can't be started.
 std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts = Options());
@@ -53,7 +61,8 @@ struct Result {
     bool failed = false;   // could not start
 };
 
-// subprocess.run(argv, capture_output=True, timeout=...) — never raises
+// subprocess.run(argv, capture_output=True, timeout=...) — never raises. The timeout (ms, -1: none) covers the whole
+// run, with or without pipes: a program still running then is killed, with its process group, and timed_out is set.
 Result run(const QStringList &argv, int timeout_ms = -1, const Options &opts = Options(),
            const QByteArray &input = QByteArray());
 
