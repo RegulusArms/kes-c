@@ -14,12 +14,13 @@
 
 using namespace test;
 
-// what the computer has installed decides whether these appear (an email client or Bluetooth; Samba; code editors,
-// "Open in Zed" and the like): not listed
+// what the computer has installed decides whether these appear (an email client or Bluetooth; Samba; BleachBit; code
+// editors, "Open in Zed" and the like): not listed
 static bool depends_on_computer(const QString &text)
 {
     static const QStringList ALWAYS = {"Open in Terminal", "Open in New Tab", "Open in New Window"};
-    return text == "Send To" || text == "Network Sharing…" || (text.startsWith("Open in ") && !ALWAYS.contains(text));
+    return text == "Send To" || text == "Network Sharing…" || text.endsWith("with BleachBit…") ||
+           (text.startsWith("Open in ") && !ALWAYS.contains(text));
 }
 
 static QString label(const QAction *a)   // the text without its mnemonic ("&&" is a real "&")

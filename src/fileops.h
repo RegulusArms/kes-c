@@ -170,6 +170,14 @@ struct DirStats {
 };
 // (total bytes, file count, dir count) recursively, not following symlinks
 DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr);
+// What emptying the trash removes: every entry in the trash folders on every drive (files, info and expunged)
+QStringList trash_contents();
+// Shredding with BleachBit (`bleachbit --shred`): files and folders are overwritten, then deleted, so they can't be
+// recovered. A background task; BleachBit reports success either way, so on_done gets the paths still there
+// afterwards (none: all shredded). Not called after a cancel.
+bool can_shred();   // BleachBit is installed
+Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
+            std::function<void(const QStringList &left)> on_done = nullptr);
 
 }  // namespace fileops
 
