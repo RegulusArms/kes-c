@@ -486,7 +486,8 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 
 | File | Purpose |
 |---|---|
-| `src/app.cpp` | Main window, tabs, browser pane (including the combined trash view), actions, context menus |
+| `src/app.cpp` | Main window, tabs, browser pane (including the combined trash view), menus and shortcuts, context menus |
+| `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
 | `src/viewer.cpp` | Image viewer |
