@@ -34,7 +34,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - Admin rights for just the operation that needs them, instead of opening a whole Nemo window as root.
 - Folder icons that preview the images inside.
 - A built-in image viewer, and GIF/WebM playback in the file view.
-- Metadata viewing and editing (EXIF, XMP, AI-generation prompts) and checksums in Properties.
+- Metadata viewing and editing (EXIF, XMP, and the prompts image generators such as Stable Diffusion save in the file) and checksums in Properties.
 - Phones: thumbnails from the phone's own previews, and iPhone videos copied once so they play smoothly.
 - Faster file operations in the benchmark: copying about 20× faster, moving to another drive 5.4× faster, and emptying the trash several hundred times faster (see [Performance: Kestrel vs Nemo](#performance-kestrel-vs-nemo)).
 
@@ -222,7 +222,7 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
     - **Remove:** delete one or more selected tags.
     - **Clear All Metadata…:** strip everything, optionally keeping the orientation and colour profile so the image looks the same.
     - Greyed-out rows (file system info and values exiftool calculates) are read-only.
-    - The tag descriptions and "Accepts" types are AI-generated and may not be completely accurate. Descriptions outside the common tags are built from exiftool's tag names and categories.
+    - The tag descriptions and "Accepts" types were written with the help of an AI tool while Kestrel was being made, and may not be completely accurate. They ship as fixed text: Kestrel itself runs no AI. Descriptions outside the common tags are built from exiftool's tag names and categories.
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum.
 
 **Archives** (details in [Archives](#archives))
@@ -267,7 +267,7 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 - Built-in viewer: arrow keys or the scroll wheel to move between images, zoom and pan, fullscreen (F), slideshow (S), rotate (R/L) and flip (H), an info overlay (I), copy the image (Ctrl+C), trash (Delete), and animated GIF/WebP.
 - Images and videos open in your system's default app unless you choose otherwise. In Preferences you can pick **Open images with** (system default, Kestrel's built-in viewer, or any installed image app) and **Open videos with** (system default or any installed video app). "View Image" in the right-click menu always uses the built-in viewer.
 - The info panel (F3) shows EXIF details: camera, lens, exposure and GPS.
-- It also shows Stable Diffusion / ComfyUI prompts and settings embedded in PNG, WebP and JPEG files.
+- It also shows the prompts and settings that Stable Diffusion, ComfyUI and other image generators save in PNG, WebP and JPEG files. Kestrel only reads that text from the file.
 
 Press F1 in the app for all keyboard shortcuts. Settings are in the ☰ menu under Preferences: homepage, how many images a mosaic uses, whether it picks images by name or newest first, folder colour (the desktop's accent colour unless you pick one), the thumbnail size limit, which apps open images and videos, single-click, folder previews in list view, slideshow speed, playing GIFs and WebM videos, sharing undo between windows, and opening folders from other apps as tabs.
 
@@ -396,7 +396,7 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 ## Differences from the Python version
 
 - **Image decoding is Qt only.** The Python version fell back to Pillow for images Qt couldn't read. This version has no second decoder, so a file Qt can't decode (even with `kimageformat6-plugins`) gets no thumbnail.
-- **The EXIF summary and AI-prompt panel use a built-in reader** instead of Pillow. It reads EXIF from JPEG, PNG (`eXIf`), WebP and TIFF-based RAW files, and text chunks from PNG. HEIC/AVIF EXIF appears only in the Metadata tab (through exiftool).
+- **The EXIF summary and the image-generation prompts in the info panel come from a built-in reader** instead of Pillow. It reads EXIF from JPEG, PNG (`eXIf`), WebP and TIFF-based RAW files, and text chunks from PNG. HEIC/AVIF EXIF appears only in the Metadata tab (through exiftool).
 - **The admin helper is a compiled program** (`kes-admin-helper`) instead of a Python script, so the password prompt names that file rather than `/usr/bin/python3`. It speaks the same protocol and has the same safety rules.
 
 ## Tests
@@ -510,7 +510,7 @@ The C++ and Python versions speak the same protocol (JSON messages), so A and B 
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
 | `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark, preferences |
-| `src/metadata.cpp` | EXIF and PNG-text reading, AI-generation metadata, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types are AI-generated and may not be completely accurate) |
+| `src/metadata.cpp` | EXIF and PNG-text reading, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
@@ -534,7 +534,7 @@ Run Kestrel with `KESTREL_STATS=1` (for example `KESTREL_STATS=1 kes ~/Pictures`
 
 Kestrel Explorer exists in two versions with the same features: the original [Python/PyQt6 version](../kestrel-explorer) and the [C++/Qt 6 port](.). They share settings, bookmarks and caches, so you can switch between them. Both are compared here with GNOME Files 50.2.2, the file manager they replace.
 
-**Test machine:** AMD Ryzen Threadripper 2950X 16-Core Processor (32 threads), Ubuntu 26.04.1 LTS. The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with AI-generation metadata.
+**Test machine:** AMD Ryzen Threadripper 2950X 16-Core Processor (32 threads), Ubuntu 26.04.1 LTS. The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 
 **How it was measured:** each test ran 3 times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. All three apps ran on a headless X server with software rendering (Qt's raster engine, GTK's cairo renderer), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start, so no file indexer ran. The benchmark is in [bench/](bench) and is run with `bench/run.sh`.
 
@@ -590,7 +590,7 @@ These are measured inside the app, because GNOME Files has no equivalent ("Gener
 | Thumbnail all 600 images ("Generate Previews") | 5.00 s | 4.84 s | about the same |
 | Build 150 folder mosaics | 6.56 s | 6.24 s | 1.1× faster |
 | Recursive search over 50,000 files | 0.19 s | 0.12 s | 1.6× faster |
-| Read EXIF / AI metadata for 400 images | 1.62 s | 0.042 s | about 39× faster |
+| Read EXIF / image-generation prompts for 400 images | 1.62 s | 0.042 s | about 39× faster |
 | Peak memory (background jobs) | 75–83 MB | 37–42 MB | |
 
 Thumbnails and mosaics take about as long in both versions, because both decode images with the same Qt C++ code, which the Python version already runs on several threads. The C++ version is much faster where the Python version does the work in Python itself, such as reading metadata, searching and copying, and it uses about half the memory.
@@ -599,7 +599,7 @@ Thumbnails and mosaics take about as long in both versions, because both decode 
 
 Kestrel Explorer exists in two versions with the same features: the original [Python/PyQt6 version](../kestrel-explorer) and the [C++/Qt 6 port](.). They share settings, bookmarks and caches, so you can switch between them. Both are compared here with Nemo, the file manager they replace.
 
-**Test machine:** a VirtualBox virtual machine running Linux Mint 22 (Cinnamon). The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with AI-generation metadata.
+**Test machine:** a VirtualBox virtual machine running Linux Mint 22 (Cinnamon). The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 
 **How it was measured:** each test ran 3 times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. All three apps ran on a headless X server with software rendering (Qt's raster engine, GTK's cairo renderer), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start, so no file indexer ran. The benchmark is in [bench/](bench) and is run with `bench/run.sh`.
 
@@ -655,7 +655,7 @@ These are measured inside the app, because Nemo has no equivalent ("Generate Pre
 | Thumbnail all 600 images ("Generate Previews") | 8.53 s | 8.37 s | about the same |
 | Build 150 folder mosaics | 11.01 s | 11.12 s | about the same |
 | Recursive search over 50,000 files | 0.21 s | 0.17 s | 1.2× faster |
-| Read EXIF / AI metadata for 400 images | 1.92 s | 0.046 s | about 42× faster |
+| Read EXIF / image-generation prompts for 400 images | 1.92 s | 0.046 s | about 42× faster |
 | Peak memory (background jobs) | 58–66 MB | 27–31 MB | |
 
 Thumbnails and mosaics take about as long in both versions, because both decode images with the same Qt C++ code, which the Python version already runs on several threads. The C++ version is much faster where the Python version does the work in Python itself, such as reading metadata, searching and copying, and it uses about half the memory.
