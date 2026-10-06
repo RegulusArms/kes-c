@@ -23,6 +23,8 @@ struct Options {
     bool c_utf8 = false;       // LC_ALL=C.UTF-8: English messages, UTF-8 file names
 };
 
+// A running program. Destroying it while the program still runs stops it, with its process group, and reaps it;
+// programs meant to outlive Kestrel are started with start_detached(). Not thread-safe: its owner serialises calls.
 class Process {
 public:
     ~Process();
