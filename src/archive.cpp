@@ -363,20 +363,20 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
     if (!stdbuf.isEmpty())
         argv = QStringList{stdbuf, "-o0", "-e0"} + argv;
     auto p = proc::spawn(argv, tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL));
-    if (stdin_text) {
-        QByteArray data = stdin_text->toUtf8();
-        try {
-            write_all(p->in, data.constData(), data.size());
-        } catch (const BrokenPipe &) {
-        }
-        p->close_in();
-    }
     QByteArray out;
     QElapsedTimer start;
     start.start();
     int pct = -1;
     QByteArray carry;
     try {
+        if (stdin_text) {
+            QByteArray data = stdin_text->toUtf8();
+            try {
+                write_all(p->in, data.constData(), data.size());
+            } catch (const BrokenPipe &) {
+            }
+            p->close_in();
+        }
         int fd = p->out;
         for (;;) {
             task->check();
@@ -427,7 +427,7 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
                 task->report(0, 0, label + clock);
         }
         p->wait();
-    } catch (const Cancelled &) {
+    } catch (...) {   // cancelled, or any other error: the tool mustn't carry on unseen
         p->kill_group();
         throw;
     }

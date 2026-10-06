@@ -227,5 +227,13 @@ int main(int argc, char **argv)
     check(r.timed_out && clock.elapsed() < 2000, "a program's timeout holds after it closes its output");
     r = proc::run({"sh", "-c", "echo hi"}, 5000);
     check(!r.timed_out && r.rc == 0 && r.out == "hi\n", "a program that finishes in time isn't affected");
+    ::unlink(P("left.pid").toLocal8Bit().constData());
+    pid_t left = 0;
+    {
+        auto tool = proc::spawn({"sh", "-c", "echo $$ > \"$0\"; exec sleep 30", P("left.pid")}, quiet);
+        wait_for([&]() { return QFile::exists(P("left.pid")) && !read_file(P("left.pid")).trimmed().isEmpty(); });
+        left = pid_t(QString::fromUtf8(read_file(P("left.pid"))).trimmed().toInt());
+    }   // nothing refers to it any more
+    check(left > 0 && ::kill(left, 0) != 0, "a tool still running when nothing refers to it any more is stopped");
     finish();
 }

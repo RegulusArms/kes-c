@@ -24,8 +24,10 @@ Process::~Process()
     for (int fd : {in, out, err})
         if (fd >= 0)
             ::close(fd);
-    if (pid > 0 && !done)
-        poll();   // reap if already finished; a still-running child is left alone
+    // still running: nothing will wait for it any more, so stop it (with its process group) and reap it. Programs
+    // meant to outlive Kestrel are started with start_detached().
+    if (pid > 0 && !done && !poll() && (::killpg(pid, SIGKILL) == 0 || ::kill(pid, SIGKILL) == 0))
+        wait();
 }
 
 void Process::set_status(int status)
