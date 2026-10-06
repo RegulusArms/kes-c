@@ -7,8 +7,10 @@
 #include <QAbstractSlider>
 #include <QAccessible>
 #include <QComboBox>
+#include <QDropEvent>
 #include <QFile>
 #include <QHeaderView>
+#include <QMimeData>
 
 using namespace test;
 
@@ -121,6 +123,40 @@ int main(int argc, char **argv)
     check(missing.isEmpty(), "every control in the window has a name a screen reader can say (also with the search bar, "
                              "the list view and the info panel open)" +
                                  (missing.isEmpty() ? QString() : " (no name: " + missing.join(", ") + ")"));
+
+    // -- drag and drop: a file dropped onto a folder goes into it, in both views. The events go where a real drag's go:
+    // to the innermost widget under the pointer that accepts drops
+    w->pane()->close_search();
+    auto drop_onto_folder = [&](const QString &mode, const QString &name) {
+        w->set_view(mode);
+        write_text(home_path(name), "z");
+        QAbstractItemView *v = w->pane()->view();
+        QModelIndex folder;
+        wait_for([&]() {
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++)
+                if (v->model()->index(r, 0, v->rootIndex()).data().toString() == "folder")
+                    folder = v->model()->index(r, 0, v->rootIndex());
+            return folder.isValid() && !v->visualRect(folder).isEmpty();
+        });
+        QWidget *target = v->viewport();
+        while (target && !target->acceptDrops())
+            target = target->parentWidget();
+        if (!folder.isValid() || !target)
+            return false;
+        QPointF pos = target->mapFrom(v->viewport(), v->visualRect(folder).center());
+        QMimeData data;
+        data.setUrls({QUrl::fromLocalFile(home_path(name))});
+        QDragEnterEvent enter(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &enter);
+        QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &move);
+        QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &drop);
+        return wait_for([&]() { return exists(join(home_path("folder"), name)) && !exists(home_path(name)); });
+    };
+    bool in_grid = drop_onto_folder("grid", "dropped-in-grid.txt"), in_list = drop_onto_folder("list", "dropped-in-list.txt");
+    check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view" +
+                                  QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
 
     QString dump = qEnvironmentVariable("KESTREL_UI_DUMP");
     if (!dump.isEmpty()) {
