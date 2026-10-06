@@ -208,6 +208,7 @@ void Pane::setup_common(QAbstractItemView *v)
     v->setDropIndicatorShown(true);
     v->setDragDropMode(QAbstractItemView::DragDrop);
     v->setDefaultDropAction(Qt::MoveAction);
+    v->viewport()->setAcceptDrops(true);   // the grid's Static movement turns drops off there (QListView::setMovement)
     v->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(v, &QWidget::customContextMenuRequested, this, [this, v](const QPoint &pos) { win->context_menu(this, v, pos); });
     connect(v, &QAbstractItemView::doubleClicked, this, &Pane::double_clicked);
