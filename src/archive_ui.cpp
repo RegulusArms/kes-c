@@ -54,7 +54,8 @@ static QHBoxLayout *password_row(QLineEdit *edit, QCheckBox **show_out = nullptr
     return row;
 }
 
-static bool argv_tool(const QString &t) { return t == "unrar" || t == "zpaq" || t == "unzip"; }
+// the only tool that gets the password on its command line (unrar reads it from stdin, unzip from $UNZIP)
+static bool argv_tool(const QString &t) { return t == "zpaq"; }
 
 namespace archive_ui {
 
