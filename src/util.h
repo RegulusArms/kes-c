@@ -201,6 +201,7 @@ QColor blend(const QColor &a, const QColor &b, double t);     // t = 0: a, 1: b
 QColor card_color();    // a card (Overview) that stands out a little from the window background
 QColor card_border();
 QColor error_color();   // red text that is readable on the window background
+QColor ok_color();      // green text that is readable on the window background
 QColor accent_color();  // the desktop's accent (the theme's selection colour)
 // Call fn whenever the desktop's colours change (a light/dark switch, another theme). Qt updates its palette, but a
 // stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)

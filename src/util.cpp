@@ -1110,6 +1110,8 @@ QColor card_border()
 
 QColor error_color() { return QColor(dark_theme() ? "#ff7b63" : "#c01c28"); }   // GNOME's error colours
 
+QColor ok_color() { return QColor(dark_theme() ? "#8ff0a4" : "#26a269"); }   // GNOME's success colours
+
 QColor accent_color() { return QGuiApplication::palette().color(QPalette::Highlight); }
 
 namespace {
