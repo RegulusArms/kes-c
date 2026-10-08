@@ -1,5 +1,6 @@
-// MainWindow's opening of files and folders: activating items (folders navigate, archives offer Extract, images open
-// in the viewer, videos and everything else in their apps, as Preferences says), Quick View, and the image viewer.
+// MainWindow's opening of files and folders: activating items (folders navigate, archives offer Extract, checksum
+// files check the files they list, images open in the viewer, videos and everything else in their apps, as Preferences
+// says), Quick View, and the image viewer.
 // The window itself (tabs, menus, context menus) is in app.cpp.
 #include "app.h"
 
@@ -8,6 +9,7 @@
 #include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "hashcheck.h"
 #include "places.h"
 #include "proc.h"
 #include "util.h"
@@ -50,6 +52,8 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     for (const QString &f : files) {
         if (archive::opens_as_archive(f))
             archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
+        else if (hashcheck::is_hash_file(f) && hashcheck::open_dialog(this, f))
+            ;   // Verify Checksums (one that lists nothing opens as text)
         else if (is_image(f))
             images << f;
         else if (is_video(f))

@@ -105,6 +105,12 @@ private:
     QWidget *checksum_tab();
     void apply();
 
+public:
+    void verify_against(const QString &hash_path);   // the Checksums tab's checksum file (Browse…)
+    QLabel *hash_result = nullptr;                   // what it said
+
+private:
+
     QStringList paths;
     bool single;
     QString path;
@@ -117,6 +123,7 @@ private:
     QHash<mode_t, QCheckBox *> perm_boxes;
     mode_t orig_mode = 0;
     QLabel *octal = nullptr;
+    QLineEdit *hash_edit = nullptr;
     QWidget *meta_tab_widget = nullptr;
     QLineEdit *meta_filter = nullptr;
     QTreeWidget *meta_tree = nullptr;
