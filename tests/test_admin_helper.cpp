@@ -338,6 +338,25 @@ int main(int argc, char **argv)
               "ending the admin session part-way through a copy stops it, keeping the file it was replacing and no "
               "half-made copy");
     }
+    {
+        // "replace": false (a destination that was free when Kestrel planned the job): one another program saves
+        // meanwhile is kept and the copy fails with a conflict; one that's there already is never replaced
+        QString fresh = join(W, "fresh.bin"), mid = join(W, "mid.bin");
+        write_file(mid, "m");
+        ::truncate(enc(mid).constData(), qint64(256) << 20);   // sparse; the first progress report comes at once
+        qint64 id = h.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
+        bool partway = !h.next(id).value("progress").toArray().isEmpty();
+        write_file(fresh, "theirs");
+        QJsonObject r = h.reply(id, 60000);
+        QJsonObject taken = h.call({{"op", "copy"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
+        QJsonObject moved = h.call({{"op", "move"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
+        check(partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
+                  read_file(fresh) == "theirs" && !ok(taken) && !ok(moved) && read_file(join(W, "conf.txt")) == "original" &&
+                  read_file(join(W, "w.txt")) == "hello" && leftovers().isEmpty(),
+              "a copy or move to a new name keeps a file another program saves there meanwhile (or had saved), and says so");
+        QFile::remove(fresh);
+        QFile::remove(mid);
+    }
     QFile::remove(join(W, "huge"));
     QDir().mkpath(join(W, "mvsrc"));
     write_file(join(W, "mvsrc/moved.txt"), "moved");

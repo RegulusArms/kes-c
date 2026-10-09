@@ -927,11 +927,14 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         // goes to a new file that is then renamed over the name. Opening the name would follow a symlink there (or
         // truncate a file hard-linked elsewhere), and a failed run would leave the old file truncated or deleted.
         QString out = join(dest, archive_stem(path));
+        bool replace = false;   // the user's choice for a file that's there; otherwise the name is claimed (put_new)
         if (lexists(out)) {
             if (overwrite == "skip")
                 return dest;
             if (overwrite == "rename")
                 out = unique_path(dest, basename(out), "num");
+            else
+                replace = true;
         }
         QString part;
         int fo = open_part_at(AT_FDCWD, rstrip(dest, '/') + "/", &part);
@@ -974,10 +977,23 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
                 throw_errno(out, e);
             }
         }
-        if (::rename(enc(part).constData(), enc(out).constData()) != 0) {
-            int e = errno;
+        if (replace) {
+            if (::rename(enc(part).constData(), enc(out).constData()) != 0) {
+                int e = errno;
+                ::unlink(enc(part).constData());
+                throw_errno(out, e);
+            }
+            return dest;
+        }
+        // a name that was free: never replacing a file another program put there while this ran
+        try {
+            put_new(part, out);
+        } catch (const OSError &e) {
             ::unlink(enc(part).constData());
-            throw_errno(out, e);
+            if (e.code == EEXIST)
+                throw Error("“" + basename(out) + "” appeared in " + dest +
+                            " while it was being extracted; it was kept as it is, and nothing was put in its place");
+            throw;
         }
         return dest;
     }

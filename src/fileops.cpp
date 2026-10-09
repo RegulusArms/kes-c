@@ -521,13 +521,14 @@ public:
             task->check();
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
+            bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
             try {
                 if (j.op == "delete")
                     remove(j.src);
                 else if (j.op == "move" || j.op == "merge_move")
-                    move(j.src, j.dst, j.op == "merge_move");
+                    move(j.src, j.dst, j.op == "merge_move", claim);
                 else
-                    copy(j.src, j.dst, j.op == "merge_copy");
+                    copy(j.src, j.dst, j.op == "merge_copy", claim);
                 if (replacing)
                     ++replaced;
                 else if (j.op == "merge_copy" || j.op == "merge_move")
@@ -593,11 +594,16 @@ private:
         return lstat_(src, a) && stat_(dirname(dst), b) && a.st_dev == b.st_dev;
     }
 
-    void move(const QString &src, const QString &dst, bool merge)
+    void move(const QString &src, const QString &dst, bool merge, bool claim)
     {
         if (!merge && same_dev(src, dst)) {
             struct stat st, dst_st;
-            if (lstat_(dst, dst_st)) {
+            if (claim && lstat_(dst, dst_st))
+                throw conflict(dst);
+            if (claim) {   // a new name: claimed, never replacing what another program put there meanwhile
+                Fd sp(open_parent(src)), dp(open_parent(dst));
+                claim_name(sp.fd, basename(src), dp.fd, basename(dst), dst);
+            } else if (lstat_(dst, dst_st)) {
                 // replaced in one step (swap_in); the old one is deleted once the moved one is in place
                 if (lstat_(src, st) && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
                     throw Error(dst + " is a folder");
@@ -609,7 +615,7 @@ private:
             report_progress(basename(src));
             return;
         }
-        copy(src, dst, merge);
+        copy(src, dst, merge, claim);
         remove(src);
     }
 
@@ -677,20 +683,25 @@ private:
         }
     }
 
-    void copy(const QString &src, const QString &dst, bool merge)
+    // claim: dst must be new (see Job::replace)
+    void copy(const QString &src, const QString &dst, bool merge, bool claim)
     {
         struct stat st;
         if (!lstat_(src, st))
             throw_errno(src);
         Fd sp(open_parent(src)), dp(open_parent(dst));
-        copy_at(sp.fd, basename(src), st, src, dp.fd, basename(dst), dst, merge);
+        copy_at(sp.fd, basename(src), st, src, dp.fd, basename(dst), dst, merge, claim);
     }
 
+    // claim: dname must still be free when the copy is put there (the items inside a folder being built never are
+    // claimed: only Kestrel writes there)
     void copy_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
-                 const QString &dname, const QString &dst, bool merge)
+                 const QString &dname, const QString &dst, bool merge, bool claim = false)
     {
         struct stat dst_st;
         bool dst_exists = stat_at(ddir, dname, dst_st);
+        if (claim && dst_exists)
+            throw conflict(dst);
         if (dst_exists && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
             throw Error(dst + " is a folder");
         if (S_ISLNK(st.st_mode)) {
@@ -708,10 +719,11 @@ private:
                 if (errno != EEXIST)
                     throw_errno(dst);
             }
-            if (::renameat(ddir, enc(part).constData(), ddir, enc(dname).constData()) != 0) {
-                int e = errno;
+            try {
+                commit(ddir, part, dname, dst, claim);
+            } catch (...) {
                 ::unlinkat(ddir, enc(part).constData(), 0);
-                throw_errno(dst, e);
+                throw;
             }
         } else if (S_ISDIR(st.st_mode)) {
             Fd in(open_dir_at(sdir, sname, st, src));
@@ -748,21 +760,24 @@ private:
                         Fd out(open_dir_at(ddir, part, part_st, dst));
                         copy_into(out.fd);
                     }
-                    swap_in(ddir, part, ddir, dname, dst);
+                    if (claim)
+                        claim_name(ddir, part, ddir, dname, dst);
+                    else
+                        swap_in(ddir, part, ddir, dname, dst);
                 } catch (...) {
                     discard(ddir, part, join(dirname(dst), part));
                     throw;
                 }
             }
         } else if (S_ISREG(st.st_mode)) {
-            copy_file_at(sdir, sname, st, src, ddir, dname, dst);
+            copy_file_at(sdir, sname, st, src, ddir, dname, dst, claim);
         } else {
             throw Error(src + " isn't a regular file, folder or link");
         }
     }
 
     void copy_file_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
-                      const QString &dname, const QString &dst)
+                      const QString &dname, const QString &dst, bool claim)
     {
         QString name = basename(src);
         Fd in(::openat(sdir, enc(sname).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -811,13 +826,57 @@ private:
                 throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
-            if (::renameat(ddir, enc(part).constData(), ddir, enc(dname).constData()) != 0)
-                throw_errno(dst);
+            commit(ddir, part, dname, dst, claim);
         } catch (...) {
             out.reset();
             ::unlinkat(ddir, enc(part).constData(), 0);
             throw;
         }
+    }
+
+    static Error conflict(const QString &dst)
+    {
+        return Error("“" + basename(dst) + "” appeared in " + dirname(dst) +
+                     " while this was being done; it was kept as it is, and nothing was put in its place");
+    }
+
+    // a finished part (a file or link) to its name in the same folder: claimed (claim_name), or replacing what's
+    // there in one rename
+    void commit(int dirfd, const QString &part, const QString &name, const QString &shown, bool claim)
+    {
+        if (claim)
+            claim_name(dirfd, part, dirfd, name, shown);
+        else if (::renameat(dirfd, enc(part).constData(), dirfd, enc(name).constData()) != 0)
+            throw_errno(shown);
+    }
+
+    // src (in src_dir) to the name dst (in dst_dir) on one filesystem, which must still be free: something another
+    // program put there meanwhile is never replaced (RENAME_NOREPLACE; without it, link() for a file or link, which
+    // fails on a taken name, and check-then-rename for a folder). A taken name throws conflict().
+    void claim_name(int src_dir, const QString &src, int dst_dir, const QString &dst, const QString &shown)
+    {
+        if (::renameat2(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), RENAME_NOREPLACE) == 0)
+            return;
+        int e = errno;
+        if (e == EINVAL) {
+            struct stat st, existing;
+            if (stat_at(src_dir, src, st) && S_ISDIR(st.st_mode)) {
+                if (stat_at(dst_dir, dst, existing))
+                    e = EEXIST;
+                else if (::renameat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData()) == 0)
+                    return;
+                else
+                    e = errno;
+            } else if (::linkat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), 0) == 0) {
+                ::unlinkat(src_dir, enc(src).constData(), 0);
+                return;
+            } else {
+                e = errno;
+            }
+        }
+        if (e == EEXIST)
+            throw conflict(shown);
+        throw_errno(shown, e);
     }
 
     // src (in src_dir) to dst (in dst_dir) on one filesystem, replacing what's at dst (shown) in one step. A
@@ -913,7 +972,10 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
                     admin::session().call(task, "delete", {{"path", j.src}});
                 else
                     admin::session().call(task, j.op.contains("copy") ? "copy" : "move",
-                                          {{"src", j.src}, {"dst", j.dst}, {"merge", j.op.startsWith("merge")}});
+                                          {{"src", j.src},
+                                           {"dst", j.dst},
+                                           {"merge", j.op.startsWith("merge")},
+                                           {"replace", j.replace}});
             } catch (const admin::AdminError &e) {
                 errors << basename(j.src) + ": " + e.message();
             }
@@ -1013,7 +1075,7 @@ std::optional<QList<Job>> plan_transfer(QWidget *parent, const QStringList &sour
                 jobs << Job{op, src, unique_path(dest_dir, name, "num")};
             } else {
                 bool merge = isdir(dst) && isdir(src);
-                jobs << Job{merge ? "merge_" + op : op, src, dst};
+                jobs << Job{merge ? "merge_" + op : op, src, dst, true};
             }
         } else {
             jobs << Job{op, src, dst};
