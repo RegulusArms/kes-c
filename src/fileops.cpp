@@ -516,6 +516,8 @@ public:
         qint64 started = stats::now_ms();
         for (const Job &j : jobs) {
             task->check();
+            // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
+            bool replacing = j.op == "copy" && lexists(j.dst);
             try {
                 if (j.op == "delete")
                     remove(j.src);
@@ -523,7 +525,8 @@ public:
                     move(j.src, j.dst, j.op == "merge_move");
                 else
                     copy(j.src, j.dst, j.op == "merge_copy");
-                completed << j;
+                if (!replacing)
+                    completed << j;
             } catch (const OSError &e) {
                 if (e.permission())
                     denied << j;
@@ -1315,6 +1318,9 @@ ConflictDialog::ConflictDialog(QWidget *parent, const QString &dst, bool is_dir)
     auto *lay = new QVBoxLayout(this);
     QString kind = is_dir ? "folder" : "file";
     lay->addWidget(new QLabel(QString("A %1 named “%2” already exists in\n%3").arg(kind, basename(dst), dirname(dst))));
+    if (is_dir)
+        lay->addWidget(new QLabel("Merge puts the contents into the existing folder: files there with the same names are\n"
+                                  "replaced. A merge can't be undone."));
     all_box = new QCheckBox("Apply this action to all conflicts");
     lay->addWidget(all_box);
     auto *bb = new QDialogButtonBox;

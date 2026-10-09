@@ -183,6 +183,43 @@ int main(int argc, char **argv)
               !ok(h.call({{"op", "copyfile"}, {"src", join(W, "t.txt")}, {"dst", join(W, "c.txt")}})),
           "copyfile copies a file and won't overwrite one");
 
+    // what the helper makes gets the owner of the folder it's made in (run as root: the user's in their home), not
+    // the helper's. Seen here through the group: a folder given another of the user's groups
+    {
+        gid_t groups[256];
+        int n = getgroups(256, groups);
+        gid_t other = getegid();
+        for (int i = 0; i < n; ++i)
+            if (groups[i] != getegid())
+                other = groups[i];
+        if (other == getegid()) {
+            skip("new items get the folder's owner (the user has no other group)");
+        } else {
+            QString own = join(W, "own"), src = join(W, "own-src.txt");
+            QDir().mkpath(own);
+            (void)!chown(own.toLocal8Bit().constData(), -1, other);
+            write_file(src, "s");
+            chmod(src.toLocal8Bit().constData(), 02755);
+            make_tree(join(W, "own-tree"), 1, 1);
+            bool done = ok(h.call({{"op", "copy"}, {"src", src}, {"dst", join(own, "copy.txt")}})) &&
+                        ok(h.call({{"op", "copy"}, {"src", join(W, "own-tree")}, {"dst", join(own, "tree")}})) &&
+                        ok(h.call({{"op", "mkdir"}, {"path", join(own, "new/sub")}})) &&
+                        ok(h.call({{"op", "touch"}, {"path", join(own, "t.txt")}})) &&
+                        ok(h.call({{"op", "write"}, {"path", join(own, "w.txt")}, {"text", "w"}})) &&
+                        ok(h.call({{"op", "copyfile"}, {"src", src}, {"dst", join(own, "cf.txt")}})) &&
+                        ok(h.call({{"op", "symlink"}, {"target", "t.txt"}, {"link", join(own, "l")}}));
+            bool all = done;
+            for (const QString &name : {"copy.txt", "tree", "tree/d0", "tree/d0/f0", "new", "new/sub", "t.txt", "w.txt",
+                                        "cf.txt", "l"}) {
+                struct stat st;
+                all = all && lstat(join(own, name).toLocal8Bit().constData(), &st) == 0 && st.st_gid == other;
+            }
+            check(all, "copies, new folders (and the parents made for them), files and links get the folder's owner");
+            check(done && mode_of(join(own, "copy.txt")) == 0755,
+                  "a copy given another group loses its set-group-ID bit");
+        }
+    }
+
     QString tree = join(W, "tree");
     make_tree(tree, 2, 2);
     symlink(victim.toLocal8Bit().constData(), join(tree, "to-victim").toLocal8Bit().constData());

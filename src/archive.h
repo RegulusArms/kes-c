@@ -94,5 +94,8 @@ ProbeResult probe(const QString &path);   // look inside an archive without a pa
 // Raises WrongPassword, Error or Cancelled.
 QString extract(Task *task, const QString &path, const QString &dest, const QString &password = QString(),
                 const QString &overwrite = "rename", int threads = 0);
+// A symlink target that leads out of the folder an archive is extracted into: an absolute one, or one whose ".."s
+// climb above it. depth: how many folders below that folder the link is.
+bool link_escapes(int depth, const QByteArray &target);
 
 }  // namespace archive
