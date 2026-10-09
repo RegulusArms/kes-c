@@ -12,6 +12,7 @@
 
 #include <QClipboard>
 #include <QCursor>
+#include <QFile>
 #include <QGuiApplication>
 #include <QInputDialog>
 #include <QLineEdit>
@@ -103,9 +104,18 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         const QMimeData *md = QGuiApplication::clipboard()->mimeData();
         if (md && md->hasImage()) {
             QString dst = unique_path(target, "Pasted image.png", "num");
-            if (QGuiApplication::clipboard()->image().save(dst, "PNG"))
+            QImage img = QGuiApplication::clipboard()->image();
+            try {   // made whole under a hidden name, then given the new name (write_parts)
+                write_parts(dst, [&](int fd) {
+                    QFile f;
+                    if (!f.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle) || !img.save(&f, "PNG"))
+                        throw OSError(EIO, "Couldn't save the pasted image");
+                }, true);
                 undo::record_paths("create", "Paste", {dst});
-            pane()->select_later(dst);
+                pane()->select_later(dst);
+            } catch (const OSError &e) {
+                QMessageBox::warning(this, "Paste", e.message());
+            }
         }
         return;
     }
@@ -225,7 +235,7 @@ void MainWindow::new_file(const QString &tmpl)
     }
     try {
         if (!tmpl.isEmpty())
-            copyfile(tmpl, p);
+            copyfile(tmpl, p, true);
         else
             write_text(p, QByteArray(), true);
         undo::record_paths("create", "New File", {p});

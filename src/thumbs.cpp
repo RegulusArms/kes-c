@@ -469,16 +469,27 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
         makedirs(dirname(cache), true);
     } catch (const OSError &) {
     }
+    // saved whole under a hidden name, then renamed over the old one: another Kestrel never reads half a PNG
+    auto save = [&cache](const QImage &im) {
+        try {
+            write_parts(cache, [&](int fd) {
+                QFile f;
+                if (!f.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle) || !im.save(&f, "PNG"))
+                    throw OSError(EIO, "couldn't save " + cache);
+            }, false);
+        } catch (const OSError &) {
+        }
+    };
     if (images.isEmpty()) {
         QImage marker(1, 1, QImage::Format_ARGB32);
         marker.fill(Qt::transparent);
         marker.setText("FE::Tag", "empty|" + tag);
-        marker.save(cache, "PNG");
+        save(marker);
         return QImage();
     }
     QImage img = compose_folder(images, size, opts.color, videos);
     img.setText("FE::Tag", tag);
-    img.save(cache, "PNG");
+    save(img);
     stats::count("folder previews made");
     return img;
 }
