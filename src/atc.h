@@ -6,8 +6,9 @@
 // cleared caches) and hears what the other flights report. The first Kestrel that finds no tower starts one, and the
 // tower lands itself shortly after the last flight leaves. If the tower goes down, the flights start a new one.
 //
-// The Python and C++ versions speak the same protocol (JSON messages), so they share one tower. Admin sessions are
-// never shared: each window keeps its own.
+// Up to 0.3.0-alpha.9 the Python version spoke the same protocol (JSON messages) and shared the tower; the two are
+// developed separately since, and a flight that speaks another PROTOCOL is ignored. Admin sessions are never shared:
+// each window keeps its own.
 #pragma once
 
 #include <QJsonObject>
@@ -18,7 +19,7 @@ namespace atc {
 
 extern const char *NAME;   // the tower's bus name
 
-// The protocol (the same in the Python version; see "the protocol" in atc.cpp for the message types and fields).
+// The protocol (see "the protocol" in atc.cpp for the message types and fields). Bump PROTOCOL when a message changes.
 // A flight checks in with {"pid", "impl", "version", "protocol"}; one speaking another protocol is ignored (one that
 // names none predates the version and speaks 1). Messages from other programs on the session bus are checked by the
 // tower and again by each radio: a JSON object of at most MAX_MESSAGE bytes, a known "type", each known field of the

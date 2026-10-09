@@ -1,5 +1,5 @@
 // A browser pane: one tab's view of a folder (grid or list), the overview page, the combined trash, Starred and Recent,
-// search, history and selection. Python: kestrel/pane.py.
+// search, history and selection.
 #pragma once
 
 #include <QPointer>

@@ -113,6 +113,12 @@ static int mode_of(const QString &p)
     return lstat(p.toLocal8Bit().constData(), &st) == 0 ? int(st.st_mode & 07777) : -1;
 }
 
+static ino_t inode_of(const QString &p)
+{
+    struct stat st;
+    return lstat(p.toLocal8Bit().constData(), &st) == 0 ? st.st_ino : 0;
+}
+
 static bool is_link(const QString &p)
 {
     struct stat st;
@@ -352,7 +358,7 @@ int main(int argc, char **argv)
     check(ok(h.call({{"op", "symlink"}, {"target", "w.txt"}, {"link", join(W, "sl")}})) &&
               QFile::symLinkTarget(join(W, "sl")) == join(W, "w.txt") &&
               ok(h.call({{"op", "hardlink"}, {"target", join(W, "w.txt")}, {"link", join(W, "hl")}})) &&
-              read_file(join(W, "hl")) == "hello",
+              inode_of(join(W, "hl")) == inode_of(join(W, "w.txt")) && read_file(join(W, "hl")) == "hello",
           "symlink and hardlink make links");
     QJsonObject other = h.call({{"op", "hardlink"}, {"target", "/etc/hostname"}, {"link", join(W, "not-mine")}});
     check(!ok(other) && other.value("error").toString().contains("isn't yours") && !QFile::exists(join(W, "not-mine")),

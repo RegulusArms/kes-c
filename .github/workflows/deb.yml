@@ -39,7 +39,6 @@ jobs:
             dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils
 
       - name: Run the tests
-        # the cross-version checks (the Python version, ../kestrel-explorer) are skipped here
         run: tests/run.sh
 
   sanitizers:
