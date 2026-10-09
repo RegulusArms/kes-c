@@ -9,6 +9,7 @@
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 
 #include <cstdio>
 #include <fcntl.h>
@@ -185,6 +186,37 @@ int main(int argc, char **argv)
     check(ok(h.call({{"op", "move"}, {"src", join(W, "tree2")}, {"dst", join(W, "tree3")}})) &&
               !QFile::exists(join(W, "tree2")) && QFile::exists(join(W, "tree3/d0/f0")),
           "move moves a folder");
+    // the same entry as source and destination: the helper must notice (its "replace the destination" step would
+    // delete the source), whatever Kestrel sends
+    auto contents = [](const QString &root) {   // names and file contents
+        QStringList out;
+        QDirIterator it(root, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            out << relpath(f, root) + "=" + (QFileInfo(f).isFile() ? QString::fromUtf8(read_file(f)) : QString());
+        }
+        out.sort();
+        return out;
+    };
+    write_file(join(W, "self.txt"), "mine");
+    QStringList tree_before = contents(join(W, "tree3"));
+    h.call({{"op", "move"}, {"src", join(W, "self.txt")}, {"dst", join(W, "self.txt")}});
+    h.call({{"op", "copy"}, {"src", join(W, "self.txt")}, {"dst", join(W, "self.txt")}});
+    h.call({{"op", "move"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}});
+    h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}});
+    h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}, {"merge", true}});
+    check(read_file(join(W, "self.txt")) == "mine" && !tree_before.isEmpty() && contents(join(W, "tree3")) == tree_before,
+          "moving or copying a file or folder onto itself leaves it as it was");
+    QJsonObject into_move = h.call({{"op", "move"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
+    QJsonObject into_copy = h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
+    check(!into_move.isEmpty() && !ok(into_move) && !into_copy.isEmpty() && !ok(into_copy) &&
+              contents(join(W, "tree3")) == tree_before,
+          "moving or copying a folder into itself is refused, and the folder is left as it was");
+    write_file(join(W, "hl-a"), "linked");
+    (void)!::link(enc(join(W, "hl-a")).constData(), enc(join(W, "hl-b")).constData());
+    h.call({{"op", "move"}, {"src", join(W, "hl-a")}, {"dst", join(W, "hl-b")}});
+    check(read_file(join(W, "hl-b")) == "linked", "moving a file onto a hard link to it keeps the file");
     write_file(join(W, "r1"));
     check(ok(h.call({{"op", "rename"}, {"src", join(W, "r1")}, {"dst", join(W, "r2")}})) &&
               QFile::exists(join(W, "r2")) &&
