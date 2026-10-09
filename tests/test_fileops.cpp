@@ -275,18 +275,23 @@ int main(int argc, char **argv)
         ::truncate(enc(P("race/big.bin")).constData(), qint64(256) << 20);   // sparse: long enough to step in
         make(P("race/dir/inner.bin"), "i");
         ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(256) << 20);
-        // on the copying thread, at its first report on the file: "another program" saves the destination
+        // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
+        // is still to come), "another program" saves the destination. Watched here, not through progress reports,
+        // which come at most every 80 ms: a fast disk can copy the file before the first one.
         auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
             boxes.clear();
             bool stepped = false;
             Task *t = fileops::start_ops(w, {job}, "Test", []() {});
-            QObject::connect(t, &Task::progress, t, [&stepped, intrude](double, const QString &text) {
-                if (!stepped && text.endsWith(".bin")) {
-                    stepped = true;
-                    intrude();
-                }
-            }, Qt::DirectConnection);
             QPointer<Task> tp(t);
+            QElapsedTimer clock;
+            clock.start();
+            while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
+                if (!leftovers().isEmpty()) {
+                    intrude();
+                    stepped = true;
+                }
+                QThread::usleep(200);
+            }
             wait_for([&]() { return !tp; }, 20000);
             wait_for([]() { return !boxes.isEmpty(); }, 3000);
             return stepped;
@@ -903,20 +908,28 @@ int main(int argc, char **argv)
             f.write(rnd.read(48 << 20));   // doesn't compress: long enough to step in
         }
         proc::run({"gzip", "-1", join(base, "noise.bin")});
+        // as with the copies above: "another program" saves noise.bin once the hidden part has appeared beside it
         bool stepped = false;
         Task task("test", [](Task *) { return QVariant(); });
-        QObject::connect(&task, &Task::progress, &task, [&](double, const QString &) {
-            if (!stepped) {
-                stepped = true;
-                write_text(join(dest, "noise.bin"), "theirs");
-            }
-        }, Qt::DirectConnection);
         QString said;
-        try {
-            archive::extract(&task, join(base, "noise.bin.gz"), dest, QString(), "rename");
-        } catch (const Error &e) {
-            said = e.message();
+        std::atomic<bool> done{false};
+        std::thread extracting([&]() {
+            try {
+                archive::extract(&task, join(base, "noise.bin.gz"), dest, QString(), "rename");
+            } catch (const Error &e) {
+                said = e.message();
+            }
+            done = true;
+        });
+        while (!stepped && !done) {
+            for (const QString &n : listdir(dest))
+                if (n.startsWith(".kes-") && !stepped) {
+                    write_text(join(dest, "noise.bin"), "theirs");
+                    stepped = true;
+                }
+            QThread::usleep(200);
         }
+        extracting.join();
         check(stepped && said.contains("appeared") && text_of(join(dest, "noise.bin")) == "theirs" &&
                   listdir(dest) == QStringList{"noise.bin"},
               "decompressing a single file: one another program saves under its name meanwhile is kept, and the "
