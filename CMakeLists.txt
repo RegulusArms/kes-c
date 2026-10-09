@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(kestrel-explorer VERSION 0.2.1 LANGUAGES CXX)
-
+# The one version to bump. project() takes only its numbers (0.3.0-alpha.3 → 0.3.0); the .deb's is set below.
 set(KES_VERSION "0.3.0-alpha.3")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
+project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
