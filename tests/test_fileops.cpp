@@ -379,6 +379,56 @@ int main(int argc, char **argv)
               label);
     }
 
+    // -- a single compressed file (note.txt.gz → note.txt) where the destination already has a symlink named note.txt:
+    // the name is replaced, never written through (a dangling link would create its target, a live one truncate it)
+    {
+        QString base = P("gzlink"), dest = join(base, "dest"), outside = join(base, "outside");
+        makedirs(dest, true);
+        makedirs(outside, true);
+        make(join(base, "note.txt"), "new\n");
+        proc::run({"gzip", "-k", join(base, "note.txt")});
+        write_text(join(base, "bad.txt.gz"), "not gzip at all");
+        auto run_extract = [&](const QString &archive_path, const QString &overwrite) {
+            Task task("test", [](Task *) { return QVariant(); });
+            try {
+                archive::extract(&task, archive_path, dest, QString(), overwrite);
+                return true;
+            } catch (const Error &) {
+                return false;
+            }
+        };
+        auto reset = [&](const QString &target) {
+            QDir(dest).removeRecursively();
+            QDir(outside).removeRecursively();
+            makedirs(dest, true);
+            makedirs(outside, true);
+            if (target == "keep.txt")
+                make(join(outside, "keep.txt"), "keep\n");
+            ::symlink(enc(join(outside, target)).constData(), enc(join(dest, "note.txt")).constData());
+        };
+        bool dangling_ok = true, live_ok = true;
+        for (const QString &mode : QStringList{"rename", "overwrite"}) {
+            reset("created.txt");
+            bool ran = run_extract(join(base, "note.txt.gz"), mode);
+            QString got = mode == "rename" ? join(dest, "note (2).txt") : join(dest, "note.txt");
+            dangling_ok = dangling_ok && ran && listdir(outside).isEmpty() && !islink(got) && text_of(got) == "new\n" &&
+                          (mode == "overwrite" || islink(join(dest, "note.txt")));
+            reset("keep.txt");
+            ran = run_extract(join(base, "note.txt.gz"), mode);
+            live_ok = live_ok && ran && text_of(join(outside, "keep.txt")) == "keep\n" && !islink(got) &&
+                      text_of(got) == "new\n";
+        }
+        check(dangling_ok,
+              "decompressing a single file doesn't write through a dangling symlink of that name (Keep both and Replace)");
+        check(live_ok, "...or truncate the file a symlink of that name points to (Keep both and Replace)");
+        QDir(dest).removeRecursively();
+        makedirs(dest, true);
+        make(join(dest, "bad.txt"), "old\n");
+        bool failed = !run_extract(join(base, "bad.txt.gz"), "overwrite");
+        check(failed && text_of(join(dest, "bad.txt")) == "old\n" && listdir(dest) == QStringList{"bad.txt"},
+              "a failed decompress leaves the file it would have replaced, and no temporary file");
+    }
+
     // -- Shred with BleachBit: `bleachbit --shred` on the chosen files and folders, and what's still there afterwards
     // reported (BleachBit reports success either way); Empty Trash with BleachBit hands it every item in the trash and
     // its record; ✕ stops it. A stand-in bleachbit here: it only touches this test's home (the trash list also has
