@@ -300,6 +300,54 @@ int main(int argc, char **argv)
               said.value(2).contains("isn't a checksum file"),
           QString("Properties' Checksums tab checks a file against a chosen checksum file (%1)").arg(said.join(" | ")));
 
+    // -- making checksum files (Create Checksum File…)
+    make(P("mk/a.txt"), "alpha\n");
+    make(P("mk/back\\slash.txt"), "back\n");
+    make(P("mk/sub/inner.txt"), "inner\n");
+    make(P("mk/sub/deep/z.txt"), "zed\n");
+    QStringList mk_paths{P("mk/a.txt"), P("mk/back\\slash.txt"), P("mk/sub")};
+    auto all_ok = [](const QString &sums) {
+        QStringList out;
+        for (const auto &e : hashcheck::parse(sums))
+            out << e.name + ":" + e.algo + ":" + hashcheck::verify(e).status;
+        return out;
+    };
+    QStringList errs;
+    QStringList made = hashcheck::create(nullptr, mk_paths, P("mk"), "set", hashcheck::create_algorithms(), false, &errs);
+    QStringList made_names, per_algo;
+    for (const QString &m : made) {
+        made_names << basename(m);
+        per_algo << all_ok(m).join(",");
+    }
+    const QString listed = "a.txt:%1:ok,back\\slash.txt:%1:ok,sub/inner.txt:%1:ok,sub/deep/z.txt:%1:ok";
+    bool each_ok = made_names.join(",") == "set.sfv,set.md5,set.sha1,set.sha256,set.sha512,set.b2" && errs.isEmpty();
+    for (int i = 0; i < per_algo.size(); i++)
+        each_ok = each_ok && per_algo[i] == listed.arg(hashcheck::create_algorithms()[i]);
+    check(each_ok, "Create Checksum File makes one file per algorithm (md5sum's format, SFV for CRC32) that verify as "
+                   "OK, with the files inside folders");
+    made = hashcheck::create(nullptr, mk_paths, P("mk"), "set", hashcheck::create_algorithms(), true, &errs);
+    QStringList bsd_lines = all_ok(P("mk/set-CHECKSUM"));
+    bool bsd_ok = made == QStringList{P("mk/set-CHECKSUM")} && bsd_lines.size() == 24 &&
+                  std::all_of(bsd_lines.begin(), bsd_lines.end(), [](const QString &l) { return l.endsWith(":ok"); }) &&
+                  text_of(P("mk/set-CHECKSUM")).contains("\\SHA256 (back\\\\slash.txt) = ");
+    hashcheck::create(nullptr, {P("mk")}, P("mk"), "all", {"sha256"}, true, &errs);
+    hashcheck::create(nullptr, {P("mk")}, P("mk"), "all", {"sha256"}, true, &errs);
+    QStringList again = all_ok(P("mk/all-CHECKSUM"));
+    check(bsd_ok && !again.isEmpty() && !again.join(",").contains("all-CHECKSUM") &&
+              std::all_of(again.begin(), again.end(), [](const QString &l) { return l.endsWith(":ok"); }),
+          "...or one file with every algorithm as BSD tags (escaped names), and making it again leaves out its own "
+          "older copy");
+    make(P("mk/locked.txt"), "locked\n");
+    ::chmod(enc(P("mk/locked.txt")).constData(), 0);
+    errs.clear();
+    hashcheck::create(nullptr, {P("mk/a.txt"), P("mk/locked.txt")}, P("mk"), "two", {"md5"}, false, &errs);
+    QStringList two = all_ok(P("mk/two.md5"));
+    ::chmod(enc(P("mk/locked.txt")).constData(), 0644);
+    hashcheck::CreateDialog cd(w, {P("mk/a.txt")});
+    check(two == QStringList{"a.txt:md5:ok"} && errs.size() == 1 && errs.value(0).startsWith("locked.txt: ") &&
+              cd.stem() == "a.txt" && cd.dir() == P("mk") && cd.outputs() == QStringList{P("mk/a.txt.sha256")},
+          "a file that can't be read is left out and named; the dialog starts from the item's name and folder, and SHA256");
+
     // -- symlinks inside a tree: never followed, even when one is swapped in while a job runs
     QString victim = P("victim");   // stands for files elsewhere that a job mustn't touch
     auto reset_victim = [&]() {
