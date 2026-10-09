@@ -301,14 +301,16 @@ void MainWindow::rename(const QStringList &paths)
     }
 }
 
-void MainWindow::trash_paths(const QStringList &paths)
+void MainWindow::trash_paths(const QStringList &selected)
 {
+    // what's already in the trash can only be deleted permanently (delete_paths asks first); the rest goes to the
+    // trash. A selection can hold both (a search, Recent, Starred).
+    QStringList paths, trashed_already;
+    for (const QString &p : selected)
+        (in_trash(p) ? trashed_already : paths) << p;
+    delete_paths(trashed_already);
     if (paths.isEmpty())
         return;
-    if (in_trash(paths.first())) {
-        delete_paths(paths);
-        return;
-    }
     auto trashed = std::make_shared<QStringList>();
     auto work = [paths, trashed](Task *task) -> QVariant {
         QVariantList failed;

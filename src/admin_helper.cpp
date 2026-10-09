@@ -187,6 +187,39 @@ static bool trusted_link(int dirfd, const struct stat &link)   // a symlink only
     return link.st_uid == 0 && fstat(dirfd, &dir) == 0 && dir.st_uid == 0 && !(dir.st_mode & (S_IWGRP | S_IWOTH));
 }
 
+// Who owns what the helper makes. A move keeps each item's owner. Anything new (a copy, a new folder, file or link)
+// gets the owner of the folder it's made in: the user's in their home, root's in /etc. Made as root, it would
+// otherwise be root's, and often of no use to the user who asked for it.
+struct Owner {
+    bool keep = false;   // each item's own (a move)
+    uid_t uid = 0;
+    gid_t gid = 0;
+};
+
+static Owner keep_owner()
+{
+    Owner o;
+    o.keep = true;
+    return o;
+}
+
+static Owner owner_of(int dirfd)   // the owner for something new in this folder
+{
+    Owner o;
+    struct stat st;
+    bool ok = fstat(dirfd, &st) == 0;
+    o.uid = ok ? st.st_uid : geteuid();
+    o.gid = ok ? st.st_gid : getegid();
+    return o;
+}
+
+// give the new `name` in dirfd (never followed if it's a symlink) the owner for that folder
+static void own_new(int dirfd, const std::string &name)
+{
+    Owner o = owner_of(dirfd);
+    (void)!fchownat(dirfd, name.c_str(), o.uid, o.gid, AT_SYMLINK_NOFOLLOW);
+}
+
 static Walk walk(std::string path, bool make_parents = false)
 {
     for (int links = 0;; ++links) {
@@ -204,7 +237,9 @@ static Walk walk(std::string path, bool make_parents = false)
             if (!stat_at(dir.get(), c, &st)) {
                 if (errno != ENOENT || !make_parents)
                     fail_errno();
-                if (mkdirat(dir.get(), c.c_str(), 0777) != 0 && errno != EEXIST)
+                if (mkdirat(dir.get(), c.c_str(), 0777) == 0)
+                    own_new(dir.get(), c);
+                else if (errno != EEXIST)
                     fail_errno();
                 if (!stat_at(dir.get(), c, &st))
                     fail_errno();
@@ -307,17 +342,21 @@ static Fd open_part(int dirfd, std::string &name)
     }
 }
 
-// the permissions and times of an open file or folder (on a descriptor: never through a symlink); keep_owner (a move):
-// its owner too
-static void copy_stat_fd(int fd, const struct stat &st, bool keep_owner)
+// the permissions, times and owner of an open file or folder (on a descriptor: never through a symlink)
+static void copy_stat_fd(int fd, const struct stat &st, const Owner &owner)
 {
     struct timespec times[2] = {st.st_atim, st.st_mtim};
     futimens(fd, times);
     mode_t mode = st.st_mode & 07777;
-    if (keep_owner)
-        (void)!fchown(fd, st.st_uid, st.st_gid);   // first: chown clears set-user-ID, which fchmod then puts back
-    else if (S_ISREG(st.st_mode) && st.st_uid != geteuid())
-        mode &= ~mode_t(S_ISUID | S_ISGID);   // a copy of someone else's set-user-ID program mustn't run as us
+    uid_t uid = owner.keep ? st.st_uid : owner.uid;
+    gid_t gid = owner.keep ? st.st_gid : owner.gid;
+    (void)!fchown(fd, uid, gid);   // first: chown clears set-user-ID, which fchmod then puts back
+    if (S_ISREG(st.st_mode)) {     // a copy of someone else's set-user/group-ID program mustn't run as its new owner
+        if (st.st_uid != uid)
+            mode &= ~mode_t(S_ISUID);
+        if (st.st_gid != gid)
+            mode &= ~mode_t(S_ISGID);
+    }
     fchmod(fd, mode);
 }
 
@@ -382,7 +421,7 @@ public:
     // was and no half-made copy. Only a merge writes into an existing folder (each file in it still replaced whole).
     // staged: dst is inside a folder being built, where nothing exists yet.
     void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge,
-              bool keep_owner = false, bool staged = false)
+              const Owner &owner, bool staged = false)
     {
         struct stat st, dst_st;
         if (!stat_at(src_dir, src, &st))
@@ -396,8 +435,9 @@ public:
             Fd in = open_dir_at(src_dir, src, st);
             Fd out = open_dir_at(dst_dir, dst, dst_st);
             for (const std::string &e : list_dir(in.get()))
-                copy(in.get(), e, out.get(), e, merge, keep_owner);
-            copy_stat_fd(out.get(), st, keep_owner);
+                copy(in.get(), e, out.get(), e, merge, owner);
+            Owner existing{owner.keep, dst_st.st_uid, dst_st.st_gid};   // a copy leaves the folder's owner as it was
+            copy_stat_fd(out.get(), st, existing);
             done += 1;
             report(src);
             return;
@@ -416,8 +456,8 @@ public:
                 made = true;
                 struct timespec times[2] = {st.st_atim, st.st_mtim};
                 utimensat(dst_dir, part.c_str(), times, AT_SYMLINK_NOFOLLOW);
-                if (keep_owner)
-                    (void)!fchownat(dst_dir, part.c_str(), st.st_uid, st.st_gid, AT_SYMLINK_NOFOLLOW);
+                (void)!fchownat(dst_dir, part.c_str(), owner.keep ? st.st_uid : owner.uid,
+                                owner.keep ? st.st_gid : owner.gid, AT_SYMLINK_NOFOLLOW);
             } else if (S_ISDIR(st.st_mode)) {
                 Fd in = open_dir_at(src_dir, src, st);
                 if (mkdirat(dst_dir, part.c_str(), 0700) != 0)
@@ -428,8 +468,8 @@ public:
                     fail_errno();
                 Fd out = open_dir_at(dst_dir, part, part_st);
                 for (const std::string &e : list_dir(in.get()))
-                    copy(in.get(), e, out.get(), e, false, keep_owner, true);
-                copy_stat_fd(out.get(), st, keep_owner);
+                    copy(in.get(), e, out.get(), e, false, owner, true);
+                copy_stat_fd(out.get(), st, owner);
             } else if (S_ISREG(st.st_mode)) {
                 check_cancel();
                 Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -447,7 +487,7 @@ public:
                     fail_errno();
                 made = true;
                 copy_bytes(in.get(), out.get(), src);
-                copy_stat_fd(out.get(), st, keep_owner);
+                copy_stat_fd(out.get(), st, owner);
                 // replacing something: on disk before the rename (a crash leaves the old or the new)
                 if (dst_exists && fsync(out.get()) != 0)
                     fail_errno();
@@ -584,7 +624,7 @@ public:
             if (errno == EEXIST)
                 throw Failure(dst.name + " appeared while it was being replaced");
         }
-        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, true);   // a move keeps the owner
+        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, keep_owner());
         remove(src.dir.get(), src.name);
     }
 
@@ -681,7 +721,7 @@ static void handle(const QJsonObject &req)
         // progress: every item, and the bytes copied; a move then deletes the items
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         if (op == "copy")
-            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge);
+            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()));
         else
             job.move(src, dst, merge);
     } else if (op == "rename") {
@@ -701,8 +741,11 @@ static void handle(const QJsonObject &req)
         const Walk &p = w.at("path");
         if (mkdirat(p.dir.get(), p.name.c_str(), 0777) != 0)
             fail_errno();
+        own_new(p.dir.get(), p.name);
     } else if (op == "touch") {
-        open_new_file(w.at("path"));
+        const Walk &p = w.at("path");
+        open_new_file(p);
+        own_new(p.dir.get(), p.name);
     } else if (op == "copyfile") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         struct stat st;
@@ -717,6 +760,8 @@ static void handle(const QJsonObject &req)
             fail_errno();
         try {
             job.copy_bytes(in.get(), out.get(), src.path);
+            Owner o = owner_of(dst.dir.get());
+            (void)!fchown(out.get(), o.uid, o.gid);
             if (fchmod(out.get(), 0644) != 0 || close(out.release()) != 0)
                 fail_errno();
             put_new(dst, part);
@@ -729,6 +774,7 @@ static void handle(const QJsonObject &req)
         const Walk &link = w.at("link");
         if (symlinkat(target.c_str(), link.dir.get(), link.name.c_str()) != 0)
             fail_errno();
+        own_new(link.dir.get(), link.name);
     } else if (op == "hardlink") {
         // the file itself, opened without following a symlink: its owner is checked, and that same file is linked
         // (through /proc/self/fd), so it can't be swapped for another between the check and the link
@@ -754,6 +800,8 @@ static void handle(const QJsonObject &req)
             fail_errno();
         try {
             int mode = req.contains("mode") ? req.value("mode").toInt() : 0644;
+            Owner o = owner_of(p.dir.get());
+            (void)!fchown(fd.get(), o.uid, o.gid);   // before the chmod: chown clears set-user-ID
             if (write(fd.get(), text.constData(), size_t(text.size())) != text.size() ||
                 fchmod(fd.get(), mode_t(mode) & 07777) != 0 || close(fd.release()) != 0)
                 fail_errno();

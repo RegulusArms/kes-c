@@ -1283,28 +1283,48 @@ void BatchRenameDialog::preview()
 
 void BatchRenameDialog::apply()
 {
+    // Two phases, so swaps and overlaps work: every item to a hidden temporary name, then each to its new name. Names
+    // are only claimed, never replaced (put_new), so nothing that turns up meanwhile is overwritten. On a failure every
+    // item is put back under its old name (lexists: a dangling symlink is an item too), and any that can't be are named.
     QStringList names = new_names();
-    QList<QPair<QString, QString>> temps;
+    QList<QPair<QString, QString>> temps;   // (temporary, old)
+    QStringList finals;                     // the new names given so far, in temps' order
     try {
-        for (const QString &p : paths) {   // two-phase rename so swaps/overlaps work
+        for (const QString &p : paths) {
             QString tmp = join(dirname(p), QString(".fe-rename-%1-%2").arg(::getpid()).arg(temps.size()));
-            util::rename(p, tmp);
+            put_new(p, tmp);
             temps << qMakePair(tmp, p);
         }
-        for (int i = 0; i < temps.size(); ++i)
-            util::rename(temps[i].first, join(dirname(temps[i].second), names[i]));
-        QList<QPair<QString, QString>> renamed;
-        for (int i = 0; i < temps.size(); ++i)
-            if (basename(temps[i].second) != names[i])
-                renamed << qMakePair(temps[i].second, join(dirname(temps[i].second), names[i]));
-        undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
+        for (int i = 0; i < temps.size(); ++i) {
+            QString target = join(dirname(temps[i].second), names[i]);
+            put_new(temps[i].first, target);
+            finals << target;
+        }
     } catch (const OSError &e) {
-        for (const auto &[tmp, p] : temps)
-            if (exists(tmp))
-                ::rename(enc(tmp).constData(), enc(p).constData());
-        QMessageBox::warning(this, "Rename", e.message());
+        for (int i = finals.size() - 1; i >= 0; --i)   // first free the new names: one may be another item's old name
+            if (lexists(finals[i]) && !lexists(temps[i].first))
+                ::rename(enc(finals[i]).constData(), enc(temps[i].first).constData());
+        QStringList stuck;
+        for (const auto &[tmp, p] : temps) {
+            if (!lexists(tmp))
+                continue;
+            try {
+                put_new(tmp, p);
+            } catch (const OSError &) {
+                stuck << QString("%1 is now %2").arg(basename(p), basename(tmp));
+            }
+        }
+        QString msg = e.message();
+        if (!stuck.isEmpty())
+            msg += "\n\nThese couldn't be put back under their old names:\n" + stuck.join('\n');
+        QMessageBox::warning(this, "Rename", msg);
         return;
     }
+    QList<QPair<QString, QString>> renamed;
+    for (int i = 0; i < temps.size(); ++i)
+        if (basename(temps[i].second) != names[i])
+            renamed << qMakePair(temps[i].second, finals[i]);
+    undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
     accept();
 }
 

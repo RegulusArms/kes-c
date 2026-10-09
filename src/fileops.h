@@ -144,7 +144,7 @@ struct Job {
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
 // permission can be retried as administrator.
 // With undo_label, the moves and copies that succeed (also when cancelled part-way) can be undone with Ctrl+Z; merges
-// into existing folders can't.
+// into existing folders and copies that replaced something can't (what was replaced is gone).
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
                 const QString &undo_label = QString());
 

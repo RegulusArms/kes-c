@@ -7,9 +7,13 @@
 #include "stats.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
+#include <QPushButton>
 
 #include <fcntl.h>
 #include <gio/gdesktopappinfo.h>
@@ -269,6 +273,74 @@ int main(int argc, char **argv)
     undo::undo(w);
     check(wait_for([]() { return !boxes.isEmpty(); }) && boxes.last().contains("no longer at"),
           "undo explains what it can't put back");
+
+    // a copy that replaces a file can't be undone (the old file is gone, and undoing it as a new copy would put the
+    // only one left in the trash): in a batch, only the other copies are undone
+    undo::record("rename", "Earlier", {qMakePair(P("u/earlier-a"), P("u/earlier-b"))});
+    make(P("u/rep.txt"), "new");
+    make(P("u/rep-dst/rep.txt"), "old");
+    check(run_ops(w, {{"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}}, "Copy") &&
+              text_of(P("u/rep-dst/rep.txt")) == "new" && undo::label() == "Earlier",
+          "a copy that replaced a file isn't offered for undo");
+    make(P("u/fresh.txt"), "fresh");
+    make(P("u/rep.txt"), "newer");
+    check(run_ops(w, {{"copy", P("u/fresh.txt"), P("u/rep-dst/fresh.txt")}, {"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}},
+                  "Copy") &&
+              undo_and_wait(w, [&]() { return !lexists(P("u/rep-dst/fresh.txt")); }) &&
+              text_of(P("u/rep-dst/rep.txt")) == "newer",
+          "undoing a batch of copies leaves the one that replaced a file where it is");
+
+    // ---- batch rename: a failure part-way puts every item back under its old name (a dangling symlink too, which
+    // exists() wouldn't see), and a name taken meanwhile is never replaced
+    {
+        makedirs(P("br"), true);
+        util::symlink("/nonexistent/target", P("br/lnk"));
+        make(P("br/b.txt"), "b");
+        BatchRenameDialog dlg(w, {P("br/lnk"), P("br/b.txt")});
+        dlg.findChildren<QLineEdit *>().first()->setText("[Name]-x");   // the template
+        make(P("br/b-x.txt"), "taken meanwhile");
+        QStringList earlier = boxes;
+        boxes.clear();
+        for (QPushButton *b : dlg.findChildren<QPushButton *>())
+            if (b->text() == "Rename")
+                b->click();
+        QStringList left = listdir(P("br"));
+        left.sort();
+        check(left == QStringList({"b-x.txt", "b.txt", "lnk"}) && islink(P("br/lnk")) && text_of(P("br/b.txt")) == "b" &&
+                  text_of(P("br/b-x.txt")) == "taken meanwhile" && !boxes.isEmpty(),
+              "a batch rename that fails part-way puts every item back, a dangling symlink too, and replaces nothing");
+        boxes = earlier;
+    }
+
+    // ---- the conflict dialog says what Merge does to files with the same names (they're replaced, for good)
+    {
+        ConflictDialog folder_dlg(w, P("dst"), true), file_dlg(w, P("dst/a.txt"), false);
+        auto says = [](QDialog &d) {
+            QString all;
+            for (QLabel *l : d.findChildren<QLabel *>())
+                all += l->text() + "\n";
+            return all;
+        };
+        check(says(folder_dlg).contains("files there with the same names are\nreplaced. A merge can't be undone.") &&
+                  !says(file_dlg).contains("Merge"),
+              "the conflict dialog says a merge replaces files with the same names and can't be undone");
+    }
+
+    // ---- Move to Trash on a selection that holds something already in the trash: that one can only be deleted
+    // permanently (it asks first: cancelled here), and the rest still goes to the trash
+    {
+        make(P("mt/in-trash.txt"), "t");
+        util::trash(P("mt/in-trash.txt"));
+        QString trashed_item = join(TRASH_DIR(), "files/in-trash.txt");
+        make(P("mt/normal.txt"), "n");
+        QStringList earlier = boxes;
+        boxes.clear();
+        w->trash_paths({trashed_item, P("mt/normal.txt")});
+        check(wait_for([&]() { return !lexists(P("mt/normal.txt")); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
+                  exists(trashed_item) && !boxes.isEmpty() && boxes.first().contains("Permanently delete “in-trash.txt”"),
+              "Move to Trash on a mixed selection trashes the items outside the trash and asks only about the one in it");
+        boxes = earlier;
+    }
 
     // ---- unique names and links
     make(P("n/a.txt"));
@@ -604,6 +676,35 @@ int main(int argc, char **argv)
         check(!listdir(join(base, "dest")).isEmpty() && listdir(join(base, "outside")).isEmpty() &&
                   !lexists(join(base, "escape.txt")) && !lexists("/tmp/kestrel-evil-abs.txt"),
               label);
+        bool escaping = false;   // a symlink left in dest that leads out of it (opening it would go there)
+        QString dest = join(base, "dest");
+        QDirIterator it(dest, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            QString target = islink(f) ? util::readlink(f) : QString();
+            if (!target.isEmpty() && (target.startsWith('/') || !(QDir::cleanPath(join(dirname(f), target)) + "/").startsWith(dest + "/")))
+                escaping = true;
+        }
+        check(!escaping, "a crafted " + ext + " archive leaves no symlink leading out of the folder it's extracted into");
+    }
+    check(archive::link_escapes(0, "../x") && archive::link_escapes(0, "/etc") && archive::link_escapes(1, "a/../../..") &&
+              archive::link_escapes(2, "../../../x") && !archive::link_escapes(1, "../x") &&
+              !archive::link_escapes(0, "a/../b") && !archive::link_escapes(0, "./a//b") && !archive::link_escapes(2, "../.."),
+          "a link target leads out of the extracted folder when it's absolute or its \"..\"s climb above it");
+    {   // extracting into an existing folder: the user's own links there stay, also ones that lead out of it
+        QString base = P("evil-own"), dest = join(base, "dest");
+        makedirs(dest, true);
+        util::symlink("../elsewhere", join(dest, "mine"));
+        QFile::copy(join(QString(TESTS_DIR), "fixtures/evil.tar.gz"), join(base, "evil.tar.gz"));
+        spin(1100);   // older than the job's start
+        Task task("test", [](Task *) { return QVariant(); });
+        try {
+            archive::extract(&task, join(base, "evil.tar.gz"), dest, QString(), "overwrite");
+        } catch (const Error &) {
+        }
+        check(islink(join(dest, "mine")) && !lexists(join(dest, "lnk")),
+              "extracting into an existing folder keeps the user's own links there and drops the archive's escaping one");
     }
 
     // -- a single compressed file (note.txt.gz → note.txt) where the destination already has a symlink named note.txt:

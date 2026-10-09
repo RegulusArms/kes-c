@@ -10,9 +10,17 @@
 #include <QThread>
 
 #include <cerrno>
+#include <climits>
+#include <cstring>
+#include <ctime>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#include <string>
+#include <vector>
 
 using namespace util;
 
@@ -1033,6 +1041,92 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
     return dest;
 }
 
+bool link_escapes(int depth, const QByteArray &target)
+{
+    if (target.startsWith('/'))
+        return true;
+    for (const QByteArray &c : target.split('/')) {
+        if (c == "..") {
+            if (--depth < 0)
+                return true;
+        } else if (!c.isEmpty() && c != ".") {
+            ++depth;
+        }
+    }
+    return false;
+}
+
+static bool changed_since(const struct timespec &t, const struct timespec &since)
+{
+    return t.tv_sec > since.tv_sec || (t.tv_sec == since.tv_sec && t.tv_nsec >= since.tv_nsec);
+}
+
+// the symlinks in an open folder (and the folders below it, on the same drive) changed since `since` that
+// link_escapes(), removed
+static void drop_escaping_links(int dirfd, int depth, const struct timespec &since)
+{
+    struct stat here;
+    int fd = ::dup(dirfd);
+    DIR *d = fd >= 0 && ::fstat(dirfd, &here) == 0 ? ::fdopendir(fd) : nullptr;
+    if (!d) {
+        if (fd >= 0)
+            ::close(fd);
+        return;
+    }
+    std::vector<std::string> subdirs;
+    while (struct dirent *e = ::readdir(d)) {
+        const char *n = e->d_name;
+        struct stat st;
+        if (!std::strcmp(n, ".") || !std::strcmp(n, "..") || ::fstatat(dirfd, n, &st, AT_SYMLINK_NOFOLLOW) != 0)
+            continue;
+        if (S_ISDIR(st.st_mode) && st.st_dev == here.st_dev) {
+            subdirs.push_back(n);
+        } else if (S_ISLNK(st.st_mode) && changed_since(st.st_ctim, since)) {
+            char target[PATH_MAX];
+            ssize_t len = ::readlinkat(dirfd, n, target, sizeof target);
+            if (len >= 0 && link_escapes(depth, QByteArray(target, int(len))))
+                ::unlinkat(dirfd, n, 0);
+        }
+    }
+    ::closedir(d);
+    for (const std::string &n : subdirs) {
+        int sub = ::openat(dirfd, n.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (sub >= 0) {
+            drop_escaping_links(sub, depth + 1, since);
+            ::close(sub);
+        }
+    }
+}
+
+// GNU tar and UnZip make an archive's symlinks as they are, also ones that lead out of the destination (7-Zip and
+// unrar leave those out), and Kestrel follows a link like any other folder or file: opening, copying or deleting
+// "inside" the extracted folder would reach whatever it points to. So once they're done (also after a failure or a
+// cancel), the escaping links they made are removed: only links changed since the job started (a link's ctime can't
+// be set back), so the user's own links in an existing folder stay.
+class EscapingLinkSweep {
+public:
+    EscapingLinkSweep(const QString &dest, const QString &tool) : dest(dest), active(tool == "tar" || tool == "unzip")
+    {
+        ::clock_gettime(CLOCK_REALTIME, &since);
+        since.tv_sec -= 1;   // the filesystem's clock can lag a little behind
+    }
+    ~EscapingLinkSweep()
+    {
+        if (!active)
+            return;
+        int fd = ::open(enc(dest).constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (fd >= 0) {
+            drop_escaping_links(fd, 0, since);
+            ::close(fd);
+        }
+    }
+
+private:
+    QString dest;
+    bool active;
+    struct timespec since;
+};
+
 QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
                 const QString &overwrite, int threads)
 {
@@ -1040,9 +1134,14 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
     QString path = first_volume(path_in);
     auto [k, suf] = kind(path);
     QString label = "Extracting " + basename(path);
-    if (k == "tar" || k == "single")
+    if (k == "tar") {
+        EscapingLinkSweep sweep(dest, "tar");
+        return extract_stream(task, path, dest, k, suf, overwrite, label);
+    }
+    if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     ExtractCommand c = extract_command(path, dest, password, overwrite, threads);
+    EscapingLinkSweep sweep(dest, c.tool);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
                                     QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
     const QString &t = c.tool;
