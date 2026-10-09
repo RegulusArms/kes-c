@@ -125,14 +125,27 @@ void link(const QString &target, const QString &link);
 QString readlink(const QString &p);
 void chmod(const QString &p, mode_t mode);
 void copystat(const QString &src, const QString &dst, bool follow_symlinks = true);
-void copyfile(const QString &src, const QString &dst);   // contents only, like shutil.copyfile
+// contents only, like shutil.copyfile, in one step (write_parts); new_only: only if the name is still free
+void copyfile(const QString &src, const QString &dst, bool new_only = false);
 void move(const QString &src, const QString &dst);       // shutil.move
 void rmtree(const QString &p);                            // ignores errors
+// Write a whole file in one step (failure-atomic, see CLAUDE.md): exclusive makes it only if the name is free,
+// otherwise it replaces any old contents (keeping their permissions, and a symlink there as a symlink: its target is
+// replaced; fsynced first, so a crash leaves the old or the new, never a truncated file). A failure leaves no part
+// file and the old contents as they were. For Kestrel's own files; a user's file in the way is replaced, never
+// written through (fileops).
 void write_text(const QString &p, const QByteArray &data, bool exclusive = false);
+void write_atomic(const QString &path, const QByteArray &data);   // write_text(), replacing
+// the general form: fill(fd) writes a part file beside path; new_only: take the name only if free; sync: fsync first
+// (for data that matters, not caches)
+void write_parts(const QString &path, const std::function<void(int)> &fill, bool new_only, bool sync = false);
+void put_new(const QString &part, const QString &path);   // a finished part file to a name that must still be free
+void write_all(int fd, const char *data, qint64 size, const QString &shown);
 // A new, empty file to write something into before it is renamed over a name in the same folder (so that name keeps
 // its old contents until the new ones are complete): prefix + ".kes-<random>.part", relative to dirfd (or a path, with
 // AT_FDCWD and prefix "dir/"), created exclusively and never through a symlink. Returns the open fd; *name is the name.
 int open_part_at(int dirfd, const QString &prefix, QString *name);
+QString part_name();   // a fresh ".kes-<random>.part", for building something beside the name it will replace
 QByteArray read_file(const QString &p, bool *ok = nullptr);
 
 // os.walk: fn(root, dirs, files) for every folder; with topdown the callback may prune `dirs`.

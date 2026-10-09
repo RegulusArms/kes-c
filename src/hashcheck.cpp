@@ -496,30 +496,10 @@ namespace {
 const QMap<QString, QString> OUT_EXT = {{"crc32", ".sfv"},    {"md5", ".md5"},       {"sha1", ".sha1"},
                                         {"sha256", ".sha256"}, {"sha512", ".sha512"}, {"blake2b", ".b2"}};
 
-// write `data` to a new file beside `path`, then rename it over `path` (never through a symlink there)
+// `data` to path in one step (write_parts; fsynced, since it may replace an older checksum file)
 void write_replacing(const QString &path, const QByteArray &data)
 {
-    QString part;
-    int fd = open_part_at(AT_FDCWD, rstrip(dirname(path), '/') + "/", &part);
-    qint64 off = 0;
-    while (off < data.size()) {
-        ssize_t n = ::write(fd, data.constData() + off, data.size() - off);
-        if (n < 0 && errno == EINTR)
-            continue;
-        if (n < 0) {
-            int e = errno;
-            ::close(fd);
-            ::unlink(enc(part).constData());
-            throw_errno(path, e);
-        }
-        off += n;
-    }
-    ::close(fd);
-    if (::rename(enc(part).constData(), enc(path).constData()) != 0) {
-        int e = errno;
-        ::unlink(enc(part).constData());
-        throw_errno(path, e);
-    }
+    write_parts(path, [&](int fd) { write_all(fd, data.constData(), data.size(), path); }, false, true);
 }
 
 }   // namespace

@@ -750,9 +750,7 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
             }
         }
         task->check();
-        if (exists(spec_in.out))
-            util::unlink(spec_in.out);
-        archive::Spec sp = spec_in;
+        archive::Spec sp = spec_in;   // an older archive of that name is replaced only once the new one is made
         sp.total = std::max<qint64>(total, 1);
         QString out = archive::compress(task, sp);
         if (spec_in.trash_originals) {

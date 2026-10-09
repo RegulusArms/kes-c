@@ -10,9 +10,12 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 
 #include <cstdio>
+#include <csignal>
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -61,10 +64,14 @@ public:
         }
     }
 
-    void stop()
+    // the next message for a request: a progress report ({"progress": [done, total, text]}) or its final reply
+    QJsonObject next(qint64 id, int ms = 20000) { return next_reply(id, ms); }
+
+    // close its input, as when the session ends; true if it then exits
+    bool stop(int ms = 5000)
     {
         p.closeWriteChannel();
-        p.waitForFinished(5000);
+        return p.waitForFinished(ms);
     }
 
 private:
@@ -217,6 +224,88 @@ int main(int argc, char **argv)
     (void)!::link(enc(join(W, "hl-a")).constData(), enc(join(W, "hl-b")).constData());
     h.call({{"op", "move"}, {"src", join(W, "hl-a")}, {"dst", join(W, "hl-b")}});
     check(read_file(join(W, "hl-b")) == "linked", "moving a file onto a hard link to it keeps the file");
+
+    // -- replacing: what's replaced stays as it was until the new one is complete (a failure, a cancel or the session
+    // ending leaves it, and no half-made copy); a folder is swapped in whole
+    auto leftovers = [&]() {   // half-made copies (".kes-….part") anywhere in W
+        QStringList out;
+        QDirIterator it(W, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            if (basename(f).startsWith(".kes-"))
+                out << f;
+        }
+        return out;
+    };
+    write_file(join(W, "big6"), QByteArray(6 << 20, 'b'));
+    write_file(join(W, "conf.txt"), "original");
+    QDir().mkpath(join(W, "newdir"));
+    write_file(join(W, "newdir/a.txt"), "a");
+    write_file(join(W, "newdir/big"), QByteArray(6 << 20, 'n'));
+    QDir().mkpath(join(W, "olddir"));
+    write_file(join(W, "olddir/keep.txt"), "keep");
+    QStringList old_before = contents(join(W, "olddir"));
+    {
+        // a helper whose writes fail past 1 MB (EFBIG), as on a full disk: limits pass to the program it starts
+        Helper small;
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        bool started = small.start();
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QJsonObject file_r = small.call({{"op", "copy"}, {"src", join(W, "big6")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject dir_r = small.call({{"op", "copy"}, {"src", join(W, "newdir")}, {"dst", join(W, "olddir")}});
+        small.stop();
+        check(started && !file_r.isEmpty() && !ok(file_r) && read_file(join(W, "conf.txt")) == "original" &&
+                  leftovers().isEmpty(),
+              "replacing a file: a write that fails part-way (a full disk) keeps the old file, and leaves no "
+              "half-made copy");
+        check(!dir_r.isEmpty() && !ok(dir_r) && contents(join(W, "olddir")) == old_before && leftovers().isEmpty(),
+              "replacing a folder: a failure part-way keeps the old folder as it was, and leaves no half-made copy");
+    }
+    write_file(join(W, "huge"), "x");
+    ::truncate(enc(join(W, "huge")).constData(), qint64(2) << 30);   // 2 GB (sparse): long enough to stop part-way
+    {
+        qint64 id = h.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject m = h.next(id);
+        QJsonArray pr = m.value("progress").toArray();
+        bool partway = !pr.isEmpty() && pr[0].toDouble() > 0 && pr[0].toDouble() < pr[1].toDouble() / 2;
+        QElapsedTimer clock;
+        clock.start();
+        h.cancel(id);
+        QJsonObject r = h.reply(id);
+        check(partway && r.value("cancelled").toBool() && clock.elapsed() < 2000 &&
+                  read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
+              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way at once, keeping "
+              "the file it was replacing and no half-made copy");
+    }
+    {
+        Helper ending;
+        bool started = ending.start();
+        qint64 id = ending.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        bool partway = !ending.next(id).value("progress").toArray().isEmpty();
+        bool exited = ending.stop();
+        check(started && partway && exited && read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
+              "ending the admin session part-way through a copy stops it, keeping the file it was replacing and no "
+              "half-made copy");
+    }
+    QFile::remove(join(W, "huge"));
+    QDir().mkpath(join(W, "mvsrc"));
+    write_file(join(W, "mvsrc/moved.txt"), "moved");
+    QDir().mkpath(join(W, "mvdst"));
+    write_file(join(W, "mvdst/old.txt"), "old");
+    bool copied_over = ok(h.call({{"op", "copy"}, {"src", join(W, "newdir")}, {"dst", join(W, "olddir")}}));
+    bool moved_over = ok(h.call({{"op", "move"}, {"src", join(W, "mvsrc")}, {"dst", join(W, "mvdst")}}));
+    check(copied_over && contents(join(W, "olddir")) == contents(join(W, "newdir")) && moved_over &&
+              !QFile::exists(join(W, "mvsrc")) && contents(join(W, "mvdst")) == QStringList{"moved.txt=moved"} &&
+              leftovers().isEmpty(),
+          "copying or moving a folder onto another replaces it whole: the old contents are gone, nothing is left "
+          "behind");
     write_file(join(W, "r1"));
     check(ok(h.call({{"op", "rename"}, {"src", join(W, "r1")}, {"dst", join(W, "r2")}})) &&
               QFile::exists(join(W, "r2")) &&

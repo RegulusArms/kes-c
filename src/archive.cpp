@@ -734,11 +734,19 @@ struct JobClock {
     ~JobClock() { stats::sample("archive job (s)", (stats::now_ms() - started) / 1000.0); }
 };
 
-QString compress(Task *task, const Spec &spec)
+// The archive is made under a hidden name beside spec.out that keeps the format's extension (some tools go by it),
+// and its file (or volumes) renamed into place only when the tool has succeeded: a failure or a cancel leaves an older
+// archive of that name as it was, and no half-made one. zip, which adds to an archive that already exists, starts
+// from nothing this way too.
+QString compress(Task *task, const Spec &spec_in)
 {
     JobClock clock;
-    QString out = spec.out;
-    QString label = "Compressing " + basename(out);
+    const QString final_out = spec_in.out, dir = dirname(final_out);
+    QString ext = final_out.endsWith(spec_in.format.ext) ? spec_in.format.ext : QString();
+    Spec spec = spec_in;
+    spec.out = join(dir, part_name() + ext);
+    const QString out = spec.out;
+    QString label = "Compressing " + basename(final_out);
     try {
         if (!spec.format.stream.isEmpty()) {
             compress_stream(task, spec, label);
@@ -759,17 +767,43 @@ QString compress(Task *task, const Spec &spec)
                 }
             }
         }
+        task->check();
     } catch (...) {
         for (const QString &f : QStringList{out} + volume_files(out))
             ::unlink(enc(f).constData());
         throw;
     }
-    if (!exists(out)) {
-        QStringList vols = volume_files(out);
-        vols.sort();
-        return vols.isEmpty() ? out : vols.first();
+    // into place: each file renamed over the name it's for ("<hidden>.7z.002" → "<name>.7z.002"); then the parts of
+    // an older archive of that name that the new one doesn't have are deleted
+    QString hidden_stem = basename(out).chopped(ext.size()), final_stem = basename(final_out).chopped(ext.size());
+    QStringList made = exists(out) ? QStringList{out} : volume_files(out), placed;
+    QStringList old = volume_files(final_out);
+    if (lexists(final_out))
+        old << final_out;
+    made.sort();
+    try {
+        for (const QString &m : made) {
+            QString target = join(dir, final_stem + basename(m).mid(hidden_stem.size()));
+            if (!old.isEmpty()) {   // replacing an older archive: on disk before the rename
+                int fd = ::open(enc(m).constData(), O_RDONLY | O_CLOEXEC);
+                if (fd >= 0) {
+                    ::fsync(fd);
+                    ::close(fd);
+                }
+            }
+            if (::rename(enc(m).constData(), enc(target).constData()) != 0)
+                throw_errno(target);
+            placed << target;
+        }
+    } catch (...) {
+        for (const QString &m : made)
+            ::unlink(enc(m).constData());
+        throw;
     }
-    return out;
+    for (const QString &o : old)
+        if (!placed.contains(o))
+            ::unlink(enc(o).constData());
+    return placed.isEmpty() ? final_out : placed.first();
 }
 
 // ---------------------------------------------------------------- extract
@@ -920,6 +954,17 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
             ::unlink(enc(part).constData());
             QString t = tail(QString::fromUtf8(dec->read_all_err()));
             throw Error(t.isEmpty() ? QString("decompression failed") : t);
+        }
+        if (lexists(out)) {   // replacing something: on disk before the rename (the decompressor wrote it)
+            int sfd = ::open(enc(part).constData(), O_RDONLY | O_CLOEXEC);
+            bool synced = sfd >= 0 && ::fsync(sfd) == 0;
+            int e = errno;
+            if (sfd >= 0)
+                ::close(sfd);
+            if (!synced) {
+                ::unlink(enc(part).constData());
+                throw_errno(out, e);
+            }
         }
         if (::rename(enc(part).constData(), enc(out).constData()) != 0) {
             int e = errno;

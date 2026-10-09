@@ -586,9 +586,16 @@ private:
     void move(const QString &src, const QString &dst, bool merge)
     {
         if (!merge && same_dev(src, dst)) {
-            if (lexists(dst))
-                remove(dst);
-            util::rename(src, dst);
+            struct stat st, dst_st;
+            if (lstat_(dst, dst_st)) {
+                // replaced in one step (swap_in); the old one is deleted once the moved one is in place
+                if (lstat_(src, st) && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
+                    throw Error(dst + " is a folder");
+                Fd sp(open_parent(src)), dp(open_parent(dst));
+                swap_in(sp.fd, basename(src), dp.fd, basename(dst), dst);
+            } else {
+                util::rename(src, dst);
+            }
             report_progress(basename(src));
             return;
         }
@@ -624,7 +631,9 @@ private:
         count(basename(path));
     }
 
-    void remove_at(int dirfd, const QString &name, const struct stat &st, const QString &shown, dev_t dev)
+    // counted: reports progress and stops at a cancel (not when deleting what was just replaced, or a half-made part)
+    void remove_at(int dirfd, const QString &name, const struct stat &st, const QString &shown, dev_t dev,
+                   bool counted = true)
     {
         if (S_ISDIR(st.st_mode)) {
             if (st.st_dev != dev)
@@ -632,13 +641,15 @@ private:
             {
                 Fd d(open_dir_at(dirfd, name, st, shown));
                 for (const QString &e : names_in(d.fd, shown)) {
-                    task->check();
+                    if (counted)
+                        task->check();
                     QString p = join(shown, e);
                     struct stat est;
                     if (!stat_at(d.fd, e, est))
                         throw_errno(p);
-                    remove_at(d.fd, e, est, p, dev);
-                    count(e);
+                    remove_at(d.fd, e, est, p, dev, counted);
+                    if (counted)
+                        count(e);
                 }
             }
             if (::unlinkat(dirfd, enc(name).constData(), AT_REMOVEDIR) != 0)
@@ -678,30 +689,61 @@ private:
             if (n < 0)
                 throw_errno(src);
             target.truncate(n);
-            if (dst_exists && ::unlinkat(ddir, enc(dname).constData(), 0) != 0)
-                throw_errno(dst);
-            if (::symlinkat(target.constData(), ddir, enc(dname).constData()) != 0)
-                throw_errno(dst);
+            // made under a hidden name, then renamed over dst: replaced in one step, never written through
+            QString part;
+            for (;;) {
+                part = part_name();
+                if (::symlinkat(target.constData(), ddir, enc(part).constData()) == 0)
+                    break;
+                if (errno != EEXIST)
+                    throw_errno(dst);
+            }
+            if (::renameat(ddir, enc(part).constData(), ddir, enc(dname).constData()) != 0) {
+                int e = errno;
+                ::unlinkat(ddir, enc(part).constData(), 0);
+                throw_errno(dst, e);
+            }
         } else if (S_ISDIR(st.st_mode)) {
             Fd in(open_dir_at(sdir, sname, st, src));
-            if (dst_exists && !merge) {
-                remove_at_or_retry(ddir, dname, dst_st, dst);
-                dst_exists = false;
-            } else if (dst_exists && !S_ISDIR(dst_st.st_mode)) {
-                throw Error(dst + " exists and isn't a folder");
+            auto copy_into = [&](int out) {
+                for (const QString &e : names_in(in.fd, src)) {
+                    struct stat est;
+                    if (!stat_at(in.fd, e, est))
+                        throw_errno(join(src, e));
+                    copy_at(in.fd, e, est, join(src, e), out, e, join(dst, e), merge);
+                }
+                copy_times_mode(out, st);
+            };
+            if (dst_exists && merge) {   // into the existing folder (each file in it still replaced whole)
+                if (!S_ISDIR(dst_st.st_mode))
+                    throw Error(dst + " exists and isn't a folder");
+                Fd out(open_dir_at(ddir, dname, dst_st, dst));
+                copy_into(out.fd);
+            } else {
+                // built under a hidden name beside dst and put in its place only when complete (swap_in): a cancel or
+                // an error leaves dst as it was, and no half-made copy
+                QString part;
+                for (;;) {
+                    part = part_name();
+                    if (::mkdirat(ddir, enc(part).constData(), 0700) == 0)
+                        break;
+                    if (errno != EEXIST)
+                        throw_errno(dst);
+                }
+                try {
+                    struct stat part_st;
+                    if (!stat_at(ddir, part, part_st))
+                        throw_errno(dst);
+                    {
+                        Fd out(open_dir_at(ddir, part, part_st, dst));
+                        copy_into(out.fd);
+                    }
+                    swap_in(ddir, part, ddir, dname, dst);
+                } catch (...) {
+                    discard(ddir, part, join(dirname(dst), part));
+                    throw;
+                }
             }
-            if (!dst_exists && ::mkdirat(ddir, enc(dname).constData(), 0700) != 0)
-                throw_errno(dst);
-            if (!stat_at(ddir, dname, dst_st))
-                throw_errno(dst);
-            Fd out(open_dir_at(ddir, dname, dst_st, dst));
-            for (const QString &e : names_in(in.fd, src)) {
-                struct stat est;
-                if (!stat_at(in.fd, e, est))
-                    throw_errno(join(src, e));
-                copy_at(in.fd, e, est, join(src, e), out.fd, e, join(dst, e), merge);
-            }
-            copy_times_mode(out.fd, st);
         } else if (S_ISREG(st.st_mode)) {
             copy_file_at(sdir, sname, st, src, ddir, dname, dst);
         } else {
@@ -754,6 +796,9 @@ private:
                 report_progress(name);
             }
             copy_times_mode(out.fd, st);
+            struct stat old;   // replacing something: on disk before the rename (a crash leaves the old or the new)
+            if (stat_at(ddir, dname, old) && ::fsync(out.fd) != 0)
+                throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
             if (::renameat(ddir, enc(part).constData(), ddir, enc(dname).constData()) != 0)
@@ -765,15 +810,68 @@ private:
         }
     }
 
-    // a folder in the way of a copy: deleted, with the same retry for read-only folders as remove()
-    void remove_at_or_retry(int dirfd, const QString &name, const struct stat &st, const QString &shown)
+    // src (in src_dir) to dst (in dst_dir) on one filesystem, replacing what's at dst (shown) in one step. A
+    // non-folder over a non-folder (or nothing) is one rename. Where a folder is involved, the two are swapped
+    // (RENAME_EXCHANGE; on a filesystem without it, the old one is renamed aside first and put back if the second
+    // rename fails), and the old one, now out of the way under a hidden name, is then deleted.
+    void swap_in(int src_dir, const QString &src, int dst_dir, const QString &dst, const QString &shown)
+    {
+        struct stat old, nw;
+        bool exists = stat_at(dst_dir, dst, old);
+        if (!stat_at(src_dir, src, nw))
+            throw_errno(shown);
+        if (!exists || (!S_ISDIR(old.st_mode) && !S_ISDIR(nw.st_mode))) {
+            if (::renameat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData()) != 0)
+                throw_errno(shown);
+            return;
+        }
+        if (::renameat2(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), RENAME_EXCHANGE) == 0) {
+            remove_old(src_dir, src, shown);   // the old one, now where the new one was
+            return;
+        }
+        if (errno != EINVAL)
+            throw_errno(shown);
+        QString aside = part_name();
+        if (::renameat(dst_dir, enc(dst).constData(), src_dir, enc(aside).constData()) != 0)
+            throw_errno(shown);
+        if (::renameat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData()) != 0) {
+            int e = errno;
+            (void)!::renameat(src_dir, enc(aside).constData(), dst_dir, enc(dst).constData());
+            throw_errno(shown, e);
+        }
+        remove_old(src_dir, aside, shown);
+    }
+
+    // what was just replaced: deleted whole (a cancel now would only leave it half-deleted), with the retry for
+    // read-only folders
+    void remove_old(int dirfd, const QString &name, const QString &shown)
+    {
+        struct stat st;
+        if (!stat_at(dirfd, name, st))
+            return;
+        QString path = join(dirname(shown), name);
+        try {
+            try {
+                remove_at(dirfd, name, st, path, st.st_dev, false);
+            } catch (const OSError &) {
+                if (!make_writable(path))
+                    throw;
+                remove_at(dirfd, name, st, path, st.st_dev, false);
+            }
+        } catch (const Error &e) {
+            throw Error(QString("%1 was replaced, but the old one couldn't be deleted (it's left as %2): %3")
+                            .arg(shown, name, e.message()));
+        }
+    }
+
+    // a half-made part after a failure or cancel: deleted, without letting a second failure hide the first
+    void discard(int dirfd, const QString &name, const QString &path)
     {
         try {
-            remove_at(dirfd, name, st, shown, st.st_dev);
-        } catch (const OSError &) {
-            if (!make_writable(shown))
-                throw;
-            remove_at(dirfd, name, st, shown, st.st_dev);
+            struct stat st;
+            if (stat_at(dirfd, name, st))
+                remove_at(dirfd, name, st, path, st.st_dev, false);
+        } catch (...) {
         }
     }
 };

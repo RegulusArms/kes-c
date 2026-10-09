@@ -202,6 +202,42 @@ int main(int argc, char **argv)
                   text_of(P("rep/other-link.txt")) == "old" && leftovers().isEmpty(),
               "replacing a symlink replaces the link, not its target; another hard link of a replaced file keeps its "
               "contents");
+        // folders: the new one is built beside the old one and swapped in whole
+        make(P("rep/newdir/a.txt"), "a");
+        make(P("rep/newdir/huge"), "x");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), qint64(1) << 30);
+        make(P("rep/olddir/keep.txt"), "keep");
+        auto old_intact = []() { return listdir(P("rep/olddir")) == QStringList{"keep.txt"} &&
+                                        text_of(P("rep/olddir/keep.txt")) == "keep"; };
+        Task *dt = fileops::start_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}}, "Test", []() {});
+        QObject::connect(dt, &Task::progress, dt, [dt](double, const QString &text) {
+            if (text.endsWith("huge"))
+                dt->cancel();
+        }, Qt::DirectConnection);
+        QPointer<Task> dtp(dt);
+        wait_for([&]() { return !dtp; }, 20000);
+        check(old_intact() && leftovers().isEmpty(),
+              "replacing a folder and cancelling part-way keeps the old folder as it was, and leaves no half-made copy");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), BIG);
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(old_intact() && leftovers().isEmpty(),
+              "a folder copy that fails part-way (a write error) keeps the folder it would have replaced");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), 10);
+        make(P("rep/mvsrc/moved.txt"), "moved");
+        make(P("rep/mvdst/old.txt"), "old");
+        bool replaced = run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}, {"move", P("rep/mvsrc"), P("rep/mvdst")}});
+        check(replaced && listdir(P("rep/olddir")).size() == 2 && lexists(P("rep/olddir/huge")) &&
+                  !lexists(P("rep/olddir/keep.txt")) && !lexists(P("rep/mvsrc")) &&
+                  listdir(P("rep/mvdst")) == QStringList{"moved.txt"} && leftovers().isEmpty(),
+              "copying or moving a folder onto another replaces it whole: the old contents are gone, nothing is left "
+              "behind");
         QDir(P("rep")).removeRecursively();
         boxes.clear();
     }
@@ -618,6 +654,110 @@ int main(int argc, char **argv)
         bool failed = !run_extract(join(base, "bad.txt.gz"), "overwrite");
         check(failed && text_of(join(dest, "bad.txt")) == "old\n" && listdir(dest) == QStringList{"bad.txt"},
               "a failed decompress leaves the file it would have replaced, and no temporary file");
+    }
+
+    // -- failure-atomic everywhere else Kestrel writes (CLAUDE.md): compressing over an archive, its own files, new
+    // files, moves between drives. A file-size limit stands for a full disk.
+    {
+        auto small_disk = [](const std::function<void()> &fn) {
+            struct rlimit old_lim, lim;
+            ::getrlimit(RLIMIT_FSIZE, &old_lim);
+            lim = old_lim;
+            lim.rlim_cur = 1 << 20;   // writes past 1 MB fail (EFBIG)
+            auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+            try {
+                fn();
+            } catch (...) {
+            }
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+        };
+        auto leftovers = [](const QString &d) {
+            QStringList out;
+            for (const QString &n : listdir(d))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        makedirs(P("fa/src"), true);
+        make(P("fa/src/big.bin"), QByteArray(BIG, 'b'));
+        make(P("fa/src/small.txt"), "small");
+        make(P("fa/arc.tar"), "the old archive");
+        archive::Format tar_fmt;
+        for (const archive::Format &f : archive::formats())
+            if (f.id == "tar")
+                tar_fmt = f;
+        auto compress = [&](const QString &rel) {
+            Task task("test", [](Task *) { return QVariant(); });
+            archive::Spec spec;
+            spec.format = tar_fmt;
+            spec.tool = "tar";
+            spec.base = P("fa/src");
+            spec.rels = {rel};
+            spec.out = P("fa/arc.tar");
+            spec.total = BIG;
+            archive::compress(&task, spec);
+        };
+        small_disk([&]() { compress("big.bin"); });
+        bool kept = text_of(P("fa/arc.tar")) == "the old archive" && leftovers(P("fa")).isEmpty();
+        compress("small.txt");
+        check(kept && proc::run({"tar", "tf", P("fa/arc.tar")}).out.trimmed() == "small.txt" &&
+                  leftovers(P("fa")).isEmpty(),
+              "compressing over an archive that fails part-way keeps the old archive and no half-made one; one that "
+              "succeeds replaces it");
+
+        make(P("fa/state.json"), "old");
+        ::chmod(enc(P("fa/state.json")).constData(), 0600);
+        small_disk([&]() { write_text(P("fa/state.json"), QByteArray(2 << 20, 'n')); });
+        bool state_kept = text_of(P("fa/state.json")) == "old" && leftovers(P("fa")).isEmpty();
+        write_text(P("fa/state.json"), "new");
+        struct stat sst;
+        stat_(P("fa/state.json"), sst);
+        make(P("fa/dotfiles/bookmarks"), "old");
+        ::symlink(enc(P("fa/dotfiles/bookmarks")).constData(), enc(P("fa/bookmarks")).constData());
+        write_text(P("fa/bookmarks"), "new");
+        check(state_kept && text_of(P("fa/state.json")) == "new" && (sst.st_mode & 0777) == 0600 &&
+                  islink(P("fa/bookmarks")) && text_of(P("fa/dotfiles/bookmarks")) == "new" &&
+                  leftovers(P("fa")).isEmpty(),
+              "Kestrel's own files are written in one step: a write that fails part-way keeps the old contents; they "
+              "keep their permissions, and a symlinked one stays a symlink");
+
+        make(P("fa/taken.txt"), "mine");
+        bool refused_copy = false, refused_new = false;
+        try {
+            copyfile(P("fa/src/small.txt"), P("fa/taken.txt"), true);
+        } catch (const OSError &) {
+            refused_copy = true;
+        }
+        try {
+            write_text(P("fa/taken.txt"), "", true);
+        } catch (const OSError &) {
+            refused_new = true;
+        }
+        small_disk([&]() { copyfile(P("fa/src/big.bin"), P("fa/new-from-template.bin"), true); });
+        check(refused_copy && refused_new && text_of(P("fa/taken.txt")) == "mine" &&
+                  !lexists(P("fa/new-from-template.bin")) && leftovers(P("fa")).isEmpty(),
+              "a new file (from a template, or pasted) never replaces one that's there, and one that fails part-way "
+              "leaves nothing");
+
+        // moves between drives (undo, restoring from the trash): /dev/shm is another filesystem
+        QString other = "/dev/shm/kestrel-test-" + QString::number(::getpid());
+        struct stat a, b;
+        if (!stat_("/dev/shm", b) || !stat_(P("fa"), a) || a.st_dev == b.st_dev) {
+            skip("moving between drives copies whole before deleting (no second filesystem here)");
+        } else {
+            makedirs(other, true);
+            small_disk([&]() { util::move(P("fa/src/big.bin"), join(other, "big.bin")); });
+            bool src_kept = getsize(P("fa/src/big.bin")) == BIG && !lexists(join(other, "big.bin")) &&
+                            leftovers(other).isEmpty();
+            util::move(P("fa/src"), join(other, "src"));
+            check(src_kept && !lexists(P("fa/src")) && getsize(join(other, "src/big.bin")) == BIG &&
+                      leftovers(other).isEmpty(),
+                  "moving between drives copies whole before deleting: a failure part-way keeps the original and no "
+                  "half-made copy");
+            QDir(other).removeRecursively();
+        }
     }
 
     // -- Shred with BleachBit: `bleachbit --shred` on the chosen files and folders, and what's still there afterwards
