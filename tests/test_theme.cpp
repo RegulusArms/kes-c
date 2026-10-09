@@ -137,12 +137,31 @@ int main(int argc, char **argv)
     check(thumbs::follows_accent("accent") && thumbs::follows_accent("") && thumbs::follows_accent("#D9652F") &&
               !thumbs::follows_accent("#33d17a"),
           "“accent”, no setting and the old fixed default follow the accent; a chosen colour doesn't");
+    check(named_accent("orange") == QColor("#ed5b00") && named_accent("slate") == QColor("#6f8396") &&
+              !named_accent("olive").isValid(),
+          "GNOME's accent colour names give libadwaita's colours");
+    QString iface = "org.gnome.desktop.interface";
+    if (desktop_schema(iface) == iface && has_schema_key(iface, "accent-color")) {
+        GSettings *gs = g_settings_new("org.gnome.desktop.interface");
+        g_settings_set_string(gs, "accent-color", "orange");
+        g_settings_sync();
+        check(wait_for([]() { return g_thumbs->folder_color == "#ed5b00"; }, 3000),
+              "a chosen GNOME accent colour comes before the theme's, and folders follow it when it changes");
+        g_settings_reset(gs, "accent-color");
+        g_settings_sync();
+        check(wait_for([]() { return g_thumbs->folder_color == "#3584e4"; }, 3000),
+              "with no GNOME accent colour chosen, folders take the theme's");
+        g_object_unref(gs);
+    } else {
+        skip("GNOME's accent colour setting (GNOME 47+)");
+    }
     settings().setValue("folder_color", "#33d17a");
     apply_thumb_settings(g_thumbs);
+    int before = calls;
     delete owner;
     QApplication::setPalette(LIGHT);
     spin(300);
-    check(calls == 1, "a deleted owner's callback is dropped");
+    check(calls == before, "a deleted owner's callback is dropped");
     check(g_thumbs->folder_color == "#33d17a", "a chosen folder colour stays when the accent changes");
 
     finish();
