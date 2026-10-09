@@ -1061,51 +1061,109 @@ static bool changed_since(const struct timespec &t, const struct timespec &since
     return t.tv_sec > since.tv_sec || (t.tv_sec == since.tv_sec && t.tv_nsec >= since.tv_nsec);
 }
 
-// the symlinks in an open folder (and the folders below it, on the same drive) changed since `since` that
-// link_escapes(), removed
-static void drop_escaping_links(int dirfd, int depth, const struct timespec &since)
+// The folder `name` in dirfd, opened to be listed (-1 if it can't be); *restore: the mode to put back, or -1. One of
+// the user's own that the archive left unreadable (GNU tar applies a folder's stored mode, 000 or 111 say, before it
+// exits) is let in first: owner rwx, set on the folder itself through /proc (never through a symlink swapped in), and
+// its mode is put back once it's swept.
+static int open_for_sweep(int dirfd, const char *name, bool nofollow, int *restore)
+{
+    *restore = -1;
+    int nf = nofollow ? O_NOFOLLOW : 0;
+    int fd = ::openat(dirfd, name, O_RDONLY | O_DIRECTORY | nf | O_CLOEXEC);
+    if (fd >= 0 || errno != EACCES)
+        return fd;
+    int pfd = ::openat(dirfd, name, O_PATH | O_DIRECTORY | nf | O_CLOEXEC);
+    if (pfd < 0)
+        return -1;
+    struct stat st;
+    std::string proc = "/proc/self/fd/" + std::to_string(pfd);
+    if (::fstat(pfd, &st) == 0 && st.st_uid == ::geteuid() && ::chmod(proc.c_str(), (st.st_mode & 07777) | S_IRWXU) == 0) {
+        fd = ::open(proc.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (fd >= 0)
+            *restore = int(st.st_mode & 07777);
+        else
+            ::chmod(proc.c_str(), st.st_mode & 07777);
+    }
+    ::close(pfd);
+    return fd;
+}
+
+// The symlinks in an open folder (and the folders below it, on the same drive) changed since `since` that
+// link_escapes(), removed. One in a folder of the user's that the archive made read-only is removed too: the folder is
+// made writable for it, and its mode put back after (restore: the mode to put back when this folder was opened by
+// open_for_sweep, or -1). Each one is added to report.
+static void drop_escaping_links(int dirfd, const QString &rel, int depth, const struct timespec &since,
+                                QList<archive::DroppedLink> &report, int restore)
 {
     struct stat here;
-    int fd = ::dup(dirfd);
-    DIR *d = fd >= 0 && ::fstat(dirfd, &here) == 0 ? ::fdopendir(fd) : nullptr;
-    if (!d) {
-        if (fd >= 0)
-            ::close(fd);
+    if (::fstat(dirfd, &here) != 0)
         return;
-    }
+    auto let_in = [&]() {   // owner rwx on this folder, if it's the user's; its mode is put back below
+        if (restore >= 0 || here.st_uid != ::geteuid() || ::fchmod(dirfd, (here.st_mode & 07777) | S_IRWXU) != 0)
+            return false;
+        restore = int(here.st_mode & 07777);
+        return true;
+    };
+    if (!(here.st_mode & S_IXUSR))   // can't look anything up in it
+        let_in();
+    int fd = ::dup(dirfd);
+    DIR *d = fd >= 0 ? ::fdopendir(fd) : nullptr;
+    if (!d && fd >= 0)
+        ::close(fd);
     std::vector<std::string> subdirs;
-    while (struct dirent *e = ::readdir(d)) {
+    while (d) {
+        struct dirent *e = ::readdir(d);
+        if (!e)
+            break;
         const char *n = e->d_name;
         struct stat st;
         if (!std::strcmp(n, ".") || !std::strcmp(n, "..") || ::fstatat(dirfd, n, &st, AT_SYMLINK_NOFOLLOW) != 0)
             continue;
         if (S_ISDIR(st.st_mode) && st.st_dev == here.st_dev) {
             subdirs.push_back(n);
-        } else if (S_ISLNK(st.st_mode) && changed_since(st.st_ctim, since)) {
-            char target[PATH_MAX];
-            ssize_t len = ::readlinkat(dirfd, n, target, sizeof target);
-            if (len >= 0 && link_escapes(depth, QByteArray(target, int(len))))
-                ::unlinkat(dirfd, n, 0);
+            continue;
         }
+        if (!S_ISLNK(st.st_mode) || !changed_since(st.st_ctim, since))
+            continue;
+        char target[PATH_MAX];
+        ssize_t len = ::readlinkat(dirfd, n, target, sizeof target);
+        if (len < 0 || !link_escapes(depth, QByteArray(target, int(len))))
+            continue;
+        QString why;
+        if (::unlinkat(dirfd, n, 0) != 0) {
+            int err = errno;
+            if ((err == EACCES || err == EPERM) && let_in())
+                err = ::unlinkat(dirfd, n, 0) == 0 ? 0 : errno;
+            if (err)
+                why = QString::fromLocal8Bit(std::strerror(err));
+        }
+        report << archive::DroppedLink{rel + QString::fromLocal8Bit(n), QString::fromLocal8Bit(target, int(len)), why};
     }
-    ::closedir(d);
+    if (d)
+        ::closedir(d);
     for (const std::string &n : subdirs) {
-        int sub = ::openat(dirfd, n.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        int mode;
+        int sub = open_for_sweep(dirfd, n.c_str(), true, &mode);
         if (sub >= 0) {
-            drop_escaping_links(sub, depth + 1, since);
+            drop_escaping_links(sub, rel + QString::fromLocal8Bit(n.c_str()) + "/", depth + 1, since, report, mode);
             ::close(sub);
         }
     }
+    if (restore >= 0)
+        ::fchmod(dirfd, mode_t(restore));
 }
 
 // GNU tar and UnZip make an archive's symlinks as they are, also ones that lead out of the destination (7-Zip and
 // unrar leave those out), and Kestrel follows a link like any other folder or file: opening, copying or deleting
 // "inside" the extracted folder would reach whatever it points to. So once they're done (also after a failure or a
 // cancel), the escaping links they made are removed: only links changed since the job started (a link's ctime can't
-// be set back), so the user's own links in an existing folder stay.
+// be set back), so the user's own links in an existing folder stay. As in Python's tarfile "data" filter, an absolute
+// link goes even when it names a place inside the folder: where it leads depends on where the folder is. What was
+// removed, or couldn't be, goes in report for the user to be told.
 class EscapingLinkSweep {
 public:
-    EscapingLinkSweep(const QString &dest, const QString &tool) : dest(dest), active(tool == "tar" || tool == "unzip")
+    EscapingLinkSweep(const QString &dest, const QString &tool, QList<archive::DroppedLink> &report)
+        : dest(dest), active(tool == "tar" || tool == "unzip"), report(report)
     {
         ::clock_gettime(CLOCK_REALTIME, &since);
         since.tv_sec -= 1;   // the filesystem's clock can lag a little behind
@@ -1114,9 +1172,10 @@ public:
     {
         if (!active)
             return;
-        int fd = ::open(enc(dest).constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        int mode;
+        int fd = open_for_sweep(AT_FDCWD, enc(dest).constData(), false, &mode);
         if (fd >= 0) {
-            drop_escaping_links(fd, 0, since);
+            drop_escaping_links(fd, QString(), 0, since, report, mode);
             ::close(fd);
         }
     }
@@ -1124,24 +1183,27 @@ public:
 private:
     QString dest;
     bool active;
+    QList<archive::DroppedLink> &report;
     struct timespec since;
 };
 
 QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
-                const QString &overwrite, int threads)
+                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links)
 {
+    QList<DroppedLink> unused;
+    QList<DroppedLink> &report = dropped_links ? *dropped_links : unused;
     JobClock clock;
     QString path = first_volume(path_in);
     auto [k, suf] = kind(path);
     QString label = "Extracting " + basename(path);
     if (k == "tar") {
-        EscapingLinkSweep sweep(dest, "tar");
+        EscapingLinkSweep sweep(dest, "tar", report);
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     }
     if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     ExtractCommand c = extract_command(path, dest, password, overwrite, threads);
-    EscapingLinkSweep sweep(dest, c.tool);
+    EscapingLinkSweep sweep(dest, c.tool, report);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
                                     QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
     const QString &t = c.tool;

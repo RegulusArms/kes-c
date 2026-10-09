@@ -14,11 +14,13 @@
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
+#include <QMainWindow>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QStatusBar>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -502,6 +504,7 @@ public:
     QStringList errors;
     QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
     QList<Job> completed;   // jobs that succeeded (for undo)
+    int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
 
     QStringList run()
     {
@@ -525,7 +528,11 @@ public:
                     move(j.src, j.dst, j.op == "merge_move");
                 else
                     copy(j.src, j.dst, j.op == "merge_copy");
-                if (!replacing)
+                if (replacing)
+                    ++replaced;
+                else if (j.op == "merge_copy" || j.op == "merge_move")
+                    ++merged;
+                else
                     completed << j;
             } catch (const OSError &e) {
                 if (e.permission())
@@ -941,6 +948,13 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
                 undo::record("move", undo_label, moves);
             else if (!copies.isEmpty())
                 undo::record_paths("create", undo_label, copies);
+            if ((*ops)->replaced || (*ops)->merged) {
+                QString what = (*ops)->merged ? "Merge" : "Replace";
+                if (moves.isEmpty() && copies.isEmpty())
+                    undo::record("none", what + " (can't be undone)", {});
+                if (auto *win = qobject_cast<QMainWindow *>(p ? p->window() : nullptr))
+                    win->statusBar()->showMessage(what + " can't be undone: what was replaced is gone.", 8000);
+            }
         }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())

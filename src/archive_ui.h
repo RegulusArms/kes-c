@@ -69,6 +69,9 @@ namespace archive_ui {
 QString ask_password(QWidget *parent, const QString &path, bool wrong = false);   // null if cancelled
 void extract_here(MainWindow *win, const QString &path);
 void extract_dialog(MainWindow *win, const QString &path);
+// Tell the user which of the archive's symlinks were left out for leading outside the folder, and warn about any that
+// couldn't be removed. dropped: [path, target, why] each (why empty: removed).
+void say_dropped_links(QWidget *win, const QString &name, const QVariantList &dropped);
 void compress_dialog(MainWindow *win, const QStringList &paths);
 void run_compress(MainWindow *win, const archive::Spec &spec);
 QString quick_compress_label(const QStringList &paths);   // empty if there are no usable last settings
