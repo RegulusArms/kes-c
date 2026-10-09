@@ -335,26 +335,31 @@ void VerifyDialog::step()
     status->setText(QString("Checking %1 of %2: %3").arg(QString::number(i + 1), QString::number(entries.size()),
                                                           entries[i].name));
     Entry e = entries[i];
+    // no parent: closing the dialog mustn't destroy a thread that is still reading. The result comes through
+    // on_done, not a connection made afterwards, which a quick file could finish before.
+    QPointer<VerifyDialog> self(this);
     task = fileops::run_job(
         nullptr, "Verifying " + e.name,
         [e](Task *t) -> QVariant {
-            Result r = verify(e, t);
-            return QVariantList{r.status, r.actual, r.error};
+            try {
+                Result r = verify(e, t);
+                return QVariantList{r.status, r.actual, r.error};
+            } catch (const Cancelled &) {
+                throw;
+            } catch (const std::exception &err) {   // as a result: run_job connects on_done before the thread starts
+                return QVariantList{"error", "", QString::fromStdString(err.what())};
+            }
         },
-        nullptr, true, true);
+        [self, g](const QVariant &res) {
+            if (self && g == self->gen)
+                self->on_result(res);
+        },
+        true, true);
     connect(task, &Task::progress, this, [this, g, i](double f, const QString &) {
         if (g != gen)
             return;
         qint64 here = before + qint64(std::max(f, 0.0) * sizes[i]);
         bar->setValue(total ? int(1000 * here / total) : 1000 * i / entries.size());
-    });
-    connect(task, &Task::result, this, [this, g](const QVariant &res) {
-        if (g == gen)
-            on_result(res);
-    });
-    connect(task, &Task::error, this, [this, g](const QString &msg) {
-        if (g == gen)
-            on_result(QVariantList{"error", "", msg});
     });
 }
 
