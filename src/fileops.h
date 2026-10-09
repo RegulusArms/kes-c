@@ -139,6 +139,9 @@ Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> 
 // op is "copy", "move", "merge_copy", "merge_move" or "delete"
 struct Job {
     QString op, src, dst;
+    // the user chose Replace or Merge for a dst that was there. Otherwise dst must be new: one that's there when the job
+    // starts, or appears while it runs (another program saving a file), is kept and the job fails with a conflict.
+    bool replace = false;
 };
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of

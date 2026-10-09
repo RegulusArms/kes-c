@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.1-alpha.0.** This is an early alpha release, so expect rough edges.
+**Version 0.3.1-alpha.1.** This is an early alpha release, so expect rough edges.
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -43,7 +43,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 
 **Installs alongside GNOME Files:** Kestrel installs next to GNOME Files (or Nemo on Linux Mint) instead of replacing it. The two share bookmarks, thumbnails, the clipboard, the trash and Recent files, so you can use either. `./install.sh --default` (or `kes-setup --default` with the apt package) makes Kestrel open folders and "Show in folder" requests and show other apps' Open/Save dialogs, and `./install.sh --uninstall` (`kes-setup --undo`) hands them back.
 
-This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.com/RegulusArms/kestrel-explorer). The two were the same up to 0.3.1-alpha.0; since then each is developed on its own. They still use the same settings folder, bookmarks and caches, but aren't kept compatible any more.
+This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.com/RegulusArms/kestrel-explorer). The two were the same up to 0.3.1-alpha.1; since then each is developed on its own. They still use the same settings folder, bookmarks and caches, but aren't kept compatible any more.
 
 ## Install with apt
 
@@ -212,7 +212,8 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 - If a name already exists when copying or moving, you can replace, merge, skip or keep both.
 - Trash, permanent delete, and restoring or emptying the trash. The Trash shows everything you've deleted on every drive in one list: your home trash plus the trash folder each drive keeps for files deleted on it (`.Trash-<uid>`, the same as GNOME Files). The Location column shows where each item came from, and Restore, Delete Permanently and Empty Trash work across all of them.
 - **Shred with BleachBit:** with [BleachBit](https://www.bleachbit.org) installed, right-click files or folders → **Shred with BleachBit…** overwrites them and then deletes them, so they can't be recovered; **Empty Trash with BleachBit…** (in the Trash and on the sidebar's Trash) does the same to everything in the trash, on every drive. Both ask first, run in the status bar with ✕ to stop, and list anything BleachBit couldn't shred. On SSDs and some file systems, overwriting can't guarantee that every old copy of the data is gone.
-- Nothing is replaced until its replacement is complete. Copies, moves, extracting, compressing over an older archive, checksum files, shortcuts, pasted images and Kestrel's own settings files are written under a hidden name (`.kes-….part`) beside their destination and renamed into place at the end. A full disk, a cancel or a crash leaves the old version as it was, never a half-written one. Merges, deletes and moves between drives can't be all-or-nothing, so each file in them is still handled whole and nothing is lost.
+- Nothing is replaced until its replacement is complete. Copies, moves, decompressing a single file (`.gz`, `.xz`, …), compressing over an older archive, checksum files, shortcuts, pasted images and Kestrel's own settings files are written under a hidden name (`.kes-….part`) beside their destination and renamed into place at the end. A full disk, a cancel or a crash leaves the old version as it was, never a half-written one. Merges, deletes and moves between drives can't be all-or-nothing, so each file in them is still handled whole and nothing is lost. Files are staged through temporary `.kes-*.part` paths where supported; extraction directly into an existing folder may leave partial results after a failure or cancellation, and overwritten files are not rolled back.
+- A copy, move or extracted file going to a name that was free never replaces something another program saves there in the meantime: that file is kept, and Kestrel says so. Only **Replace** replaces.
 - Deleting handles read-only folders you own (common in extracted Windows archives): they're made writable and deleted.
 - Copies and deletes never follow a symbolic link inside the folders they work through, so a folder swapped for a link while they run can't send them anywhere else. A delete also stops at another drive mounted inside the folder, instead of emptying it.
 - Links and shortcuts:
@@ -250,7 +251,7 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 - **Compress…** on any files or folders: 7z, zip, rar, zpaq, tar, tar.gz/bz2/xz/zst/lz/lz4 or a single compressed file, using pigz, gzip, zpaq, zstd, xz, bzip2, lzip, 7-Zip, rar and the other tools you have installed.
 - Every option the format supports: program, level, method, CPU threads, password (AES-256), encrypted file names, split volumes, solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
 - **Compress to “name.ext”** repeats your last settings in one click.
-- Progress, elapsed time and Cancel in the status bar; cancelling removes partial output.
+- Progress, elapsed time and Cancel in the status bar; cancelling removes partial output (extracting straight into an existing folder may leave what was already written).
 
 **Admin session** (details in [Admin session](#admin-session))
 - When something fails because you don't have permission (copying into `/opt`, deleting files owned by root, renaming in a system folder…), Kestrel offers **Retry as Administrator**.
@@ -356,7 +357,7 @@ Symbolic links are stored as links (zpaq is the exception; see below). File name
 
 ### Progress and cancelling
 
-Archive jobs run in the background and show in the status bar with a progress bar, ✕ to cancel, and the elapsed time for anything over 5 seconds. Cancelling stops the tool immediately and removes the partial archive, or the half-extracted folder.
+Archive jobs run in the background and show in the status bar with a progress bar, ✕ to cancel, and the elapsed time for anything over 5 seconds. Cancelling stops the tool immediately and removes the partial archive, or the half-extracted folder Kestrel made for it. Extracting straight into an existing folder may leave what was already written there, and files it overwrote aren't put back.
 
 Not every tool can report real progress, so the bar shows what each one can:
 
@@ -428,7 +429,7 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 - **It won't hand out root by accident.** A copy it makes is root's, so it drops the set-user-ID bit from someone else's program (a move between drives keeps the owner instead). It only hard-links your own files, and never deletes a mount point (the drive mounted there would be emptied).
 - **The trade-off, when built from source:** the helper binary is in the Kestrel build folder, which your account can edit. Anything running as you could change that file before your next admin session. Installed from the .deb, it's `/usr/bin/kes-admin-helper`, which only root can change. That's the same level of trust as typing `sudo` in your own terminal, which is fine on a personal computer.
 
-## Differences from the Python version (as of 0.3.1-alpha.0, when the two were split)
+## Differences from the Python version (as of 0.3.1-alpha.1, when the two were split)
 
 - **Image decoding is Qt only.** The Python version fell back to Pillow for images Qt couldn't read. This version has no second decoder, so a file Qt can't decode (even with `kimageformat6-plugins`) gets no thumbnail.
 - **The EXIF summary and the image-generation prompts in the info panel come from a built-in reader** instead of Pillow. It reads EXIF from JPEG, PNG (`eXIf`), WebP and TIFF-based RAW files, and text chunks from PNG. HEIC/AVIF EXIF appears only in the Metadata tab (through exiftool).
@@ -441,7 +442,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 365 checks in 13 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](tests/README.md).
+There are 370 checks in 13 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](tests/README.md).
 
 ## Architecture
 

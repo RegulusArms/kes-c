@@ -124,7 +124,7 @@ int main(int argc, char **argv)
           "merge: files from both folders are there");
     check(text_of(P("B/both.txt")) == "from A", "merge: a file in both is replaced by the copied one");
     make(P("C/only-c.txt"), "c");
-    check(run_ops(w, {{"copy", P("A"), P("C")}}), "a replace finishes");
+    check(run_ops(w, {{"copy", P("A"), P("C"), true}}), "a replace finishes");
     check(!lexists(P("C/only-c.txt")) && exists(P("C/only-a.txt")), "replace: the old folder's contents are gone");
 
     // ---- delete
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
         make(P("rep/report.txt"), "precious");
         Task *rt = nullptr;
         bool rep_done = false;
-        rt = fileops::start_ops(w, {{"copy", P("rep/new.bin"), P("rep/report.txt")}}, "Test",
+        rt = fileops::start_ops(w, {{"copy", P("rep/new.bin"), P("rep/report.txt"), true}}, "Test",
                                 [&rep_done]() { rep_done = true; });
         // on the copying thread itself, as soon as the copy reports progress on this file: a cancel half-way through
         QObject::connect(rt, &Task::progress, rt, [rt](double, const QString &text) {
@@ -201,7 +201,7 @@ int main(int argc, char **argv)
         lim.rlim_cur = 1 << 20;   // writes past 1 MB fail (EFBIG)
         auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
         ::setrlimit(RLIMIT_FSIZE, &lim);
-        run_ops(w, {{"copy", P("rep/big.bin"), P("rep/keep.txt")}});
+        run_ops(w, {{"copy", P("rep/big.bin"), P("rep/keep.txt"), true}});
         ::setrlimit(RLIMIT_FSIZE, &old_lim);
         ::signal(SIGXFSZ, old_handler);
         check(text_of(P("rep/keep.txt")) == "precious" && leftovers().isEmpty(),
@@ -213,7 +213,7 @@ int main(int argc, char **argv)
         make(P("rep/linked.txt"), "old");
         ::link(enc(P("rep/linked.txt")).constData(), enc(P("rep/other-link.txt")).constData());
         make(P("rep/small.txt"), "new");
-        run_ops(w, {{"copy", P("rep/small.txt"), P("rep/to-outside")}, {"copy", P("rep/small.txt"), P("rep/linked.txt")}});
+        run_ops(w, {{"copy", P("rep/small.txt"), P("rep/to-outside"), true}, {"copy", P("rep/small.txt"), P("rep/linked.txt"), true}});
         check(!islink(P("rep/to-outside")) && text_of(P("rep/to-outside")) == "new" &&
                   text_of(P("rep/outside.txt")) == "outside" && text_of(P("rep/linked.txt")) == "new" &&
                   text_of(P("rep/other-link.txt")) == "old" && leftovers().isEmpty(),
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
         make(P("rep/olddir/keep.txt"), "keep");
         auto old_intact = []() { return listdir(P("rep/olddir")) == QStringList{"keep.txt"} &&
                                         text_of(P("rep/olddir/keep.txt")) == "keep"; };
-        Task *dt = fileops::start_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}}, "Test", []() {});
+        Task *dt = fileops::start_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}}, "Test", []() {});
         QObject::connect(dt, &Task::progress, dt, [dt](double, const QString &text) {
             if (text.endsWith("huge"))
                 dt->cancel();
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
         lim.rlim_cur = 1 << 20;
         old_handler = ::signal(SIGXFSZ, SIG_IGN);
         ::setrlimit(RLIMIT_FSIZE, &lim);
-        run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}});
+        run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}});
         ::setrlimit(RLIMIT_FSIZE, &old_lim);
         ::signal(SIGXFSZ, old_handler);
         check(old_intact() && leftovers().isEmpty(),
@@ -249,13 +249,65 @@ int main(int argc, char **argv)
         ::truncate(enc(P("rep/newdir/huge")).constData(), 10);
         make(P("rep/mvsrc/moved.txt"), "moved");
         make(P("rep/mvdst/old.txt"), "old");
-        bool replaced = run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir")}, {"move", P("rep/mvsrc"), P("rep/mvdst")}});
+        bool replaced = run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}, {"move", P("rep/mvsrc"), P("rep/mvdst"), true}});
         check(replaced && listdir(P("rep/olddir")).size() == 2 && lexists(P("rep/olddir/huge")) &&
                   !lexists(P("rep/olddir/keep.txt")) && !lexists(P("rep/mvsrc")) &&
                   listdir(P("rep/mvdst")) == QStringList{"moved.txt"} && leftovers().isEmpty(),
               "copying or moving a folder onto another replaces it whole: the old contents are gone, nothing is left "
               "behind");
         QDir(P("rep")).removeRecursively();
+        boxes.clear();
+    }
+
+    // -- a destination that was free when the job was planned and that another program creates while it runs (or
+    // before it starts) is kept: the copy or move isn't put in its place, and the conflict is reported. Only Replace
+    // replaces.
+    {
+        makedirs(P("race"), true);
+        auto leftovers = []() {
+            QStringList out;
+            for (const QString &n : listdir(P("race")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        make(P("race/big.bin"), "b");
+        ::truncate(enc(P("race/big.bin")).constData(), qint64(256) << 20);   // sparse: long enough to step in
+        make(P("race/dir/inner.bin"), "i");
+        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(256) << 20);
+        // on the copying thread, at its first report on the file: "another program" saves the destination
+        auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
+            boxes.clear();
+            bool stepped = false;
+            Task *t = fileops::start_ops(w, {job}, "Test", []() {});
+            QObject::connect(t, &Task::progress, t, [&stepped, intrude](double, const QString &text) {
+                if (!stepped && text.endsWith(".bin")) {
+                    stepped = true;
+                    intrude();
+                }
+            }, Qt::DirectConnection);
+            QPointer<Task> tp(t);
+            wait_for([&]() { return !tp; }, 20000);
+            wait_for([]() { return !boxes.isEmpty(); }, 3000);
+            return stepped;
+        };
+        bool stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
+                                  []() { write_text(P("race/new.bin"), "theirs"); });
+        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+                  boxes.last().contains("appeared"),
+              "a file another program saves under the new name while a copy runs is kept, and the conflict is reported");
+        stepped = run_racing({"copy", P("race/dir"), P("race/newdir")}, []() { make(P("race/newdir/theirs.txt"), "t"); });
+        check(stepped && listdir(P("race/newdir")) == QStringList{"theirs.txt"} && leftovers().isEmpty() &&
+                  !boxes.isEmpty() && boxes.last().contains("appeared"),
+              "...and so is a folder made under the new name while a folder copy runs");
+        make(P("race/taken.txt"), "mine");
+        make(P("race/small.txt"), "small");
+        boxes.clear();
+        bool ran = run_ops(w, {{"copy", P("race/small.txt"), P("race/taken.txt")}, {"move", P("race/small.txt"), P("race/taken.txt")}});
+        check(ran && text_of(P("race/taken.txt")) == "mine" && text_of(P("race/small.txt")) == "small" &&
+                  !boxes.isEmpty() && boxes.last().contains("appeared"),
+              "a copy or move to a name that's taken by the time it starts (not chosen as Replace) replaces nothing");
+        QDir(P("race")).removeRecursively();
         boxes.clear();
     }
 
@@ -293,7 +345,7 @@ int main(int argc, char **argv)
     undo::record("rename", "Earlier", {qMakePair(P("u/earlier-a"), P("u/earlier-b"))});
     make(P("u/rep.txt"), "new");
     make(P("u/rep-dst/rep.txt"), "old");
-    check(run_ops(w, {{"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}}, "Copy") &&
+    check(run_ops(w, {{"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt"), true}}, "Copy") &&
               text_of(P("u/rep-dst/rep.txt")) == "new" && undo::label() == "Replace (can't be undone)" &&
               w->statusBar()->currentMessage() == "Replace can't be undone: what was replaced is gone.",
           "a copy that replaced a file isn't offered for undo, and the status bar says it can't be undone");
@@ -303,7 +355,7 @@ int main(int argc, char **argv)
           "Ctrl+Z after a replace says it can't be undone, and leaves the action before it alone");
     make(P("u/fresh.txt"), "fresh");
     make(P("u/rep.txt"), "newer");
-    check(run_ops(w, {{"copy", P("u/fresh.txt"), P("u/rep-dst/fresh.txt")}, {"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}},
+    check(run_ops(w, {{"copy", P("u/fresh.txt"), P("u/rep-dst/fresh.txt")}, {"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt"), true}},
                   "Copy") &&
               undo_and_wait(w, [&]() { return !lexists(P("u/rep-dst/fresh.txt")); }) &&
               text_of(P("u/rep-dst/rep.txt")) == "newer",
@@ -653,7 +705,7 @@ int main(int argc, char **argv)
     reset_victim();
     make(P("lk_src.txt"), "new");
     ::symlink(join(victim, "keep").toLocal8Bit().constData(), P("lk_dst.txt").toLocal8Bit().constData());
-    run_ops(w, {{"copy", P("lk_src.txt"), P("lk_dst.txt")}});
+    run_ops(w, {{"copy", P("lk_src.txt"), P("lk_dst.txt"), true}});
     check(victim_intact() && !islink(P("lk_dst.txt")) && text_of(P("lk_dst.txt")) == "new",
           "copying onto a symlink replaces the link, not the file it points to");
     // a folder swapped for a symlink to the victim (renameat2 exchange: the path always exists) while a delete runs
@@ -841,6 +893,34 @@ int main(int argc, char **argv)
         bool failed = !run_extract(join(base, "bad.txt.gz"), "overwrite");
         check(failed && text_of(join(dest, "bad.txt")) == "old\n" && listdir(dest) == QStringList{"bad.txt"},
               "a failed decompress leaves the file it would have replaced, and no temporary file");
+        // a name that was free, saved by another program while the file is being decompressed: kept as it is
+        QDir(dest).removeRecursively();
+        makedirs(dest, true);
+        {
+            QFile rnd("/dev/urandom"), f(join(base, "noise.bin"));
+            rnd.open(QIODevice::ReadOnly);
+            f.open(QIODevice::WriteOnly);
+            f.write(rnd.read(48 << 20));   // doesn't compress: long enough to step in
+        }
+        proc::run({"gzip", "-1", join(base, "noise.bin")});
+        bool stepped = false;
+        Task task("test", [](Task *) { return QVariant(); });
+        QObject::connect(&task, &Task::progress, &task, [&](double, const QString &) {
+            if (!stepped) {
+                stepped = true;
+                write_text(join(dest, "noise.bin"), "theirs");
+            }
+        }, Qt::DirectConnection);
+        QString said;
+        try {
+            archive::extract(&task, join(base, "noise.bin.gz"), dest, QString(), "rename");
+        } catch (const Error &e) {
+            said = e.message();
+        }
+        check(stepped && said.contains("appeared") && text_of(join(dest, "noise.bin")) == "theirs" &&
+                  listdir(dest) == QStringList{"noise.bin"},
+              "decompressing a single file: one another program saves under its name meanwhile is kept, and the "
+              "conflict is reported");
     }
 
     // -- failure-atomic everywhere else Kestrel writes (CLAUDE.md): compressing over an archive, its own files, new

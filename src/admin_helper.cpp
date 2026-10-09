@@ -419,14 +419,17 @@ public:
     // Copy src (in src_dir) to dst (in dst_dir). Whatever is made is built under a hidden part_name() beside dst and
     // put in its place only when complete (install), so a failure, a cancel or the session ending leaves dst as it
     // was and no half-made copy. Only a merge writes into an existing folder (each file in it still replaced whole).
-    // staged: dst is inside a folder being built, where nothing exists yet.
+    // staged: dst is inside a folder being built, where nothing exists yet. claim: dst must be new (Kestrel's
+    // "replace": false): one that's there, or that appears while this runs, is kept and the copy fails.
     void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge,
-              const Owner &owner, bool staged = false)
+              const Owner &owner, bool staged = false, bool claim = false)
     {
         struct stat st, dst_st;
         if (!stat_at(src_dir, src, &st))
             fail_errno();
         bool dst_exists = !staged && stat_at(dst_dir, dst, &dst_st);
+        if (claim && dst_exists)
+            throw conflict(dst);
         if (dst_exists && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
             throw Failure(dst + " is a folder");   // a file or link never replaces a whole folder
         if (S_ISDIR(st.st_mode) && merge && dst_exists) {
@@ -496,7 +499,9 @@ public:
             } else {
                 throw Failure(src + " isn't a regular file, folder or link");
             }
-            if (!staged)
+            if (claim)
+                claim_name(dst_dir, part, dst);
+            else if (!staged)
                 install(dst_dir, part, dst);
         } catch (...) {
             if (made && !staged)
@@ -537,6 +542,39 @@ public:
     // rename. Where a folder is involved, the two are swapped in one step (RENAME_EXCHANGE; on a filesystem without
     // it, the old one is renamed aside first and put back if the second rename fails), and then the old one, now
     // under the part name, is deleted.
+    static Failure conflict(const std::string &name)
+    {
+        return Failure(name + " appeared while this was being done; it was kept as it is, and nothing was put in its place");
+    }
+
+    // a finished part to a name that must still be free: never replacing what another program put there meanwhile
+    // (RENAME_NOREPLACE; without it, link() for a file or link, check-then-rename for a folder)
+    void claim_name(int dirfd, const std::string &part, const std::string &name)
+    {
+        if (renameat2(dirfd, part.c_str(), dirfd, name.c_str(), RENAME_NOREPLACE) == 0)
+            return;
+        int e = errno;
+        if (e == EINVAL) {
+            struct stat st, existing;
+            if (stat_at(dirfd, part, &st) && S_ISDIR(st.st_mode)) {
+                if (stat_at(dirfd, name, &existing))
+                    e = EEXIST;
+                else if (renameat(dirfd, part.c_str(), dirfd, name.c_str()) == 0)
+                    return;
+                else
+                    e = errno;
+            } else if (linkat(dirfd, part.c_str(), dirfd, name.c_str(), 0) == 0) {
+                unlinkat(dirfd, part.c_str(), 0);
+                return;
+            } else {
+                e = errno;
+            }
+        }
+        if (e == EEXIST)
+            throw conflict(name);
+        fail_errno(e);
+    }
+
     void install(int dirfd, const std::string &part, const std::string &name)
     {
         swap_in(dirfd, part, dirfd, name, [&](int d, const std::string &old) { remove_old(d, old, name); });
@@ -599,12 +637,14 @@ public:
         }
     }
 
-    void move(const Walk &src, const Walk &dst, bool merge)
+    void move(const Walk &src, const Walk &dst, bool merge, bool claim)
     {
         struct stat st, dst_dir_st, existing;
+        if (claim && stat_at(dst.dir.get(), dst.name, &existing))
+            throw conflict(dst.name);
         if (!merge && stat_at(src.dir.get(), src.name, &st) && fstat(dst.dir.get(), &dst_dir_st) == 0 &&
             st.st_dev == dst_dir_st.st_dev) {
-            if (stat_at(dst.dir.get(), dst.name, &existing)) {
+            if (!claim && stat_at(dst.dir.get(), dst.name, &existing)) {
                 // replaced in one step (see swap_in); the old one is deleted once the moved one is in place
                 if (S_ISDIR(existing.st_mode) && !S_ISDIR(st.st_mode))
                     throw Failure(dst.name + " is a folder");
@@ -622,9 +662,9 @@ public:
                 return;
             }
             if (errno == EEXIST)
-                throw Failure(dst.name + " appeared while it was being replaced");
+                throw conflict(dst.name);
         }
-        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, keep_owner());
+        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, keep_owner(), false, claim);
         remove(src.dir.get(), src.name);
     }
 
@@ -703,6 +743,8 @@ static void handle(const QJsonObject &req)
     } else if (op == "copy" || op == "move") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         bool merge = req.value("merge").toBool();
+        // "replace": false: the destination must be new (Kestrel planned it as free); absent: as before, replace it
+        bool claim = !merge && req.contains("replace") && !req.value("replace").toBool();
         // The destination may be the source itself: the same path, a hard link to it, or the same name in another
         // case on a drive that ignores case. Replacing it first would delete the source, so: moving a path onto
         // itself does nothing, moving onto another name for it just renames, and anything else is refused.
@@ -721,9 +763,9 @@ static void handle(const QJsonObject &req)
         // progress: every item, and the bytes copied; a move then deletes the items
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         if (op == "copy")
-            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()));
+            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else
-            job.move(src, dst, merge);
+            job.move(src, dst, merge, claim);
     } else if (op == "rename") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         if (renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE) != 0) {
