@@ -21,6 +21,7 @@
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QMutex>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
@@ -554,6 +555,18 @@ void rmtree(const QString &p)
         return;
     rmtree_at(fd, enc(basename(p)));
     ::close(fd);
+}
+
+int open_part_at(int dirfd, const QString &prefix, QString *name)
+{
+    for (;;) {
+        *name = prefix + QString(".kes-%1.part").arg(QRandomGenerator::global()->generate(), 8, 16, QChar('0'));
+        int fd = ::openat(dirfd, enc(*name).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+        if (fd >= 0)
+            return fd;
+        if (errno != EEXIST)
+            throw_errno(*name);
+    }
 }
 
 void write_text(const QString &p, const QByteArray &data, bool exclusive)

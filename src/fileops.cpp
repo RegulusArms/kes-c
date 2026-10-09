@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
@@ -702,14 +703,14 @@ private:
             }
             copy_times_mode(out.fd, st);
         } else if (S_ISREG(st.st_mode)) {
-            copy_file_at(sdir, sname, st, src, ddir, dname, dst, dst_exists && S_ISLNK(dst_st.st_mode));
+            copy_file_at(sdir, sname, st, src, ddir, dname, dst);
         } else {
             throw Error(src + " isn't a regular file, folder or link");
         }
     }
 
     void copy_file_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
-                      const QString &dname, const QString &dst, bool dst_is_link)
+                      const QString &dname, const QString &dst)
     {
         QString name = basename(src);
         Fd in(::openat(sdir, enc(sname).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -718,40 +719,50 @@ private:
             throw_errno(src);
         if (::fstat(in.fd, &now) != 0 || now.st_dev != st.st_dev || now.st_ino != st.st_ino)
             throw Error(src + " changed while it was being copied");
-        // a symlink in the way is replaced, never written through; an existing file is overwritten in place
-        if (dst_is_link && ::unlinkat(ddir, enc(dname).constData(), 0) != 0)
-            throw_errno(dst);
-        Fd out(::openat(ddir, enc(dname).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0666));
-        if (out.fd < 0)
-            throw_errno(dst);
-        std::unique_ptr<char[]> buf(new char[CHUNK]);
-        for (;;) {
-            if (task->cancelled) {
-                out.reset();
-                ::unlinkat(ddir, enc(dname).constData(), 0);
-                throw Cancelled();
-            }
-            ssize_t n = ::read(in.fd, buf.get(), CHUNK);
-            if (n < 0 && errno == EINTR)
-                continue;
-            if (n < 0)
-                throw_errno(src);
-            if (n == 0)
-                break;
-            for (ssize_t off = 0; off < n;) {
-                ssize_t w = ::write(out.fd, buf.get() + off, size_t(n - off));
-                if (w < 0 && errno == EINTR)
-                    continue;
-                if (w < 0)
-                    throw_errno(dst);
-                off += w;
-            }
-            done += n;
-            report_progress(name);
+        // Written to a new file beside the destination and renamed over it once complete: until then an existing file
+        // keeps its contents (a cancel or an error removes only the new file), a symlink in the way is replaced (never
+        // written through), and another hard link of the old file keeps the old contents.
+        QString part;
+        int part_fd;
+        try {
+            part_fd = open_part_at(ddir, QString(), &part);
+        } catch (const OSError &e) {
+            throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
         }
-        copy_times_mode(out.fd, st);
-        if (::close(out.release()) != 0)
-            throw_errno(dst);
+        Fd out(part_fd);
+        try {
+            std::unique_ptr<char[]> buf(new char[CHUNK]);
+            for (;;) {
+                if (task->cancelled)
+                    throw Cancelled();
+                ssize_t n = ::read(in.fd, buf.get(), CHUNK);
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n < 0)
+                    throw_errno(src);
+                if (n == 0)
+                    break;
+                for (ssize_t off = 0; off < n;) {
+                    ssize_t w = ::write(out.fd, buf.get() + off, size_t(n - off));
+                    if (w < 0 && errno == EINTR)
+                        continue;
+                    if (w < 0)
+                        throw_errno(dst);
+                    off += w;
+                }
+                done += n;
+                report_progress(name);
+            }
+            copy_times_mode(out.fd, st);
+            if (::close(out.release()) != 0)
+                throw_errno(dst);
+            if (::renameat(ddir, enc(part).constData(), ddir, enc(dname).constData()) != 0)
+                throw_errno(dst);
+        } catch (...) {
+            out.reset();
+            ::unlinkat(ddir, enc(part).constData(), 0);
+            throw;
+        }
     }
 
     // a folder in the way of a copy: deleted, with the same retry for read-only folders as remove()
@@ -906,6 +917,42 @@ void transfer(QWidget *parent, const QStringList &sources, const QString &dest_d
 
 // ---------------------------------------------------------------- links & shortcuts
 
+// A string value in a .desktop file (the Desktop Entry spec's escapes): a line break can't end the value and start a
+// key of its own.
+static QString desktop_value(const QString &s)
+{
+    QString out;
+    for (int i = 0; i < s.size(); i++) {
+        QChar c = s[i];
+        if (c == '\\')
+            out += "\\\\";
+        else if (c == '\n')
+            out += "\\n";
+        else if (c == '\t')
+            out += "\\t";
+        else if (c == '\r')
+            out += "\\r";
+        else if (c == ' ' && i == 0)
+            out += "\\s";
+        else
+            out += c;
+    }
+    return out;
+}
+
+// One argument of a .desktop file's Exec: in double quotes, with ", `, $ and \ escaped inside them and % doubled (a
+// field code otherwise); desktop_value() is applied to the whole line on top.
+static QString exec_arg(const QString &arg)
+{
+    QString q;
+    for (QChar c : arg) {
+        if (c == '"' || c == '`' || c == '$' || c == '\\')
+            q += '\\';
+        q += c;
+    }
+    return "\"" + q.replace("%", "%%") + "\"";
+}
+
 QVariantMap link_plan(const QString &kind, const QString &target, const QString &dest_dir)
 {
     QString name = basename(rstrip(target, '/'));
@@ -921,16 +968,25 @@ QVariantMap link_plan(const QString &kind, const QString &target, const QString 
         QString link = unique_path(dest_dir, same_dir ? name + " (hard link)" : name, "num");
         return {{"op", "hardlink"}, {"target", abspath(target)}, {"link", link}};
     }
-    // a freedesktop .desktop launcher pointing to target
+    // a freedesktop .desktop launcher pointing to target. Every value is escaped (desktop_value), so a name can't add
+    // keys of its own; control characters the format has no escape for are refused.
+    static const QRegularExpression control("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]");
+    if (target.contains(control))
+        throw Error("A shortcut can't point to “" + name + "”: its name or folder holds control characters.");
     bool is_dir = isdir(target);
     QString body;
     if (isfile(target) && util::access(target, X_OK)) {
-        body = QString("[Desktop Entry]\nType=Application\nName=%1\nExec=\"%2\"\nPath=%3\n"
-                       "Icon=application-x-executable\nTerminal=false\n")
-                   .arg(name, target, dirname(target));
+        // GLib checks that the program exists before it turns %% back into %, so it won't load a launcher whose
+        // program's path holds a "%": sh starts that one (the path is its $0, never parsed as a command)
+        QString exec = target.contains('%') ? "sh -c " + exec_arg("exec \"$0\"") + " " + exec_arg(target)
+                                            : exec_arg(target);
+        body = "[Desktop Entry]\nType=Application\nName=" + desktop_value(name) +
+               "\nExec=" + desktop_value(exec) + "\nPath=" + desktop_value(dirname(target)) +
+               "\nIcon=application-x-executable\nTerminal=false\n";
     } else {
         QString icon = is_dir ? QString("folder") : mime_for(target, is_dir).iconName();
-        body = QString("[Desktop Entry]\nType=Link\nName=%1\nURL=%2\nIcon=%3\n").arg(name, file_uri(target), icon);
+        body = "[Desktop Entry]\nType=Link\nName=" + desktop_value(name) + "\nURL=" + desktop_value(file_uri(target)) +
+               "\nIcon=" + desktop_value(icon) + "\n";
     }
     QString path = unique_path(dest_dir, split_ext(name).first + ".desktop", "num");
     return {{"op", "write"}, {"path", path}, {"text", body}, {"mode", 0755}};
