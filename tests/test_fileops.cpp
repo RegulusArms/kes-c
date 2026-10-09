@@ -2,6 +2,8 @@
 #include "common.h"
 
 #include "archive_ui.h"
+#include "dialogs.h"
+#include "hashcheck.h"
 #include "stats.h"
 
 #include <QDir>
@@ -219,6 +221,84 @@ int main(int argc, char **argv)
     w->open_paths(w->pane(), {P("arc.tar.gz")});
     check(wait_for([&]() { return extract_shown; }), "double-clicking an archive opens Kestrel's Extract dialog");
     extract_closer.stop();
+
+    // ---- checksum files
+    check(hashcheck::is_hash_file(P("x.sfv")) && hashcheck::is_hash_file(P("x.MD5")) &&
+              hashcheck::is_hash_file(P("x.sha256")) && hashcheck::is_hash_file(P("SHA256SUMS")) &&
+              hashcheck::is_hash_file(P("Fedora-41-x86_64-CHECKSUM")) && hashcheck::is_hash_file(P("x.b2")) &&
+              !hashcheck::is_hash_file(P("x.txt")) && !hashcheck::is_hash_file(P("md5.txt")) &&
+              !hashcheck::is_hash_file(P("summary")),
+          "checksum files are recognised by name (.sfv, .md5, .sha256, SHA256SUMS, …-CHECKSUM), other files aren't");
+    const QString MD5 = "b1946ac92492d2347c6235b4d2611184", SHA1 = "f572d396fae9206628714fb2ce00f72e94f2258f",
+                  SHA256 = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+                  SHA512 = "e7c22b994c59d9cf2b48e549b1e24666636045930d3da7c1acb299d1c3b7f931f94aae41edda2c2b207a36e10f8bcb8d"
+                           "45223e54878f5b316e7ce3b6bc019629",
+                  B2 = "f60ce482e5cc1229f39d71313171a8d9f4ca3a87d066bf4b205effb528192a75f14f3271e2c1a90e1de53f275b4d4793ee"
+                       "f2f5e31ea90d2ce29d2e481c36435f";
+    make(P("sums/hello.txt"), "hello\n");
+    make(P("sums/back\\slash.txt"), "hello\n");
+    make(P("sums/changed.txt"), "changed\n");
+    make(P("sums/MD5SUMS"), ("# made by md5sum\n" + MD5 + "  hello.txt\n" + MD5 + " *changed.txt\n" + MD5 +
+                             "  missing.txt\n\\" + MD5 + "  back\\\\slash.txt\n")
+                                .toUtf8());
+    make(P("sums/CHECKSUM"), ("-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nSHA256 (hello.txt) = " + SHA256 +
+                              "\nSHA1 (hello.txt) = " + SHA1 + "\nSHA512 (hello.txt) = " + SHA512 +
+                              "\nBLAKE2b (hello.txt) = " + B2 +
+                              "\n-----BEGIN PGP SIGNATURE-----\niQIzBAEBCAAdFiEE\n-----END PGP SIGNATURE-----\n")
+                                 .toUtf8());
+    make(P("sums/files.sfv"), "; made by an SFV tool\r\nhello.txt 363A3020\r\nchanged.txt 363a3020\r\n");
+    make(P("sums/hello.txt.sha256"), (SHA256 + "\n").toUtf8());
+    make(P("sums/notes.md5"), "just some notes\n");
+    auto md5s = hashcheck::parse(P("sums/MD5SUMS")), bsd = hashcheck::parse(P("sums/CHECKSUM")),
+         sfv = hashcheck::parse(P("sums/files.sfv")), lone = hashcheck::parse(P("sums/hello.txt.sha256"));
+    auto names = [](const QList<hashcheck::Entry> &es) {
+        QStringList out;
+        for (const auto &e : es)
+            out << e.name + ":" + e.algo;
+        return out.join(",");
+    };
+    check(names(md5s) == "hello.txt:md5,changed.txt:md5,missing.txt:md5,back\\slash.txt:md5" &&
+              md5s.value(0).path == P("sums/hello.txt") &&
+              names(bsd) == "hello.txt:sha256,hello.txt:sha1,hello.txt:sha512,hello.txt:blake2b" &&
+              names(sfv) == "hello.txt:crc32,changed.txt:crc32" && sfv.value(0).expected == "363a3020" &&
+              names(lone) == "hello.txt:sha256" && lone.value(0).path == P("sums/hello.txt") &&
+              hashcheck::parse(P("sums/notes.md5")).isEmpty(),
+          "GNU, BSD-tag, SFV and lone-hash checksum files are read (escaped names, comments and a PGP signature skipped)");
+    auto statuses = [](const QList<hashcheck::Entry> &es) {
+        QStringList out;
+        for (const auto &e : es)
+            out << hashcheck::verify(e).status;
+        return out.join(",");
+    };
+    check(statuses(md5s) == "ok,failed,missing,ok" && statuses(bsd) == "ok,ok,ok,ok" && statuses(sfv) == "ok,failed" &&
+              statuses(lone) == "ok",
+          "verifying finds matching, changed and missing files (MD5, SHA-1, SHA-256, SHA-512, BLAKE2b, CRC32)");
+    w->open_paths(w->pane(), {P("sums/MD5SUMS")});
+    hashcheck::VerifyDialog *vd = nullptr;
+    wait_for([&]() {
+        for (QWidget *x : QApplication::topLevelWidgets())
+            if (auto *d = qobject_cast<hashcheck::VerifyDialog *>(x); d && d->isVisible())
+                vd = d;
+        return vd && vd->complete();
+    });
+    QStringList got;
+    for (const auto &r : vd ? vd->results : QList<hashcheck::Result>())
+        got << r.status;
+    check(got.join(",") == "ok,failed,missing,ok",
+          "double-clicking a checksum file opens Verify Checksums, which checks every file it lists");
+    if (vd)
+        vd->close();
+    QStringList said;
+    for (const auto &[file, sums] : QList<QPair<QString, QString>>{
+             {"hello.txt", "CHECKSUM"}, {"changed.txt", "MD5SUMS"}, {"hello.txt", "notes.md5"}}) {
+        PropertiesDialog d(w, {P("sums/" + file)});
+        d.verify_against(P("sums/" + sums));
+        wait_for([&]() { return !d.hash_result->text().endsWith("…"); });
+        said << d.hash_result->text();
+    }
+    check(said.value(0) == "✔ Matches (SHA256)." && said.value(1) == "✘ Doesn't match (MD5)." &&
+              said.value(2).contains("isn't a checksum file"),
+          QString("Properties' Checksums tab checks a file against a chosen checksum file (%1)").arg(said.join(" | ")));
 
     // -- symlinks inside a tree: never followed, even when one is swapped in while a job runs
     QString victim = P("victim");   // stands for files elsewhere that a job mustn't touch

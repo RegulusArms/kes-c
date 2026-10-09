@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "fileops.h"
+#include "hashcheck.h"
 #include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
@@ -953,7 +954,67 @@ QWidget *PropertiesDialog::checksum_tab()
     });
     form->addRow("Verify:", verify);
     form->addRow("", result);
+    // or against a checksum file that lists it (SHA256SUMS, .md5, .sfv…)
+    auto *hrow = new QHBoxLayout;
+    hash_edit = new QLineEdit;
+    hash_edit->setReadOnly(true);
+    hash_edit->setPlaceholderText("Verify against a checksum file…");
+    auto *browse = new QPushButton("Browse…");
+    hrow->addWidget(hash_edit, 1);
+    hrow->addWidget(browse);
+    form->addRow("Checksum file:", hrow);
+    hash_result = new QLabel;
+    hash_result->setWordWrap(true);
+    form->addRow("", hash_result);
+    connect(browse, &QPushButton::clicked, this, [this]() {
+        QString start = hash_edit->text().isEmpty() ? dirname(path) : dirname(hash_edit->text());
+        QString f = QFileDialog::getOpenFileName(this, "Choose Checksum File", start, hashcheck::file_filter());
+        if (!f.isEmpty())
+            verify_against(f);
+    });
     return w;
+}
+
+void PropertiesDialog::verify_against(const QString &hash_path)
+{
+    hash_edit->setText(hash_path);
+    hash_result->setToolTip(QString());
+    auto said = [this](const QString &text, bool good) {
+        hash_result->setText(text);
+        hash_result->setStyleSheet(QString("color: %1").arg((good ? ok_color() : error_color()).name()));
+    };
+    QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
+    const hashcheck::Entry *found = hashcheck::find(entries, path);
+    if (entries.isEmpty())
+        return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
+    if (!found)
+        return said(QString("✘ “%1” isn't listed in it.").arg(basename(path)), false);
+    hashcheck::Entry e = *found;
+    QString algo = hashcheck::algo_label(e.algo);
+    hash_result->setStyleSheet(QString());
+    hash_result->setText(QString("Checking (%1)…").arg(algo));
+    QPointer<QLabel> label(hash_result);
+    fileops::run_job(
+        this, "Verifying " + basename(path),
+        [e](Task *t) -> QVariant {
+            hashcheck::Result r = hashcheck::verify(e, t);
+            return QVariantList{r.status, r.actual, r.error};
+        },
+        [label, said, e, algo](const QVariant &res) {
+            if (!label)
+                return;
+            QVariantList r = res.toList();
+            QString status = r.value(0).toString();
+            if (!res.isValid())
+                return said("Stopped.", false);
+            if (status == "ok")
+                return said(QString("✔ Matches (%1).").arg(algo), true);
+            if (status == "failed") {
+                label->setToolTip(QString("Expected: %1\nActual: %2").arg(e.expected, r.value(1).toString()));
+                return said(QString("✘ Doesn't match (%1).").arg(algo), false);
+            }
+            said("✘ " + (status == "missing" ? QString("Not found.") : r.value(2).toString()), false);
+        });
 }
 
 void PropertiesDialog::apply()
