@@ -5,6 +5,7 @@
 #include "stats.h"
 
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QThread>
@@ -881,16 +882,25 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         ~CloseFd() { ::close(fd); }
     } close_fi{fi};
     if (k == "single") {
+        // The name itself is what gets replaced: lexists, not exists (a dangling symlink is taken), and the output
+        // goes to a new file that is then renamed over the name. Opening the name would follow a symlink there (or
+        // truncate a file hard-linked elsewhere), and a failed run would leave the old file truncated or deleted.
         QString out = join(dest, archive_stem(path));
-        if (exists(out)) {
+        if (lexists(out)) {
             if (overwrite == "skip")
                 return dest;
             if (overwrite == "rename")
                 out = unique_path(dest, basename(out), "num");
         }
-        int fo = ::open(enc(out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-        if (fo < 0)
-            throw_errno(out);
+        QString part;
+        int fo = -1;
+        while (fo < 0) {
+            part = join(dest, QString(".%1.kes-%2.part")
+                                  .arg(basename(out), QString::number(QRandomGenerator::global()->generate(), 16)));
+            fo = ::open(enc(part).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+            if (fo < 0 && errno != EEXIST)
+                throw_errno(part);
+        }
         proc::Options o;
         o.in = proc::PIPE;
         o.out = fo;
@@ -901,6 +911,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
             dec = proc::spawn(dec_argv, o);
         } catch (...) {
             ::close(fo);
+            ::unlink(enc(part).constData());
             throw;
         }
         ::close(fo);
@@ -910,13 +921,18 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
             dec->wait();
         } catch (...) {
             dec->kill_group();
-            ::unlink(enc(out).constData());
+            ::unlink(enc(part).constData());
             throw;
         }
         if (dec->returncode != 0) {
-            ::unlink(enc(out).constData());
+            ::unlink(enc(part).constData());
             QString t = tail(QString::fromUtf8(dec->read_all_err()));
             throw Error(t.isEmpty() ? QString("decompression failed") : t);
+        }
+        if (::rename(enc(part).constData(), enc(out).constData()) != 0) {
+            int e = errno;
+            ::unlink(enc(part).constData());
+            throw_errno(out, e);
         }
         return dest;
     }
