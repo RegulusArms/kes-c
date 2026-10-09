@@ -138,21 +138,32 @@ int main(int argc, char **argv)
 
     // ---- cancel
     const int BIG = 6 * 1024 * 1024;   // more than one 4 MB chunk, so a file can be cancelled half-way
-    for (int i = 0; i < 24; ++i)
-        make(P(QString("big/f%1.bin").arg(i, 2, 10, QChar('0'))), QByteArray(BIG, char('a' + i)));
+    const qint64 LONG = qint64(48) << 20;   // the cancel test's files (sparse): long enough to be cut off part-way
+    for (int i = 0; i < 24; ++i) {
+        QString f = P(QString("big/f%1.bin").arg(i, 2, 10, QChar('0')));
+        make(f, QByteArray(1, char('a' + i)));
+        ::truncate(enc(f).constData(), LONG);
+    }
     bool finished = false;
     Task *t = fileops::start_ops(w, {{"copy", P("big"), P("big2")}}, "Test", [&finished]() { finished = true; });
     QPointer<Task> tp(t);
-    // at once: on a fast disk (the test's home is in /tmp, often in memory) the whole copy can finish before the
-    // first progress report arrives
-    tp->cancel();
-    check(wait_for([&]() { return !tp; }, 10000), "a cancelled copy stops");
-    QStringList copied = isdir(P("big2")) ? listdir(P("big2")) : QStringList();
+    // on the copying thread itself, at its first report on a file (reports come at most every 80 ms): a cancel in the
+    // middle of copying, never before it starts or after it's done
+    auto cut = std::make_shared<std::atomic<bool>>(false);
+    QObject::connect(t, &Task::progress, t, [t, cut](double, const QString &text) {
+        if (text.endsWith(".bin") && !cut->exchange(true))
+            t->cancel();
+    }, Qt::DirectConnection);
+    check(wait_for([&]() { return !tp; }, 20000), "a cancelled copy stops");
+    QStringList copied = isdir(P("big2")) ? listdir(P("big2")) : QStringList();   // hidden part files too
     bool whole = true;
+    for (const QString &n : listdir(HOME()))   // the folder being built beside it, under a hidden part name
+        whole = whole && !n.startsWith(".kes-");
     for (const QString &f : copied)
-        whole = whole && getsize(join(P("big2"), f)) == BIG;
-    check(copied.size() < 24, QString("cancel: stops part-way (%1 of 24 copied)").arg(copied.size()));
-    check(whole, "cancel: no half-copied file is left behind");
+        whole = whole && getsize(join(P("big2"), f)) == LONG;
+    check(*cut && copied.size() < 24, QString("cancel: stops part-way (%1 of 24 copied)").arg(copied.size()));
+    check(*cut && whole, "cancel: no half-copied file is left behind");
+    QDir(P("big2")).removeRecursively();
 
     // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink
     // in the way is replaced, not written through; another hard link of the old file keeps its contents

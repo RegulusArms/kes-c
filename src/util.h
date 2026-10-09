@@ -168,7 +168,7 @@ QString unique_path(const QString &directory, const QString &name, const QString
 QPair<QString, QString> split_ext(const QString &name);
 QString fmt_time(qint64 ts, const char *fmt);   // strftime in local time
 
-// Python's shlex.split (POSIX mode, no comments), which the Python version uses: words split at spaces, tabs and line
+// As Python's shlex.split (POSIX mode, no comments): words split at spaces, tabs and line
 // breaks (not other Unicode spaces); 'single quotes' keep everything as it is; "double quotes" keep everything but
 // \" and \\ (a backslash before anything else stays); outside quotes a backslash makes the next character ordinary.
 // No variables, globs, ~ or comments: it's for argument lists (a compressor's extra options, a thumbnailer's command),

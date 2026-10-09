@@ -48,7 +48,8 @@ int main(int argc, char **argv)
               read_bookmarks().value(0).first == home_path("c"),
           "moving a bookmark rewrites the bookmarks file in the new order");
     s->move_entry("places", trash, 99);
-    check(wait_for([&]() { return s->entry_keys("places").value(s->entry_keys("places").size() - 1) == trash; }),
+    check(wait_for([&]() { return s->entry_keys("places").value(s->entry_keys("places").size() - 1) == trash; }) &&
+              !s->entry_keys("bookmarks").contains(trash) && !s->entry_keys("devices").contains(trash),
           "an entry stays in its own section");
     s->move_section("devices", 0);
     check(wait_for([&]() { return s->shown_sections() == QStringList({"devices", "places", "bookmarks"}); }),

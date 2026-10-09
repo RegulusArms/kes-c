@@ -71,7 +71,7 @@ int main(int argc, char **argv)
     undo::record_paths("trash", "Move to Trash", {P("t")});
     op = fake.call("UndoPop");
     check(QJsonDocument::fromJson(op.toUtf8()).object().value("items").toArray() == QJsonArray{QJsonArray{P("t"), ""}},
-          "trash/create items are sent as [path, \"\"] (as the Python version expects)");
+          "trash/create items are sent as [path, \"\"]");
     makedirs(P("newdir"), true);
     push("create", "New Folder", QJsonArray{QJsonArray{P("newdir"), ""}});
     spin(300);

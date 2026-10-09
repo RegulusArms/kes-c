@@ -35,9 +35,6 @@ echo "Building…"
     { tail -30 "$HERE/build.log"; echo "Build failed (full log: tests/build.log)"; exit 1; }
 
 export KES_CXX="$ROOT/$B/kes"
-KES_PY=""
-[[ -x "$ROOT/../kestrel-explorer/kes" ]] && KES_PY="$(cd "$ROOT/../kestrel-explorer" && pwd)/kes"
-export KES_PY
 
 failed=()
 for t in "${TESTS[@]}"; do
