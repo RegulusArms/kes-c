@@ -90,10 +90,15 @@ struct ProbeResult {
 };
 ProbeResult probe(const QString &path);   // look inside an archive without a password
 
+// A symlink an extraction left out for leading outside the folder: its path in the folder, its target, and why it's
+// still there (empty: it was removed).
+struct DroppedLink {
+    QString path, target, why;
+};
 // Extract `path` into the existing folder `dest`. overwrite: "overwrite", "skip" or "rename".
-// Raises WrongPassword, Error or Cancelled.
+// Raises WrongPassword, Error or Cancelled. Symlinks that led out of dest were removed: they're added to dropped_links.
 QString extract(Task *task, const QString &path, const QString &dest, const QString &password = QString(),
-                const QString &overwrite = "rename", int threads = 0);
+                const QString &overwrite = "rename", int threads = 0, QList<DroppedLink> *dropped_links = nullptr);
 // A symlink target that leads out of the folder an archive is extracted into: an absolute one, or one whose ".."s
 // climb above it. depth: how many folders below that folder the link is.
 bool link_escapes(int depth, const QByteArray &target);

@@ -12,8 +12,10 @@
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QStatusBar>
 
 #include <fcntl.h>
 #include <gio/gdesktopappinfo.h>
@@ -275,13 +277,19 @@ int main(int argc, char **argv)
           "undo explains what it can't put back");
 
     // a copy that replaces a file can't be undone (the old file is gone, and undoing it as a new copy would put the
-    // only one left in the trash): in a batch, only the other copies are undone
+    // only one left in the trash): the status bar says so, Ctrl+Z only says so too (it doesn't undo the action before
+    // it), and in a batch, only the other copies are undone
     undo::record("rename", "Earlier", {qMakePair(P("u/earlier-a"), P("u/earlier-b"))});
     make(P("u/rep.txt"), "new");
     make(P("u/rep-dst/rep.txt"), "old");
     check(run_ops(w, {{"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}}, "Copy") &&
-              text_of(P("u/rep-dst/rep.txt")) == "new" && undo::label() == "Earlier",
-          "a copy that replaced a file isn't offered for undo");
+              text_of(P("u/rep-dst/rep.txt")) == "new" && undo::label() == "Replace (can't be undone)" &&
+              w->statusBar()->currentMessage() == "Replace can't be undone: what was replaced is gone.",
+          "a copy that replaced a file isn't offered for undo, and the status bar says it can't be undone");
+    undo::undo(w);
+    check(undo::label() == "Earlier" && text_of(P("u/rep-dst/rep.txt")) == "new" &&
+              w->statusBar()->currentMessage() == "Can't undo that: what was replaced is gone.",
+          "Ctrl+Z after a replace says it can't be undone, and leaves the action before it alone");
     make(P("u/fresh.txt"), "fresh");
     make(P("u/rep.txt"), "newer");
     check(run_ops(w, {{"copy", P("u/fresh.txt"), P("u/rep-dst/fresh.txt")}, {"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt")}},
@@ -340,6 +348,21 @@ int main(int argc, char **argv)
                   exists(trashed_item) && !boxes.isEmpty() && boxes.first().contains("Permanently delete “in-trash.txt”"),
               "Move to Trash on a mixed selection trashes the items outside the trash and asks only about the one in it");
         boxes = earlier;
+
+        auto menu_texts = [&](const QStringList &paths) {
+            QMenu *m = w->build_menu(w->pane(), paths);
+            QStringList texts;
+            for (QAction *a : m->actions())
+                texts << a->text();
+            m->deleteLater();
+            return texts;
+        };
+        make(P("mt/live.txt"), "l");
+        QStringList mixed = menu_texts({trashed_item, P("mt/live.txt")}), only = menu_texts({trashed_item});
+        check(mixed.contains("Move to Trash") && !mixed.contains("Restore") && only.contains("Restore") &&
+                  !only.contains("Move to Trash"),
+              "right-clicking a mixed selection gives the usual menu (Move to Trash), not the trash's (Restore); "
+              "a selection all in the trash gets the trash's");
     }
 
     // ---- unique names and links
@@ -705,6 +728,50 @@ int main(int argc, char **argv)
         }
         check(islink(join(dest, "mine")) && !lexists(join(dest, "lnk")),
               "extracting into an existing folder keeps the user's own links there and drops the archive's escaping one");
+    }
+    // links in folders the archive leaves read-only (555, as GNU tar applies a folder's stored mode before it exits) or
+    // closed (000): they're removed too, each folder's mode is put back, and every link removed is reported (an absolute
+    // one naming a place inside the folder too)
+    {
+        QString base = P("evil-perm"), stage = join(base, "stage"), dest = join(base, "dest");
+        makedirs(join(stage, "ro/sub"), true);
+        makedirs(join(stage, "closed"), true);
+        makedirs(dest, true);
+        util::symlink("/etc", join(stage, "ro/abs"));
+        util::symlink("../../../outside", join(stage, "ro/sub/up"));
+        util::symlink(join(dest, "ro/sub"), join(stage, "ro/inside"));
+        util::symlink("/etc", join(stage, "closed/abs"));
+        proc::run({"tar", "-czf", join(base, "ro.tar.gz"), "--mode=a-w", "-C", stage, "ro"});
+        proc::run({"tar", "-czf", join(base, "closed.tar.gz"), "--mode=a-rwx", "-C", stage, "closed"});
+        QList<archive::DroppedLink> dropped;
+        for (const char *name : {"ro.tar.gz", "closed.tar.gz"}) {
+            Task task("test", [](Task *) { return QVariant(); });
+            try {
+                archive::extract(&task, join(base, name), dest, QString(), "overwrite", 0, &dropped);
+            } catch (const Error &) {
+            }
+        }
+        auto mode = [&](const QString &rel) {
+            struct stat st;
+            return ::lstat(join(dest, rel).toLocal8Bit().constData(), &st) == 0 ? int(st.st_mode & 07777) : -1;
+        };
+        bool modes_back = mode("ro") == 0555 && mode("ro/sub") == 0555 && mode("closed") == 0;
+        proc::run({"chmod", "-R", "u+rwx", dest});
+        QStringList left;
+        QDirIterator it(dest, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext())
+            left << QDir(dest).relativeFilePath(it.next());
+        left.sort();
+        QStringList got, want = {"ro/abs|/etc|", "ro/sub/up|../../../outside|", "ro/inside|" + join(dest, "ro/sub") + "|",
+                                 "closed/abs|/etc|"};
+        for (const archive::DroppedLink &l : dropped)
+            got << l.path + "|" + l.target + "|" + l.why;
+        got.sort();
+        want.sort();
+        check(modes_back && left == QStringList{"closed", "ro", "ro/sub"} && got == want,
+              "escaping links in folders an archive leaves read-only (555) or closed (000) are removed too, the folders' "
+              "modes are put back, and each link removed is reported (an absolute one naming a place inside too)");
     }
 
     // -- a single compressed file (note.txt.gz → note.txt) where the destination already has a symlink named note.txt:
