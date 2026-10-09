@@ -658,6 +658,7 @@ int main(int argc, char **argv)
           "copying onto a symlink replaces the link, not the file it points to");
     // a folder swapped for a symlink to the victim (renameat2 exchange: the path always exists) while a delete runs
     bool safe = true;
+    std::atomic<int> swaps{0};   // a swap that never happens (no RENAME_EXCHANGE here) would prove nothing
     QElapsedTimer race_clock;
     race_clock.start();
     for (int round = 0; race_clock.elapsed() < 4000 && safe; ++round) {
@@ -676,6 +677,7 @@ int main(int argc, char **argv)
                     QByteArray a = join(race, QString("d%1").arg(d)).toLocal8Bit();
                     QByteArray b = join(links, QString("d%1").arg(d)).toLocal8Bit();
                     if (renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE) == 0) {
+                        ++swaps;
                         usleep(200);
                         renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE);
                     }
@@ -687,7 +689,8 @@ int main(int argc, char **argv)
         swapper.join();
         safe = victim_intact();
     }
-    check(safe, "a folder swapped for a symlink during a delete doesn't let it delete outside the tree");
+    check(safe && swaps > 0, QString("a folder swapped for a symlink during a delete doesn't let it delete outside the "
+                                     "tree (%1 swaps)").arg(swaps > 0 ? "some" : "no"));
 
     // -- crafted archives (tests/fixtures, make_evil_archives.sh): "../" names, absolute paths, and a symlink out of
     // the destination with a file written through it, extracted by whichever tool Kestrel picks
@@ -726,7 +729,8 @@ int main(int argc, char **argv)
               archive::link_escapes(2, "../../../x") && !archive::link_escapes(1, "../x") &&
               !archive::link_escapes(0, "a/../b") && !archive::link_escapes(0, "./a//b") && !archive::link_escapes(2, "../.."),
           "a link target leads out of the extracted folder when it's absolute or its \"..\"s climb above it");
-    {   // extracting into an existing folder: the user's own links there stay, also ones that lead out of it
+    {   // extracting into an existing folder: the user's own links there stay, also ones that lead out of it (and the
+        // archive was extracted: its absolute name lands inside, as tmp/kestrel-evil-abs.txt)
         QString base = P("evil-own"), dest = join(base, "dest");
         makedirs(dest, true);
         util::symlink("../elsewhere", join(dest, "mine"));
@@ -737,25 +741,28 @@ int main(int argc, char **argv)
             archive::extract(&task, join(base, "evil.tar.gz"), dest, QString(), "overwrite");
         } catch (const Error &) {
         }
-        check(islink(join(dest, "mine")) && !lexists(join(dest, "lnk")),
+        check(isfile(join(dest, "tmp/kestrel-evil-abs.txt")) && islink(join(dest, "mine")) && !lexists(join(dest, "lnk")),
               "extracting into an existing folder keeps the user's own links there and drops the archive's escaping one");
     }
-    // links in folders the archive leaves read-only (555, as GNU tar applies a folder's stored mode before it exits) or
-    // closed (000): they're removed too, each folder's mode is put back, and every link removed is reported (an absolute
+    // links in folders the archive leaves read-only (555, as GNU tar applies a folder's stored mode before it exits),
+    // closed (000) or unlistable (111): they're removed too, each folder's mode is put back, and every link removed is reported (an absolute
     // one naming a place inside the folder too)
     {
         QString base = P("evil-perm"), stage = join(base, "stage"), dest = join(base, "dest");
         makedirs(join(stage, "ro/sub"), true);
         makedirs(join(stage, "closed"), true);
+        makedirs(join(stage, "unlisted"), true);
         makedirs(dest, true);
         util::symlink("/etc", join(stage, "ro/abs"));
         util::symlink("../../../outside", join(stage, "ro/sub/up"));
         util::symlink(join(dest, "ro/sub"), join(stage, "ro/inside"));
         util::symlink("/etc", join(stage, "closed/abs"));
+        util::symlink("../../outside", join(stage, "unlisted/up"));
         proc::run({"tar", "-czf", join(base, "ro.tar.gz"), "--mode=a-w", "-C", stage, "ro"});
         proc::run({"tar", "-czf", join(base, "closed.tar.gz"), "--mode=a-rwx", "-C", stage, "closed"});
+        proc::run({"tar", "-czf", join(base, "unlisted.tar.gz"), "--mode=a-rw", "-C", stage, "unlisted"});
         QList<archive::DroppedLink> dropped;
-        for (const char *name : {"ro.tar.gz", "closed.tar.gz"}) {
+        for (const char *name : {"ro.tar.gz", "closed.tar.gz", "unlisted.tar.gz"}) {
             Task task("test", [](Task *) { return QVariant(); });
             try {
                 archive::extract(&task, join(base, name), dest, QString(), "overwrite", 0, &dropped);
@@ -766,7 +773,7 @@ int main(int argc, char **argv)
             struct stat st;
             return ::lstat(join(dest, rel).toLocal8Bit().constData(), &st) == 0 ? int(st.st_mode & 07777) : -1;
         };
-        bool modes_back = mode("ro") == 0555 && mode("ro/sub") == 0555 && mode("closed") == 0;
+        bool modes_back = mode("ro") == 0555 && mode("ro/sub") == 0555 && mode("closed") == 0 && mode("unlisted") == 0111;
         proc::run({"chmod", "-R", "u+rwx", dest});
         QStringList left;
         QDirIterator it(dest, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
@@ -775,14 +782,15 @@ int main(int argc, char **argv)
             left << QDir(dest).relativeFilePath(it.next());
         left.sort();
         QStringList got, want = {"ro/abs|/etc|", "ro/sub/up|../../../outside|", "ro/inside|" + join(dest, "ro/sub") + "|",
-                                 "closed/abs|/etc|"};
+                                 "closed/abs|/etc|", "unlisted/up|../../outside|"};
         for (const archive::DroppedLink &l : dropped)
             got << l.path + "|" + l.target + "|" + l.why;
         got.sort();
         want.sort();
-        check(modes_back && left == QStringList{"closed", "ro", "ro/sub"} && got == want,
-              "escaping links in folders an archive leaves read-only (555) or closed (000) are removed too, the folders' "
-              "modes are put back, and each link removed is reported (an absolute one naming a place inside too)");
+        check(modes_back && left == QStringList{"closed", "ro", "ro/sub", "unlisted"} && got == want,
+              "escaping links in folders an archive leaves read-only (555), closed (000) or unlistable (111) are removed "
+              "too, the folders' modes are put back, and each link removed is reported (an absolute one naming a place "
+              "inside too)");
     }
 
     // -- a single compressed file (note.txt.gz → note.txt) where the destination already has a symlink named note.txt:

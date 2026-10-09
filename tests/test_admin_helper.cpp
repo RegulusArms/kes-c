@@ -220,7 +220,8 @@ int main(int argc, char **argv)
                 struct stat st;
                 all = all && lstat(join(own, name).toLocal8Bit().constData(), &st) == 0 && st.st_gid == other;
             }
-            check(all, "copies, new folders (and the parents made for them), files and links get the folder's owner");
+            check(all, "copies, new folders (and the parents made for them), files and links get the folder's group (the "
+                       "owner as root: tests/check_package.sh)");
             check(done && mode_of(join(own, "copy.txt")) == 0755,
                   "a copy given another group loses its set-group-ID bit");
         }
@@ -452,6 +453,7 @@ int main(int argc, char **argv)
     // (a race: the old helper loses it in some rounds, not all, so rounds run for a few seconds)
     std::atomic<bool> stop{false};
     bool safe = true;
+    std::atomic<int> swaps{0};   // a swap that never happens (no RENAME_EXCHANGE here) would prove nothing
     QElapsedTimer clock;
     clock.start();
     for (int round = 0; clock.elapsed() < 4000 && safe; ++round) {
@@ -468,6 +470,7 @@ int main(int argc, char **argv)
                     QByteArray a = join(race, QString("d%1").arg(d)).toLocal8Bit();
                     QByteArray b = join(links, QString("d%1").arg(d)).toLocal8Bit();
                     if (renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE) == 0) {
+                        ++swaps;
                         usleep(200);
                         renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE);
                     }
@@ -479,7 +482,8 @@ int main(int argc, char **argv)
         swapper.join();
         safe = victim_intact();
     }
-    check(safe, "a folder swapped for a symlink during a delete doesn't let it delete outside the tree");
+    check(safe && swaps > 0, QString("a folder swapped for a symlink during a delete doesn't let it delete outside the "
+                                     "tree (%1 swaps)").arg(swaps > 0 ? "some" : "no"));
 
     h.stop();
     finish();

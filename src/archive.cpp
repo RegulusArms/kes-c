@@ -1104,7 +1104,7 @@ static void drop_escaping_links(int dirfd, const QString &rel, int depth, const 
         restore = int(here.st_mode & 07777);
         return true;
     };
-    if (!(here.st_mode & S_IXUSR))   // can't look anything up in it
+    if ((here.st_mode & (S_IRUSR | S_IXUSR)) != (S_IRUSR | S_IXUSR))   // can't list it (111) or look anything up in it
         let_in();
     int fd = ::dup(dirfd);
     DIR *d = fd >= 0 ? ::fdopendir(fd) : nullptr;
