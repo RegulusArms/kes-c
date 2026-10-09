@@ -22,7 +22,6 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStatusBar>
 #include <QTreeWidget>
@@ -501,14 +500,7 @@ const QMap<QString, QString> OUT_EXT = {{"crc32", ".sfv"},    {"md5", ".md5"},  
 void write_replacing(const QString &path, const QByteArray &data)
 {
     QString part;
-    int fd = -1;
-    while (fd < 0) {
-        part = join(dirname(path), QString(".%1.kes-%2.part")
-                                       .arg(basename(path), QString::number(QRandomGenerator::global()->generate(), 16)));
-        fd = ::open(enc(part).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
-        if (fd < 0 && errno != EEXIST)
-            throw_errno(part);
-    }
+    int fd = open_part_at(AT_FDCWD, rstrip(dirname(path), '/') + "/", &part);
     qint64 off = 0;
     while (off < data.size()) {
         ssize_t n = ::write(fd, data.constData() + off, data.size() - off);

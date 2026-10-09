@@ -129,6 +129,10 @@ void copyfile(const QString &src, const QString &dst);   // contents only, like 
 void move(const QString &src, const QString &dst);       // shutil.move
 void rmtree(const QString &p);                            // ignores errors
 void write_text(const QString &p, const QByteArray &data, bool exclusive = false);
+// A new, empty file to write something into before it is renamed over a name in the same folder (so that name keeps
+// its old contents until the new ones are complete): prefix + ".kes-<random>.part", relative to dirfd (or a path, with
+// AT_FDCWD and prefix "dir/"), created exclusively and never through a symlink. Returns the open fd; *name is the name.
+int open_part_at(int dirfd, const QString &prefix, QString *name);
 QByteArray read_file(const QString &p, bool *ok = nullptr);
 
 // os.walk: fn(root, dirs, files) for every folder; with topdown the callback may prune `dirs`.

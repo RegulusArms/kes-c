@@ -503,14 +503,17 @@ void MainWindow::make_links(const QStringList &paths, QString dest, const QStrin
         return;
     }
     for (const QString &p : paths) {
-        QVariantMap plan = fileops::link_plan(kind, p, dest);
+        QVariantMap plan;
         try {
+            plan = fileops::link_plan(kind, p, dest);
             made << fileops::make_link(plan);
         } catch (const OSError &e) {
             if (e.permission())
                 denied << plan;
             else
                 errors << basename(p) + ": " + e.message();
+        } catch (const Error &e) {   // a name a shortcut can't hold
+            errors << e.message();
         }
     }
     if (!errors.isEmpty())

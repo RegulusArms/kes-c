@@ -5,7 +5,6 @@
 #include "stats.h"
 
 #include <QElapsedTimer>
-#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QThread>
@@ -893,14 +892,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
                 out = unique_path(dest, basename(out), "num");
         }
         QString part;
-        int fo = -1;
-        while (fo < 0) {
-            part = join(dest, QString(".%1.kes-%2.part")
-                                  .arg(basename(out), QString::number(QRandomGenerator::global()->generate(), 16)));
-            fo = ::open(enc(part).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
-            if (fo < 0 && errno != EEXIST)
-                throw_errno(part);
-        }
+        int fo = open_part_at(AT_FDCWD, rstrip(dest, '/') + "/", &part);
         proc::Options o;
         o.in = proc::PIPE;
         o.out = fo;

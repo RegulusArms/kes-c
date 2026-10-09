@@ -12,7 +12,9 @@
 #include <QMessageBox>
 
 #include <fcntl.h>
+#include <gio/gdesktopappinfo.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <utime.h>
 
@@ -146,6 +148,64 @@ int main(int argc, char **argv)
     check(copied.size() < 24, QString("cancel: stops part-way (%1 of 24 copied)").arg(copied.size()));
     check(whole, "cancel: no half-copied file is left behind");
 
+    // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink
+    // in the way is replaced, not written through; another hard link of the old file keeps its contents
+    {
+        makedirs(P("rep"), true);
+        auto leftovers = []() {   // temporary files left in rep/
+            QStringList out;
+            for (const QString &n : listdir(P("rep")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        make(P("rep/new.bin"), "new");
+        ::truncate(enc(P("rep/new.bin")).constData(), qint64(1) << 30);   // 1 GB (sparse): long enough to cancel
+        make(P("rep/report.txt"), "precious");
+        Task *rt = nullptr;
+        bool rep_done = false;
+        rt = fileops::start_ops(w, {{"copy", P("rep/new.bin"), P("rep/report.txt")}}, "Test",
+                                [&rep_done]() { rep_done = true; });
+        // on the copying thread itself, as soon as the copy reports progress on this file: a cancel half-way through
+        QObject::connect(rt, &Task::progress, rt, [rt](double, const QString &text) {
+            if (text.endsWith("new.bin"))
+                rt->cancel();
+        }, Qt::DirectConnection);
+        QPointer<Task> rtp(rt);
+        wait_for([&]() { return !rtp; }, 20000);
+        check(text_of(P("rep/report.txt")) == "precious" && leftovers().isEmpty(),
+              "replacing a file and cancelling part-way keeps the original, and leaves no temporary file");
+
+        make(P("rep/big.bin"), QByteArray(BIG, 'b'));
+        make(P("rep/keep.txt"), "precious");
+        struct rlimit old_lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        struct rlimit lim = old_lim;
+        lim.rlim_cur = 1 << 20;   // writes past 1 MB fail (EFBIG)
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run_ops(w, {{"copy", P("rep/big.bin"), P("rep/keep.txt")}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(text_of(P("rep/keep.txt")) == "precious" && leftovers().isEmpty(),
+              "a copy that fails part-way (a write error) keeps the file it would have replaced, and leaves nothing "
+              "half-written");
+
+        make(P("rep/outside.txt"), "outside");
+        ::symlink(enc(P("rep/outside.txt")).constData(), enc(P("rep/to-outside")).constData());
+        make(P("rep/linked.txt"), "old");
+        ::link(enc(P("rep/linked.txt")).constData(), enc(P("rep/other-link.txt")).constData());
+        make(P("rep/small.txt"), "new");
+        run_ops(w, {{"copy", P("rep/small.txt"), P("rep/to-outside")}, {"copy", P("rep/small.txt"), P("rep/linked.txt")}});
+        check(!islink(P("rep/to-outside")) && text_of(P("rep/to-outside")) == "new" &&
+                  text_of(P("rep/outside.txt")) == "outside" && text_of(P("rep/linked.txt")) == "new" &&
+                  text_of(P("rep/other-link.txt")) == "old" && leftovers().isEmpty(),
+              "replacing a symlink replaces the link, not its target; another hard link of a replaced file keeps its "
+              "contents");
+        QDir(P("rep")).removeRecursively();
+        boxes.clear();
+    }
+
     // ---- trash
     make(P("t/gone.txt"), "trash me");
     util::trash(P("t/gone.txt"));
@@ -192,6 +252,89 @@ int main(int argc, char **argv)
     check(h1.st_ino == h2.st_ino, "hard link");
     QString same = fileops::make_link(fileops::link_plan("sym", P("n/a.txt"), P("n")));
     check(basename(same).startsWith("Link to a"), "a link in the same folder is named \"Link to …\"");
+
+    // -- desktop shortcuts to items whose names hold quotes, $, `, \, % and line breaks that try to add keys of their
+    // own (GLib keeps the last of a repeated key): the shortcut must still name and open exactly that item
+    {
+        const QString evil = "\"q\" $HOME `id` \\b %f %%\nExec=touch PWNED\nType=Application\n";
+        QString sc = P("sc"), out = P("sc/out"), dir = join(sc, "d " + evil), marker = P("sc-ran");
+        makedirs(out, true);
+        makedirs(dir, true);
+        QString script = join(dir, "run " + evil + ".sh"), doc = join(dir, "doc " + evil + ".txt");
+        make(script, ("#!/bin/sh\nprintf '%s\\n' \"$#\" \"$0\" > '" + marker + "'\n").toUtf8());
+        ::chmod(enc(script).constData(), 0755);
+        make(doc, "doc");
+        // each shortcut as GLib reads it, and the keys written (each once)
+        auto read = [](const QString &path, QStringList *keys) {
+            QMap<QString, QString> values;
+            QStringList lines = text_of(path).split('\n');
+            for (const QString &l : lines)
+                if (l.contains('='))
+                    *keys << l.section('=', 0, 0);
+            GKeyFile *kf = g_key_file_new();
+            if (g_key_file_load_from_file(kf, enc(path).constData(), G_KEY_FILE_NONE, nullptr)) {
+                gsize n = 0;
+                gchar **names = g_key_file_get_keys(kf, "Desktop Entry", &n, nullptr);
+                for (gsize i = 0; i < n; i++) {
+                    gchar *v = g_key_file_get_string(kf, "Desktop Entry", names[i], nullptr);
+                    values[QString::fromUtf8(names[i])] = QString::fromUtf8(v ? v : "");
+                    g_free(v);
+                }
+                g_strfreev(names);
+            }
+            g_key_file_free(kf);
+            return values;
+        };
+        QStringList made;
+        for (const QString &t : {script, doc, dir})
+            made << fileops::make_link(fileops::link_plan("desktop", t, out));
+        QStringList app_keys, doc_keys, dir_keys;
+        auto app = read(made[0], &app_keys), docv = read(made[1], &doc_keys), dirv = read(made[2], &dir_keys);
+        check(app_keys == QStringList{"Type", "Name", "Exec", "Path", "Icon", "Terminal"} &&
+                  app.value("Type") == "Application" && app.value("Name") == basename(script) &&
+                  app.value("Path") == dir && doc_keys == QStringList{"Type", "Name", "URL", "Icon"} &&
+                  docv.value("Type") == "Link" && docv.value("Name") == basename(doc) &&
+                  uri_to_path(docv.value("URL")) == doc && dir_keys == doc_keys && dirv.value("Type") == "Link" &&
+                  uri_to_path(dirv.value("URL")) == dir,
+              "a desktop shortcut keeps an item's name and path whole, whatever they hold (quotes, $, `, \\, %, line "
+              "breaks), and adds no keys");
+        if (!which("desktop-file-validate")) {
+            skip("desktop-file-validate accepts the shortcuts (it isn't installed)");
+        } else {
+            QString complaints;
+            for (const QString &m : made) {
+                auto r = proc::run({"desktop-file-validate", m});
+                if (r.rc != 0)
+                    complaints += r.out + r.err;
+            }
+            check(complaints.isEmpty(), "desktop-file-validate accepts the shortcuts" +
+                                            (complaints.isEmpty() ? QString() : " " + complaints.trimmed()));
+        }
+        QString ctl = join(sc, QString("bell") + QChar(7) + ".txt");
+        make(ctl, "x");
+        bool refused = false;
+        try {
+            fileops::link_plan("desktop", ctl, out);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused, "a shortcut to an item whose name holds other control characters is refused");
+        QString cwd = QDir::currentPath();
+        QDir::setCurrent(sc);   // where an injected relative command would land
+        GDesktopAppInfo *info = g_desktop_app_info_new_from_filename(enc(made[0]).constData());
+        bool launched = info && g_app_info_launch(G_APP_INFO(info), nullptr, nullptr, nullptr);
+        if (info)
+            g_object_unref(info);
+        wait_for([&]() { return exists(marker); }, 5000);
+        QDir::setCurrent(cwd);
+        bool pwned = false;
+        walk(HOME(), [&](const QString &, QStringList &, QStringList &files) {
+            pwned = pwned || files.contains("PWNED");
+            return true;
+        });
+        check(launched && text_of(marker) == "0\n" + script + "\n" && !pwned,
+              "opening the program's shortcut runs that program alone, with no arguments, and nothing else");
+    }
 
     check(location_arg("trash:///") == join(TRASH_DIR(), "files") && location_arg("recent:///") == places::RECENT,
           "trash:/// and recent:/// from other apps open the right places");
