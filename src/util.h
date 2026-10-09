@@ -219,10 +219,13 @@ QColor card_color();    // a card (Overview) that stands out a little from the w
 QColor card_border();
 QColor error_color();   // red text that is readable on the window background
 QColor ok_color();      // green text that is readable on the window background
-QColor accent_color();  // the desktop's accent (the theme's selection colour)
-// Call fn whenever the desktop's colours change (a light/dark switch, another theme). Qt updates its palette, but a
-// stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)
-// are reapplied first, then fn runs. Stops when owner is deleted.
+// The desktop's accent: GNOME's accent colour setting once the user has chosen one (GNOME 47+), else the theme's
+// selection colour. named_accent: that setting's colour for one of its names (blue, teal, …); invalid if unknown.
+QColor accent_color();
+QColor named_accent(const QString &name);
+// Call fn whenever the desktop's colours change (a light/dark switch, another theme, the accent colour setting). Qt
+// updates its palette, but a stylesheet resolves palette(...) once and colours read earlier stay as they were:
+// stylesheets that use palette(...) are reapplied first, then fn runs. Stops when owner is deleted.
 void on_palette_change(QObject *owner, std::function<void()> fn);
 // Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
 // 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's

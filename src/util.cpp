@@ -1180,7 +1180,54 @@ QColor error_color() { return QColor(dark_theme() ? "#ff7b63" : "#c01c28"); }   
 
 QColor ok_color() { return QColor(dark_theme() ? "#8ff0a4" : "#26a269"); }   // GNOME's success colours
 
-QColor accent_color() { return QGuiApplication::palette().color(QPalette::Highlight); }
+QColor named_accent(const QString &name)
+{
+    // libadwaita's accent colours (what GNOME's own apps draw)
+    static const QHash<QString, QString> colors = {
+        {"blue", "#3584e4"}, {"teal", "#2190a4"},   {"green", "#3a944a"},  {"yellow", "#c88800"}, {"orange", "#ed5b00"},
+        {"red", "#e62d42"},  {"pink", "#d56199"},   {"purple", "#9141ac"}, {"slate", "#6f8396"}};
+    return colors.contains(name) ? QColor(colors.value(name)) : QColor();
+}
+
+namespace {
+
+void palette_changed();
+
+// GNOME 47+'s accent colour setting, once the user has chosen one; invalid otherwise
+QColor desktop_accent()
+{
+    static GSettings *s = nullptr;   // kept for the life of the app
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        QString schema = "org.gnome.desktop.interface";   // not Cinnamon's, which has none and ignores GNOME's
+        if (desktop_schema(schema) == schema && has_schema_key(schema, "accent-color")) {
+            s = g_settings_new("org.gnome.desktop.interface");
+            g_signal_connect(s, "changed::accent-color", G_CALLBACK(+[](GSettings *, gchar *, gpointer) {
+                palette_changed();
+            }), nullptr);
+        }
+    }
+    if (!s)
+        return QColor();
+    GVariant *set = g_settings_get_user_value(s, "accent-color");
+    if (!set)
+        return QColor();
+    g_variant_unref(set);
+    gchar *name = g_settings_get_string(s, "accent-color");
+    QColor c = named_accent(QString::fromUtf8(name));
+    g_free(name);
+    return c;
+}
+
+}  // namespace
+
+QColor accent_color()
+{
+    // GTK 3 themes (and so Qt's palette) don't follow GNOME's accent colour setting, so a chosen one comes first
+    QColor c = desktop_accent();
+    return c.isValid() ? c : QGuiApplication::palette().color(QPalette::Highlight);
+}
 
 namespace {
 
@@ -1189,16 +1236,22 @@ class PaletteWatcher : public QWidget {
 public:
     QList<QPair<QPointer<QObject>, std::function<void()>>> fns;
 
+    void apply_soon()
+    {
+        if (queued)
+            return;
+        queued = true;   // a theme switch can change the palette several times in a row
+        QTimer::singleShot(0, this, [this]() {
+            queued = false;
+            apply();
+        });
+    }
+
 protected:
     bool event(QEvent *ev) override
     {
-        if (ev->type() == QEvent::ApplicationPaletteChange && !queued) {
-            queued = true;   // a theme switch can change the palette several times in a row
-            QTimer::singleShot(0, this, [this]() {
-                queued = false;
-                apply();
-            });
-        }
+        if (ev->type() == QEvent::ApplicationPaletteChange)
+            apply_soon();
         return QWidget::event(ev);
     }
 
@@ -1221,12 +1274,19 @@ private:
     }
 };
 
+PaletteWatcher *palette_watcher()
+{
+    static PaletteWatcher *watcher = new PaletteWatcher;
+    return watcher;
+}
+
+void palette_changed() { palette_watcher()->apply_soon(); }   // the accent colour setting changed
+
 }  // namespace
 
 void on_palette_change(QObject *owner, std::function<void()> fn)
 {
-    static PaletteWatcher *watcher = new PaletteWatcher;
-    watcher->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
+    palette_watcher()->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
 }
 
 // ---------------------------------------------------------------- the GTK theme's colours (Qt < 6.5)
