@@ -2,16 +2,29 @@
 // hash), hashing with progress, and the Verify Checksums dialog.
 #include "hashcheck.h"
 
+#include "app.h"
 #include "fileops.h"
+#include "pane.h"
 #include "util.h"
 
+#include <QCheckBox>
 #include <QCryptographicHash>
 #include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QRadioButton>
+#include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QStatusBar>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -21,6 +34,8 @@
 
 #include <cerrno>
 #include <cstring>
+#include <memory>
+#include <vector>
 
 using namespace util;
 
@@ -183,8 +198,8 @@ QString algo_label(const QString &algo)
     return algo == "blake2b" ? QString("BLAKE2b") : algo.toUpper();
 }
 
-QString hash_file(const QString &path, const QString &algo, const std::function<void(qint64, qint64)> &progress,
-                  const std::function<void()> &check)
+QStringList hash_files(const QString &path, const QStringList &algos,
+                       const std::function<void(qint64, qint64)> &progress, const std::function<void()> &check)
 {
     static const QMap<QString, QCryptographicHash::Algorithm> ALGOS = {
         {"md5", QCryptographicHash::Md5},       {"sha1", QCryptographicHash::Sha1},
@@ -196,7 +211,9 @@ QString hash_file(const QString &path, const QString &algo, const std::function<
         throw_errno(path);
     struct stat st;
     qint64 size = ::fstat(fd, &st) == 0 ? st.st_size : 0;
-    QCryptographicHash h(ALGOS.value(algo, QCryptographicHash::Md5));
+    std::vector<std::unique_ptr<QCryptographicHash>> hashes;   // nullptr for CRC32
+    for (const QString &a : algos)
+        hashes.emplace_back(a == "crc32" ? nullptr : new QCryptographicHash(ALGOS.value(a, QCryptographicHash::Md5)));
     quint32 crc = 0;
     QByteArray buf(4 << 20, Qt::Uninitialized);
     qint64 done = 0;
@@ -213,18 +230,27 @@ QString hash_file(const QString &path, const QString &algo, const std::function<
         }
         if (n == 0)
             break;
-        if (algo == "crc32")
-            crc = crc32_update(crc, buf.constData(), n);
-        else
-            h.addData(QByteArrayView(buf.constData(), n));
+        for (auto &h : hashes) {
+            if (h)
+                h->addData(QByteArrayView(buf.constData(), n));
+            else
+                crc = crc32_update(crc, buf.constData(), n);
+        }
         done += n;
         if (progress)
             progress(done, size);
     }
     ::close(fd);
-    if (algo == "crc32")
-        return QString("%1").arg(crc, 8, 16, QChar('0'));
-    return QString::fromLatin1(h.result().toHex());
+    QStringList out;
+    for (auto &h : hashes)
+        out << (h ? QString::fromLatin1(h->result().toHex()) : QString("%1").arg(crc, 8, 16, QChar('0')));
+    return out;
+}
+
+QString hash_file(const QString &path, const QString &algo, const std::function<void(qint64, qint64)> &progress,
+                  const std::function<void()> &check)
+{
+    return hash_files(path, {algo}, progress, check).first();
 }
 
 Result verify(const Entry &e, Task *task)
@@ -458,6 +484,332 @@ bool open_dialog(QWidget *parent, const QString &path)
     d->raise();
     d->activateWindow();
     return true;
+}
+
+}   // namespace hashcheck
+
+// ---------------------------------------------------------------- making checksum files
+
+namespace hashcheck {
+
+namespace {
+
+const QMap<QString, QString> OUT_EXT = {{"crc32", ".sfv"},    {"md5", ".md5"},       {"sha1", ".sha1"},
+                                        {"sha256", ".sha256"}, {"sha512", ".sha512"}, {"blake2b", ".b2"}};
+
+// write `data` to a new file beside `path`, then rename it over `path` (never through a symlink there)
+void write_replacing(const QString &path, const QByteArray &data)
+{
+    QString part;
+    int fd = -1;
+    while (fd < 0) {
+        part = join(dirname(path), QString(".%1.kes-%2.part")
+                                       .arg(basename(path), QString::number(QRandomGenerator::global()->generate(), 16)));
+        fd = ::open(enc(part).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+        if (fd < 0 && errno != EEXIST)
+            throw_errno(part);
+    }
+    qint64 off = 0;
+    while (off < data.size()) {
+        ssize_t n = ::write(fd, data.constData() + off, data.size() - off);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0) {
+            int e = errno;
+            ::close(fd);
+            ::unlink(enc(part).constData());
+            throw_errno(path, e);
+        }
+        off += n;
+    }
+    ::close(fd);
+    if (::rename(enc(part).constData(), enc(path).constData()) != 0) {
+        int e = errno;
+        ::unlink(enc(part).constData());
+        throw_errno(path, e);
+    }
+}
+
+}   // namespace
+
+const QStringList &create_algorithms()
+{
+    static const QStringList a = {"crc32", "md5", "sha1", "sha256", "sha512", "blake2b"};
+    return a;
+}
+
+QStringList files_in(const QStringList &paths, const std::function<void()> &check)
+{
+    QStringList out;
+    for (const QString &p : paths) {
+        if (!isdir(p)) {
+            out << p;
+            continue;
+        }
+        walk(p, [&](const QString &root, QStringList &dirs, QStringList &files) {
+            if (check)
+                check();
+            dirs.sort();
+            files.sort();
+            for (const QString &f : files)
+                out << join(root, f);
+            return true;
+        });
+    }
+    return out;
+}
+
+QStringList output_paths(const QString &dir, const QString &stem, const QStringList &algos, bool one_file)
+{
+    if (one_file)
+        return {join(dir, stem + "-CHECKSUM")};
+    QStringList out;
+    for (const QString &a : algos)
+        out << join(dir, stem + OUT_EXT.value(a));
+    return out;
+}
+
+QString format_line(const QString &name, const QString &algo, const QString &hex, const QString &style)
+{
+    if (style == "sfv")
+        return name + " " + hex.toUpper();
+    bool escape = name.contains('\\') || name.contains('\n') || name.contains('\r');
+    QString n = name;
+    if (escape)
+        n.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r");
+    QString prefix = escape ? QString("\\") : QString();
+    if (style == "bsd")
+        return prefix + algo_label(algo) + " (" + n + ") = " + hex;
+    return prefix + hex + "  " + n;
+}
+
+QStringList create(Task *task, const QStringList &paths, const QString &dir, const QString &stem,
+                   const QStringList &algos, bool one_file, QStringList *errors)
+{
+    auto check = [task]() {
+        if (task)
+            task->check();
+    };
+    if (task)
+        task->report(0, 0, "Listing files…");
+    QStringList outputs = output_paths(dir, stem, algos, one_file), files, skip;
+    for (const QString &o : outputs)
+        skip << normpath(o);
+    for (const QString &f : files_in(paths, check))
+        if (!skip.contains(normpath(f)))   // an older copy of what's being written
+            files << f;
+    if (files.isEmpty())
+        throw Error("There are no files to make checksums of.");
+    qint64 total = 0, before = 0;
+    QList<qint64> sizes;
+    for (const QString &f : files) {
+        struct stat st;
+        sizes << (stat_(f, st) ? qint64(st.st_size) : 0);
+        total += sizes.last();
+    }
+    QList<QPair<QString, QStringList>> hashed;   // relative name, hashes in algos' order
+    for (int i = 0; i < files.size(); i++) {
+        QString name = relpath(files[i], dir);
+        try {
+            QStringList h = hash_files(
+                files[i], algos,
+                [&](qint64 done, qint64) {
+                    if (task)
+                        task->report(before + done, std::max<qint64>(total, 1), "Hashing " + basename(files[i]));
+                },
+                check);
+            hashed << qMakePair(name, h);
+        } catch (const OSError &e) {
+            if (errors)
+                *errors << name + ": " + QString::fromLocal8Bit(strerror(e.code));
+        }
+        before += sizes[i];
+    }
+    if (hashed.isEmpty())
+        throw Error("None of the files could be read.");
+    check();
+    if (one_file) {
+        QString text;
+        for (const auto &[name, h] : hashed)
+            for (int a = 0; a < algos.size(); a++)
+                text += format_line(name, algos[a], h[a], "bsd") + "\n";
+        write_replacing(outputs.first(), text.toUtf8());
+    } else {
+        for (int a = 0; a < algos.size(); a++) {
+            QString style = algos[a] == "crc32" ? "sfv" : "gnu";
+            QString text = style == "sfv" ? QString("; Made by Kestrel Explorer\n") : QString();
+            for (const auto &[name, h] : hashed)
+                text += format_line(name, algos[a], h[a], style) + "\n";
+            write_replacing(outputs[a], text.toUtf8());
+        }
+    }
+    return outputs;
+}
+
+// ---------------------------------------------------------------- Create Checksum File dialog
+
+CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(parent), paths(paths)
+{
+    setWindowTitle("Create Checksum File");
+    auto *lay = new QVBoxLayout(this);
+    QString first = rstrip(paths.first(), '/');
+    bool folders = std::any_of(paths.begin(), paths.end(), [](const QString &p) { return isdir(p); });
+    auto *head = new QLabel((paths.size() == 1 ? QString("Checksums for “%1”.").arg(basename(first))
+                                               : QString("Checksums for %1 items.").arg(paths.size())) +
+                            (folders ? QString(" The files inside folders are included.") : QString()));
+    head->setWordWrap(true);
+    lay->addWidget(head);
+
+    auto *algo_box = new QGroupBox("Algorithms");
+    auto *grid = new QGridLayout(algo_box);
+    QStringList saved = settings().value("checksum_algorithms", "sha256").toString().split(',', Qt::SkipEmptyParts);
+    int i = 0;
+    for (const QString &a : create_algorithms()) {
+        auto *b = new QCheckBox(a == "crc32" ? QString("CRC32 (SFV)") : algo_label(a));
+        b->setChecked(saved.contains(a));
+        boxes[a] = b;
+        grid->addWidget(b, i / 3, i % 3);
+        i++;
+        connect(b, &QCheckBox::toggled, this, &CreateDialog::update);
+    }
+    lay->addWidget(algo_box);
+
+    auto *files_box = new QGroupBox("Checksum files");
+    auto *fl = new QVBoxLayout(files_box);
+    each = new QRadioButton("One file for each algorithm (as md5sum, sha256sum… write them)");
+    single = new QRadioButton("One file with every algorithm (BSD tags, like Fedora's CHECKSUM files)");
+    (settings().value("checksum_one_file", false).toBool() ? single : each)->setChecked(true);
+    fl->addWidget(each);
+    fl->addWidget(single);
+    connect(each, &QRadioButton::toggled, this, &CreateDialog::update);
+    lay->addWidget(files_box);
+
+    auto *form = new QFormLayout;
+    name = new QLineEdit(paths.size() == 1 ? basename(first) : basename(dirname(first)));
+    if (name->text().isEmpty())
+        name->setText("checksums");
+    form->addRow("Name:", name);
+    auto *row = new QHBoxLayout;
+    folder = new QLineEdit(dirname(first));
+    auto *browse = new QPushButton("Browse…");
+    row->addWidget(folder, 1);
+    row->addWidget(browse);
+    form->addRow("Save in:", row);
+    lay->addLayout(form);
+    connect(name, &QLineEdit::textChanged, this, &CreateDialog::update);
+    connect(folder, &QLineEdit::textChanged, this, &CreateDialog::update);
+    connect(browse, &QPushButton::clicked, this, [this]() {
+        QString d = QFileDialog::getExistingDirectory(this, "Save Checksum File In", folder->text());
+        if (!d.isEmpty())
+            folder->setText(d);
+    });
+
+    preview = new QLabel;
+    preview->setWordWrap(true);
+    preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    lay->addWidget(preview);
+    auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    create_btn = bb->button(QDialogButtonBox::Ok);
+    create_btn->setText("Create");
+    connect(bb, &QDialogButtonBox::accepted, this, &CreateDialog::ok);
+    connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    lay->addWidget(bb);
+    update();
+}
+
+QStringList CreateDialog::algos() const
+{
+    QStringList out;
+    for (const QString &a : create_algorithms())
+        if (boxes[a]->isChecked())
+            out << a;
+    return out;
+}
+
+bool CreateDialog::one_file() const { return single->isChecked(); }
+QString CreateDialog::dir() const { return folder->text().trimmed(); }
+QString CreateDialog::stem() const { return name->text().trimmed(); }
+
+void CreateDialog::update()
+{
+    QString problem;
+    if (algos().isEmpty())
+        problem = "Choose at least one algorithm.";
+    else if (stem().isEmpty() || stem().contains('/'))
+        problem = "Enter a name (without “/”).";
+    else if (!isdir(dir()))
+        problem = "The folder to save in doesn't exist.";
+    create_btn->setEnabled(problem.isEmpty());
+    if (!problem.isEmpty()) {
+        preview->setText(problem);
+        return;
+    }
+    QStringList names, existing;
+    for (const QString &o : outputs()) {
+        names << basename(o);
+        if (lexists(o))
+            existing << basename(o);
+    }
+    preview->setText("Creates: " + names.join(", ") +
+                     (existing.isEmpty() ? QString() : "\nReplaces: " + existing.join(", ")));
+}
+
+void CreateDialog::ok()
+{
+    QStringList existing;
+    for (const QString &o : outputs())
+        if (lexists(o))
+            existing << basename(o);
+    if (!existing.isEmpty() &&
+        QMessageBox::question(this, "Create Checksum File",
+                              "Replace " + existing.join(", ") + "?") != QMessageBox::Yes)
+        return;
+    settings().setValue("checksum_algorithms", algos().join(','));
+    settings().setValue("checksum_one_file", one_file());
+    accept();
+}
+
+void create_dialog(MainWindow *win, const QStringList &paths)
+{
+    CreateDialog dlg(win, paths);
+    if (dlg.exec())
+        run_create(win, paths, dlg.dir(), dlg.stem(), dlg.algos(), dlg.one_file());
+}
+
+void run_create(MainWindow *win, const QStringList &paths, const QString &dir, const QString &stem,
+                const QStringList &algos, bool one_file)
+{
+    auto work = [=](Task *task) -> QVariant {
+        QStringList errors;
+        QStringList written = create(task, paths, dir, stem, algos, one_file, &errors);
+        return QVariantList{written, errors};
+    };
+    QPointer<MainWindow> w(win);
+    auto done = [w, dir](const QVariant &r) {
+        if (!w)
+            return;
+        if (!r.isValid()) {
+            w->statusBar()->showMessage("Creating checksums cancelled", 4000);
+            return;
+        }
+        QStringList written = r.toList().value(0).toStringList(), errors = r.toList().value(1).toStringList();
+        QStringList names;
+        for (const QString &o : written)
+            names << basename(o);
+        w->statusBar()->showMessage("Created " + names.join(", "), 6000);
+        if (w->pane() && w->pane()->dir() == dir && !written.isEmpty())
+            w->pane()->select_later(written.first());
+        if (!errors.isEmpty()) {
+            QStringList shown = errors.mid(0, 10);
+            if (errors.size() > 10)
+                shown << QString("…and %1 more").arg(errors.size() - 10);
+            QString head = errors.size() == 1
+                               ? QString("1 file couldn't be read and was left out:")
+                               : QString("%1 files couldn't be read and were left out:").arg(errors.size());
+            QMessageBox::warning(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
+        }
+    };
+    fileops::run_job(win, "Creating checksums", work, done);
 }
 
 }   // namespace hashcheck
