@@ -505,8 +505,23 @@ static void handle(const QJsonObject &req)
         job.remove(p.dir.get(), p.name);
     } else if (op == "copy" || op == "move") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
-        job.total = job.count(src.dir.get(), src.name) * (op == "move" ? 2 : 1);
         bool merge = req.value("merge").toBool();
+        // The destination may be the source itself: the same path, a hard link to it, or the same name in another
+        // case on a drive that ignores case. Replacing it first would delete the source, so: moving a path onto
+        // itself does nothing, moving onto another name for it just renames, and anything else is refused.
+        struct stat src_st, dst_st;
+        bool have_src = stat_at(src.dir.get(), src.name, &src_st);
+        if (have_src && stat_at(dst.dir.get(), dst.name, &dst_st) && same_file(src_st, dst_st)) {
+            if (op == "copy" || merge)
+                throw Failure("can't " + op + " " + src.path + " onto itself");
+            if (src.path != dst.path &&
+                renameat(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str()) != 0)
+                fail_errno();
+            return;
+        }
+        if (have_src && S_ISDIR(src_st.st_mode) && dst.path.rfind(src.path + "/", 0) == 0)
+            throw Failure("can't " + op + " " + src.path + " into itself");
+        job.total = job.count(src.dir.get(), src.name) * (op == "move" ? 2 : 1);
         if (op == "copy")
             job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge);
         else
