@@ -50,7 +50,7 @@ bool make_preview(const QString &path, const QString &out, int size)
     } catch (const OSError &) {
         return false;
     }
-    QString tmp = out + ".part.webp";
+    QString tmp = join(dirname(out), part_name() + ".webp");   // unique: two Kestrels may make the same preview
     auto r = proc::run({"ffmpeg", "-v", "error", "-y", "-t", QString::number(PREVIEW_SECONDS), "-i", path, "-an", "-vf",
                         QString("fps=%1,scale=%2:%2:force_original_aspect_ratio=decrease").arg(PREVIEW_FPS).arg(size),
                         "-c:v", "libwebp_anim", "-loop", "0", "-q:v", "70", "-compression_level", "3", tmp},

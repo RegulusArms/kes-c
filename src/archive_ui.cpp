@@ -632,6 +632,35 @@ static QString collapse(const QString &out, const QString &dest_parent)
     return out;
 }
 
+// Tell the user which of the archive's symlinks were left out for leading outside the folder (an absolute target, or
+// one climbing out with ".."), and warn about any that couldn't be removed. dropped: [path, target, why] each.
+void say_dropped_links(QWidget *win, const QString &name, const QVariantList &dropped)
+{
+    QStringList removed, stuck;
+    for (const QVariant &v : dropped) {
+        QStringList l = v.toStringList();
+        if (l.value(2).isEmpty())
+            removed << l.value(0) + " → " + l.value(1);
+        else
+            stuck << l.value(0) + " → " + l.value(1) + " (" + l.value(2) + ")";
+    }
+    QString text;
+    if (!removed.isEmpty())
+        text += QString("Left out %1 symbolic link%2 that led outside the folder (an absolute target, or one climbing out "
+                        "with “..”):\n\n")
+                    .arg(removed.size())
+                    .arg(removed.size() > 1 ? "s" : "") +
+                removed.mid(0, 20).join('\n') + "\n\n";
+    if (!stuck.isEmpty())
+        text += "These symbolic links lead outside the folder and couldn't be removed. Opening, copying or deleting "
+                "through them reaches what they point to:\n\n" +
+                stuck.mid(0, 20).join('\n');
+    if (stuck.isEmpty())
+        QMessageBox::information(win, "Extracting " + name, text.trimmed());
+    else
+        QMessageBox::warning(win, "Extracting " + name, text.trimmed());
+}
+
 static void run_extract(MainWindow *win, const QString &path, const QVariantMap &opts)
 {
     QString name = basename(path);
@@ -643,8 +672,9 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
             out = unique_path(dest, archive::archive_stem(path), "num");
             makedirs(out);
         }
+        QList<archive::DroppedLink> dropped;
         try {
-            archive::extract(task, path, out, opts["password"].toString(), opts["overwrite"].toString());
+            archive::extract(task, path, out, opts["password"].toString(), opts["overwrite"].toString(), 0, &dropped);
         } catch (const archive::WrongPassword &) {
             if (sub)
                 rmtree(out);
@@ -661,7 +691,10 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
             } catch (const OSError &) {
             }
         }
-        return QVariantMap{{"out", result}};
+        QVariantList links;
+        for (const archive::DroppedLink &l : dropped)
+            links << QVariant(QStringList{l.path, l.target, l.why});
+        return QVariantMap{{"out", result}, {"dropped", links}};
     };
     QPointer<MainWindow> w(win);
     auto done = [w, path, name, opts](const QVariant &r) {
@@ -683,6 +716,8 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         }
         QString out = res["out"].toString();
         w->statusBar()->showMessage(QString("Extracted %1 to %2").arg(name, out), 6000);
+        if (!res["dropped"].toList().isEmpty())
+            say_dropped_links(w, name, res["dropped"].toList());
         if (opts["open_after"].toBool())
             w->navigate(out);
         else if (w->pane() && w->pane()->dir() == dirname(out))
@@ -750,9 +785,7 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
             }
         }
         task->check();
-        if (exists(spec_in.out))
-            util::unlink(spec_in.out);
-        archive::Spec sp = spec_in;
+        archive::Spec sp = spec_in;   // an older archive of that name is replaced only once the new one is made
         sp.total = std::max<qint64>(total, 1);
         QString out = archive::compress(task, sp);
         if (spec_in.trash_originals) {

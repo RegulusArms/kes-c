@@ -125,10 +125,27 @@ void link(const QString &target, const QString &link);
 QString readlink(const QString &p);
 void chmod(const QString &p, mode_t mode);
 void copystat(const QString &src, const QString &dst, bool follow_symlinks = true);
-void copyfile(const QString &src, const QString &dst);   // contents only, like shutil.copyfile
+// contents only, like shutil.copyfile, in one step (write_parts); new_only: only if the name is still free
+void copyfile(const QString &src, const QString &dst, bool new_only = false);
 void move(const QString &src, const QString &dst);       // shutil.move
 void rmtree(const QString &p);                            // ignores errors
+// Write a whole file in one step (failure-atomic, see CLAUDE.md): exclusive makes it only if the name is free,
+// otherwise it replaces any old contents (keeping their permissions, and a symlink there as a symlink: its target is
+// replaced; fsynced first, so a crash leaves the old or the new, never a truncated file). A failure leaves no part
+// file and the old contents as they were. For Kestrel's own files; a user's file in the way is replaced, never
+// written through (fileops).
 void write_text(const QString &p, const QByteArray &data, bool exclusive = false);
+void write_atomic(const QString &path, const QByteArray &data);   // write_text(), replacing
+// the general form: fill(fd) writes a part file beside path; new_only: take the name only if free; sync: fsync first
+// (for data that matters, not caches)
+void write_parts(const QString &path, const std::function<void(int)> &fill, bool new_only, bool sync = false);
+void put_new(const QString &part, const QString &path);   // a finished part file to a name that must still be free
+void write_all(int fd, const char *data, qint64 size, const QString &shown);
+// A new, empty file to write something into before it is renamed over a name in the same folder (so that name keeps
+// its old contents until the new ones are complete): prefix + ".kes-<random>.part", relative to dirfd (or a path, with
+// AT_FDCWD and prefix "dir/"), created exclusively and never through a symlink. Returns the open fd; *name is the name.
+int open_part_at(int dirfd, const QString &prefix, QString *name);
+QString part_name();   // a fresh ".kes-<random>.part", for building something beside the name it will replace
 QByteArray read_file(const QString &p, bool *ok = nullptr);
 
 // os.walk: fn(root, dirs, files) for every folder; with topdown the callback may prune `dirs`.
@@ -151,7 +168,7 @@ QString unique_path(const QString &directory, const QString &name, const QString
 QPair<QString, QString> split_ext(const QString &name);
 QString fmt_time(qint64 ts, const char *fmt);   // strftime in local time
 
-// Python's shlex.split (POSIX mode, no comments), which the Python version uses: words split at spaces, tabs and line
+// As Python's shlex.split (POSIX mode, no comments): words split at spaces, tabs and line
 // breaks (not other Unicode spaces); 'single quotes' keep everything as it is; "double quotes" keep everything but
 // \" and \\ (a backslash before anything else stays); outside quotes a backslash makes the next character ordinary.
 // No variables, globs, ~ or comments: it's for argument lists (a compressor's extra options, a thumbnailer's command),
@@ -202,10 +219,13 @@ QColor card_color();    // a card (Overview) that stands out a little from the w
 QColor card_border();
 QColor error_color();   // red text that is readable on the window background
 QColor ok_color();      // green text that is readable on the window background
-QColor accent_color();  // the desktop's accent (the theme's selection colour)
-// Call fn whenever the desktop's colours change (a light/dark switch, another theme). Qt updates its palette, but a
-// stylesheet resolves palette(...) once and colours read earlier stay as they were: stylesheets that use palette(...)
-// are reapplied first, then fn runs. Stops when owner is deleted.
+// The desktop's accent: GNOME's accent colour setting once the user has chosen one (GNOME 47+), else the theme's
+// selection colour. named_accent: that setting's colour for one of its names (blue, teal, …); invalid if unknown.
+QColor accent_color();
+QColor named_accent(const QString &name);
+// Call fn whenever the desktop's colours change (a light/dark switch, another theme, the accent colour setting). Qt
+// updates its palette, but a stylesheet resolves palette(...) once and colours read earlier stay as they were:
+// stylesheets that use palette(...) are reapplied first, then fn runs. Stops when owner is deleted.
 void on_palette_change(QObject *owner, std::function<void()> fn);
 // Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
 // 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's

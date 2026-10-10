@@ -9,9 +9,13 @@
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 
 #include <cstdio>
+#include <csignal>
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -60,10 +64,14 @@ public:
         }
     }
 
-    void stop()
+    // the next message for a request: a progress report ({"progress": [done, total, text]}) or its final reply
+    QJsonObject next(qint64 id, int ms = 20000) { return next_reply(id, ms); }
+
+    // close its input, as when the session ends; true if it then exits
+    bool stop(int ms = 5000)
     {
         p.closeWriteChannel();
-        p.waitForFinished(5000);
+        return p.waitForFinished(ms);
     }
 
 private:
@@ -103,6 +111,12 @@ static int mode_of(const QString &p)
 {
     struct stat st;
     return lstat(p.toLocal8Bit().constData(), &st) == 0 ? int(st.st_mode & 07777) : -1;
+}
+
+static ino_t inode_of(const QString &p)
+{
+    struct stat st;
+    return lstat(p.toLocal8Bit().constData(), &st) == 0 ? st.st_ino : 0;
 }
 
 static bool is_link(const QString &p)
@@ -175,6 +189,44 @@ int main(int argc, char **argv)
               !ok(h.call({{"op", "copyfile"}, {"src", join(W, "t.txt")}, {"dst", join(W, "c.txt")}})),
           "copyfile copies a file and won't overwrite one");
 
+    // what the helper makes gets the owner of the folder it's made in (run as root: the user's in their home), not
+    // the helper's. Seen here through the group: a folder given another of the user's groups
+    {
+        gid_t groups[256];
+        int n = getgroups(256, groups);
+        gid_t other = getegid();
+        for (int i = 0; i < n; ++i)
+            if (groups[i] != getegid())
+                other = groups[i];
+        if (other == getegid()) {
+            skip("new items get the folder's owner (the user has no other group)");
+        } else {
+            QString own = join(W, "own"), src = join(W, "own-src.txt");
+            QDir().mkpath(own);
+            (void)!chown(own.toLocal8Bit().constData(), -1, other);
+            write_file(src, "s");
+            chmod(src.toLocal8Bit().constData(), 02755);
+            make_tree(join(W, "own-tree"), 1, 1);
+            bool done = ok(h.call({{"op", "copy"}, {"src", src}, {"dst", join(own, "copy.txt")}})) &&
+                        ok(h.call({{"op", "copy"}, {"src", join(W, "own-tree")}, {"dst", join(own, "tree")}})) &&
+                        ok(h.call({{"op", "mkdir"}, {"path", join(own, "new/sub")}})) &&
+                        ok(h.call({{"op", "touch"}, {"path", join(own, "t.txt")}})) &&
+                        ok(h.call({{"op", "write"}, {"path", join(own, "w.txt")}, {"text", "w"}})) &&
+                        ok(h.call({{"op", "copyfile"}, {"src", src}, {"dst", join(own, "cf.txt")}})) &&
+                        ok(h.call({{"op", "symlink"}, {"target", "t.txt"}, {"link", join(own, "l")}}));
+            bool all = done;
+            for (const QString &name : {"copy.txt", "tree", "tree/d0", "tree/d0/f0", "new", "new/sub", "t.txt", "w.txt",
+                                        "cf.txt", "l"}) {
+                struct stat st;
+                all = all && lstat(join(own, name).toLocal8Bit().constData(), &st) == 0 && st.st_gid == other;
+            }
+            check(all, "copies, new folders (and the parents made for them), files and links get the folder's group (the "
+                       "owner as root: tests/check_package.sh)");
+            check(done && mode_of(join(own, "copy.txt")) == 0755,
+                  "a copy given another group loses its set-group-ID bit");
+        }
+    }
+
     QString tree = join(W, "tree");
     make_tree(tree, 2, 2);
     symlink(victim.toLocal8Bit().constData(), join(tree, "to-victim").toLocal8Bit().constData());
@@ -185,6 +237,138 @@ int main(int argc, char **argv)
     check(ok(h.call({{"op", "move"}, {"src", join(W, "tree2")}, {"dst", join(W, "tree3")}})) &&
               !QFile::exists(join(W, "tree2")) && QFile::exists(join(W, "tree3/d0/f0")),
           "move moves a folder");
+    // the same entry as source and destination: the helper must notice (its "replace the destination" step would
+    // delete the source), whatever Kestrel sends
+    auto contents = [](const QString &root) {   // names and file contents
+        QStringList out;
+        QDirIterator it(root, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            out << relpath(f, root) + "=" + (QFileInfo(f).isFile() ? QString::fromUtf8(read_file(f)) : QString());
+        }
+        out.sort();
+        return out;
+    };
+    write_file(join(W, "self.txt"), "mine");
+    QStringList tree_before = contents(join(W, "tree3"));
+    h.call({{"op", "move"}, {"src", join(W, "self.txt")}, {"dst", join(W, "self.txt")}});
+    h.call({{"op", "copy"}, {"src", join(W, "self.txt")}, {"dst", join(W, "self.txt")}});
+    h.call({{"op", "move"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}});
+    h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}});
+    h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}, {"merge", true}});
+    check(read_file(join(W, "self.txt")) == "mine" && !tree_before.isEmpty() && contents(join(W, "tree3")) == tree_before,
+          "moving or copying a file or folder onto itself leaves it as it was");
+    QJsonObject into_move = h.call({{"op", "move"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
+    QJsonObject into_copy = h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
+    check(!into_move.isEmpty() && !ok(into_move) && !into_copy.isEmpty() && !ok(into_copy) &&
+              contents(join(W, "tree3")) == tree_before,
+          "moving or copying a folder into itself is refused, and the folder is left as it was");
+    write_file(join(W, "hl-a"), "linked");
+    (void)!::link(enc(join(W, "hl-a")).constData(), enc(join(W, "hl-b")).constData());
+    h.call({{"op", "move"}, {"src", join(W, "hl-a")}, {"dst", join(W, "hl-b")}});
+    check(read_file(join(W, "hl-b")) == "linked", "moving a file onto a hard link to it keeps the file");
+
+    // -- replacing: what's replaced stays as it was until the new one is complete (a failure, a cancel or the session
+    // ending leaves it, and no half-made copy); a folder is swapped in whole
+    auto leftovers = [&]() {   // half-made copies (".kes-….part") anywhere in W
+        QStringList out;
+        QDirIterator it(W, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            if (basename(f).startsWith(".kes-"))
+                out << f;
+        }
+        return out;
+    };
+    write_file(join(W, "big6"), QByteArray(6 << 20, 'b'));
+    write_file(join(W, "conf.txt"), "original");
+    QDir().mkpath(join(W, "newdir"));
+    write_file(join(W, "newdir/a.txt"), "a");
+    write_file(join(W, "newdir/big"), QByteArray(6 << 20, 'n'));
+    QDir().mkpath(join(W, "olddir"));
+    write_file(join(W, "olddir/keep.txt"), "keep");
+    QStringList old_before = contents(join(W, "olddir"));
+    {
+        // a helper whose writes fail past 1 MB (EFBIG), as on a full disk: limits pass to the program it starts
+        Helper small;
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        bool started = small.start();
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QJsonObject file_r = small.call({{"op", "copy"}, {"src", join(W, "big6")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject dir_r = small.call({{"op", "copy"}, {"src", join(W, "newdir")}, {"dst", join(W, "olddir")}});
+        small.stop();
+        check(started && !file_r.isEmpty() && !ok(file_r) && read_file(join(W, "conf.txt")) == "original" &&
+                  leftovers().isEmpty(),
+              "replacing a file: a write that fails part-way (a full disk) keeps the old file, and leaves no "
+              "half-made copy");
+        check(!dir_r.isEmpty() && !ok(dir_r) && contents(join(W, "olddir")) == old_before && leftovers().isEmpty(),
+              "replacing a folder: a failure part-way keeps the old folder as it was, and leaves no half-made copy");
+    }
+    write_file(join(W, "huge"), "x");
+    ::truncate(enc(join(W, "huge")).constData(), qint64(2) << 30);   // 2 GB (sparse): long enough to stop part-way
+    {
+        qint64 id = h.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject m = h.next(id);
+        QJsonArray pr = m.value("progress").toArray();
+        bool partway = !pr.isEmpty() && pr[0].toDouble() > 0 && pr[0].toDouble() < pr[1].toDouble() / 2;
+        QElapsedTimer clock;
+        clock.start();
+        h.cancel(id);
+        QJsonObject r = h.reply(id);
+        check(partway && r.value("cancelled").toBool() && clock.elapsed() < 2000 &&
+                  read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
+              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way at once, keeping "
+              "the file it was replacing and no half-made copy");
+    }
+    {
+        Helper ending;
+        bool started = ending.start();
+        qint64 id = ending.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        bool partway = !ending.next(id).value("progress").toArray().isEmpty();
+        bool exited = ending.stop();
+        check(started && partway && exited && read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
+              "ending the admin session part-way through a copy stops it, keeping the file it was replacing and no "
+              "half-made copy");
+    }
+    {
+        // "replace": false (a destination that was free when Kestrel planned the job): one another program saves
+        // meanwhile is kept and the copy fails with a conflict; one that's there already is never replaced
+        QString fresh = join(W, "fresh.bin"), mid = join(W, "mid.bin");
+        write_file(mid, "m");
+        ::truncate(enc(mid).constData(), qint64(256) << 20);   // sparse; the first progress report comes at once
+        qint64 id = h.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
+        bool partway = !h.next(id).value("progress").toArray().isEmpty();
+        write_file(fresh, "theirs");
+        QJsonObject r = h.reply(id, 60000);
+        QJsonObject taken = h.call({{"op", "copy"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
+        QJsonObject moved = h.call({{"op", "move"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
+        check(partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
+                  read_file(fresh) == "theirs" && !ok(taken) && !ok(moved) && read_file(join(W, "conf.txt")) == "original" &&
+                  read_file(join(W, "w.txt")) == "hello" && leftovers().isEmpty(),
+              "a copy or move to a new name keeps a file another program saves there meanwhile (or had saved), and says so");
+        QFile::remove(fresh);
+        QFile::remove(mid);
+    }
+    QFile::remove(join(W, "huge"));
+    QDir().mkpath(join(W, "mvsrc"));
+    write_file(join(W, "mvsrc/moved.txt"), "moved");
+    QDir().mkpath(join(W, "mvdst"));
+    write_file(join(W, "mvdst/old.txt"), "old");
+    bool copied_over = ok(h.call({{"op", "copy"}, {"src", join(W, "newdir")}, {"dst", join(W, "olddir")}}));
+    bool moved_over = ok(h.call({{"op", "move"}, {"src", join(W, "mvsrc")}, {"dst", join(W, "mvdst")}}));
+    check(copied_over && contents(join(W, "olddir")) == contents(join(W, "newdir")) && moved_over &&
+              !QFile::exists(join(W, "mvsrc")) && contents(join(W, "mvdst")) == QStringList{"moved.txt=moved"} &&
+              leftovers().isEmpty(),
+          "copying or moving a folder onto another replaces it whole: the old contents are gone, nothing is left "
+          "behind");
     write_file(join(W, "r1"));
     check(ok(h.call({{"op", "rename"}, {"src", join(W, "r1")}, {"dst", join(W, "r2")}})) &&
               QFile::exists(join(W, "r2")) &&
@@ -194,7 +378,7 @@ int main(int argc, char **argv)
     check(ok(h.call({{"op", "symlink"}, {"target", "w.txt"}, {"link", join(W, "sl")}})) &&
               QFile::symLinkTarget(join(W, "sl")) == join(W, "w.txt") &&
               ok(h.call({{"op", "hardlink"}, {"target", join(W, "w.txt")}, {"link", join(W, "hl")}})) &&
-              read_file(join(W, "hl")) == "hello",
+              inode_of(join(W, "hl")) == inode_of(join(W, "w.txt")) && read_file(join(W, "hl")) == "hello",
           "symlink and hardlink make links");
     QJsonObject other = h.call({{"op", "hardlink"}, {"target", "/etc/hostname"}, {"link", join(W, "not-mine")}});
     check(!ok(other) && other.value("error").toString().contains("isn't yours") && !QFile::exists(join(W, "not-mine")),
@@ -288,6 +472,7 @@ int main(int argc, char **argv)
     // (a race: the old helper loses it in some rounds, not all, so rounds run for a few seconds)
     std::atomic<bool> stop{false};
     bool safe = true;
+    std::atomic<int> swaps{0};   // a swap that never happens (no RENAME_EXCHANGE here) would prove nothing
     QElapsedTimer clock;
     clock.start();
     for (int round = 0; clock.elapsed() < 4000 && safe; ++round) {
@@ -304,6 +489,7 @@ int main(int argc, char **argv)
                     QByteArray a = join(race, QString("d%1").arg(d)).toLocal8Bit();
                     QByteArray b = join(links, QString("d%1").arg(d)).toLocal8Bit();
                     if (renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE) == 0) {
+                        ++swaps;
                         usleep(200);
                         renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE);
                     }
@@ -315,7 +501,8 @@ int main(int argc, char **argv)
         swapper.join();
         safe = victim_intact();
     }
-    check(safe, "a folder swapped for a symlink during a delete doesn't let it delete outside the tree");
+    check(safe && swaps > 0, QString("a folder swapped for a symlink during a delete doesn't let it delete outside the "
+                                     "tree (%1 swaps)").arg(swaps > 0 ? "some" : "no"));
 
     h.stop();
     finish();

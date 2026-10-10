@@ -21,6 +21,7 @@
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QMutex>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
@@ -435,47 +436,30 @@ void copystat(const QString &src, const QString &dst, bool follow)
         throw_errno(dst);
 }
 
-void copyfile(const QString &src, const QString &dst)
+void copyfile(const QString &src, const QString &dst, bool new_only)
 {
     int in = ::open(enc(src).constData(), O_RDONLY | O_CLOEXEC);
     if (in < 0)
         throw_errno(src);
-    int out = ::open(enc(dst).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-    if (out < 0) {
-        int e = errno;
-        ::close(in);
-        throw_errno(dst, e);
-    }
     std::vector<char> buf(1 << 20);
-    for (;;) {
-        ssize_t n = ::read(in, buf.data(), buf.size());
-        if (n < 0 && errno == EINTR)
-            continue;
-        if (n < 0) {
-            int e = errno;
-            ::close(in);
-            ::close(out);
-            throw_errno(src, e);
-        }
-        if (n == 0)
-            break;
-        ssize_t off = 0;
-        while (off < n) {
-            ssize_t w = ::write(out, buf.data() + off, size_t(n - off));
-            if (w < 0 && errno == EINTR)
-                continue;
-            if (w < 0) {
-                int e = errno;
-                ::close(in);
-                ::close(out);
-                throw_errno(dst, e);
+    try {
+        write_parts(dst, [&](int out) {
+            for (;;) {
+                ssize_t n = ::read(in, buf.data(), buf.size());
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n < 0)
+                    throw_errno(src);
+                if (n == 0)
+                    break;
+                write_all(out, buf.data(), n, dst);
             }
-            off += w;
-        }
+        }, new_only, !new_only && lexists(dst));   // fsynced when it replaces something
+    } catch (...) {
+        ::close(in);
+        throw;
     }
     ::close(in);
-    if (::close(out) != 0)
-        throw_errno(dst);
 }
 
 static void copytree(const QString &src, const QString &dst)
@@ -502,7 +486,17 @@ void move(const QString &src, const QString &dst)
         return;
     if (errno != EXDEV)
         throw_errno(src);
-    copytree(src, dst);
+    // another drive: copied whole under a hidden name beside dst, renamed into place, and only then is src deleted
+    // (a failure part-way leaves src, and no half-made copy)
+    QString part = join(dirname(dst), part_name());
+    try {
+        copytree(src, part);
+        if (::rename(enc(part).constData(), enc(dst).constData()) != 0)
+            throw_errno(dst);
+    } catch (...) {
+        rmtree(part);
+        throw;
+    }
     struct stat st;
     if (lstat_(src, st) && S_ISDIR(st.st_mode)) {
         rmtree(src);
@@ -556,25 +550,99 @@ void rmtree(const QString &p)
     ::close(fd);
 }
 
-void write_text(const QString &p, const QByteArray &data, bool exclusive)
+QString part_name() { return QString(".kes-%1.part").arg(QRandomGenerator::global()->generate(), 8, 16, QChar('0')); }
+
+int open_part_at(int dirfd, const QString &prefix, QString *name)
 {
-    int flags = O_WRONLY | O_CREAT | O_CLOEXEC | (exclusive ? O_EXCL : O_TRUNC);
-    int fd = ::open(enc(p).constData(), flags, 0666);
-    if (fd < 0)
-        throw_errno(p);
-    qsizetype off = 0;
-    while (off < data.size()) {
-        ssize_t w = ::write(fd, data.constData() + off, size_t(data.size() - off));
+    for (;;) {
+        *name = prefix + part_name();
+        int fd = ::openat(dirfd, enc(*name).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+        if (fd >= 0)
+            return fd;
+        if (errno != EEXIST)
+            throw_errno(*name);
+    }
+}
+
+void write_all(int fd, const char *data, qint64 size, const QString &shown)
+{
+    qint64 off = 0;
+    while (off < size) {
+        ssize_t w = ::write(fd, data + off, size_t(size - off));
         if (w < 0 && errno == EINTR)
             continue;
-        if (w < 0) {
-            int e = errno;
-            ::close(fd);
-            throw_errno(p, e);
-        }
+        if (w < 0)
+            throw_errno(shown);
         off += w;
     }
-    ::close(fd);
+}
+
+// fill(fd) writes a part file beside path, which then replaces path (keeping its permissions) or, with new_only,
+// takes the name only if it's still free. sync: fsync before the rename (a crash then leaves the old contents or
+// the new, never a truncated file): for data that matters, not caches.
+void write_parts(const QString &path_in, const std::function<void(int)> &fill, bool new_only, bool sync)
+{
+    // a replaced file that's a symlink (a config file kept in a dotfiles folder) stays one: its target is replaced
+    QString path = !new_only && islink(path_in) ? realpath(path_in) : path_in;
+    QString part;
+    int fd = -1;
+    try {
+        fd = open_part_at(AT_FDCWD, rstrip(dirname(path), '/') + "/", &part);
+    } catch (const OSError &e) {
+        throw_errno(path, e.code);   // named as the file being written (permission denied there: the admin session)
+    }
+    try {
+        struct stat old;
+        if (!new_only && ::stat(enc(path).constData(), &old) == 0 && S_ISREG(old.st_mode))
+            ::fchmod(fd, old.st_mode & 07777);   // first, so fill() can still change them
+        fill(fd);
+        if (sync && ::fsync(fd) != 0)
+            throw_errno(path);
+        int fd2 = fd;
+        fd = -1;
+        if (::close(fd2) != 0)
+            throw_errno(path);
+        if (new_only)
+            put_new(part, path);
+        else if (::rename(enc(part).constData(), enc(path).constData()) != 0)
+            throw_errno(path);
+    } catch (...) {
+        if (fd >= 0)
+            ::close(fd);
+        ::unlink(enc(part).constData());
+        throw;
+    }
+}
+
+void put_new(const QString &part, const QString &path)
+{
+    if (::renameat2(AT_FDCWD, enc(part).constData(), AT_FDCWD, enc(path).constData(), RENAME_NOREPLACE) == 0)
+        return;
+    if (errno != EINVAL)
+        throw_errno(path);
+    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken; a folder can't be linked, so
+    // there it's check, then rename
+    struct stat st;
+    if (::lstat(enc(part).constData(), &st) == 0 && S_ISDIR(st.st_mode)) {
+        if (lexists(path))
+            throw OSError(EEXIST, errno_text(EEXIST, path));
+        if (::rename(enc(part).constData(), enc(path).constData()) != 0)
+            throw_errno(path);
+        return;
+    }
+    if (::link(enc(part).constData(), enc(path).constData()) != 0)
+        throw_errno(path);
+    ::unlink(enc(part).constData());
+}
+
+void write_atomic(const QString &path, const QByteArray &data)
+{
+    write_parts(path, [&](int fd) { write_all(fd, data.constData(), data.size(), path); }, false, true);
+}
+
+void write_text(const QString &p, const QByteArray &data, bool exclusive)
+{
+    write_parts(p, [&](int fd) { write_all(fd, data.constData(), data.size(), p); }, exclusive, !exclusive);
 }
 
 QByteArray read_file(const QString &p, bool *ok)
@@ -1112,7 +1180,54 @@ QColor error_color() { return QColor(dark_theme() ? "#ff7b63" : "#c01c28"); }   
 
 QColor ok_color() { return QColor(dark_theme() ? "#8ff0a4" : "#26a269"); }   // GNOME's success colours
 
-QColor accent_color() { return QGuiApplication::palette().color(QPalette::Highlight); }
+QColor named_accent(const QString &name)
+{
+    // libadwaita's accent colours (what GNOME's own apps draw)
+    static const QHash<QString, QString> colors = {
+        {"blue", "#3584e4"}, {"teal", "#2190a4"},   {"green", "#3a944a"},  {"yellow", "#c88800"}, {"orange", "#ed5b00"},
+        {"red", "#e62d42"},  {"pink", "#d56199"},   {"purple", "#9141ac"}, {"slate", "#6f8396"}};
+    return colors.contains(name) ? QColor(colors.value(name)) : QColor();
+}
+
+namespace {
+
+void palette_changed();
+
+// GNOME 47+'s accent colour setting, once the user has chosen one; invalid otherwise
+QColor desktop_accent()
+{
+    static GSettings *s = nullptr;   // kept for the life of the app
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        QString schema = "org.gnome.desktop.interface";   // not Cinnamon's, which has none and ignores GNOME's
+        if (desktop_schema(schema) == schema && has_schema_key(schema, "accent-color")) {
+            s = g_settings_new("org.gnome.desktop.interface");
+            g_signal_connect(s, "changed::accent-color", G_CALLBACK(+[](GSettings *, gchar *, gpointer) {
+                palette_changed();
+            }), nullptr);
+        }
+    }
+    if (!s)
+        return QColor();
+    GVariant *set = g_settings_get_user_value(s, "accent-color");
+    if (!set)
+        return QColor();
+    g_variant_unref(set);
+    gchar *name = g_settings_get_string(s, "accent-color");
+    QColor c = named_accent(QString::fromUtf8(name));
+    g_free(name);
+    return c;
+}
+
+}  // namespace
+
+QColor accent_color()
+{
+    // GTK 3 themes (and so Qt's palette) don't follow GNOME's accent colour setting, so a chosen one comes first
+    QColor c = desktop_accent();
+    return c.isValid() ? c : QGuiApplication::palette().color(QPalette::Highlight);
+}
 
 namespace {
 
@@ -1121,16 +1236,22 @@ class PaletteWatcher : public QWidget {
 public:
     QList<QPair<QPointer<QObject>, std::function<void()>>> fns;
 
+    void apply_soon()
+    {
+        if (queued)
+            return;
+        queued = true;   // a theme switch can change the palette several times in a row
+        QTimer::singleShot(0, this, [this]() {
+            queued = false;
+            apply();
+        });
+    }
+
 protected:
     bool event(QEvent *ev) override
     {
-        if (ev->type() == QEvent::ApplicationPaletteChange && !queued) {
-            queued = true;   // a theme switch can change the palette several times in a row
-            QTimer::singleShot(0, this, [this]() {
-                queued = false;
-                apply();
-            });
-        }
+        if (ev->type() == QEvent::ApplicationPaletteChange)
+            apply_soon();
         return QWidget::event(ev);
     }
 
@@ -1153,12 +1274,19 @@ private:
     }
 };
 
+PaletteWatcher *palette_watcher()
+{
+    static PaletteWatcher *watcher = new PaletteWatcher;
+    return watcher;
+}
+
+void palette_changed() { palette_watcher()->apply_soon(); }   // the accent colour setting changed
+
 }  // namespace
 
 void on_palette_change(QObject *owner, std::function<void()> fn)
 {
-    static PaletteWatcher *watcher = new PaletteWatcher;
-    watcher->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
+    palette_watcher()->fns << qMakePair(QPointer<QObject>(owner), std::move(fn));
 }
 
 // ---------------------------------------------------------------- the GTK theme's colours (Qt < 6.5)

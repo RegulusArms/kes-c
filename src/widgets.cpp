@@ -670,7 +670,7 @@ Sidebar::~Sidebar()
 
 void Sidebar::monitor_changed(void *, void *, void *self) { static_cast<Sidebar *>(self)->phone_timer.start(); }
 
-// ---------------------------------------------------------------- sidebar order (shared with the Python version)
+// ---------------------------------------------------------------- sidebar order
 
 namespace sidebar {
 

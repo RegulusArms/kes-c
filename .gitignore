@@ -1,3 +1,7 @@
+# Python bytecode (bench/)
+__pycache__/
+*.py[cod]
+
 # Build output
 build/
 build-*/

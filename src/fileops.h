@@ -139,12 +139,17 @@ Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> 
 // op is "copy", "move", "merge_copy", "merge_move" or "delete"
 struct Job {
     QString op, src, dst;
+    // the user chose Replace or Merge for a dst that was there. Otherwise dst must be new: one that's there when the job
+    // starts, or appears while it runs (another program saving a file), is kept and the job fails with a conflict.
+    bool replace = false;
 };
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
 // permission can be retried as administrator.
 // With undo_label, the moves and copies that succeed (also when cancelled part-way) can be undone with Ctrl+Z; merges
-// into existing folders can't.
+// into existing folders and copies that replaced something can't (what was replaced is gone): the status bar says so,
+// and when nothing else in the job can be undone an entry that can't be is recorded, so Ctrl+Z doesn't undo the action
+// before it instead.
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
                 const QString &undo_label = QString());
 

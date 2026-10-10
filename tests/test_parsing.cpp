@@ -1,5 +1,5 @@
-// Parsing that must match the Python version, which uses Python's own: shlex_split (util.h) against shlex.split,
-// and metadata's ordered JSON reader against json.loads. The expected results are Python's, the same in both suites.
+// Parsing modelled on Python's: shlex_split (util.h) splits as shlex.split does, and metadata's ordered JSON reader
+// reads as json.loads does. The expected results are Python's.
 #include "common.h"
 
 #include "metadata.h"
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
               metadata::ordered_object("{not json").isEmpty(),
           "...each key once with its last value (as Python), exiftool's [{…}] form, and nothing from invalid JSON");
 
-    // -- KESTREL_STATS's report: the same text in both versions
+    // -- KESTREL_STATS's report
     stats::enable();
     stats::sample("b timing (ms)", 1.0);
     stats::sample("b timing (ms)", 4.5);
@@ -75,6 +75,6 @@ int main(int argc, char **argv)
     stats::peak("c peak", 5);
     check(stats::summary() == "Kestrel stats (KESTREL_STATS):\n  a count: 3\n  b timing (ms): 2×, average 2.8, largest 4.5\n"
                               "  c peak: most 7\n",
-          "the KESTREL_STATS report reads the same in both versions (sorted names, counts, averages, peaks)");
+          "the KESTREL_STATS report lists sorted names, counts, averages and peaks");
     finish();
 }

@@ -203,7 +203,11 @@ int main(int argc, char **argv)
         w->pane()->select_paths({join(dir, "a.png"), join(dir, "c.txt")});
         w->chooser->accept();
     }
-    check(wait_for([&]() { return r.got; }) && r.uris.size() == 2, "with multiple, every selected file is chosen");
+    bool got_many = wait_for([&]() { return r.got; });
+    QStringList chosen = r.uris;
+    chosen.sort();
+    check(got_many && r.response == 0 && chosen == QStringList({file_uri(join(dir, "a.png")), file_uri(join(dir, "c.txt"))}),
+          "with multiple, every selected file is chosen");
 
     call("OpenFile", options({{"current_folder", folder(dir)}, {"directory", g_variant_new_boolean(TRUE)}}), &r);
     w = wait_window();

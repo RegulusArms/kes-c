@@ -7,12 +7,20 @@
 #include "stats.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
+#include <QPushButton>
+#include <QStatusBar>
 
 #include <fcntl.h>
+#include <gio/gdesktopappinfo.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <utime.h>
 
@@ -116,7 +124,7 @@ int main(int argc, char **argv)
           "merge: files from both folders are there");
     check(text_of(P("B/both.txt")) == "from A", "merge: a file in both is replaced by the copied one");
     make(P("C/only-c.txt"), "c");
-    check(run_ops(w, {{"copy", P("A"), P("C")}}), "a replace finishes");
+    check(run_ops(w, {{"copy", P("A"), P("C"), true}}), "a replace finishes");
     check(!lexists(P("C/only-c.txt")) && exists(P("C/only-a.txt")), "replace: the old folder's contents are gone");
 
     // ---- delete
@@ -130,21 +138,183 @@ int main(int argc, char **argv)
 
     // ---- cancel
     const int BIG = 6 * 1024 * 1024;   // more than one 4 MB chunk, so a file can be cancelled half-way
-    for (int i = 0; i < 24; ++i)
-        make(P(QString("big/f%1.bin").arg(i, 2, 10, QChar('0'))), QByteArray(BIG, char('a' + i)));
+    const qint64 LONG = qint64(48) << 20;   // the cancel test's files (sparse): long enough to be cut off part-way
+    for (int i = 0; i < 24; ++i) {
+        QString f = P(QString("big/f%1.bin").arg(i, 2, 10, QChar('0')));
+        make(f, QByteArray(1, char('a' + i)));
+        ::truncate(enc(f).constData(), LONG);
+    }
     bool finished = false;
     Task *t = fileops::start_ops(w, {{"copy", P("big"), P("big2")}}, "Test", [&finished]() { finished = true; });
     QPointer<Task> tp(t);
-    // at once: on a fast disk (the test's home is in /tmp, often in memory) the whole copy can finish before the
-    // first progress report arrives
-    tp->cancel();
-    check(wait_for([&]() { return !tp; }, 10000), "a cancelled copy stops");
-    QStringList copied = isdir(P("big2")) ? listdir(P("big2")) : QStringList();
+    // on the copying thread itself, at its first report on a file (reports come at most every 80 ms): a cancel in the
+    // middle of copying, never before it starts or after it's done
+    auto cut = std::make_shared<std::atomic<bool>>(false);
+    QObject::connect(t, &Task::progress, t, [t, cut](double, const QString &text) {
+        if (text.endsWith(".bin") && !cut->exchange(true))
+            t->cancel();
+    }, Qt::DirectConnection);
+    check(wait_for([&]() { return !tp; }, 20000), "a cancelled copy stops");
+    QStringList copied = isdir(P("big2")) ? listdir(P("big2")) : QStringList();   // hidden part files too
     bool whole = true;
+    for (const QString &n : listdir(HOME()))   // the folder being built beside it, under a hidden part name
+        whole = whole && !n.startsWith(".kes-");
     for (const QString &f : copied)
-        whole = whole && getsize(join(P("big2"), f)) == BIG;
-    check(copied.size() < 24, QString("cancel: stops part-way (%1 of 24 copied)").arg(copied.size()));
-    check(whole, "cancel: no half-copied file is left behind");
+        whole = whole && getsize(join(P("big2"), f)) == LONG;
+    check(*cut && copied.size() < 24, QString("cancel: stops part-way (%1 of 24 copied)").arg(copied.size()));
+    check(*cut && whole, "cancel: no half-copied file is left behind");
+    QDir(P("big2")).removeRecursively();
+
+    // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink
+    // in the way is replaced, not written through; another hard link of the old file keeps its contents
+    {
+        makedirs(P("rep"), true);
+        auto leftovers = []() {   // temporary files left in rep/
+            QStringList out;
+            for (const QString &n : listdir(P("rep")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        make(P("rep/new.bin"), "new");
+        ::truncate(enc(P("rep/new.bin")).constData(), qint64(1) << 30);   // 1 GB (sparse): long enough to cancel
+        make(P("rep/report.txt"), "precious");
+        Task *rt = nullptr;
+        bool rep_done = false;
+        rt = fileops::start_ops(w, {{"copy", P("rep/new.bin"), P("rep/report.txt"), true}}, "Test",
+                                [&rep_done]() { rep_done = true; });
+        // on the copying thread itself, as soon as the copy reports progress on this file: a cancel half-way through
+        QObject::connect(rt, &Task::progress, rt, [rt](double, const QString &text) {
+            if (text.endsWith("new.bin"))
+                rt->cancel();
+        }, Qt::DirectConnection);
+        QPointer<Task> rtp(rt);
+        wait_for([&]() { return !rtp; }, 20000);
+        check(text_of(P("rep/report.txt")) == "precious" && leftovers().isEmpty(),
+              "replacing a file and cancelling part-way keeps the original, and leaves no temporary file");
+
+        make(P("rep/big.bin"), QByteArray(BIG, 'b'));
+        make(P("rep/keep.txt"), "precious");
+        struct rlimit old_lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        struct rlimit lim = old_lim;
+        lim.rlim_cur = 1 << 20;   // writes past 1 MB fail (EFBIG)
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run_ops(w, {{"copy", P("rep/big.bin"), P("rep/keep.txt"), true}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(text_of(P("rep/keep.txt")) == "precious" && leftovers().isEmpty(),
+              "a copy that fails part-way (a write error) keeps the file it would have replaced, and leaves nothing "
+              "half-written");
+
+        make(P("rep/outside.txt"), "outside");
+        ::symlink(enc(P("rep/outside.txt")).constData(), enc(P("rep/to-outside")).constData());
+        make(P("rep/linked.txt"), "old");
+        ::link(enc(P("rep/linked.txt")).constData(), enc(P("rep/other-link.txt")).constData());
+        make(P("rep/small.txt"), "new");
+        run_ops(w, {{"copy", P("rep/small.txt"), P("rep/to-outside"), true}, {"copy", P("rep/small.txt"), P("rep/linked.txt"), true}});
+        check(!islink(P("rep/to-outside")) && text_of(P("rep/to-outside")) == "new" &&
+                  text_of(P("rep/outside.txt")) == "outside" && text_of(P("rep/linked.txt")) == "new" &&
+                  text_of(P("rep/other-link.txt")) == "old" && leftovers().isEmpty(),
+              "replacing a symlink replaces the link, not its target; another hard link of a replaced file keeps its "
+              "contents");
+        // folders: the new one is built beside the old one and swapped in whole
+        make(P("rep/newdir/a.txt"), "a");
+        make(P("rep/newdir/huge"), "x");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), qint64(1) << 30);
+        make(P("rep/olddir/keep.txt"), "keep");
+        auto old_intact = []() { return listdir(P("rep/olddir")) == QStringList{"keep.txt"} &&
+                                        text_of(P("rep/olddir/keep.txt")) == "keep"; };
+        Task *dt = fileops::start_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}}, "Test", []() {});
+        QObject::connect(dt, &Task::progress, dt, [dt](double, const QString &text) {
+            if (text.endsWith("huge"))
+                dt->cancel();
+        }, Qt::DirectConnection);
+        QPointer<Task> dtp(dt);
+        wait_for([&]() { return !dtp; }, 20000);
+        check(old_intact() && leftovers().isEmpty(),
+              "replacing a folder and cancelling part-way keeps the old folder as it was, and leaves no half-made copy");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), BIG);
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(old_intact() && leftovers().isEmpty(),
+              "a folder copy that fails part-way (a write error) keeps the folder it would have replaced");
+        ::truncate(enc(P("rep/newdir/huge")).constData(), 10);
+        make(P("rep/mvsrc/moved.txt"), "moved");
+        make(P("rep/mvdst/old.txt"), "old");
+        bool replaced = run_ops(w, {{"copy", P("rep/newdir"), P("rep/olddir"), true}, {"move", P("rep/mvsrc"), P("rep/mvdst"), true}});
+        check(replaced && listdir(P("rep/olddir")).size() == 2 && lexists(P("rep/olddir/huge")) &&
+                  !lexists(P("rep/olddir/keep.txt")) && !lexists(P("rep/mvsrc")) &&
+                  listdir(P("rep/mvdst")) == QStringList{"moved.txt"} && leftovers().isEmpty(),
+              "copying or moving a folder onto another replaces it whole: the old contents are gone, nothing is left "
+              "behind");
+        QDir(P("rep")).removeRecursively();
+        boxes.clear();
+    }
+
+    // -- a destination that was free when the job was planned and that another program creates while it runs (or
+    // before it starts) is kept: the copy or move isn't put in its place, and the conflict is reported. Only Replace
+    // replaces.
+    {
+        makedirs(P("race"), true);
+        auto leftovers = []() {
+            QStringList out;
+            for (const QString &n : listdir(P("race")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        make(P("race/big.bin"), "b");
+        ::truncate(enc(P("race/big.bin")).constData(), qint64(256) << 20);   // sparse: long enough to step in
+        make(P("race/dir/inner.bin"), "i");
+        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(256) << 20);
+        // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
+        // is still to come), "another program" saves the destination. Watched here, not through progress reports,
+        // which come at most every 80 ms: a fast disk can copy the file before the first one.
+        auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
+            boxes.clear();
+            bool stepped = false;
+            Task *t = fileops::start_ops(w, {job}, "Test", []() {});
+            QPointer<Task> tp(t);
+            QElapsedTimer clock;
+            clock.start();
+            while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
+                if (!leftovers().isEmpty()) {
+                    intrude();
+                    stepped = true;
+                }
+                QThread::usleep(200);
+            }
+            wait_for([&]() { return !tp; }, 20000);
+            wait_for([]() { return !boxes.isEmpty(); }, 3000);
+            return stepped;
+        };
+        bool stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
+                                  []() { write_text(P("race/new.bin"), "theirs"); });
+        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+                  boxes.last().contains("appeared"),
+              "a file another program saves under the new name while a copy runs is kept, and the conflict is reported");
+        stepped = run_racing({"copy", P("race/dir"), P("race/newdir")}, []() { make(P("race/newdir/theirs.txt"), "t"); });
+        check(stepped && listdir(P("race/newdir")) == QStringList{"theirs.txt"} && leftovers().isEmpty() &&
+                  !boxes.isEmpty() && boxes.last().contains("appeared"),
+              "...and so is a folder made under the new name while a folder copy runs");
+        make(P("race/taken.txt"), "mine");
+        make(P("race/small.txt"), "small");
+        boxes.clear();
+        bool ran = run_ops(w, {{"copy", P("race/small.txt"), P("race/taken.txt")}, {"move", P("race/small.txt"), P("race/taken.txt")}});
+        check(ran && text_of(P("race/taken.txt")) == "mine" && text_of(P("race/small.txt")) == "small" &&
+                  !boxes.isEmpty() && boxes.last().contains("appeared"),
+              "a copy or move to a name that's taken by the time it starts (not chosen as Replace) replaces nothing");
+        QDir(P("race")).removeRecursively();
+        boxes.clear();
+    }
 
     // ---- trash
     make(P("t/gone.txt"), "trash me");
@@ -174,6 +344,95 @@ int main(int argc, char **argv)
     check(wait_for([]() { return !boxes.isEmpty(); }) && boxes.last().contains("no longer at"),
           "undo explains what it can't put back");
 
+    // a copy that replaces a file can't be undone (the old file is gone, and undoing it as a new copy would put the
+    // only one left in the trash): the status bar says so, Ctrl+Z only says so too (it doesn't undo the action before
+    // it), and in a batch, only the other copies are undone
+    undo::record("rename", "Earlier", {qMakePair(P("u/earlier-a"), P("u/earlier-b"))});
+    make(P("u/rep.txt"), "new");
+    make(P("u/rep-dst/rep.txt"), "old");
+    check(run_ops(w, {{"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt"), true}}, "Copy") &&
+              text_of(P("u/rep-dst/rep.txt")) == "new" && undo::label() == "Replace (can't be undone)" &&
+              w->statusBar()->currentMessage() == "Replace can't be undone: what was replaced is gone.",
+          "a copy that replaced a file isn't offered for undo, and the status bar says it can't be undone");
+    undo::undo(w);
+    check(undo::label() == "Earlier" && text_of(P("u/rep-dst/rep.txt")) == "new" &&
+              w->statusBar()->currentMessage() == "Can't undo that: what was replaced is gone.",
+          "Ctrl+Z after a replace says it can't be undone, and leaves the action before it alone");
+    make(P("u/fresh.txt"), "fresh");
+    make(P("u/rep.txt"), "newer");
+    check(run_ops(w, {{"copy", P("u/fresh.txt"), P("u/rep-dst/fresh.txt")}, {"copy", P("u/rep.txt"), P("u/rep-dst/rep.txt"), true}},
+                  "Copy") &&
+              undo_and_wait(w, [&]() { return !lexists(P("u/rep-dst/fresh.txt")); }) &&
+              text_of(P("u/rep-dst/rep.txt")) == "newer",
+          "undoing a batch of copies leaves the one that replaced a file where it is");
+
+    // ---- batch rename: a failure part-way puts every item back under its old name (a dangling symlink too, which
+    // exists() wouldn't see), and a name taken meanwhile is never replaced
+    {
+        makedirs(P("br"), true);
+        util::symlink("/nonexistent/target", P("br/lnk"));
+        make(P("br/b.txt"), "b");
+        BatchRenameDialog dlg(w, {P("br/lnk"), P("br/b.txt")});
+        dlg.findChildren<QLineEdit *>().first()->setText("[Name]-x");   // the template
+        make(P("br/b-x.txt"), "taken meanwhile");
+        QStringList earlier = boxes;
+        boxes.clear();
+        for (QPushButton *b : dlg.findChildren<QPushButton *>())
+            if (b->text() == "Rename")
+                b->click();
+        QStringList left = listdir(P("br"));
+        left.sort();
+        check(left == QStringList({"b-x.txt", "b.txt", "lnk"}) && islink(P("br/lnk")) && text_of(P("br/b.txt")) == "b" &&
+                  text_of(P("br/b-x.txt")) == "taken meanwhile" && !boxes.isEmpty(),
+              "a batch rename that fails part-way puts every item back, a dangling symlink too, and replaces nothing");
+        boxes = earlier;
+    }
+
+    // ---- the conflict dialog says what Merge does to files with the same names (they're replaced, for good)
+    {
+        ConflictDialog folder_dlg(w, P("dst"), true), file_dlg(w, P("dst/a.txt"), false);
+        auto says = [](QDialog &d) {
+            QString all;
+            for (QLabel *l : d.findChildren<QLabel *>())
+                all += l->text() + "\n";
+            return all;
+        };
+        check(says(folder_dlg).contains("files there with the same names are\nreplaced. A merge can't be undone.") &&
+                  !says(file_dlg).contains("Merge"),
+              "the conflict dialog says a merge replaces files with the same names and can't be undone");
+    }
+
+    // ---- Move to Trash on a selection that holds something already in the trash: that one can only be deleted
+    // permanently (it asks first: cancelled here), and the rest still goes to the trash
+    {
+        make(P("mt/in-trash.txt"), "t");
+        util::trash(P("mt/in-trash.txt"));
+        QString trashed_item = join(TRASH_DIR(), "files/in-trash.txt");
+        make(P("mt/normal.txt"), "n");
+        QStringList earlier = boxes;
+        boxes.clear();
+        w->trash_paths({trashed_item, P("mt/normal.txt")});
+        check(wait_for([&]() { return !lexists(P("mt/normal.txt")); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
+                  exists(trashed_item) && !boxes.isEmpty() && boxes.first().contains("Permanently delete “in-trash.txt”"),
+              "Move to Trash on a mixed selection trashes the items outside the trash and asks only about the one in it");
+        boxes = earlier;
+
+        auto menu_texts = [&](const QStringList &paths) {
+            QMenu *m = w->build_menu(w->pane(), paths);
+            QStringList texts;
+            for (QAction *a : m->actions())
+                texts << a->text();
+            m->deleteLater();
+            return texts;
+        };
+        make(P("mt/live.txt"), "l");
+        QStringList mixed = menu_texts({trashed_item, P("mt/live.txt")}), only = menu_texts({trashed_item});
+        check(mixed.contains("Move to Trash") && !mixed.contains("Restore") && only.contains("Restore") &&
+                  !only.contains("Move to Trash"),
+              "right-clicking a mixed selection gives the usual menu (Move to Trash), not the trash's (Restore); "
+              "a selection all in the trash gets the trash's");
+    }
+
     // ---- unique names and links
     make(P("n/a.txt"));
     check(unique_path(P("n"), "a.txt") == P("n/a (copy).txt"), "a copy's name: \"a (copy).txt\"");
@@ -192,6 +451,89 @@ int main(int argc, char **argv)
     check(h1.st_ino == h2.st_ino, "hard link");
     QString same = fileops::make_link(fileops::link_plan("sym", P("n/a.txt"), P("n")));
     check(basename(same).startsWith("Link to a"), "a link in the same folder is named \"Link to …\"");
+
+    // -- desktop shortcuts to items whose names hold quotes, $, `, \, % and line breaks that try to add keys of their
+    // own (GLib keeps the last of a repeated key): the shortcut must still name and open exactly that item
+    {
+        const QString evil = "\"q\" $HOME `id` \\b %f %%\nExec=touch PWNED\nType=Application\n";
+        QString sc = P("sc"), out = P("sc/out"), dir = join(sc, "d " + evil), marker = P("sc-ran");
+        makedirs(out, true);
+        makedirs(dir, true);
+        QString script = join(dir, "run " + evil + ".sh"), doc = join(dir, "doc " + evil + ".txt");
+        make(script, ("#!/bin/sh\nprintf '%s\\n' \"$#\" \"$0\" > '" + marker + "'\n").toUtf8());
+        ::chmod(enc(script).constData(), 0755);
+        make(doc, "doc");
+        // each shortcut as GLib reads it, and the keys written (each once)
+        auto read = [](const QString &path, QStringList *keys) {
+            QMap<QString, QString> values;
+            QStringList lines = text_of(path).split('\n');
+            for (const QString &l : lines)
+                if (l.contains('='))
+                    *keys << l.section('=', 0, 0);
+            GKeyFile *kf = g_key_file_new();
+            if (g_key_file_load_from_file(kf, enc(path).constData(), G_KEY_FILE_NONE, nullptr)) {
+                gsize n = 0;
+                gchar **names = g_key_file_get_keys(kf, "Desktop Entry", &n, nullptr);
+                for (gsize i = 0; i < n; i++) {
+                    gchar *v = g_key_file_get_string(kf, "Desktop Entry", names[i], nullptr);
+                    values[QString::fromUtf8(names[i])] = QString::fromUtf8(v ? v : "");
+                    g_free(v);
+                }
+                g_strfreev(names);
+            }
+            g_key_file_free(kf);
+            return values;
+        };
+        QStringList made;
+        for (const QString &t : {script, doc, dir})
+            made << fileops::make_link(fileops::link_plan("desktop", t, out));
+        QStringList app_keys, doc_keys, dir_keys;
+        auto app = read(made[0], &app_keys), docv = read(made[1], &doc_keys), dirv = read(made[2], &dir_keys);
+        check(app_keys == QStringList{"Type", "Name", "Exec", "Path", "Icon", "Terminal"} &&
+                  app.value("Type") == "Application" && app.value("Name") == basename(script) &&
+                  app.value("Path") == dir && doc_keys == QStringList{"Type", "Name", "URL", "Icon"} &&
+                  docv.value("Type") == "Link" && docv.value("Name") == basename(doc) &&
+                  uri_to_path(docv.value("URL")) == doc && dir_keys == doc_keys && dirv.value("Type") == "Link" &&
+                  uri_to_path(dirv.value("URL")) == dir,
+              "a desktop shortcut keeps an item's name and path whole, whatever they hold (quotes, $, `, \\, %, line "
+              "breaks), and adds no keys");
+        if (!which("desktop-file-validate")) {
+            skip("desktop-file-validate accepts the shortcuts (it isn't installed)");
+        } else {
+            QString complaints;
+            for (const QString &m : made) {
+                auto r = proc::run({"desktop-file-validate", m});
+                if (r.rc != 0)
+                    complaints += r.out + r.err;
+            }
+            check(complaints.isEmpty(), "desktop-file-validate accepts the shortcuts" +
+                                            (complaints.isEmpty() ? QString() : " " + complaints.trimmed()));
+        }
+        QString ctl = join(sc, QString("bell") + QChar(7) + ".txt");
+        make(ctl, "x");
+        bool refused = false;
+        try {
+            fileops::link_plan("desktop", ctl, out);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused, "a shortcut to an item whose name holds other control characters is refused");
+        QString cwd = QDir::currentPath();
+        QDir::setCurrent(sc);   // where an injected relative command would land
+        GDesktopAppInfo *info = g_desktop_app_info_new_from_filename(enc(made[0]).constData());
+        bool launched = info && g_app_info_launch(G_APP_INFO(info), nullptr, nullptr, nullptr);
+        if (info)
+            g_object_unref(info);
+        wait_for([&]() { return exists(marker); }, 5000);
+        QDir::setCurrent(cwd);
+        bool pwned = false;
+        walk(HOME(), [&](const QString &, QStringList &, QStringList &files) {
+            pwned = pwned || files.contains("PWNED");
+            return true;
+        });
+        check(launched && text_of(marker) == "0\n" + script + "\n" && !pwned,
+              "opening the program's shortcut runs that program alone, with no arguments, and nothing else");
+    }
 
     check(location_arg("trash:///") == join(TRASH_DIR(), "files") && location_arg("recent:///") == places::RECENT,
           "trash:/// and recent:/// from other apps open the right places");
@@ -300,6 +642,54 @@ int main(int argc, char **argv)
               said.value(2).contains("isn't a checksum file"),
           QString("Properties' Checksums tab checks a file against a chosen checksum file (%1)").arg(said.join(" | ")));
 
+    // -- making checksum files (Create Checksum File…)
+    make(P("mk/a.txt"), "alpha\n");
+    make(P("mk/back\\slash.txt"), "back\n");
+    make(P("mk/sub/inner.txt"), "inner\n");
+    make(P("mk/sub/deep/z.txt"), "zed\n");
+    QStringList mk_paths{P("mk/a.txt"), P("mk/back\\slash.txt"), P("mk/sub")};
+    auto all_ok = [](const QString &sums) {
+        QStringList out;
+        for (const auto &e : hashcheck::parse(sums))
+            out << e.name + ":" + e.algo + ":" + hashcheck::verify(e).status;
+        return out;
+    };
+    QStringList errs;
+    QStringList made = hashcheck::create(nullptr, mk_paths, P("mk"), "set", hashcheck::create_algorithms(), false, &errs);
+    QStringList made_names, per_algo;
+    for (const QString &m : made) {
+        made_names << basename(m);
+        per_algo << all_ok(m).join(",");
+    }
+    const QString listed = "a.txt:%1:ok,back\\slash.txt:%1:ok,sub/inner.txt:%1:ok,sub/deep/z.txt:%1:ok";
+    bool each_ok = made_names.join(",") == "set.sfv,set.md5,set.sha1,set.sha256,set.sha512,set.b2" && errs.isEmpty();
+    for (int i = 0; i < per_algo.size(); i++)
+        each_ok = each_ok && per_algo[i] == listed.arg(hashcheck::create_algorithms()[i]);
+    check(each_ok, "Create Checksum File makes one file per algorithm (md5sum's format, SFV for CRC32) that verify as "
+                   "OK, with the files inside folders");
+    made = hashcheck::create(nullptr, mk_paths, P("mk"), "set", hashcheck::create_algorithms(), true, &errs);
+    QStringList bsd_lines = all_ok(P("mk/set-CHECKSUM"));
+    bool bsd_ok = made == QStringList{P("mk/set-CHECKSUM")} && bsd_lines.size() == 24 &&
+                  std::all_of(bsd_lines.begin(), bsd_lines.end(), [](const QString &l) { return l.endsWith(":ok"); }) &&
+                  text_of(P("mk/set-CHECKSUM")).contains("\\SHA256 (back\\\\slash.txt) = ");
+    hashcheck::create(nullptr, {P("mk")}, P("mk"), "all", {"sha256"}, true, &errs);
+    hashcheck::create(nullptr, {P("mk")}, P("mk"), "all", {"sha256"}, true, &errs);
+    QStringList again = all_ok(P("mk/all-CHECKSUM"));
+    check(bsd_ok && !again.isEmpty() && !again.join(",").contains("all-CHECKSUM") &&
+              std::all_of(again.begin(), again.end(), [](const QString &l) { return l.endsWith(":ok"); }),
+          "...or one file with every algorithm as BSD tags (escaped names), and making it again leaves out its own "
+          "older copy");
+    make(P("mk/locked.txt"), "locked\n");
+    ::chmod(enc(P("mk/locked.txt")).constData(), 0);
+    errs.clear();
+    hashcheck::create(nullptr, {P("mk/a.txt"), P("mk/locked.txt")}, P("mk"), "two", {"md5"}, false, &errs);
+    QStringList two = all_ok(P("mk/two.md5"));
+    ::chmod(enc(P("mk/locked.txt")).constData(), 0644);
+    hashcheck::CreateDialog cd(w, {P("mk/a.txt")});
+    check(two == QStringList{"a.txt:md5:ok"} && errs.size() == 1 && errs.value(0).startsWith("locked.txt: ") &&
+              cd.stem() == "a.txt" && cd.dir() == P("mk") && cd.outputs() == QStringList{P("mk/a.txt.sha256")},
+          "a file that can't be read is left out and named; the dialog starts from the item's name and folder, and SHA256");
+
     // -- symlinks inside a tree: never followed, even when one is swapped in while a job runs
     QString victim = P("victim");   // stands for files elsewhere that a job mustn't touch
     auto reset_victim = [&]() {
@@ -320,11 +710,12 @@ int main(int argc, char **argv)
     reset_victim();
     make(P("lk_src.txt"), "new");
     ::symlink(join(victim, "keep").toLocal8Bit().constData(), P("lk_dst.txt").toLocal8Bit().constData());
-    run_ops(w, {{"copy", P("lk_src.txt"), P("lk_dst.txt")}});
+    run_ops(w, {{"copy", P("lk_src.txt"), P("lk_dst.txt"), true}});
     check(victim_intact() && !islink(P("lk_dst.txt")) && text_of(P("lk_dst.txt")) == "new",
           "copying onto a symlink replaces the link, not the file it points to");
     // a folder swapped for a symlink to the victim (renameat2 exchange: the path always exists) while a delete runs
     bool safe = true;
+    std::atomic<int> swaps{0};   // a swap that never happens (no RENAME_EXCHANGE here) would prove nothing
     QElapsedTimer race_clock;
     race_clock.start();
     for (int round = 0; race_clock.elapsed() < 4000 && safe; ++round) {
@@ -343,6 +734,7 @@ int main(int argc, char **argv)
                     QByteArray a = join(race, QString("d%1").arg(d)).toLocal8Bit();
                     QByteArray b = join(links, QString("d%1").arg(d)).toLocal8Bit();
                     if (renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE) == 0) {
+                        ++swaps;
                         usleep(200);
                         renameat2(AT_FDCWD, a.constData(), AT_FDCWD, b.constData(), RENAME_EXCHANGE);
                     }
@@ -354,7 +746,8 @@ int main(int argc, char **argv)
         swapper.join();
         safe = victim_intact();
     }
-    check(safe, "a folder swapped for a symlink during a delete doesn't let it delete outside the tree");
+    check(safe && swaps > 0, QString("a folder swapped for a symlink during a delete doesn't let it delete outside the "
+                                     "tree (%1 swaps)").arg(swaps > 0 ? "some" : "no"));
 
     // -- crafted archives (tests/fixtures, make_evil_archives.sh): "../" names, absolute paths, and a symlink out of
     // the destination with a file written through it, extracted by whichever tool Kestrel picks
@@ -377,6 +770,274 @@ int main(int argc, char **argv)
         check(!listdir(join(base, "dest")).isEmpty() && listdir(join(base, "outside")).isEmpty() &&
                   !lexists(join(base, "escape.txt")) && !lexists("/tmp/kestrel-evil-abs.txt"),
               label);
+        bool escaping = false;   // a symlink left in dest that leads out of it (opening it would go there)
+        QString dest = join(base, "dest");
+        QDirIterator it(dest, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QString f = it.next();
+            QString target = islink(f) ? util::readlink(f) : QString();
+            if (!target.isEmpty() && (target.startsWith('/') || !(QDir::cleanPath(join(dirname(f), target)) + "/").startsWith(dest + "/")))
+                escaping = true;
+        }
+        check(!escaping, "a crafted " + ext + " archive leaves no symlink leading out of the folder it's extracted into");
+    }
+    check(archive::link_escapes(0, "../x") && archive::link_escapes(0, "/etc") && archive::link_escapes(1, "a/../../..") &&
+              archive::link_escapes(2, "../../../x") && !archive::link_escapes(1, "../x") &&
+              !archive::link_escapes(0, "a/../b") && !archive::link_escapes(0, "./a//b") && !archive::link_escapes(2, "../.."),
+          "a link target leads out of the extracted folder when it's absolute or its \"..\"s climb above it");
+    {   // extracting into an existing folder: the user's own links there stay, also ones that lead out of it (and the
+        // archive was extracted: its absolute name lands inside, as tmp/kestrel-evil-abs.txt)
+        QString base = P("evil-own"), dest = join(base, "dest");
+        makedirs(dest, true);
+        util::symlink("../elsewhere", join(dest, "mine"));
+        QFile::copy(join(QString(TESTS_DIR), "fixtures/evil.tar.gz"), join(base, "evil.tar.gz"));
+        spin(1100);   // older than the job's start
+        Task task("test", [](Task *) { return QVariant(); });
+        try {
+            archive::extract(&task, join(base, "evil.tar.gz"), dest, QString(), "overwrite");
+        } catch (const Error &) {
+        }
+        check(isfile(join(dest, "tmp/kestrel-evil-abs.txt")) && islink(join(dest, "mine")) && !lexists(join(dest, "lnk")),
+              "extracting into an existing folder keeps the user's own links there and drops the archive's escaping one");
+    }
+    // links in folders the archive leaves read-only (555, as GNU tar applies a folder's stored mode before it exits),
+    // closed (000) or unlistable (111): they're removed too, each folder's mode is put back, and every link removed is reported (an absolute
+    // one naming a place inside the folder too)
+    {
+        QString base = P("evil-perm"), stage = join(base, "stage"), dest = join(base, "dest");
+        makedirs(join(stage, "ro/sub"), true);
+        makedirs(join(stage, "closed"), true);
+        makedirs(join(stage, "unlisted"), true);
+        makedirs(dest, true);
+        util::symlink("/etc", join(stage, "ro/abs"));
+        util::symlink("../../../outside", join(stage, "ro/sub/up"));
+        util::symlink(join(dest, "ro/sub"), join(stage, "ro/inside"));
+        util::symlink("/etc", join(stage, "closed/abs"));
+        util::symlink("../../outside", join(stage, "unlisted/up"));
+        proc::run({"tar", "-czf", join(base, "ro.tar.gz"), "--mode=a-w", "-C", stage, "ro"});
+        proc::run({"tar", "-czf", join(base, "closed.tar.gz"), "--mode=a-rwx", "-C", stage, "closed"});
+        proc::run({"tar", "-czf", join(base, "unlisted.tar.gz"), "--mode=a-rw", "-C", stage, "unlisted"});
+        QList<archive::DroppedLink> dropped;
+        for (const char *name : {"ro.tar.gz", "closed.tar.gz", "unlisted.tar.gz"}) {
+            Task task("test", [](Task *) { return QVariant(); });
+            try {
+                archive::extract(&task, join(base, name), dest, QString(), "overwrite", 0, &dropped);
+            } catch (const Error &) {
+            }
+        }
+        auto mode = [&](const QString &rel) {
+            struct stat st;
+            return ::lstat(join(dest, rel).toLocal8Bit().constData(), &st) == 0 ? int(st.st_mode & 07777) : -1;
+        };
+        bool modes_back = mode("ro") == 0555 && mode("ro/sub") == 0555 && mode("closed") == 0 && mode("unlisted") == 0111;
+        proc::run({"chmod", "-R", "u+rwx", dest});
+        QStringList left;
+        QDirIterator it(dest, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext())
+            left << QDir(dest).relativeFilePath(it.next());
+        left.sort();
+        QStringList got, want = {"ro/abs|/etc|", "ro/sub/up|../../../outside|", "ro/inside|" + join(dest, "ro/sub") + "|",
+                                 "closed/abs|/etc|", "unlisted/up|../../outside|"};
+        for (const archive::DroppedLink &l : dropped)
+            got << l.path + "|" + l.target + "|" + l.why;
+        got.sort();
+        want.sort();
+        check(modes_back && left == QStringList{"closed", "ro", "ro/sub", "unlisted"} && got == want,
+              "escaping links in folders an archive leaves read-only (555), closed (000) or unlistable (111) are removed "
+              "too, the folders' modes are put back, and each link removed is reported (an absolute one naming a place "
+              "inside too)");
+    }
+
+    // -- a single compressed file (note.txt.gz → note.txt) where the destination already has a symlink named note.txt:
+    // the name is replaced, never written through (a dangling link would create its target, a live one truncate it)
+    {
+        QString base = P("gzlink"), dest = join(base, "dest"), outside = join(base, "outside");
+        makedirs(dest, true);
+        makedirs(outside, true);
+        make(join(base, "note.txt"), "new\n");
+        proc::run({"gzip", "-k", join(base, "note.txt")});
+        write_text(join(base, "bad.txt.gz"), "not gzip at all");
+        auto run_extract = [&](const QString &archive_path, const QString &overwrite) {
+            Task task("test", [](Task *) { return QVariant(); });
+            try {
+                archive::extract(&task, archive_path, dest, QString(), overwrite);
+                return true;
+            } catch (const Error &) {
+                return false;
+            }
+        };
+        auto reset = [&](const QString &target) {
+            QDir(dest).removeRecursively();
+            QDir(outside).removeRecursively();
+            makedirs(dest, true);
+            makedirs(outside, true);
+            if (target == "keep.txt")
+                make(join(outside, "keep.txt"), "keep\n");
+            ::symlink(enc(join(outside, target)).constData(), enc(join(dest, "note.txt")).constData());
+        };
+        bool dangling_ok = true, live_ok = true;
+        for (const QString &mode : QStringList{"rename", "overwrite"}) {
+            reset("created.txt");
+            bool ran = run_extract(join(base, "note.txt.gz"), mode);
+            QString got = mode == "rename" ? join(dest, "note (2).txt") : join(dest, "note.txt");
+            dangling_ok = dangling_ok && ran && listdir(outside).isEmpty() && !islink(got) && text_of(got) == "new\n" &&
+                          (mode == "overwrite" || islink(join(dest, "note.txt")));
+            reset("keep.txt");
+            ran = run_extract(join(base, "note.txt.gz"), mode);
+            live_ok = live_ok && ran && text_of(join(outside, "keep.txt")) == "keep\n" && !islink(got) &&
+                      text_of(got) == "new\n";
+        }
+        check(dangling_ok,
+              "decompressing a single file doesn't write through a dangling symlink of that name (Keep both and Replace)");
+        check(live_ok, "...or truncate the file a symlink of that name points to (Keep both and Replace)");
+        QDir(dest).removeRecursively();
+        makedirs(dest, true);
+        make(join(dest, "bad.txt"), "old\n");
+        bool failed = !run_extract(join(base, "bad.txt.gz"), "overwrite");
+        check(failed && text_of(join(dest, "bad.txt")) == "old\n" && listdir(dest) == QStringList{"bad.txt"},
+              "a failed decompress leaves the file it would have replaced, and no temporary file");
+        // a name that was free, saved by another program while the file is being decompressed: kept as it is
+        QDir(dest).removeRecursively();
+        makedirs(dest, true);
+        {
+            QFile rnd("/dev/urandom"), f(join(base, "noise.bin"));
+            rnd.open(QIODevice::ReadOnly);
+            f.open(QIODevice::WriteOnly);
+            f.write(rnd.read(48 << 20));   // doesn't compress: long enough to step in
+        }
+        proc::run({"gzip", "-1", join(base, "noise.bin")});
+        // as with the copies above: "another program" saves noise.bin once the hidden part has appeared beside it
+        bool stepped = false;
+        Task task("test", [](Task *) { return QVariant(); });
+        QString said;
+        std::atomic<bool> done{false};
+        std::thread extracting([&]() {
+            try {
+                archive::extract(&task, join(base, "noise.bin.gz"), dest, QString(), "rename");
+            } catch (const Error &e) {
+                said = e.message();
+            }
+            done = true;
+        });
+        while (!stepped && !done) {
+            for (const QString &n : listdir(dest))
+                if (n.startsWith(".kes-") && !stepped) {
+                    write_text(join(dest, "noise.bin"), "theirs");
+                    stepped = true;
+                }
+            QThread::usleep(200);
+        }
+        extracting.join();
+        check(stepped && said.contains("appeared") && text_of(join(dest, "noise.bin")) == "theirs" &&
+                  listdir(dest) == QStringList{"noise.bin"},
+              "decompressing a single file: one another program saves under its name meanwhile is kept, and the "
+              "conflict is reported");
+    }
+
+    // -- failure-atomic everywhere else Kestrel writes (CLAUDE.md): compressing over an archive, its own files, new
+    // files, moves between drives. A file-size limit stands for a full disk.
+    {
+        auto small_disk = [](const std::function<void()> &fn) {
+            struct rlimit old_lim, lim;
+            ::getrlimit(RLIMIT_FSIZE, &old_lim);
+            lim = old_lim;
+            lim.rlim_cur = 1 << 20;   // writes past 1 MB fail (EFBIG)
+            auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+            try {
+                fn();
+            } catch (...) {
+            }
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+        };
+        auto leftovers = [](const QString &d) {
+            QStringList out;
+            for (const QString &n : listdir(d))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        makedirs(P("fa/src"), true);
+        make(P("fa/src/big.bin"), QByteArray(BIG, 'b'));
+        make(P("fa/src/small.txt"), "small");
+        make(P("fa/arc.tar"), "the old archive");
+        archive::Format tar_fmt;
+        for (const archive::Format &f : archive::formats())
+            if (f.id == "tar")
+                tar_fmt = f;
+        auto compress = [&](const QString &rel) {
+            Task task("test", [](Task *) { return QVariant(); });
+            archive::Spec spec;
+            spec.format = tar_fmt;
+            spec.tool = "tar";
+            spec.base = P("fa/src");
+            spec.rels = {rel};
+            spec.out = P("fa/arc.tar");
+            spec.total = BIG;
+            archive::compress(&task, spec);
+        };
+        small_disk([&]() { compress("big.bin"); });
+        bool kept = text_of(P("fa/arc.tar")) == "the old archive" && leftovers(P("fa")).isEmpty();
+        compress("small.txt");
+        check(kept && proc::run({"tar", "tf", P("fa/arc.tar")}).out.trimmed() == "small.txt" &&
+                  leftovers(P("fa")).isEmpty(),
+              "compressing over an archive that fails part-way keeps the old archive and no half-made one; one that "
+              "succeeds replaces it");
+
+        make(P("fa/state.json"), "old");
+        ::chmod(enc(P("fa/state.json")).constData(), 0600);
+        small_disk([&]() { write_text(P("fa/state.json"), QByteArray(2 << 20, 'n')); });
+        bool state_kept = text_of(P("fa/state.json")) == "old" && leftovers(P("fa")).isEmpty();
+        write_text(P("fa/state.json"), "new");
+        struct stat sst;
+        stat_(P("fa/state.json"), sst);
+        make(P("fa/dotfiles/bookmarks"), "old");
+        ::symlink(enc(P("fa/dotfiles/bookmarks")).constData(), enc(P("fa/bookmarks")).constData());
+        write_text(P("fa/bookmarks"), "new");
+        check(state_kept && text_of(P("fa/state.json")) == "new" && (sst.st_mode & 0777) == 0600 &&
+                  islink(P("fa/bookmarks")) && text_of(P("fa/dotfiles/bookmarks")) == "new" &&
+                  leftovers(P("fa")).isEmpty(),
+              "Kestrel's own files are written in one step: a write that fails part-way keeps the old contents; they "
+              "keep their permissions, and a symlinked one stays a symlink");
+
+        make(P("fa/taken.txt"), "mine");
+        bool refused_copy = false, refused_new = false;
+        try {
+            copyfile(P("fa/src/small.txt"), P("fa/taken.txt"), true);
+        } catch (const OSError &) {
+            refused_copy = true;
+        }
+        try {
+            write_text(P("fa/taken.txt"), "", true);
+        } catch (const OSError &) {
+            refused_new = true;
+        }
+        small_disk([&]() { copyfile(P("fa/src/big.bin"), P("fa/new-from-template.bin"), true); });
+        check(refused_copy && refused_new && text_of(P("fa/taken.txt")) == "mine" &&
+                  !lexists(P("fa/new-from-template.bin")) && leftovers(P("fa")).isEmpty(),
+              "a new file (from a template, or pasted) never replaces one that's there, and one that fails part-way "
+              "leaves nothing");
+
+        // moves between drives (undo, restoring from the trash): /dev/shm is another filesystem
+        QString other = "/dev/shm/kestrel-test-" + QString::number(::getpid());
+        struct stat a, b;
+        if (!stat_("/dev/shm", b) || !stat_(P("fa"), a) || a.st_dev == b.st_dev) {
+            skip("moving between drives copies whole before deleting (no second filesystem here)");
+        } else {
+            makedirs(other, true);
+            small_disk([&]() { util::move(P("fa/src/big.bin"), join(other, "big.bin")); });
+            bool src_kept = getsize(P("fa/src/big.bin")) == BIG && !lexists(join(other, "big.bin")) &&
+                            leftovers(other).isEmpty();
+            util::move(P("fa/src"), join(other, "src"));
+            check(src_kept && !lexists(P("fa/src")) && getsize(join(other, "src/big.bin")) == BIG &&
+                      leftovers(other).isEmpty(),
+                  "moving between drives copies whole before deleting: a failure part-way keeps the original and no "
+                  "half-made copy");
+            QDir(other).removeRecursively();
+        }
     }
 
     // -- Shred with BleachBit: `bleachbit --shred` on the chosen files and folders, and what's still there afterwards

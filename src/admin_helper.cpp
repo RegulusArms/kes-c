@@ -32,6 +32,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -40,6 +41,7 @@
 #include <cstring>
 #include <deque>
 #include <dirent.h>
+#include <functional>
 #include <fcntl.h>
 #include <iostream>
 #include <map>
@@ -47,6 +49,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <thread>
 #include <time.h>
@@ -79,6 +82,8 @@ static const std::map<std::string, std::vector<std::pair<const char *, Kind>>> P
 
 static std::mutex out_lock, cancel_lock;
 static std::set<qint64> cancelled;
+static std::atomic<bool> closing{false};   // the session has ended: everything counts as cancelled
+static std::atomic<bool> busy{false};      // a job is running
 
 struct Cancelled {};
 struct Failure : std::runtime_error {
@@ -138,6 +143,12 @@ public:
     }
     Fd(const Fd &) = delete;
     int get() const { return fd; }
+    int release()   // the descriptor, no longer closed here
+    {
+        int f = fd;
+        fd = -1;
+        return f;
+    }
 
 private:
     int fd;
@@ -176,6 +187,39 @@ static bool trusted_link(int dirfd, const struct stat &link)   // a symlink only
     return link.st_uid == 0 && fstat(dirfd, &dir) == 0 && dir.st_uid == 0 && !(dir.st_mode & (S_IWGRP | S_IWOTH));
 }
 
+// Who owns what the helper makes. A move keeps each item's owner. Anything new (a copy, a new folder, file or link)
+// gets the owner of the folder it's made in: the user's in their home, root's in /etc. Made as root, it would
+// otherwise be root's, and often of no use to the user who asked for it.
+struct Owner {
+    bool keep = false;   // each item's own (a move)
+    uid_t uid = 0;
+    gid_t gid = 0;
+};
+
+static Owner keep_owner()
+{
+    Owner o;
+    o.keep = true;
+    return o;
+}
+
+static Owner owner_of(int dirfd)   // the owner for something new in this folder
+{
+    Owner o;
+    struct stat st;
+    bool ok = fstat(dirfd, &st) == 0;
+    o.uid = ok ? st.st_uid : geteuid();
+    o.gid = ok ? st.st_gid : getegid();
+    return o;
+}
+
+// give the new `name` in dirfd (never followed if it's a symlink) the owner for that folder
+static void own_new(int dirfd, const std::string &name)
+{
+    Owner o = owner_of(dirfd);
+    (void)!fchownat(dirfd, name.c_str(), o.uid, o.gid, AT_SYMLINK_NOFOLLOW);
+}
+
 static Walk walk(std::string path, bool make_parents = false)
 {
     for (int links = 0;; ++links) {
@@ -193,7 +237,9 @@ static Walk walk(std::string path, bool make_parents = false)
             if (!stat_at(dir.get(), c, &st)) {
                 if (errno != ENOENT || !make_parents)
                     fail_errno();
-                if (mkdirat(dir.get(), c.c_str(), 0777) != 0 && errno != EEXIST)
+                if (mkdirat(dir.get(), c.c_str(), 0777) == 0)
+                    own_new(dir.get(), c);
+                else if (errno != EEXIST)
                     fail_errno();
                 if (!stat_at(dir.get(), c, &st))
                     fail_errno();
@@ -274,39 +320,43 @@ static std::vector<std::string> list_dir(int dirfd)   // the names in an open fo
     return out;
 }
 
-static void copy_data(int in, int out)
+// A hidden name for building something beside the name it will replace (see Job::install): ".kes-<random>.part".
+static std::string part_name()
 {
-    std::vector<char> buf(1 << 20);
+    unsigned int r = 0;
+    if (getrandom(&r, sizeof r, 0) != sizeof r)
+        r = unsigned(rand());
+    char buf[32];
+    snprintf(buf, sizeof buf, ".kes-%08x.part", r);
+    return buf;
+}
+
+// A new, empty file under a fresh part_name() in dirfd (created exclusively, never through a symlink).
+static Fd open_part(int dirfd, std::string &name)
+{
     for (;;) {
-        ssize_t n = read(in, buf.data(), buf.size());
-        if (n < 0 && errno == EINTR)
-            continue;
-        if (n < 0)
-            fail_errno();
-        if (n == 0)
-            return;
-        for (ssize_t off = 0; off < n;) {
-            ssize_t w = write(out, buf.data() + off, size_t(n - off));
-            if (w < 0 && errno == EINTR)
-                continue;
-            if (w < 0)
-                fail_errno();
-            off += w;
-        }
+        name = part_name();
+        Fd fd(openat(dirfd, name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
+        if (fd.get() >= 0 || errno != EEXIST)
+            return fd;
     }
 }
 
-// the permissions and times of an open file or folder (on a descriptor: never through a symlink); keep_owner (a move):
-// its owner too
-static void copy_stat_fd(int fd, const struct stat &st, bool keep_owner)
+// the permissions, times and owner of an open file or folder (on a descriptor: never through a symlink)
+static void copy_stat_fd(int fd, const struct stat &st, const Owner &owner)
 {
     struct timespec times[2] = {st.st_atim, st.st_mtim};
     futimens(fd, times);
     mode_t mode = st.st_mode & 07777;
-    if (keep_owner)
-        (void)!fchown(fd, st.st_uid, st.st_gid);   // first: chown clears set-user-ID, which fchmod then puts back
-    else if (S_ISREG(st.st_mode) && st.st_uid != geteuid())
-        mode &= ~mode_t(S_ISUID | S_ISGID);   // a copy of someone else's set-user-ID program mustn't run as us
+    uid_t uid = owner.keep ? st.st_uid : owner.uid;
+    gid_t gid = owner.keep ? st.st_gid : owner.gid;
+    (void)!fchown(fd, uid, gid);   // first: chown clears set-user-ID, which fchmod then puts back
+    if (S_ISREG(st.st_mode)) {     // a copy of someone else's set-user/group-ID program mustn't run as its new owner
+        if (st.st_uid != uid)
+            mode &= ~mode_t(S_ISUID);
+        if (st.st_gid != gid)
+            mode &= ~mode_t(S_ISGID);
+    }
     fchmod(fd, mode);
 }
 
@@ -319,7 +369,7 @@ public:
     void check_cancel()
     {
         std::lock_guard<std::mutex> g(cancel_lock);
-        if (cancelled.count(id))
+        if (closing || cancelled.count(id))
             throw Cancelled();
     }
 
@@ -334,19 +384,20 @@ public:
         }
     }
 
-    // how many items a tree has, for progress (only reads; never follows a symlink)
-    double count(int dirfd, const std::string &name)
+    // how many items a tree has, for progress, and with bytes its files' sizes too (only reads; never follows a
+    // symlink)
+    double count(int dirfd, const std::string &name, bool bytes = false)
     {
         struct stat st;
         if (!stat_at(dirfd, name, &st))
             return 1;
-        double n = 1;
+        double n = 1 + (bytes && S_ISREG(st.st_mode) ? double(st.st_size) : 0);
         if (S_ISDIR(st.st_mode)) {
             check_cancel();
             try {
                 Fd d = open_dir_at(dirfd, name, st);
                 for (const std::string &e : list_dir(d.get()))
-                    n += count(d.get(), e);
+                    n += count(d.get(), e, bytes);
             } catch (const Failure &) {
             }
         }
@@ -365,75 +416,243 @@ public:
         done += 1;
     }
 
+    // Copy src (in src_dir) to dst (in dst_dir). Whatever is made is built under a hidden part_name() beside dst and
+    // put in its place only when complete (install), so a failure, a cancel or the session ending leaves dst as it
+    // was and no half-made copy. Only a merge writes into an existing folder (each file in it still replaced whole).
+    // staged: dst is inside a folder being built, where nothing exists yet. claim: dst must be new (Kestrel's
+    // "replace": false): one that's there, or that appears while this runs, is kept and the copy fails.
     void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge,
-              bool keep_owner = false)
+              const Owner &owner, bool staged = false, bool claim = false)
     {
         struct stat st, dst_st;
         if (!stat_at(src_dir, src, &st))
             fail_errno();
-        bool dst_exists = stat_at(dst_dir, dst, &dst_st);
+        bool dst_exists = !staged && stat_at(dst_dir, dst, &dst_st);
+        if (claim && dst_exists)
+            throw conflict(dst);
         if (dst_exists && S_ISDIR(dst_st.st_mode) && !S_ISDIR(st.st_mode))
             throw Failure(dst + " is a folder");   // a file or link never replaces a whole folder
-        if (S_ISLNK(st.st_mode)) {
-            char target[PATH_MAX];
-            ssize_t n = readlinkat(src_dir, src.c_str(), target, sizeof target - 1);
-            if (n < 0)
-                fail_errno();
-            target[n] = 0;
-            if (dst_exists)
-                remove(dst_dir, dst);
-            if (symlinkat(target, dst_dir, dst.c_str()) != 0)
-                fail_errno();
-            struct timespec times[2] = {st.st_atim, st.st_mtim};
-            utimensat(dst_dir, dst.c_str(), times, AT_SYMLINK_NOFOLLOW);
-            if (keep_owner)
-                (void)!fchownat(dst_dir, dst.c_str(), st.st_uid, st.st_gid, AT_SYMLINK_NOFOLLOW);
-        } else if (S_ISDIR(st.st_mode)) {
+        if (S_ISDIR(st.st_mode) && merge && dst_exists) {
+            if (!S_ISDIR(dst_st.st_mode))
+                throw Failure(dst + " exists and isn't a folder");
             Fd in = open_dir_at(src_dir, src, st);
-            if (dst_exists && (!merge || !S_ISDIR(dst_st.st_mode))) {
-                if (merge)
-                    throw Failure(dst + " exists and isn't a folder");
-                remove(dst_dir, dst);
-                dst_exists = false;
-            }
-            if (!dst_exists && mkdirat(dst_dir, dst.c_str(), 0700) != 0)
-                fail_errno();
-            if (!stat_at(dst_dir, dst, &dst_st))
-                fail_errno();
             Fd out = open_dir_at(dst_dir, dst, dst_st);
             for (const std::string &e : list_dir(in.get()))
-                copy(in.get(), e, out.get(), e, merge, keep_owner);
-            copy_stat_fd(out.get(), st, keep_owner);
-        } else if (S_ISREG(st.st_mode)) {
-            check_cancel();
-            Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
-            struct stat now;
-            if (in.get() < 0)
-                fail_errno();
-            if (fstat(in.get(), &now) != 0 || !same_file(now, st))
-                throw Failure(src + " changed while it was being worked on");
-            if (dst_exists)
-                remove(dst_dir, dst);   // a new file: never writes through a link to another one
-            Fd out(openat(dst_dir, dst.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
-            if (out.get() < 0)
-                fail_errno();
-            copy_data(in.get(), out.get());
-            copy_stat_fd(out.get(), st, keep_owner);
-        } else {
-            throw Failure(src + " isn't a regular file, folder or link");
+                copy(in.get(), e, out.get(), e, merge, owner);
+            Owner existing{owner.keep, dst_st.st_uid, dst_st.st_gid};   // a copy leaves the folder's owner as it was
+            copy_stat_fd(out.get(), st, existing);
+            done += 1;
+            report(src);
+            return;
+        }
+        std::string part = staged ? dst : part_name();
+        bool made = false;
+        try {
+            if (S_ISLNK(st.st_mode)) {
+                char target[PATH_MAX];
+                ssize_t n = readlinkat(src_dir, src.c_str(), target, sizeof target - 1);
+                if (n < 0)
+                    fail_errno();
+                target[n] = 0;
+                if (symlinkat(target, dst_dir, part.c_str()) != 0)
+                    fail_errno();
+                made = true;
+                struct timespec times[2] = {st.st_atim, st.st_mtim};
+                utimensat(dst_dir, part.c_str(), times, AT_SYMLINK_NOFOLLOW);
+                (void)!fchownat(dst_dir, part.c_str(), owner.keep ? st.st_uid : owner.uid,
+                                owner.keep ? st.st_gid : owner.gid, AT_SYMLINK_NOFOLLOW);
+            } else if (S_ISDIR(st.st_mode)) {
+                Fd in = open_dir_at(src_dir, src, st);
+                if (mkdirat(dst_dir, part.c_str(), 0700) != 0)
+                    fail_errno();
+                made = true;
+                struct stat part_st;
+                if (!stat_at(dst_dir, part, &part_st))
+                    fail_errno();
+                Fd out = open_dir_at(dst_dir, part, part_st);
+                for (const std::string &e : list_dir(in.get()))
+                    copy(in.get(), e, out.get(), e, false, owner, true);
+                copy_stat_fd(out.get(), st, owner);
+            } else if (S_ISREG(st.st_mode)) {
+                check_cancel();
+                Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+                struct stat now;
+                if (in.get() < 0)
+                    fail_errno();
+                if (fstat(in.get(), &now) != 0 || !same_file(now, st))
+                    throw Failure(src + " changed while it was being worked on");
+                Fd out(-1);
+                if (staged)
+                    out = Fd(openat(dst_dir, part.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
+                else
+                    out = open_part(dst_dir, part);
+                if (out.get() < 0)
+                    fail_errno();
+                made = true;
+                copy_bytes(in.get(), out.get(), src);
+                copy_stat_fd(out.get(), st, owner);
+                // replacing something: on disk before the rename (a crash leaves the old or the new)
+                if (dst_exists && fsync(out.get()) != 0)
+                    fail_errno();
+                if (close(out.release()) != 0)
+                    fail_errno();
+            } else {
+                throw Failure(src + " isn't a regular file, folder or link");
+            }
+            if (claim)
+                claim_name(dst_dir, part, dst);
+            else if (!staged)
+                install(dst_dir, part, dst);
+        } catch (...) {
+            if (made && !staged)
+                discard(dst_dir, part);
+            throw;
         }
         done += 1;
         report(src);
     }
 
-    void move(const Walk &src, const Walk &dst, bool merge)
+    // in → out, checking for a cancel and reporting the bytes as it goes
+    void copy_bytes(int in, int out, const std::string &label)
     {
-        struct stat st, dst_dir_st;
+        std::vector<char> buf(1 << 20);
+        for (;;) {
+            check_cancel();
+            ssize_t n = read(in, buf.data(), buf.size());
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n < 0)
+                fail_errno();
+            if (n == 0)
+                return;
+            for (ssize_t off = 0; off < n;) {
+                ssize_t w = write(out, buf.data() + off, size_t(n - off));
+                if (w < 0 && errno == EINTR)
+                    continue;
+                if (w < 0)
+                    fail_errno();
+                off += w;
+            }
+            done += double(n);
+            report(label);
+        }
+    }
+
+    // Put the finished `part` in place of `name` (both in dirfd). A non-folder over a non-folder (or nothing) is one
+    // rename. Where a folder is involved, the two are swapped in one step (RENAME_EXCHANGE; on a filesystem without
+    // it, the old one is renamed aside first and put back if the second rename fails), and then the old one, now
+    // under the part name, is deleted.
+    static Failure conflict(const std::string &name)
+    {
+        return Failure(name + " appeared while this was being done; it was kept as it is, and nothing was put in its place");
+    }
+
+    // a finished part to a name that must still be free: never replacing what another program put there meanwhile
+    // (RENAME_NOREPLACE; without it, link() for a file or link, check-then-rename for a folder)
+    void claim_name(int dirfd, const std::string &part, const std::string &name)
+    {
+        if (renameat2(dirfd, part.c_str(), dirfd, name.c_str(), RENAME_NOREPLACE) == 0)
+            return;
+        int e = errno;
+        if (e == EINVAL) {
+            struct stat st, existing;
+            if (stat_at(dirfd, part, &st) && S_ISDIR(st.st_mode)) {
+                if (stat_at(dirfd, name, &existing))
+                    e = EEXIST;
+                else if (renameat(dirfd, part.c_str(), dirfd, name.c_str()) == 0)
+                    return;
+                else
+                    e = errno;
+            } else if (linkat(dirfd, part.c_str(), dirfd, name.c_str(), 0) == 0) {
+                unlinkat(dirfd, part.c_str(), 0);
+                return;
+            } else {
+                e = errno;
+            }
+        }
+        if (e == EEXIST)
+            throw conflict(name);
+        fail_errno(e);
+    }
+
+    void install(int dirfd, const std::string &part, const std::string &name)
+    {
+        swap_in(dirfd, part, dirfd, name, [&](int d, const std::string &old) { remove_old(d, old, name); });
+    }
+
+    // the replaced one, once the new one is in place: deleted whole (a cancel now would only leave it half-deleted)
+    void remove_old(int dirfd, const std::string &old, const std::string &shown)
+    {
+        struct stat st;
+        if (!stat_at(dirfd, old, &st))
+            return;
+        try {
+            remove_tree(dirfd, old, st, st.st_dev, false);
+        } catch (const std::exception &e) {
+            throw Failure(shown + " was replaced, but the old one couldn't be deleted (it's left as " + old +
+                          "): " + e.what());
+        }
+    }
+
+    // src (in src_dir) to dst (in dst_dir) on the same filesystem, replacing what's at dst as install() does; the old
+    // one is passed to dispose (as a name in src_dir) once it's out of the way
+    void swap_in(int src_dir, const std::string &src, int dst_dir, const std::string &dst,
+                 const std::function<void(int, const std::string &)> &dispose)
+    {
+        struct stat old, nw;
+        bool exists = stat_at(dst_dir, dst, &old);
+        if (!stat_at(src_dir, src, &nw))
+            fail_errno();
+        if (!exists || (!S_ISDIR(old.st_mode) && !S_ISDIR(nw.st_mode))) {
+            if (renameat(src_dir, src.c_str(), dst_dir, dst.c_str()) != 0)
+                fail_errno();
+            return;
+        }
+        if (renameat2(src_dir, src.c_str(), dst_dir, dst.c_str(), RENAME_EXCHANGE) == 0) {
+            dispose(src_dir, src);   // the old one, now where the new one was
+            return;
+        }
+        if (errno != EINVAL)
+            fail_errno();
+        std::string aside = part_name();
+        if (renameat(dst_dir, dst.c_str(), src_dir, aside.c_str()) != 0)
+            fail_errno();
+        if (renameat(src_dir, src.c_str(), dst_dir, dst.c_str()) != 0) {
+            int e = errno;
+            (void)!renameat(src_dir, aside.c_str(), dst_dir, dst.c_str());
+            errno = e;
+            fail_errno();
+        }
+        dispose(src_dir, aside);
+    }
+
+    // a half-made part after a failure or cancel: deleted, without letting a second failure hide the first
+    void discard(int dirfd, const std::string &part)
+    {
+        try {
+            struct stat st;
+            if (stat_at(dirfd, part, &st))
+                remove_tree(dirfd, part, st, st.st_dev, false);
+        } catch (...) {
+        }
+    }
+
+    void move(const Walk &src, const Walk &dst, bool merge, bool claim)
+    {
+        struct stat st, dst_dir_st, existing;
+        if (claim && stat_at(dst.dir.get(), dst.name, &existing))
+            throw conflict(dst.name);
         if (!merge && stat_at(src.dir.get(), src.name, &st) && fstat(dst.dir.get(), &dst_dir_st) == 0 &&
             st.st_dev == dst_dir_st.st_dev) {
-            struct stat existing;
-            if (stat_at(dst.dir.get(), dst.name, &existing))
-                remove(dst.dir.get(), dst.name);
+            if (!claim && stat_at(dst.dir.get(), dst.name, &existing)) {
+                // replaced in one step (see swap_in); the old one is deleted once the moved one is in place
+                if (S_ISDIR(existing.st_mode) && !S_ISDIR(st.st_mode))
+                    throw Failure(dst.name + " is a folder");
+                swap_in(src.dir.get(), src.name, dst.dir.get(), dst.name,
+                        [&](int d, const std::string &old) { remove_old(d, old, dst.name); });
+                done = total;
+                return;
+            }
             // no-replace: something that appeared there since isn't silently replaced
             int r = renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE);
             if (r != 0 && errno == EINVAL)   // a filesystem without RENAME_NOREPLACE
@@ -443,16 +662,16 @@ public:
                 return;
             }
             if (errno == EEXIST)
-                throw Failure(dst.name + " appeared while it was being replaced");
+                throw conflict(dst.name);
         }
-        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, true);   // a move keeps the owner
+        copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, keep_owner(), false, claim);
         remove(src.dir.get(), src.name);
     }
 
 private:
     double last = 0;
 
-    void remove_tree(int dirfd, const std::string &name, const struct stat &st, dev_t dev)
+    void remove_tree(int dirfd, const std::string &name, const struct stat &st, dev_t dev, bool counted = true)
     {
         if (S_ISDIR(st.st_mode)) {
             if (st.st_dev != dev)
@@ -460,13 +679,16 @@ private:
             {
                 Fd d = open_dir_at(dirfd, name, st);
                 for (const std::string &e : list_dir(d.get())) {
-                    check_cancel();
+                    if (counted)
+                        check_cancel();
                     struct stat est;
                     if (!stat_at(d.get(), e, &est))
                         fail_errno();
-                    remove_tree(d.get(), e, est, dev);
-                    done += 1;
-                    report(e);
+                    remove_tree(d.get(), e, est, dev, counted);
+                    if (counted) {
+                        done += 1;
+                        report(e);
+                    }
                 }
             }
             if (unlinkat(dirfd, name.c_str(), AT_REMOVEDIR) != 0)
@@ -483,6 +705,21 @@ static Fd open_new_file(const Walk &w)
     if (fd.get() < 0)
         fail_errno();
     return fd;
+}
+
+// a finished part file (in w's folder) given w's name, which must still be free: never replaces anything
+static void put_new(const Walk &w, const std::string &part)
+{
+    if (renameat2(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str(), RENAME_NOREPLACE) == 0)
+        return;
+    if (errno == EEXIST)
+        throw Failure(w.name + " already exists");
+    if (errno != EINVAL)
+        fail_errno();
+    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken
+    if (linkat(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str(), 0) != 0)
+        fail_errno();
+    unlinkat(w.dir.get(), part.c_str(), 0);
 }
 
 static void handle(const QJsonObject &req)
@@ -505,12 +742,30 @@ static void handle(const QJsonObject &req)
         job.remove(p.dir.get(), p.name);
     } else if (op == "copy" || op == "move") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
-        job.total = job.count(src.dir.get(), src.name) * (op == "move" ? 2 : 1);
         bool merge = req.value("merge").toBool();
+        // "replace": false: the destination must be new (Kestrel planned it as free); absent: as before, replace it
+        bool claim = !merge && req.contains("replace") && !req.value("replace").toBool();
+        // The destination may be the source itself: the same path, a hard link to it, or the same name in another
+        // case on a drive that ignores case. Replacing it first would delete the source, so: moving a path onto
+        // itself does nothing, moving onto another name for it just renames, and anything else is refused.
+        struct stat src_st, dst_st;
+        bool have_src = stat_at(src.dir.get(), src.name, &src_st);
+        if (have_src && stat_at(dst.dir.get(), dst.name, &dst_st) && same_file(src_st, dst_st)) {
+            if (op == "copy" || merge)
+                throw Failure("can't " + op + " " + src.path + " onto itself");
+            if (src.path != dst.path &&
+                renameat(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str()) != 0)
+                fail_errno();
+            return;
+        }
+        if (have_src && S_ISDIR(src_st.st_mode) && dst.path.rfind(src.path + "/", 0) == 0)
+            throw Failure("can't " + op + " " + src.path + " into itself");
+        // progress: every item, and the bytes copied; a move then deletes the items
+        job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         if (op == "copy")
-            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge);
+            job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else
-            job.move(src, dst, merge);
+            job.move(src, dst, merge, claim);
     } else if (op == "rename") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         if (renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE) != 0) {
@@ -528,8 +783,11 @@ static void handle(const QJsonObject &req)
         const Walk &p = w.at("path");
         if (mkdirat(p.dir.get(), p.name.c_str(), 0777) != 0)
             fail_errno();
+        own_new(p.dir.get(), p.name);
     } else if (op == "touch") {
-        open_new_file(w.at("path"));
+        const Walk &p = w.at("path");
+        open_new_file(p);
+        own_new(p.dir.get(), p.name);
     } else if (op == "copyfile") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         struct stat st;
@@ -538,13 +796,27 @@ static void handle(const QJsonObject &req)
         Fd in(openat(src.dir.get(), src.name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
         if (in.get() < 0)
             fail_errno();
-        Fd out = open_new_file(dst);
-        copy_data(in.get(), out.get());
+        std::string part;
+        Fd out = open_part(dst.dir.get(), part);
+        if (out.get() < 0)
+            fail_errno();
+        try {
+            job.copy_bytes(in.get(), out.get(), src.path);
+            Owner o = owner_of(dst.dir.get());
+            (void)!fchown(out.get(), o.uid, o.gid);
+            if (fchmod(out.get(), 0644) != 0 || close(out.release()) != 0)
+                fail_errno();
+            put_new(dst, part);
+        } catch (...) {
+            unlinkat(dst.dir.get(), part.c_str(), 0);
+            throw;
+        }
     } else if (op == "symlink") {
         std::string target = req.value("target").toString().toStdString();
         const Walk &link = w.at("link");
         if (symlinkat(target.c_str(), link.dir.get(), link.name.c_str()) != 0)
             fail_errno();
+        own_new(link.dir.get(), link.name);
     } else if (op == "hardlink") {
         // the file itself, opened without following a symlink: its owner is checked, and that same file is linked
         // (through /proc/self/fd), so it can't be swapped for another between the check and the link
@@ -559,14 +831,27 @@ static void handle(const QJsonObject &req)
         if (linkat(AT_FDCWD, proc_path.c_str(), link.dir.get(), link.name.c_str(), AT_SYMLINK_FOLLOW) != 0)
             fail_errno();
     } else if (op == "write") {
+        const Walk &p = w.at("path");
+        struct stat st;
+        if (stat_at(p.dir.get(), p.name, &st))
+            throw Failure(p.name + " already exists");
         QByteArray text = req.value("text").toString().toUtf8();
-        Fd fd = open_new_file(w.at("path"));
-        ssize_t n = write(fd.get(), text.constData(), size_t(text.size()));
-        if (n != text.size())
+        std::string part;
+        Fd fd = open_part(p.dir.get(), part);
+        if (fd.get() < 0)
             fail_errno();
-        int mode = req.contains("mode") ? req.value("mode").toInt() : 0644;
-        if (fchmod(fd.get(), mode_t(mode) & 07777) != 0)
-            fail_errno();
+        try {
+            int mode = req.contains("mode") ? req.value("mode").toInt() : 0644;
+            Owner o = owner_of(p.dir.get());
+            (void)!fchown(fd.get(), o.uid, o.gid);   // before the chmod: chown clears set-user-ID
+            if (write(fd.get(), text.constData(), size_t(text.size())) != text.size() ||
+                fchmod(fd.get(), mode_t(mode) & 07777) != 0 || close(fd.release()) != 0)
+                fail_errno();
+            put_new(p, part);
+        } catch (...) {
+            unlinkat(p.dir.get(), part.c_str(), 0);
+            throw;
+        }
     } else if (op == "chmod") {
         // the file itself, opened without following a symlink; chmod through /proc/self/fd changes that inode
         const Walk &p = w.at("path");
@@ -595,6 +880,9 @@ static void worker()
             jobs_cv.wait(g, [] { return !jobs.empty(); });
             req = jobs.front();
             jobs.pop_front();
+            if (closing)
+                continue;
+            busy = true;
         }
         qint64 id = req.value("id").toVariant().toLongLong();
         try {
@@ -605,8 +893,11 @@ static void worker()
         } catch (const std::exception &e) {
             send(QJsonObject{{"id", id}, {"ok", false}, {"error", QString::fromStdString(e.what())}});
         }
-        std::lock_guard<std::mutex> g(cancel_lock);
-        cancelled.erase(id);
+        {
+            std::lock_guard<std::mutex> g(cancel_lock);
+            cancelled.erase(id);
+        }
+        busy = false;
     }
 }
 
@@ -630,5 +921,14 @@ int main()
             jobs_cv.notify_one();
         }
     }
-    _exit(0);   // stdin closed: the session is over; stop whatever is running
+    // stdin closed: the session is over. A running job is cancelled, and given time to remove what it had half-made
+    // (its part files) before the helper exits.
+    closing = true;
+    {
+        std::lock_guard<std::mutex> g(jobs_lock);
+        jobs.clear();
+    }
+    for (int i = 0; i < 300 && busy; i++)
+        usleep(100000);
+    _exit(0);
 }

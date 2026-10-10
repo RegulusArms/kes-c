@@ -1,5 +1,5 @@
 // Requests from outside this Kestrel: changes other Kestrels report through the tower, folders handed over to open as
-// tabs, and other apps' FileManager1 requests ("Show in folder"). Python: kestrel/incoming.py.
+// tabs, and other apps' FileManager1 requests ("Show in folder").
 #pragma once
 
 #include <QJsonObject>

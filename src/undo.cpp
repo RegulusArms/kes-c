@@ -71,7 +71,7 @@ Signals *signals_()
 
 void record(const QString &kind, const QString &label, const QList<QPair<QString, QString>> &items)
 {
-    if (items.isEmpty())
+    if (items.isEmpty() && kind != "none")
         return;
     if (shared() && !atc::radio()->request("UndoPush", to_json(Op{kind, label, items})).isNull())
         return;   // the tower tells every window (undo_changed)
@@ -132,6 +132,10 @@ void undo(MainWindow *win)
     }
     Q_EMIT signals_()->changed();
     QString title = "Undo " + op.label;
+    if (op.kind == "none") {
+        win->statusBar()->showMessage("Can't undo that: what was replaced is gone.", 8000);
+        return;
+    }
     QPointer<MainWindow> w(win);
     auto done = [w, title, op](const QVariant &res) {
         if (!w)
