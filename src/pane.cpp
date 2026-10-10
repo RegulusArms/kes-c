@@ -16,6 +16,10 @@
 
 #include <QCheckBox>
 #include <QDrag>
+#include <QMouseEvent>
+#include <QPropertyAnimation>
+#include <QParallelAnimationGroup>
+#include <QGraphicsOpacityEffect>
 #include <QDropEvent>
 #include <QFileSystemWatcher>
 #include <QGuiApplication>
@@ -41,11 +45,77 @@ using namespace util;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
-// The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h)
-// and highlighting the folder a drag is over (where the files will go).
+// The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
+// drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
+// over any of its windows, following the drag events Qt delivers to them (watched on the whole application).
+class DragGhost : public QObject {
+public:
+    DragGhost(const QPixmap &pm, const QPoint &hot) : pm(pm), hot(hot) { qApp->installEventFilter(this); }
+    ~DragGhost() override { delete label; }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override
+    {
+        auto *w = qobject_cast<QWidget *>(obj);
+        if (!w)
+            return false;
+        switch (ev->type()) {
+        case QEvent::DragEnter:
+        case QEvent::DragMove: {
+            QWidget *top = w->window();
+            QPoint pos = w->mapTo(top, static_cast<QDropEvent *>(ev)->position().toPoint());
+            if (!label || label->parentWidget() != top) {   // into another Kestrel window
+                delete label;
+                label = new QLabel(top);
+                label->setAttribute(Qt::WA_TransparentForMouseEvents);   // drops go to what's under it
+                label->setPixmap(pm);
+                auto *fade = new QGraphicsOpacityEffect(label);
+                fade->setOpacity(0.8);
+                label->setGraphicsEffect(fade);
+                label->resize(pm.deviceIndependentSize().toSize());
+            }
+            label->move(pos - hot);
+            label->show();
+            label->raise();
+            break;
+        }
+        case QEvent::DragLeave:   // out of one widget, maybe into the next: hidden unless the next one moves it
+            if (label && w->window() == label->parentWidget())
+                QTimer::singleShot(30, label, [l = label, seen = label->pos()]() {
+                    if (l && l->pos() == seen)
+                        l->hide();
+                });
+            break;
+        case QEvent::Drop:
+            if (label)
+                label->hide();
+            break;
+        default:
+            break;
+        }
+        return false;
+    }
+
+private:
+    QPixmap pm;
+    QPoint hot;
+    QPointer<QLabel> label;
+};
+
+// The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h),
+// highlighting the folder a drag is over (where the files will go), and what a drag that starts here does in the view
+// itself: it can only go into a folder. Over empty space or a file it's refused (Qt's grid would otherwise move the
+// items there, out of the layout, until the folder is read again); dropped into a folder, the dragged items are shown
+// shrinking into it, and a drag that ends anywhere else in nothing (refused, Esc) shows them going back where they are.
 template <class View>
 class FileView : public View {
 protected:
+    void mousePressEvent(QMouseEvent *ev) override
+    {
+        press_pos = ev->position().toPoint();   // where a drag starts (on Wayland, QCursor::pos() isn't reliable)
+        View::mousePressEvent(ev);
+    }
+
     void dragMoveEvent(QDragMoveEvent *ev) override
     {
         View::dragMoveEvent(ev);
@@ -53,9 +123,15 @@ protected:
         if (i.isValid())
             i = i.siblingAtColumn(0);
         // a folder that takes the drop, and isn't one of the items being dragged
-        bool dragged = ev->source() == this && this->selectionModel()->isSelected(i);
+        bool own = ev->source() == this;
+        bool dragged = own && this->selectionModel()->isSelected(i);
         bool folder = i.isValid() && (this->model()->flags(i) & Qt::ItemIsDropEnabled);
         set_drop_target(ev->isAccepted() && folder && !dragged ? i : QModelIndex());
+        if (own) {
+            last_drag_pos = ev->position().toPoint();
+            if (!drop_target.isValid())
+                ev->ignore();   // nowhere to go: the items stay where they are
+        }
     }
 
     void dragLeaveEvent(QDragLeaveEvent *ev) override
@@ -66,7 +142,17 @@ protected:
 
     void dropEvent(QDropEvent *ev) override
     {
+        QModelIndex target = drop_target;
         set_drop_target(QModelIndex());
+        if (ev->source() == this) {
+            last_drag_pos = ev->position().toPoint();
+            if (!target.isValid()) {   // not into a folder: refused, so Qt doesn't move the items in the view
+                ev->setDropAction(Qt::IgnoreAction);
+                ev->ignore();
+                return;
+            }
+            fly(QRect(last_drag_pos - drag_hot, drag_pm.deviceIndependentSize().toSize()), folder_rect(target), true);
+        }
         View::dropEvent(ev);
     }
 
@@ -103,18 +189,40 @@ protected:
             return;
         auto *drag = new QDrag(this);
         drag->setMimeData(data);
-        QPoint hot;
-        drag->setPixmap(drag_pixmap(indexes, &hot));
-        drag->setHotSpot(hot);
+        QRect from;
+        drag_pm = drag_pixmap(indexes, &from);
+        drag_hot = from.isEmpty() ? QPoint() : press_pos - from.topLeft();
+        drag_hot.setX(std::clamp(drag_hot.x(), 0, std::max(0, from.width() - 1)));   // on the picture, under the pointer
+        drag_hot.setY(std::clamp(drag_hot.y(), 0, std::max(0, from.height() - 1)));
+        std::unique_ptr<DragGhost> ghost;
+        if (QGuiApplication::platformName() == "wayland")
+            ghost = std::make_unique<DragGhost>(drag_pm, drag_hot);
+        else
+            drag->setPixmap(drag_pm);
+        drag->setHotSpot(drag_hot);
+        QPoint start_scroll(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value());
+        last_drag_pos = press_pos;
         Qt::DropAction def = this->defaultDropAction();
         if (def == Qt::IgnoreAction || !(supported & def))
             def = supported & Qt::CopyAction ? Qt::CopyAction : Qt::IgnoreAction;
-        if (drag->exec(supported, def) != Qt::IgnoreAction && !drag->target())   // dropped into another app
+        QPointer<FileView> self(this);
+        Qt::DropAction done = drag->exec(supported, def);
+        ghost.reset();
+        if (!self)
+            return;
+        if (done == Qt::IgnoreAction) {   // went nowhere: back to where the items are (the view may have scrolled)
+            QPoint scrolled = QPoint(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value()) - start_scroll;
+            fly(QRect(last_drag_pos - drag_hot, drag_pm.deviceIndependentSize().toSize()), from.translated(-scrolled),
+                false);
+        } else if (!drag->target()) {   // dropped into another app
             focus::activate_at_pointer();
+        }
     }
 
 private:
     QPersistentModelIndex drop_target;   // the folder highlighted under a drag
+    QPoint press_pos, last_drag_pos, drag_hot;   // viewport coordinates; drag_hot: on the drag's picture
+    QPixmap drag_pm;
 
     void set_drop_target(const QModelIndex &i)
     {
@@ -125,13 +233,52 @@ private:
         this->setProperty("drop_target", i.isValid() ? i.data(PathRole).toString() : QString());   // for the tests
     }
 
-    QPixmap drag_pixmap(const QModelIndexList &indexes, QPoint *hot) const
+    // where a folder's icon is (a list row: its start)
+    QRect folder_rect(const QModelIndex &i) const
     {
-        // the dragged items as they look in the view (what Qt draws)
+        QRect r = this->visualRect(i);
+        if constexpr (std::is_base_of_v<QTreeView, View>)
+            return QRect(r.left(), r.top(), r.height(), r.height());
+        return r;
+    }
+
+    // The drag's picture, moving in the view from `from` to `to` and gone: into a folder (shrinking and fading), or
+    // back onto the items (they never moved, so it lands on them). Not when the picture is empty (items off screen).
+    void fly(const QRect &from, const QRect &to, bool into)
+    {
+        if (drag_pm.isNull() || from.isEmpty() || to.isEmpty())
+            return;
+        auto *ghost = new QLabel(this->viewport());
+        ghost->setAttribute(Qt::WA_TransparentForMouseEvents);
+        ghost->setPixmap(drag_pm);
+        ghost->setScaledContents(true);
+        ghost->setGeometry(from);
+        auto *fade = new QGraphicsOpacityEffect(ghost);
+        ghost->setGraphicsEffect(fade);
+        ghost->show();
+        auto *group = new QParallelAnimationGroup(ghost);
+        auto *move = new QPropertyAnimation(ghost, "geometry", group);
+        move->setDuration(into ? 220 : 260);
+        move->setStartValue(from);
+        QSize small = from.size() * 0.2;
+        move->setEndValue(into ? QRect(to.center() - QPoint(small.width() / 2, small.height() / 2), small)
+                               : QRect(to.topLeft(), from.size()));
+        move->setEasingCurve(into ? QEasingCurve::InCubic : QEasingCurve::OutCubic);
+        auto *opacity = new QPropertyAnimation(fade, "opacity", group);
+        opacity->setDuration(move->duration());
+        opacity->setStartValue(into ? 0.9 : 0.75);
+        opacity->setEndValue(into ? 0.15 : 1.0);
+        QObject::connect(group, &QAbstractAnimation::finished, ghost, &QObject::deleteLater);
+        group->start();
+    }
+
+    // the dragged items as they look in the view (what Qt draws); *at: where they are in the viewport
+    QPixmap drag_pixmap(const QModelIndexList &indexes, QRect *at) const
+    {
         QRect all;
         for (const QModelIndex &i : indexes)
             all |= this->visualRect(i).intersected(this->viewport()->rect());
-        *hot = this->viewport()->mapFromGlobal(QCursor::pos()) - all.topLeft();
+        *at = all;
         if (all.isEmpty())
             return QPixmap();
         qreal dpr = this->devicePixelRatioF();

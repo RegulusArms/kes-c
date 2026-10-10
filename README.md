@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.1-alpha.1.** This is an early alpha release, so expect rough edges.
+**Version 0.3.1-alpha.2.** This is an early alpha release, so expect rough edges.
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -43,7 +43,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 
 **Installs alongside GNOME Files:** Kestrel installs next to GNOME Files (or Nemo on Linux Mint) instead of replacing it. The two share bookmarks, thumbnails, the clipboard, the trash and Recent files, so you can use either. `./install.sh --default` (or `kes-setup --default` with the apt package) makes Kestrel open folders and "Show in folder" requests and show other apps' Open/Save dialogs, and `./install.sh --uninstall` (`kes-setup --undo`) hands them back.
 
-This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.com/RegulusArms/kestrel-explorer). The two were the same up to 0.3.1-alpha.1; since then each is developed on its own. They still use the same settings folder, bookmarks and caches, but aren't kept compatible any more.
+This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.com/RegulusArms/kestrel-explorer). The two were the same up to 0.3.1-alpha.2; since then each is developed on its own. They still use the same settings folder, bookmarks and caches, but aren't kept compatible any more.
 
 ## Install with apt
 
@@ -429,7 +429,7 @@ Move to Trash itself doesn't run as administrator: if an item can't be trashed, 
 - **It won't hand out root by accident.** A copy it makes is root's, so it drops the set-user-ID bit from someone else's program (a move between drives keeps the owner instead). It only hard-links your own files, and never deletes a mount point (the drive mounted there would be emptied).
 - **The trade-off, when built from source:** the helper binary is in the Kestrel build folder, which your account can edit. Anything running as you could change that file before your next admin session. Installed from the .deb, it's `/usr/bin/kes-admin-helper`, which only root can change. That's the same level of trust as typing `sudo` in your own terminal, which is fine on a personal computer.
 
-## Differences from the Python version (as of 0.3.1-alpha.1, when the two were split)
+## Differences from the Python version (as of 0.3.1-alpha.2, when the two were split)
 
 - **Image decoding is Qt only.** The Python version fell back to Pillow for images Qt couldn't read. This version has no second decoder, so a file Qt can't decode (even with `kimageformat6-plugins`) gets no thumbnail.
 - **The EXIF summary and the image-generation prompts in the info panel come from a built-in reader** instead of Pillow. It reads EXIF from JPEG, PNG (`eXIf`), WebP and TIFF-based RAW files, and text chunks from PNG. HEIC/AVIF EXIF appears only in the Metadata tab (through exiftool).
