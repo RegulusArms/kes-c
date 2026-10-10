@@ -128,7 +128,9 @@ jobs:
     strategy:
       matrix:
         image: ["ubuntu:24.04", "ubuntu:26.04"]
-    container: ${{ matrix.image }}
+    # Docker Hub's official image through Google's mirror: Docker Hub limits anonymous pulls per IP address, and
+    # GitHub's runners share theirs, so a direct pull can fail with "toomanyrequests"
+    container: mirror.gcr.io/library/${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
 
