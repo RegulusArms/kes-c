@@ -8,6 +8,7 @@
 #include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "hashcheck.h"
 #include "fm1.h"
 #include "incoming.h"
 #include "overview.h"
@@ -847,7 +848,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 
     QString single = paths.size() == 1 ? paths.first() : QString();
     bool is_dir = !single.isEmpty() && isdir(single);
-    if (in_trash(paths.first())) {
+    // only a selection all in the trash gets the trash's menu; a mixed one (a search, Recent, Starred) gets the
+    // usual menu, whose Move to Trash trashes the rest and asks before deleting what's already in the trash
+    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return in_trash(x); })) {
         m->addAction(icon({"edit-undo"}), "Restore", this, [this, paths]() { restore(paths); });
         m->addAction(icon({"edit-delete"}), "Delete Permanently", this, [this, paths]() { delete_paths(paths); });
         if (fileops::can_shred())
@@ -971,6 +974,8 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                      [this, paths]() { archive_ui::quick_compress(this, paths); });
     m->addAction(icon({"package-x-generic", "archive-insert"}), "Compress…", this,
                  [this, paths]() { archive_ui::compress_dialog(this, paths); });
+    m->addAction(icon({"security-high", "document-properties"}), "Create Checksum File…", this,
+                 [this, paths]() { hashcheck::create_dialog(this, paths); });
     if (!single.isEmpty() && (is_image(single) || is_video(single)) && uwp::editor_open())
         m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), "Add to Selected UWP Monitor", this,
                      [this, single]() { uwp_add(single); });

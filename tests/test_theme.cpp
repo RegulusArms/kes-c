@@ -91,7 +91,7 @@ int main(int argc, char **argv)
     gtk_palette_from(QJsonObject{{"theme_fg_color", "#dadada"}}, &ok);
     check(!ok, "a theme without the basic colours changes nothing");
 
-    const QPalette LIGHT = palette_of("#fafafa", "#e95420"), DARK = palette_of("#2a2a2a", "#3584e4");
+    const QPalette LIGHT = palette_of("#fafafa", "#e95420"), DARK = palette_of("#2a2a2a", "#2a7fd4");
     QApplication::setPalette(LIGHT);
     MainWindow *w = open_window({HOME()});
     w->navigate(OVERVIEW);
@@ -117,12 +117,12 @@ int main(int argc, char **argv)
     label->show();
     spin(100);
     QPalette dark2 = DARK;   // a theme switch can change the palette more than once
-    dark2.setColor(QPalette::Link, QColor("#3584e4"));
+    dark2.setColor(QPalette::Link, QColor("#2a7fd4"));
     QApplication::setPalette(DARK);
     QApplication::setPalette(dark2);
     spin(300);
     check(calls == 1, "a palette change runs the registered callbacks once");
-    check(label->palette().color(QPalette::WindowText) == QColor("#3584e4"),
+    check(label->palette().color(QPalette::WindowText) == QColor("#2a7fd4"),
           "stylesheets that use palette() take the new colours");
     QColor header = QColor();
     for (int i = 0; i < w->sidebar->count(); ++i)
@@ -132,17 +132,36 @@ int main(int argc, char **argv)
     QList<Card *> cards = w->findChildren<Card *>();
     check(!cards.isEmpty() && cards.first()->styleSheet().contains(card_color().name()),
           "the Overview's cards take the new colours");
-    check(g_thumbs->folder_color == "#3584e4" && g_thumbs->color_for(home_path("any")) == "#3584e4",
+    check(g_thumbs->folder_color == "#2a7fd4" && g_thumbs->color_for(home_path("any")) == "#2a7fd4",
           "the default folder colour follows the accent, also in folder previews");
     check(thumbs::follows_accent("accent") && thumbs::follows_accent("") && thumbs::follows_accent("#D9652F") &&
               !thumbs::follows_accent("#33d17a"),
           "“accent”, no setting and the old fixed default follow the accent; a chosen colour doesn't");
+    check(named_accent("orange") == QColor("#ed5b00") && named_accent("slate") == QColor("#6f8396") &&
+              !named_accent("olive").isValid(),
+          "GNOME's accent colour names give libadwaita's colours");
+    QString iface = "org.gnome.desktop.interface";
+    if (desktop_schema(iface) == iface && has_schema_key(iface, "accent-color")) {
+        GSettings *gs = g_settings_new("org.gnome.desktop.interface");
+        g_settings_set_string(gs, "accent-color", "orange");
+        g_settings_sync();
+        check(wait_for([]() { return g_thumbs->folder_color == "#ed5b00"; }, 3000),
+              "a chosen GNOME accent colour comes before the theme's, and folders follow it when it changes");
+        g_settings_reset(gs, "accent-color");
+        g_settings_sync();
+        check(wait_for([]() { return g_thumbs->folder_color == "#2a7fd4"; }, 3000),
+              "with no GNOME accent colour chosen, folders take the theme's");
+        g_object_unref(gs);
+    } else {
+        skip("GNOME's accent colour setting (GNOME 47+)");
+    }
     settings().setValue("folder_color", "#33d17a");
     apply_thumb_settings(g_thumbs);
+    int before = calls;
     delete owner;
     QApplication::setPalette(LIGHT);
     spin(300);
-    check(calls == 1, "a deleted owner's callback is dropped");
+    check(calls == before, "a deleted owner's callback is dropped");
     check(g_thumbs->folder_color == "#33d17a", "a chosen folder colour stays when the accent changes");
 
     finish();

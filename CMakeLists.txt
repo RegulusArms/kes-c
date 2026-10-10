@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(kestrel-explorer VERSION 0.2.1 LANGUAGES CXX)
+# The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
+set(KES_VERSION "0.3.1-alpha.2")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
+project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
-set(KES_VERSION "0.3.0-alpha.2")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -70,13 +72,17 @@ install(FILES data/org.freedesktop.impl.portal.desktop.kestrel.service DESTINATI
 install(DIRECTORY data/gnome-shell/kestrel-focus@regulusarms.com DESTINATION share/gnome-shell/extensions)
 
 # .deb package: cmake -DCMAKE_INSTALL_PREFIX=/usr ... && cd build && cpack
-# KES_DEB_VERSION overrides the package version (CI's dev builds); by default it's KES_VERSION with "-" → "~",
-# so 0.2.0~alpha sorts before 0.2.0
-string(REPLACE "-" "~" KES_DEB_VERSION_DEFAULT "${KES_VERSION}")
-set(KES_DEB_VERSION "${KES_DEB_VERSION_DEFAULT}" CACHE STRING "Debian package version")
+# The package version is KES_VERSION with "-" → "~", so 0.2.0~alpha sorts before 0.2.0. -DKES_DEB_VERSION=…
+# overrides it (CI's dev builds). The cache entry stays empty unless given: a default stored there would be kept by
+# the build folder and miss later version bumps.
+set(KES_DEB_VERSION "" CACHE STRING "Debian package version (empty: KES_VERSION with - → ~)")
+string(REPLACE "-" "~" KES_DEB_VERSION_USED "${KES_VERSION}")
+if(KES_DEB_VERSION)
+    set(KES_DEB_VERSION_USED "${KES_DEB_VERSION}")
+endif()
 set(CPACK_GENERATOR DEB)
 set(CPACK_PACKAGE_NAME kestrel-explorer)
-set(CPACK_PACKAGE_VERSION "${KES_DEB_VERSION}")
+set(CPACK_PACKAGE_VERSION "${KES_DEB_VERSION_USED}")
 set(CPACK_PACKAGE_CONTACT "RegulusAlpha <ross@regulusarms.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "File manager with archive, admin, permission and metadata tools built in")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RegulusArms/kes-c")

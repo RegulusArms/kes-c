@@ -12,6 +12,7 @@
 
 #include <QClipboard>
 #include <QCursor>
+#include <QFile>
 #include <QGuiApplication>
 #include <QInputDialog>
 #include <QLineEdit>
@@ -103,9 +104,18 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         const QMimeData *md = QGuiApplication::clipboard()->mimeData();
         if (md && md->hasImage()) {
             QString dst = unique_path(target, "Pasted image.png", "num");
-            if (QGuiApplication::clipboard()->image().save(dst, "PNG"))
+            QImage img = QGuiApplication::clipboard()->image();
+            try {   // made whole under a hidden name, then given the new name (write_parts)
+                write_parts(dst, [&](int fd) {
+                    QFile f;
+                    if (!f.open(fd, QIODevice::WriteOnly, QFileDevice::DontCloseHandle) || !img.save(&f, "PNG"))
+                        throw OSError(EIO, "Couldn't save the pasted image");
+                }, true);
                 undo::record_paths("create", "Paste", {dst});
-            pane()->select_later(dst);
+                pane()->select_later(dst);
+            } catch (const OSError &e) {
+                QMessageBox::warning(this, "Paste", e.message());
+            }
         }
         return;
     }
@@ -225,7 +235,7 @@ void MainWindow::new_file(const QString &tmpl)
     }
     try {
         if (!tmpl.isEmpty())
-            copyfile(tmpl, p);
+            copyfile(tmpl, p, true);
         else
             write_text(p, QByteArray(), true);
         undo::record_paths("create", "New File", {p});
@@ -291,14 +301,16 @@ void MainWindow::rename(const QStringList &paths)
     }
 }
 
-void MainWindow::trash_paths(const QStringList &paths)
+void MainWindow::trash_paths(const QStringList &selected)
 {
+    // what's already in the trash can only be deleted permanently (delete_paths asks first); the rest goes to the
+    // trash. A selection can hold both (a search, Recent, Starred).
+    QStringList paths, trashed_already;
+    for (const QString &p : selected)
+        (in_trash(p) ? trashed_already : paths) << p;
+    delete_paths(trashed_already);
     if (paths.isEmpty())
         return;
-    if (in_trash(paths.first())) {
-        delete_paths(paths);
-        return;
-    }
     auto trashed = std::make_shared<QStringList>();
     auto work = [paths, trashed](Task *task) -> QVariant {
         QVariantList failed;
@@ -503,14 +515,17 @@ void MainWindow::make_links(const QStringList &paths, QString dest, const QStrin
         return;
     }
     for (const QString &p : paths) {
-        QVariantMap plan = fileops::link_plan(kind, p, dest);
+        QVariantMap plan;
         try {
+            plan = fileops::link_plan(kind, p, dest);
             made << fileops::make_link(plan);
         } catch (const OSError &e) {
             if (e.permission())
                 denied << plan;
             else
                 errors << basename(p) + ": " + e.message();
+        } catch (const Error &e) {   // a name a shortcut can't hold
+            errors << e.message();
         }
     }
     if (!errors.isEmpty())

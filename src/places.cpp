@@ -285,14 +285,13 @@ void add_recent(const QStringList &paths_in)
     } else {
         w.writeEndDocument();
     }
-    QString tmp = recent_file() + ".kestrel-tmp";
-    try {
+    try {   // in one step, private (it lists the files you've opened)
         makedirs(dirname(recent_file()), true);
-        write_text(tmp, out);
-        util::chmod(tmp, 0600);
-        util::rename(tmp, recent_file());
+        write_parts(recent_file(), [&](int fd) {
+            ::fchmod(fd, 0600);
+            write_all(fd, out.constData(), out.size(), recent_file());
+        }, false, true);
     } catch (const OSError &) {
-        ::unlink(enc(tmp).constData());
     }
 }
 

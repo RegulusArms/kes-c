@@ -10,9 +10,17 @@
 #include <QThread>
 
 #include <cerrno>
+#include <climits>
+#include <cstring>
+#include <ctime>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#include <string>
+#include <vector>
 
 using namespace util;
 
@@ -734,11 +742,19 @@ struct JobClock {
     ~JobClock() { stats::sample("archive job (s)", (stats::now_ms() - started) / 1000.0); }
 };
 
-QString compress(Task *task, const Spec &spec)
+// The archive is made under a hidden name beside spec.out that keeps the format's extension (some tools go by it),
+// and its file (or volumes) renamed into place only when the tool has succeeded: a failure or a cancel leaves an older
+// archive of that name as it was, and no half-made one. zip, which adds to an archive that already exists, starts
+// from nothing this way too.
+QString compress(Task *task, const Spec &spec_in)
 {
     JobClock clock;
-    QString out = spec.out;
-    QString label = "Compressing " + basename(out);
+    const QString final_out = spec_in.out, dir = dirname(final_out);
+    QString ext = final_out.endsWith(spec_in.format.ext) ? spec_in.format.ext : QString();
+    Spec spec = spec_in;
+    spec.out = join(dir, part_name() + ext);
+    const QString out = spec.out;
+    QString label = "Compressing " + basename(final_out);
     try {
         if (!spec.format.stream.isEmpty()) {
             compress_stream(task, spec, label);
@@ -759,17 +775,43 @@ QString compress(Task *task, const Spec &spec)
                 }
             }
         }
+        task->check();
     } catch (...) {
         for (const QString &f : QStringList{out} + volume_files(out))
             ::unlink(enc(f).constData());
         throw;
     }
-    if (!exists(out)) {
-        QStringList vols = volume_files(out);
-        vols.sort();
-        return vols.isEmpty() ? out : vols.first();
+    // into place: each file renamed over the name it's for ("<hidden>.7z.002" → "<name>.7z.002"); then the parts of
+    // an older archive of that name that the new one doesn't have are deleted
+    QString hidden_stem = basename(out).chopped(ext.size()), final_stem = basename(final_out).chopped(ext.size());
+    QStringList made = exists(out) ? QStringList{out} : volume_files(out), placed;
+    QStringList old = volume_files(final_out);
+    if (lexists(final_out))
+        old << final_out;
+    made.sort();
+    try {
+        for (const QString &m : made) {
+            QString target = join(dir, final_stem + basename(m).mid(hidden_stem.size()));
+            if (!old.isEmpty()) {   // replacing an older archive: on disk before the rename
+                int fd = ::open(enc(m).constData(), O_RDONLY | O_CLOEXEC);
+                if (fd >= 0) {
+                    ::fsync(fd);
+                    ::close(fd);
+                }
+            }
+            if (::rename(enc(m).constData(), enc(target).constData()) != 0)
+                throw_errno(target);
+            placed << target;
+        }
+    } catch (...) {
+        for (const QString &m : made)
+            ::unlink(enc(m).constData());
+        throw;
     }
-    return out;
+    for (const QString &o : old)
+        if (!placed.contains(o))
+            ::unlink(enc(o).constData());
+    return placed.isEmpty() ? final_out : placed.first();
 }
 
 // ---------------------------------------------------------------- extract
@@ -881,16 +923,21 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         ~CloseFd() { ::close(fd); }
     } close_fi{fi};
     if (k == "single") {
+        // The name itself is what gets replaced: lexists, not exists (a dangling symlink is taken), and the output
+        // goes to a new file that is then renamed over the name. Opening the name would follow a symlink there (or
+        // truncate a file hard-linked elsewhere), and a failed run would leave the old file truncated or deleted.
         QString out = join(dest, archive_stem(path));
-        if (exists(out)) {
+        bool replace = false;   // the user's choice for a file that's there; otherwise the name is claimed (put_new)
+        if (lexists(out)) {
             if (overwrite == "skip")
                 return dest;
             if (overwrite == "rename")
                 out = unique_path(dest, basename(out), "num");
+            else
+                replace = true;
         }
-        int fo = ::open(enc(out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-        if (fo < 0)
-            throw_errno(out);
+        QString part;
+        int fo = open_part_at(AT_FDCWD, rstrip(dest, '/') + "/", &part);
         proc::Options o;
         o.in = proc::PIPE;
         o.out = fo;
@@ -901,6 +948,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
             dec = proc::spawn(dec_argv, o);
         } catch (...) {
             ::close(fo);
+            ::unlink(enc(part).constData());
             throw;
         }
         ::close(fo);
@@ -910,13 +958,42 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
             dec->wait();
         } catch (...) {
             dec->kill_group();
-            ::unlink(enc(out).constData());
+            ::unlink(enc(part).constData());
             throw;
         }
         if (dec->returncode != 0) {
-            ::unlink(enc(out).constData());
+            ::unlink(enc(part).constData());
             QString t = tail(QString::fromUtf8(dec->read_all_err()));
             throw Error(t.isEmpty() ? QString("decompression failed") : t);
+        }
+        if (lexists(out)) {   // replacing something: on disk before the rename (the decompressor wrote it)
+            int sfd = ::open(enc(part).constData(), O_RDONLY | O_CLOEXEC);
+            bool synced = sfd >= 0 && ::fsync(sfd) == 0;
+            int e = errno;
+            if (sfd >= 0)
+                ::close(sfd);
+            if (!synced) {
+                ::unlink(enc(part).constData());
+                throw_errno(out, e);
+            }
+        }
+        if (replace) {
+            if (::rename(enc(part).constData(), enc(out).constData()) != 0) {
+                int e = errno;
+                ::unlink(enc(part).constData());
+                throw_errno(out, e);
+            }
+            return dest;
+        }
+        // a name that was free: never replacing a file another program put there while this ran
+        try {
+            put_new(part, out);
+        } catch (const OSError &e) {
+            ::unlink(enc(part).constData());
+            if (e.code == EEXIST)
+                throw Error("“" + basename(out) + "” appeared in " + dest +
+                            " while it was being extracted; it was kept as it is, and nothing was put in its place");
+            throw;
         }
         return dest;
     }
@@ -980,16 +1057,169 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
     return dest;
 }
 
-QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
-                const QString &overwrite, int threads)
+bool link_escapes(int depth, const QByteArray &target)
 {
+    if (target.startsWith('/'))
+        return true;
+    for (const QByteArray &c : target.split('/')) {
+        if (c == "..") {
+            if (--depth < 0)
+                return true;
+        } else if (!c.isEmpty() && c != ".") {
+            ++depth;
+        }
+    }
+    return false;
+}
+
+static bool changed_since(const struct timespec &t, const struct timespec &since)
+{
+    return t.tv_sec > since.tv_sec || (t.tv_sec == since.tv_sec && t.tv_nsec >= since.tv_nsec);
+}
+
+// The folder `name` in dirfd, opened to be listed (-1 if it can't be); *restore: the mode to put back, or -1. One of
+// the user's own that the archive left unreadable (GNU tar applies a folder's stored mode, 000 or 111 say, before it
+// exits) is let in first: owner rwx, set on the folder itself through /proc (never through a symlink swapped in), and
+// its mode is put back once it's swept.
+static int open_for_sweep(int dirfd, const char *name, bool nofollow, int *restore)
+{
+    *restore = -1;
+    int nf = nofollow ? O_NOFOLLOW : 0;
+    int fd = ::openat(dirfd, name, O_RDONLY | O_DIRECTORY | nf | O_CLOEXEC);
+    if (fd >= 0 || errno != EACCES)
+        return fd;
+    int pfd = ::openat(dirfd, name, O_PATH | O_DIRECTORY | nf | O_CLOEXEC);
+    if (pfd < 0)
+        return -1;
+    struct stat st;
+    std::string proc = "/proc/self/fd/" + std::to_string(pfd);
+    if (::fstat(pfd, &st) == 0 && st.st_uid == ::geteuid() && ::chmod(proc.c_str(), (st.st_mode & 07777) | S_IRWXU) == 0) {
+        fd = ::open(proc.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (fd >= 0)
+            *restore = int(st.st_mode & 07777);
+        else
+            ::chmod(proc.c_str(), st.st_mode & 07777);
+    }
+    ::close(pfd);
+    return fd;
+}
+
+// The symlinks in an open folder (and the folders below it, on the same drive) changed since `since` that
+// link_escapes(), removed. One in a folder of the user's that the archive made read-only is removed too: the folder is
+// made writable for it, and its mode put back after (restore: the mode to put back when this folder was opened by
+// open_for_sweep, or -1). Each one is added to report.
+static void drop_escaping_links(int dirfd, const QString &rel, int depth, const struct timespec &since,
+                                QList<archive::DroppedLink> &report, int restore)
+{
+    struct stat here;
+    if (::fstat(dirfd, &here) != 0)
+        return;
+    auto let_in = [&]() {   // owner rwx on this folder, if it's the user's; its mode is put back below
+        if (restore >= 0 || here.st_uid != ::geteuid() || ::fchmod(dirfd, (here.st_mode & 07777) | S_IRWXU) != 0)
+            return false;
+        restore = int(here.st_mode & 07777);
+        return true;
+    };
+    if ((here.st_mode & (S_IRUSR | S_IXUSR)) != (S_IRUSR | S_IXUSR))   // can't list it (111) or look anything up in it
+        let_in();
+    int fd = ::dup(dirfd);
+    DIR *d = fd >= 0 ? ::fdopendir(fd) : nullptr;
+    if (!d && fd >= 0)
+        ::close(fd);
+    std::vector<std::string> subdirs;
+    while (d) {
+        struct dirent *e = ::readdir(d);
+        if (!e)
+            break;
+        const char *n = e->d_name;
+        struct stat st;
+        if (!std::strcmp(n, ".") || !std::strcmp(n, "..") || ::fstatat(dirfd, n, &st, AT_SYMLINK_NOFOLLOW) != 0)
+            continue;
+        if (S_ISDIR(st.st_mode) && st.st_dev == here.st_dev) {
+            subdirs.push_back(n);
+            continue;
+        }
+        if (!S_ISLNK(st.st_mode) || !changed_since(st.st_ctim, since))
+            continue;
+        char target[PATH_MAX];
+        ssize_t len = ::readlinkat(dirfd, n, target, sizeof target);
+        if (len < 0 || !link_escapes(depth, QByteArray(target, int(len))))
+            continue;
+        QString why;
+        if (::unlinkat(dirfd, n, 0) != 0) {
+            int err = errno;
+            if ((err == EACCES || err == EPERM) && let_in())
+                err = ::unlinkat(dirfd, n, 0) == 0 ? 0 : errno;
+            if (err)
+                why = QString::fromLocal8Bit(std::strerror(err));
+        }
+        report << archive::DroppedLink{rel + QString::fromLocal8Bit(n), QString::fromLocal8Bit(target, int(len)), why};
+    }
+    if (d)
+        ::closedir(d);
+    for (const std::string &n : subdirs) {
+        int mode;
+        int sub = open_for_sweep(dirfd, n.c_str(), true, &mode);
+        if (sub >= 0) {
+            drop_escaping_links(sub, rel + QString::fromLocal8Bit(n.c_str()) + "/", depth + 1, since, report, mode);
+            ::close(sub);
+        }
+    }
+    if (restore >= 0)
+        ::fchmod(dirfd, mode_t(restore));
+}
+
+// GNU tar and UnZip make an archive's symlinks as they are, also ones that lead out of the destination (7-Zip and
+// unrar leave those out), and Kestrel follows a link like any other folder or file: opening, copying or deleting
+// "inside" the extracted folder would reach whatever it points to. So once they're done (also after a failure or a
+// cancel), the escaping links they made are removed: only links changed since the job started (a link's ctime can't
+// be set back), so the user's own links in an existing folder stay. As in Python's tarfile "data" filter, an absolute
+// link goes even when it names a place inside the folder: where it leads depends on where the folder is. What was
+// removed, or couldn't be, goes in report for the user to be told.
+class EscapingLinkSweep {
+public:
+    EscapingLinkSweep(const QString &dest, const QString &tool, QList<archive::DroppedLink> &report)
+        : dest(dest), active(tool == "tar" || tool == "unzip"), report(report)
+    {
+        ::clock_gettime(CLOCK_REALTIME, &since);
+        since.tv_sec -= 1;   // the filesystem's clock can lag a little behind
+    }
+    ~EscapingLinkSweep()
+    {
+        if (!active)
+            return;
+        int mode;
+        int fd = open_for_sweep(AT_FDCWD, enc(dest).constData(), false, &mode);
+        if (fd >= 0) {
+            drop_escaping_links(fd, QString(), 0, since, report, mode);
+            ::close(fd);
+        }
+    }
+
+private:
+    QString dest;
+    bool active;
+    QList<archive::DroppedLink> &report;
+    struct timespec since;
+};
+
+QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
+                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links)
+{
+    QList<DroppedLink> unused;
+    QList<DroppedLink> &report = dropped_links ? *dropped_links : unused;
     JobClock clock;
     QString path = first_volume(path_in);
     auto [k, suf] = kind(path);
     QString label = "Extracting " + basename(path);
-    if (k == "tar" || k == "single")
+    if (k == "tar") {
+        EscapingLinkSweep sweep(dest, "tar", report);
+        return extract_stream(task, path, dest, k, suf, overwrite, label);
+    }
+    if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     ExtractCommand c = extract_command(path, dest, password, overwrite, threads);
+    EscapingLinkSweep sweep(dest, c.tool, report);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
                                     QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
     const QString &t = c.tool;
