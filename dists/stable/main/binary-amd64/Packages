@@ -1,0 +1,18 @@
+Package: kestrel-explorer
+Architecture: amd64
+Depends: libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins
+Priority: optional
+Section: utils
+Filename: pool/main/k/kestrel-explorer/kestrel-explorer_0.3.1~alpha.2_amd64.deb
+Size: 1783018
+SHA256: 363ef101050b88d2bf9a93d92818176fe81f6c9cb4fd18b37dbb4f97a9a46db3
+SHA1: aa3bee427489622a3bb9143873590a0f0c9af809
+MD5sum: bbe31565df8a495b15c8a6a721f68630
+Description: File manager with archive, admin, permission and metadata tools built in
+Homepage: https://github.com/RegulusArms/kes-c
+Maintainer: RegulusAlpha <ross@regulusarms.com>
+Recommends: pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip
+Suggests: libimage-exiftool-perl, ffmpeg, bleachbit
+Version: 0.3.1~alpha.2
+Installed-Size: 3692
+
