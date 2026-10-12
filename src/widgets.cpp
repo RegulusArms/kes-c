@@ -136,6 +136,75 @@ bool FSModel::dropMimeData(const QMimeData *data, Qt::DropAction, int, int, cons
     return true;
 }
 
+PinSortProxy::PinSortProxy(FSModel *source) : QSortFilterProxyModel(source), fs(source)
+{
+    setSourceModel(source);
+    setDynamicSortFilter(true);
+    connect(source, &QAbstractItemModel::rowsRemoved, this, [this]() { names.clear(); });   // its nodes may go
+}
+
+void PinSortProxy::sort(int column, Qt::SortOrder order)
+{
+    fs->sort(column, order);   // the folder model's own order (and the column the header shows); we follow it
+}
+
+void PinSortProxy::set_pinned_first(bool on)
+{
+    first = on;
+    apply();
+}
+
+void PinSortProxy::set_root(const QString &dir)
+{
+    root = dir;
+    apply();
+}
+
+void PinSortProxy::pins_changed() { apply(); }
+
+void PinSortProxy::apply()
+{
+    // pinned first: by pinned (or starred), then by the folder model's row; otherwise (or in a folder with nothing
+    // pinned or starred, so a large folder isn't sorted twice for nothing) the folder model's order as it is
+    names.clear();
+    bool any = false;
+    if (first) {
+        any = !places::pinned(root).isEmpty();
+        for (const QString &p : places::starred())
+            any = any || dirname(p) == root;
+    }
+    int col = any ? 0 : -1;
+    if (col != sortColumn())
+        QSortFilterProxyModel::sort(col, Qt::AscendingOrder);
+    else if (any)
+        invalidate();   // which items are pinned or starred has changed
+}
+
+bool PinSortProxy::pinned(const QModelIndex &i) const
+{
+    QModelIndex parent = i.parent();
+    auto it = names.find(parent.internalPointer());
+    if (it == names.end()) {
+        QString dir = fs->filePath(parent);
+        QStringList pins = places::pinned(dir);
+        QSet<QString> set(pins.begin(), pins.end());
+        for (const QString &p : places::starred())
+            if (dirname(p) == dir)
+                set << basename(p);
+        it = names.insert(parent.internalPointer(), set);
+    }
+    return !it->isEmpty() && it->contains(fs->fileName(i));
+}
+
+bool PinSortProxy::lessThan(const QModelIndex &a, const QModelIndex &b) const
+{
+    bool pa = pinned(a), pb = pinned(b);
+    if (pa != pb)
+        return pa;
+    return a.row() < b.row();
+}
+
+
 SearchModel::SearchModel(ThumbnailManager *thumbs, QObject *parent) : QStandardItemModel(parent), thumbs(thumbs)
 {
     setHorizontalHeaderLabels({"Name", "Location", "Size", "Modified"});
@@ -385,10 +454,11 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         int es = std::max(16, s / 5);
         em.paint(p, QRect(icon_rect.right() - es, icon_rect.bottom() - es, es, es));
     }
-    if (places::is_starred(path)) {
-        double bs = std::max(16, s / 6);
+    double bs = std::max(16, s / 6);
+    if (places::is_starred(path))
         star_badge(p, QRectF(badge_box.right() - bs * 0.75, badge_box.top() - bs * 0.25, bs, bs));
-    }
+    if (places::is_pinned(path))
+        pin_badge(p, QRectF(badge_box.left() - bs * 0.25, badge_box.top() - bs * 0.25, bs, bs));
     // text
     p->setPen(pal.color(QPalette::Text));
     if (selected) {
@@ -429,6 +499,22 @@ void GridDelegate::star_badge(QPainter *p, const QRectF &rect)
     p->setPen(QColor(120, 80, 0, 220));
     p->setBrush(QColor("#f6c02d"));
     p->drawPath(star);
+    p->restore();
+}
+
+void GridDelegate::pin_badge(QPainter *p, const QRectF &rect)
+{
+    // a small red pushpin (pinned items), leaning right: a round head and a needle from under it
+    double w = rect.width();
+    QPointF head(rect.left() + w * 0.6, rect.top() + w * 0.38);
+    p->save();
+    p->setOpacity(1.0);
+    p->setRenderHint(QPainter::Antialiasing);
+    p->setPen(QPen(QColor(70, 70, 70, 230), std::max(1.5, w * 0.1), Qt::SolidLine, Qt::RoundCap));
+    p->drawLine(head, QPointF(rect.left() + w * 0.2, rect.top() + w * 0.95));
+    p->setPen(QColor(110, 20, 20, 220));
+    p->setBrush(QColor("#e0443a"));
+    p->drawEllipse(head, w * 0.34, w * 0.34);
     p->restore();
 }
 

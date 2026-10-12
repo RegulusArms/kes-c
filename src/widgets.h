@@ -11,6 +11,7 @@
 #include <QListWidget>
 #include <QMutex>
 #include <QScrollArea>
+#include <QSortFilterProxyModel>
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
 #include <QThread>
@@ -70,6 +71,30 @@ private:
     void thumb_ready(const QString &path);
     ThumbnailManager *thumbs;
     mutable QHash<QString, QIcon> suffix_icons;
+};
+
+// Between FSModel and the views: keeps the folder model's own order, or with "Pinned & Starred First" on puts the
+// pinned and starred items first, each group still in that order. The views' sort() goes on to the folder model.
+class PinSortProxy : public QSortFilterProxyModel {
+    Q_OBJECT
+public:
+    explicit PinSortProxy(FSModel *source);
+    void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
+    void set_pinned_first(bool on);
+    bool pinned_first() const { return first; }
+    void set_root(const QString &dir);   // the folder shown: sorted only if something in it is pinned or starred
+    void pins_changed();
+
+protected:
+    bool lessThan(const QModelIndex &a, const QModelIndex &b) const override;
+
+private:
+    bool pinned(const QModelIndex &i) const;   // or starred
+    void apply();
+    FSModel *fs;
+    bool first = false;
+    QString root;
+    mutable QHash<const void *, QSet<QString>> names;   // per folder (its node): the pinned and starred names in it
 };
 
 // Results of a recursive search.
@@ -132,6 +157,7 @@ private:
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
     static void play_badge(QPainter *p, const QRectF &rect);
     static void star_badge(QPainter *p, const QRectF &rect);
+    static void pin_badge(QPainter *p, const QRectF &rect);
     QWidget *pane;
     ThumbnailManager *thumbs;
     std::function<bool(const QString &)> is_cut;

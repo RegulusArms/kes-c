@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -93,9 +94,75 @@ void set_starred(const QStringList &paths, bool on)
     atc::announce("starred");
 }
 
+// ---------------------------------------------------------------- pinned
+
+static QString pinned_file() { return join(CONFIG_DIR(), "pinned.json"); }
+
+static std::optional<QHash<QString, QStringList>> pinned_map;
+
+static QHash<QString, QStringList> &pinned_lists()
+{
+    if (!pinned_map) {
+        bool ok = false;
+        QHash<QString, QStringList> m;
+        QJsonObject o = QJsonDocument::fromJson(read_file(pinned_file(), &ok)).object();
+        for (auto it = o.begin(); it != o.end(); ++it) {
+            QStringList names;
+            for (const QJsonValue &v : it.value().toArray())
+                if (v.isString() && !v.toString().isEmpty() && !v.toString().contains('/') && !names.contains(v.toString()))
+                    names << v.toString();
+            if (!names.isEmpty())
+                m.insert(it.key(), names);
+        }
+        pinned_map = m;
+    }
+    return *pinned_map;
+}
+
+QStringList pinned(const QString &dir) { return pinned_lists().value(dir); }
+
+bool is_pinned(const QString &path)
+{
+    auto &m = pinned_lists();
+    if (m.isEmpty())
+        return false;
+    auto it = m.constFind(dirname(path));
+    return it != m.constEnd() && it->contains(basename(path));
+}
+
+void set_pinned(const QStringList &paths, bool on)
+{
+    pinned_map.reset();   // another Kestrel may have changed it since
+    QHash<QString, QStringList> m = pinned_lists();
+    for (const QString &p : paths) {
+        QString dir = dirname(p), name = basename(p);
+        if (name.isEmpty() || dir == p)
+            continue;
+        QStringList &names = m[dir];
+        if (on && !names.contains(name))
+            names << name;
+        else if (!on)
+            names.removeAll(name);
+        if (names.isEmpty())
+            m.remove(dir);
+    }
+    pinned_map = m;
+    QJsonObject o;
+    for (auto it = m.begin(); it != m.end(); ++it)
+        o.insert(it.key(), QJsonArray::fromStringList(it.value()));
+    try {
+        makedirs(dirname(pinned_file()), true);
+        write_atomic(pinned_file(), QJsonDocument(o).toJson(QJsonDocument::Indented));
+    } catch (const OSError &) {
+    }
+    Q_EMIT signals_()->starred_changed();
+    atc::announce("starred");   // the other Kestrels re-read both lists
+}
+
 void reload_starred()
 {
     starred_list.reset();
+    pinned_map.reset();
     starred();
     Q_EMIT signals_()->starred_changed();
 }

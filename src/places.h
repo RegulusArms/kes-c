@@ -3,6 +3,9 @@
 // Starred items are Kestrel's own list (~/.config/kestrel-explorer/starred.json). Recent is the desktop's shared
 // recently-used list (~/.local/share/recently-used.xbel), which GTK apps write too; files opened from Kestrel are
 // added to it unless "Remember recent files" is off in GNOME's privacy settings.
+//
+// Pinned items (~/.config/kestrel-explorer/pinned.json, {folder: [names]}) aren't listed anywhere: "Pinned & Starred
+// First" sorts them to the top of their folder.
 #pragma once
 
 #include <QObject>
@@ -22,14 +25,18 @@ QString empty_text(const QString &place);
 class Signals : public QObject {
     Q_OBJECT
 Q_SIGNALS:
-    void starred_changed();
+    void starred_changed();   // the stars or the pins
 };
 Signals *signals_();
 
 QStringList starred();
 bool is_starred(const QString &path);
 void set_starred(const QStringList &paths, bool on);
-void reload_starred();   // re-read the list (another Kestrel changed it) and emit starred_changed
+void reload_starred();   // re-read the lists, also the pins (another Kestrel changed them); emit starred_changed
+
+QStringList pinned(const QString &dir);   // the names pinned in dir (also ones now gone)
+bool is_pinned(const QString &path);
+void set_pinned(const QStringList &paths, bool on);   // each in its own folder
 
 // (path, original path) for a place, as util::trashed_items() gives for the trash (here both the same)
 QList<QPair<QString, QString>> items(const QString &place);

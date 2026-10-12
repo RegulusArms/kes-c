@@ -57,6 +57,9 @@ public:
     QList<Pane *> panes() const;
     Pane *new_tab(const QString &path, bool activate = true);
     void close_tab(int i);
+    void duplicate_tab(int i);
+    void tab_menu(const QPoint &pos);
+    QMenu *build_tab_menu(int i);
     void navigate(const QString &path);
     QString homepage() const;
     void go_home();
@@ -66,7 +69,8 @@ public:
     void toggle_view();
     void sync_zoom_slider();
     void set_folder_previews(bool on);
-    void build_previews(const QString &root);
+    // folders_only: only folder previews, not every file's thumbnail; depth: as RecursiveBuilder's (-1: the whole tree)
+    void build_previews(const QString &root, bool folders_only = false, int depth = -1);
     void stop_build();
     void toggle_hidden(bool on);
     void update_status();
@@ -117,6 +121,7 @@ public:
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
     void set_view_value(const QString &key, const QVariant &value);
     int default_zoom(bool grid) const;
+    void set_pinned_first(bool on);   // Pinned & Starred First, for this window's tabs and its saved view setting
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
