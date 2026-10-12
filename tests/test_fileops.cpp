@@ -782,6 +782,90 @@ int main(int argc, char **argv)
         }
         check(!escaping, "a crafted " + ext + " archive leaves no symlink leading out of the folder it's extracted into");
     }
+    {   // a folders-only walk (like tree -d) reaches the same folders as a full one, a link to a folder listed but not
+        // followed, and gives no files (not a link to one either)
+        QString root = P("walkd");
+        make(join(root, "f.txt"));
+        make(join(root, "a/b/g.txt"));
+        make(join(root, "c/h.txt"));
+        util::symlink("a", join(root, "to-a"));
+        util::symlink("f.txt", join(root, "to-f"));   // a link to a file: d_type doesn't say, so it's looked at
+        QStringList full, only;
+        int files_seen = 0, only_files = 0;
+        walk(root, [&](const QString &d, QStringList &dirs, QStringList &files) {
+            full << QDir(root).relativeFilePath(d) + ":" + dirs.join(',');
+            files_seen += int(files.size());
+            return true;
+        });
+        walk(root, [&](const QString &d, QStringList &dirs, QStringList &files) {
+            QStringList ds = dirs;
+            ds.sort();
+            only << QDir(root).relativeFilePath(d) + ":" + ds.join(',');
+            only_files += int(files.size());
+            return true;
+        }, true, true);
+        for (QString &e : full) {   // readdir's order: sort each folder's list to compare
+            QStringList parts = e.split(':');
+            QStringList ds = parts[1].split(',', Qt::SkipEmptyParts);
+            ds.sort();
+            e = parts[0] + ":" + ds.join(',');
+        }
+        full.sort();
+        only.sort();
+        check(files_seen == 4 && only_files == 0 && only == full &&
+                  only == QStringList{".:a,c,to-a", "a/b:", "a:b", "c:"},
+              "a folders-only walk reaches every folder a full walk does (a link to a folder listed, not followed) "
+              "and lists no files");
+    }
+
+    // -- damaged archives, made here: good.txt (5000 × "G") and bad.txt (5000 × "B"), stored uncompressed, with one bit
+    // of bad.txt's data flipped so it fails its checksum. Keeping damaged files extracts it as far as it goes and lists
+    // it, and good.txt comes out whole; without that the job fails, saying how to keep them, and unrar leaves no bad.txt
+    make(P("damaged-src/good.txt"), QByteArray(5000, 'G'));
+    make(P("damaged-src/bad.txt"), QByteArray(5000, 'B'));
+    for (const QString &ext : QStringList{"rar", "7z", "zip"}) {
+        QString label = "a damaged " + ext + " archive extracts with “Keep damaged files”, listing the damaged file";
+        QString base = P("damaged-" + ext), archive_path = join(base, "damaged." + ext);
+        makedirs(join(base, "kept"), true);
+        makedirs(join(base, "failed"), true);
+        QString maker = archive::tool(ext == "rar" ? "rar" : "7z");   // 7z stores just the names of absolute paths
+        if (maker.isEmpty() || !archive::can_keep_damaged(archive_path)) {
+            skip(label + " (" + (ext == "rar" ? "rar or unrar" : "7z") + " isn't installed)");
+            continue;
+        }
+        QStringList srcs = {P("damaged-src/good.txt"), P("damaged-src/bad.txt")};
+        proc::run(ext == "rar" ? QStringList{maker, "a", "-idq", "-m0", "-ep", archive_path} + srcs
+                               : QStringList{maker, "a", ext == "zip" ? "-tzip" : "-t7z", "-mx0", archive_path} + srcs);
+        QByteArray data = util::read_file(archive_path);
+        qsizetype at = data.indexOf(QByteArray(100, 'B'));
+        if (at < 0) {
+            check(false, label + " (the archive couldn't be made)");
+            continue;
+        }
+        data[at + 50] = char(data[at + 50] ^ 1);
+        make(archive_path, data);
+        Task task("test", [](Task *) { return QVariant(); });
+        archive::Damaged damaged;
+        bool kept_ok = true;
+        try {
+            archive::extract(&task, archive_path, join(base, "kept"), QString(), "overwrite", 0, nullptr, &damaged);
+        } catch (const Error &) {
+            kept_ok = false;
+        }
+        check(kept_ok && damaged.files == QStringList{"bad.txt"} && !damaged.details.isEmpty() &&
+                  util::read_file(join(base, "kept/good.txt")) == QByteArray(5000, 'G') &&
+                  QFileInfo(join(base, "kept/bad.txt")).size() == 5000,
+              label);
+        QString msg;
+        try {
+            archive::extract(&task, archive_path, join(base, "failed"), QString(), "overwrite");
+        } catch (const Error &e) {
+            msg = e.message();
+        }
+        check(msg.contains("Keep damaged files") &&
+                  (archive::extract_tool(archive_path) != "unrar" || !lexists(join(base, "failed/bad.txt"))),
+              "without “Keep damaged files” a damaged " + ext + " archive fails, saying how to keep them");
+    }
     check(archive::link_escapes(0, "../x") && archive::link_escapes(0, "/etc") && archive::link_escapes(1, "a/../../..") &&
               archive::link_escapes(2, "../../../x") && !archive::link_escapes(1, "../x") &&
               !archive::link_escapes(0, "a/../b") && !archive::link_escapes(0, "./a//b") && !archive::link_escapes(2, "../.."),

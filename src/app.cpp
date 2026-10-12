@@ -688,7 +688,7 @@ void MainWindow::set_folder_previews(bool on)
 
 // -- recursive preview build
 
-void MainWindow::build_previews(const QString &root)
+void MainWindow::build_previews(const QString &root, bool folders_only, int depth)
 {
     if (builder) {
         QMessageBox::information(this, "Generate Previews",
@@ -696,14 +696,14 @@ void MainWindow::build_previews(const QString &root)
         return;
     }
     int size = pane() ? pane()->grid_size : 160;
-    auto *b = new RecursiveBuilder(root, size, thumbs);
+    auto *b = new RecursiveBuilder(root, size, thumbs, nullptr, 3, folders_only, depth);
     connect(b, &RecursiveBuilder::progress, this, &MainWindow::build_progress);
     connect(b, &RecursiveBuilder::finished_build, this, &MainWindow::build_finished);
     connect(b, &QThread::finished, b, &QObject::deleteLater);
     builder = b;
     build_root = root;
     QString name = basename(rstrip(root, '/'));
-    build_label->setText("Previews: " + (name.isEmpty() ? root : name));
+    build_label->setText((folders_only ? "Folder previews: " : "Previews: ") + (name.isEmpty() ? root : name));
     build_label->setToolTip(root);
     build_bar->setRange(0, 0);   // busy while scanning
     build_bar->setFormat("Scanning…");
@@ -893,6 +893,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); });
         m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
+                     [this, cur]() { build_previews(cur, true, 1); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
+                     [this, cur]() { build_previews(cur, true); });
         if (in_trash(join(cur, "x"))) {
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
             if (fileops::can_shred())
@@ -1071,6 +1075,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
                      [this, single]() { build_previews(single); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
+                     [this, single]() { build_previews(single, true, 1); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
+                     [this, single]() { build_previews(single, true); });
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
     }
     m->addSeparator();

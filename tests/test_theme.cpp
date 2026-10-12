@@ -223,5 +223,62 @@ int main(int argc, char **argv)
     check(calls == before, "a deleted owner's callback is dropped");
     check(g_thumbs->folder_color == "#33d17a", "a chosen folder colour stays when the accent changes");
 
+    // -- Generate Folder Previews (this folder and the ones directly in it) and its recursive form make folder
+    // previews only: no large thumbnail for every image, as Generate Previews Recursively makes
+    {
+        QString root = home_path("gen"), s1 = join(root, "s1"), s2 = join(s1, "s2");
+        makedirs(s2, true);
+        int n = 0;
+        for (const QString &d : {root, s1, s2})
+            for (int i = 0; i < 2; ++i) {   // two each, so a preview's tiles are the small (normal) size; big
+                QImage im(600, 400, QImage::Format_RGB32);   // enough to be cached at the large size
+                im.fill(QColor::fromHsv(n * 40, 200, 200));
+                im.save(join(d, QString("p%1.png").arg(n++)), "PNG");
+            }
+        auto preview = [](const QString &d) {
+            return exists(join(join(APP_CACHE(), "folders"), md5(d) + "-256.png"));
+        };
+        auto large = []() { return isdir(join(THUMB_DIR(), "large")) ? listdir(join(THUMB_DIR(), "large")).size() : 0; };
+        auto build = [&](bool folders_only, int depth) {
+            RecursiveBuilder b(root, 256, g_thumbs, nullptr, 3, folders_only, depth);
+            b.start();
+            b.wait();
+        };
+        build(true, 1);
+        check(preview(root) && preview(s1) && !preview(s2) && large() == 0,
+              "Generate Folder Previews makes previews for the folder and the folders directly in it, not deeper, "
+              "and no thumbnail for every file");
+        build(true, -1);
+        check(preview(s2) && large() == 0, "Generate Folder Previews Recursively makes previews for every folder below, "
+                                           "and no thumbnail for every file");
+        build(false, -1);
+        check(large() == 6, "Generate Previews Recursively makes every file's thumbnail too");
+    }
+    {   // the walk doesn't wait for the previews: it's done ("scanning" over, the total known) long before they are
+        QString root = home_path("gen-big");
+        for (int d = 0; d < 20; ++d) {
+            QString dir = join(root, QString("d%1").arg(d));
+            makedirs(dir, true);
+            for (int i = 0; i < 15; ++i) {
+                QImage im(600, 400, QImage::Format_RGB32);
+                im.fill(QColor::fromHsv((d * 15 + i) % 360, 200, 200));
+                im.save(join(dir, QString("p%1.png").arg(i)), "PNG");
+            }
+        }
+        RecursiveBuilder b(root, 256, g_thumbs);
+        QMutex m;
+        int done_at_scan_end = -1, total_at_scan_end = 0;
+        QObject::connect(&b, &RecursiveBuilder::progress, &b, [&](int done, int total, bool scanning, const QString &) {
+            QMutexLocker g(&m);
+            if (!scanning && done_at_scan_end < 0)
+                done_at_scan_end = done, total_at_scan_end = total;
+        }, Qt::DirectConnection);
+        b.start();
+        b.wait();
+        check(total_at_scan_end == 321 && done_at_scan_end >= 0 && done_at_scan_end < total_at_scan_end / 2,
+              QString("a preview build finishes scanning the tree before most previews are made (%1 of %2 done then)")
+                  .arg(done_at_scan_end).arg(total_at_scan_end));
+    }
+
     finish();
 }

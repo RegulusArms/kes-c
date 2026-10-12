@@ -135,6 +135,8 @@ private:
 };
 
 // Pre-generate file thumbnails and folder previews for a whole tree.
+// folders_only: only folder previews (each makes thumbnails of just the few images it shows), not one for every file.
+// depth: how many levels of folders below root to go (-1: all; 1: root and the folders directly in it).
 //
 // Scanning and generating overlap: items are queued to a small worker pool as the walk finds them, so work starts
 // immediately and the total grows until the walk completes. Everything goes to the on-disk caches.
@@ -142,7 +144,7 @@ class RecursiveBuilder : public QThread {
     Q_OBJECT
 public:
     RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent = nullptr,
-                     int workers = 3);
+                     int workers = 3, bool folders_only = false, int depth = -1);
     void cancel() { stop = true; }
 
 Q_SIGNALS:
@@ -160,6 +162,8 @@ private:
     int size;
     std::atomic<bool> stop{false};
     int workers;
+    bool folders_only;
+    int depth;
     qint64 max_bytes;
     thumbs::FolderOpts opts;
     QHash<QString, QString> covers;

@@ -5,7 +5,18 @@ What changed in each version of Kestrel Explorer, newest first. Versions with a 
 
 ## 0.3.1-alpha.4
 
-- Nothing yet.
+- **Keep damaged files when extracting:** Extract To… has a new "Keep damaged files" option for rar, 7z and zip
+  archives. Files that fail their checksum are kept as far as they could be extracted, so the extraction no longer
+  fails, and a list of them is shown afterwards. Before, a single damaged file failed the whole extraction, and unrar
+  deleted the file. When an extraction fails because of damaged files, the error message now points to this option.
+- **Generate Folder Previews** and **Generate Folder Previews Recursively** (right-click a folder, or empty space):
+  they build only folder previews, for the folder and the folders directly in it or for every folder below it. Unlike
+  Generate Previews Recursively, they don't make a thumbnail for every file.
+- **Preview builds scan quickly:** the Generate Previews entries now list the whole folder tree at full speed while
+  the previews are being made, so the progress bar shows the real total early. Before, the scan could only move as
+  fast as the previews were made, so "scanning…" lasted almost the whole build.
+  The folder-preview builds only look at folders while scanning, like `tree -d`: each folder's files are read when
+  its preview is made, as when you open it.
 
 ## 0.3.1-alpha.3 (2026-10-12)
 

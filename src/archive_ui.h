@@ -60,7 +60,7 @@ private:
     QString path;
     bool encrypted;
     QLineEdit *dest, *pw;
-    QCheckBox *subfolder, *trash_after, *open_after;
+    QCheckBox *subfolder, *trash_after, *open_after, *keep_damaged = nullptr;
     QComboBox *overwrite;
 };
 

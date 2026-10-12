@@ -15,7 +15,6 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QPainterPath>
-#include <QSemaphore>
 
 #include <cstdlib>
 #include <fcntl.h>
@@ -962,8 +961,9 @@ void ThumbnailManager::on_done(const QString &k, const QString &path, const QIma
 // ---------------------------------------------------------------- recursive pre-generation
 
 RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent,
-                                   int workers)
-    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), current(root)
+                                   int workers, bool folders_only, int depth)
+    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
+      depth(depth), current(root)
 {
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
@@ -1026,40 +1026,42 @@ void RecursiveBuilder::run()
     exts.unite(VIDEO_EXTS);
     QThreadPool workers_pool;
     workers_pool.setMaxThreadCount(workers);
-    QSemaphore slots(workers * 16);   // cap queued work / memory
+    // The walk queues everything it finds without waiting for the workers: listing a tree takes seconds where making
+    // its previews takes minutes, so the total is known early (a cap on queued work held the walk to the workers' pace,
+    // "scanning" until nearly the end). The queue is a path per item.
     auto submit = [&](char kind, const QString &path) {
-        while (!slots.tryAcquire(1, 200))
-            if (stop)
-                return false;
+        if (stop)
+            return false;
         {
             QMutexLocker g(&lock);
             total += 1;
         }
-        workers_pool.start([this, kind, path, &slots]() {
-            one(kind, path);
-            slots.release();
-        });
+        workers_pool.start([this, kind, path]() { one(kind, path); });
         return true;
     };
+    QString top = rstrip(root, '/');
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
         if (stop)
             return false;
         QStringList keep;
-        for (const QString &d : dirs)
-            if (!d.startsWith('.'))
-                keep << d;
+        int level = rstrip(dir, '/') == top ? 0 : QStringView(dir).mid(top.size()).count('/');
+        if (depth < 0 || level < depth)
+            for (const QString &d : dirs)
+                if (!d.startsWith('.'))
+                    keep << d;
         natural_sort(keep);
         dirs = keep;
         natural_sort(files);
-        for (const QString &f : files)
-            if (!f.startsWith('.') && exts.contains(ext_of(f)))
-                if (!submit('f', join(dir, f)))
-                    return false;
+        if (!folders_only)
+            for (const QString &f : files)
+                if (!f.startsWith('.') && exts.contains(ext_of(f)))
+                    if (!submit('f', join(dir, f)))
+                        return false;
         if (stop || (!no_previews.contains(dir) && !submit('d', dir)))
             return false;
         emit_progress();
         return true;
-    });
+    }, true, folders_only);   // folder previews only: just the folders, like tree -d (each preview lists its own)
     {
         QMutexLocker g(&lock);
         scanning = false;

@@ -524,6 +524,12 @@ ExtractDialog::ExtractDialog(QWidget *parent, const QString &path, bool encrypte
         form->addRow(small("This archive is encrypted."));
     if (argv_tool(t))
         form->addRow(small(QString(ARGV_NOTE).arg(t)));
+    if (archive::can_keep_damaged(path)) {   // not remembered: keeping broken files is for the one damaged archive
+        keep_damaged = new QCheckBox("Keep damaged files");
+        form->addRow(keep_damaged);
+        form->addRow(small("Files that fail their checksum are kept as far as they could be extracted, instead of the "
+                           "extraction failing. They're listed afterwards: expect them to be broken in places."));
+    }
     trash_after = new QCheckBox("Move the archive to the trash afterwards");
     trash_after->setChecked(s.value("archive/x_trash", false).toBool());
     form->addRow(trash_after);
@@ -575,7 +581,8 @@ QVariantMap ExtractDialog::options() const
 {
     return {{"dest", expanduser(dest->text().trimmed())}, {"subfolder", subfolder->isChecked()},
             {"overwrite", overwrite->currentData()},       {"password", pw->text()},
-            {"trash_after", trash_after->isChecked()},     {"open_after", open_after->isChecked()}};
+            {"trash_after", trash_after->isChecked()},     {"open_after", open_after->isChecked()},
+            {"keep_damaged", keep_damaged && keep_damaged->isChecked()}};
 }
 
 // ---------------------------------------------------------------- flows (called from the main window)
@@ -661,6 +668,26 @@ void say_dropped_links(QWidget *win, const QString &name, const QVariantList &dr
         QMessageBox::warning(win, "Extracting " + name, text.trimmed());
 }
 
+// Tell the user which files were kept although they're damaged. damaged: their names in the archive.
+static void say_damaged(QWidget *win, const QString &name, const QStringList &damaged, const QString &details,
+                        bool with_password)
+{
+    QMessageBox box(QMessageBox::Warning, "Extracting " + name, QString(), QMessageBox::Ok, win);
+    QString text = QString("%1 file%2 failed %3 checksum and %4 kept as far as %5 could be extracted. Expect %6 to be "
+                           "broken in places:\n\n")
+                       .arg(QString::number(damaged.size()), damaged.size() > 1 ? "s" : "",
+                            damaged.size() > 1 ? "their" : "its", damaged.size() > 1 ? "were" : "was",
+                            damaged.size() > 1 ? "they" : "it", damaged.size() > 1 ? "them" : "it") +
+                   damaged.mid(0, 20).join('\n');
+    if (damaged.size() > 20)
+        text += QString("\n… and %1 more").arg(damaged.size() - 20);
+    if (with_password)
+        text += "\n\nIn an older (RAR4) archive a wrong password looks like damage too.";
+    box.setText(text);
+    box.setDetailedText(details);
+    box.exec();
+}
+
 static void run_extract(MainWindow *win, const QString &path, const QVariantMap &opts)
 {
     QString name = basename(path);
@@ -673,8 +700,10 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
             makedirs(out);
         }
         QList<archive::DroppedLink> dropped;
+        archive::Damaged damaged;
         try {
-            archive::extract(task, path, out, opts["password"].toString(), opts["overwrite"].toString(), 0, &dropped);
+            archive::extract(task, path, out, opts["password"].toString(), opts["overwrite"].toString(), 0, &dropped,
+                             opts["keep_damaged"].toBool() ? &damaged : nullptr);
         } catch (const archive::WrongPassword &) {
             if (sub)
                 rmtree(out);
@@ -694,7 +723,8 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         QVariantList links;
         for (const archive::DroppedLink &l : dropped)
             links << QVariant(QStringList{l.path, l.target, l.why});
-        return QVariantMap{{"out", result}, {"dropped", links}};
+        return QVariantMap{{"out", result}, {"dropped", links}, {"damaged", damaged.files},
+                           {"damaged_details", damaged.details}};
     };
     QPointer<MainWindow> w(win);
     auto done = [w, path, name, opts](const QVariant &r) {
@@ -715,7 +745,14 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
             return;
         }
         QString out = res["out"].toString();
-        w->statusBar()->showMessage(QString("Extracted %1 to %2").arg(name, out), 6000);
+        QStringList damaged = res["damaged"].toStringList();
+        w->statusBar()->showMessage(damaged.isEmpty() ? QString("Extracted %1 to %2").arg(name, out)
+                                                      : QString("Extracted %1 to %2, keeping %3 damaged file%4")
+                                                            .arg(name, out, QString::number(damaged.size()),
+                                                                 damaged.size() > 1 ? "s" : ""),
+                                    6000);
+        if (!damaged.isEmpty())
+            say_damaged(w, name, damaged, res["damaged_details"].toString(), !opts["password"].toString().isEmpty());
         if (!res["dropped"].toList().isEmpty())
             say_dropped_links(w, name, res["dropped"].toList());
         if (opts["open_after"].toBool())
