@@ -62,8 +62,9 @@ int main(int argc, char **argv)
     ThumbnailManager *t = g_thumbs;
     QString dir = gvfs + "gphoto2:host=Test/DCIM/100APPLE";
     qsizetype before = t->failed.size();
-    check(t->folder_pixmap(dir, 1, 128).isNull() && t->failed.size() == before + 1,
-          "no folder previews on a phone (they would download every file)");
+    QImage phone_folder = t->folder_pixmap(dir, 1, 128).toImage();
+    check(phone_folder == t->plain_folder(t->folder_color, 128).toImage() && t->failed.size() == before + 1,
+          "no folder previews on a phone (they would download every file): a plain folder in the folder colour");
     check(device_uri(dir + "/IMG_0001.JPG").isEmpty() && thumbs::device_preview(QString(), 128).isNull(),
           "a file outside any mount has no device preview");
     before = t->failed.size();

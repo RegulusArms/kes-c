@@ -377,7 +377,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     model = make_model();
     search_model = new SearchModel(thumbs, this);
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
-    attach(model);
+    attach(proxy);
     set_view_mode(win->view_value("view_mode", "grid").toString());
     if (win->chooser)
         set_type_filter(win->chooser->type_filter());
@@ -468,6 +468,10 @@ void Pane::setup_tree()
 FSModel *Pane::make_model()
 {
     auto *m = new FSModel(thumbs, this);
+    // goes with the model; connected first, so it has taken in a change before the slots below (update_empty can add
+    // rows) run
+    proxy = new PinSortProxy(m);
+    proxy->set_pinned_first(win->view_value("pinned_first", false).toBool());
     MainWindow *w = win;
     m->drop_handler = [w](const QStringList &paths, const QString &target) { w->handle_drop(paths, target); };
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
@@ -503,7 +507,7 @@ void Pane::attach(QAbstractItemModel *m)
 
 void Pane::use_model_root()
 {
-    QModelIndex root = model->index(path);
+    QModelIndex root = proxy->mapFromSource(model->index(path));
     grid->setRootIndex(root);
     tree->setRootIndex(root);
 }
@@ -640,7 +644,9 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     thumbs->cancel_pending();
     animator->clear();
     model->setNameFilters(type_filters);
-    QModelIndex root = model->setRootPath(p);
+    QModelIndex src_root = model->setRootPath(p);
+    proxy->set_root(p);   // before mapping: it may start or stop sorting
+    QModelIndex root = proxy->mapFromSource(src_root);
     grid->setRootIndex(root);
     tree->setRootIndex(root);
     view()->selectionModel()->clear();   // drop the previous folder's selection and current item
@@ -679,6 +685,7 @@ void Pane::starred_changed()
 {
     if (path == places::STARRED)
         show_trash();
+    proxy->pins_changed();
     view()->viewport()->update();
 }
 
@@ -828,7 +835,7 @@ QModelIndex Pane::index_for(const QString &p) const
         QStandardItem *item = search_model->rows.value(p);
         return item ? item->index() : QModelIndex();
     }
-    return model->index(p);
+    return proxy->mapFromSource(model->index(p));
 }
 
 Pane::HistoryEntry Pane::snapshot(const QString &dest, bool search) const
@@ -926,8 +933,10 @@ void Pane::refresh()
     FSModel *old = model;
     model = make_model();
     if (!in_search) {
-        attach(model);
-        QModelIndex root = model->setRootPath(path);
+        attach(proxy);
+        QModelIndex src_root = model->setRootPath(path);
+        proxy->set_root(path);
+        QModelIndex root = proxy->mapFromSource(src_root);
         grid->setRootIndex(root);
         tree->setRootIndex(root);
         pending_select = sel.isEmpty() ? QString() : sel.first();
@@ -997,7 +1006,7 @@ void Pane::close_search(bool refocus, bool navigating)
     model->setNameFilters(type_filters);
     if (in_search) {
         in_search = false;
-        attach(model);
+        attach(proxy);
         use_model_root();
     }
     update_empty();
@@ -1054,7 +1063,7 @@ void Pane::do_search()
         model->setNameFilters(type_filters);
         if (in_search) {
             in_search = false;
-            attach(model);
+            attach(proxy);
             use_model_root();
         }
         update_empty();
@@ -1089,7 +1098,7 @@ void Pane::do_search()
     } else {
         if (in_search) {
             in_search = false;
-            attach(model);
+            attach(proxy);
             use_model_root();
         }
         bool wild = text.contains('*') || text.contains('?') || text.contains('[');
@@ -1135,9 +1144,9 @@ QStringList Pane::all_paths() const
             out << search_model->item(r, 0)->data(PathRole).toString();
         return out;
     }
-    QModelIndex root = model->index(path);
-    for (int r = 0; r < model->rowCount(root); ++r)
-        out << model->filePath(model->index(r, 0, root));
+    QModelIndex root = proxy->mapFromSource(model->index(path));   // in the order shown
+    for (int r = 0; r < proxy->rowCount(root); ++r)
+        out << proxy->index(r, 0, root).data(PathRole).toString();
     return out;
 }
 
@@ -1163,6 +1172,14 @@ void Pane::sort_changed(int col, Qt::SortOrder order)
     win->set_view_value("sort_col", col);
     win->set_view_value("sort_order", int(order));
 }
+
+void Pane::set_pinned_first(bool on)
+{
+    if (on != proxy->pinned_first())
+        proxy->set_pinned_first(on);
+}
+
+bool Pane::pinned_first() const { return proxy->pinned_first(); }
 
 void Pane::sort_by(int col, int order)
 {

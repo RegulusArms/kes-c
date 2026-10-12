@@ -51,6 +51,10 @@ QImage video_frame(const QString &path, int size);
 QImage file_thumb(const QString &path, qint64 mtime, int size);
 QStringList pick_folder_images(const QString &folder, int count, const QString &order, const QString &cover = QString());
 QImage compose_folder(const QList<QImage> &images, int size, const QString &color, const QList<bool> &videos);
+// The symbol of a special folder (icon theme name, e.g. "folder-download": its -symbolic version) drawn on a plain
+// folder in `color`, in a shade of that colour so it shows on any. Unchanged if the theme has no such symbol. UI thread
+// (it uses the icon theme).
+QImage add_folder_symbol(const QImage &folder, const QString &icon, const QString &color);
 QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts);
 // The phone's own small preview of a file (is_device_path; uri from device_uri), scaled to fit size; null if it has
 // none. Worker thread.
@@ -87,9 +91,10 @@ public:
     bool previews_for(const QString &folder) const;      // false if image previews are off for this folder
     void set_folder_color(const QStringList &folders, const QString &color);   // empty color = default
     void set_folder_previews(const QStringList &folders, bool on);
-    QPixmap plain_folder(const QString &color, int size);   // a plain folder icon in `color` (cached)
-    // What to draw for a folder: its preview mosaic (in its colour), a plain folder in its custom colour while there
-    // is no mosaic, or a null pixmap for the theme's folder icon. previews=false skips the mosaic.
+    // a plain folder icon in `color` (cached), with a special folder's symbol (add_folder_symbol) if `symbol` is set
+    QPixmap plain_folder(const QString &color, int size, const QString &symbol = QString());
+    // What to draw for a folder: its preview mosaic (in its colour), else a plain folder in its colour. previews=false
+    // skips the mosaic and gives a plain folder only in a custom colour, else a null pixmap for the theme's icon.
     QPixmap folder_pixmap(const QString &path, qint64 mtime, int size, bool previews = true);
     QHash<QString, QVariantMap> styles;
 
@@ -114,7 +119,7 @@ private:
     void emit_progress();
     void load_covers();
     void set_style(const QStringList &folders, const QString &key, const QVariant &value);
-    QHash<QPair<QString, int>, QPixmap> plain_cache;
+    QHash<QString, QPixmap> plain_cache;   // by colour, size and symbol
     void cache_put(const QString &key, const QPixmap &pm);
 
     QThreadPool pool, dir_pool, device_pool;
@@ -130,6 +135,8 @@ private:
 };
 
 // Pre-generate file thumbnails and folder previews for a whole tree.
+// folders_only: only folder previews (each makes thumbnails of just the few images it shows), not one for every file.
+// depth: how many levels of folders below root to go (-1: all; 1: root and the folders directly in it).
 //
 // Scanning and generating overlap: items are queued to a small worker pool as the walk finds them, so work starts
 // immediately and the total grows until the walk completes. Everything goes to the on-disk caches.
@@ -137,7 +144,7 @@ class RecursiveBuilder : public QThread {
     Q_OBJECT
 public:
     RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent = nullptr,
-                     int workers = 3);
+                     int workers = 3, bool folders_only = false, int depth = -1);
     void cancel() { stop = true; }
 
 Q_SIGNALS:
@@ -155,6 +162,8 @@ private:
     int size;
     std::atomic<bool> stop{false};
     int workers;
+    bool folders_only;
+    int depth;
     qint64 max_bytes;
     thumbs::FolderOpts opts;
     QHash<QString, QString> covers;

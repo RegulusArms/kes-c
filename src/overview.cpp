@@ -18,6 +18,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPointer>
 #include <QProgressBar>
 #include <QPushButton>
@@ -659,22 +660,28 @@ BookmarkCard::BookmarkCard(const QString &target, const QString &label, Thumbnai
 
 void BookmarkCard::update_pic()
 {
-    QString icon = "folder-remote";
-    if (local) {
-        if (isdir(target)) {
-            QFileInfo fi(target);
-            QPixmap pm = thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128);
-            if (!pm.isNull()) {
-                pic->setPixmap(thumbs->scaled(pm, 128));
-                return;
-            }
-            icon = special_dir_icons().value(target, "folder");
-        } else {
-            bool remote = target.startsWith("/run/user") || target.startsWith("/media") || target.startsWith("/mnt");
-            icon = remote ? "folder-remote" : "dialog-question";
-        }
+    if (local && isdir(target)) {
+        QFileInfo fi(target);
+        pic->setPixmap(thumbs->scaled(thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128), 128));
+        return;
     }
-    pic->setPixmap(theme_icon({icon, "folder"}).pixmap(96, 96));
+    // A network location (mounted when opened), or one that isn't there: a drive that isn't connected, or a folder
+    // that's gone. A plain folder in the default colour like the others, with what it is as its symbol; faded when
+    // it isn't there.
+    bool mount = target.startsWith("/run/user") || target.startsWith("/media") || target.startsWith("/mnt");
+    QString symbol = !local || target.startsWith("/run/user") ? "folder-remote" : mount ? "drive-harddisk" : "dialog-question";
+    QPixmap pm = thumbs->scaled(thumbs->plain_folder(thumbs->folder_color, 128, symbol), 128);
+    if (local) {
+        QPixmap faded(pm.size());
+        faded.setDevicePixelRatio(pm.devicePixelRatio());
+        faded.fill(Qt::transparent);
+        QPainter p(&faded);
+        p.setOpacity(0.45);
+        p.drawPixmap(0, 0, pm);
+        p.end();
+        pm = faded;
+    }
+    pic->setPixmap(pm);
 }
 
 // ---------------------------------------------------------------- page

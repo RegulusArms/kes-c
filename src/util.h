@@ -151,8 +151,9 @@ QByteArray read_file(const QString &p, bool *ok = nullptr);
 // os.walk: fn(root, dirs, files) for every folder; with topdown the callback may prune `dirs`.
 // Directories are classified by following links (like os.walk), but links are never descended.
 // Return false from fn to stop the walk.
+// dirs_only: like `tree -d`, files are passed over as they're read (no name made for them) and `files` stays empty.
 using WalkFn = std::function<bool(const QString &root, QStringList &dirs, QStringList &files)>;
-void walk(const QString &top, const WalkFn &fn, bool topdown = true);
+void walk(const QString &top, const WalkFn &fn, bool topdown = true, bool dirs_only = false);
 
 // ---------------------------------------------------------------- strings
 

@@ -118,6 +118,12 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <warning>This empties Starred in Kestrel's sidebar.</warning>
     <action command="delete" search="file" path="$conf/starred.json"/>
   </option>
+  <option id="pinned">
+    <label>Pinned items</label>
+    <description>Delete the list of pinned files and folders</description>
+    <warning>This unpins everything.</warning>
+    <action command="delete" search="file" path="$conf/pinned.json"/>
+  </option>
   <option id="folder_looks">
     <label>Folder covers and colours</label>
     <description>Delete the list of folders given a cover image, a colour, or no image previews</description>
@@ -331,6 +337,6 @@ if (( BLEACHBIT )); then
     mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
     bleachbit_cleaner > "$BLEACHBIT_CLEANER"
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder), Starred," \
-         "and folder covers and colours."
+         "pinned items, and folder covers and colours."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

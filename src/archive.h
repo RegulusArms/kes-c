@@ -95,10 +95,21 @@ ProbeResult probe(const QString &path);   // look inside an archive without a pa
 struct DroppedLink {
     QString path, target, why;
 };
+// Files an extraction kept although they failed their checksum (a damaged or cut-short archive): their names in the
+// archive, and the tool's error lines.
+struct Damaged {
+    QStringList files;
+    QString details;
+};
 // Extract `path` into the existing folder `dest`. overwrite: "overwrite", "skip" or "rename".
 // Raises WrongPassword, Error or Cancelled. Symlinks that led out of dest were removed: they're added to dropped_links.
+// damaged: when given (and can_keep_damaged()), files that fail their checksum are kept as far as they could be
+// extracted and listed in it, and only those failing doesn't fail the job. Without it unrar deletes them, and any
+// damage fails the job.
 QString extract(Task *task, const QString &path, const QString &dest, const QString &password = QString(),
-                const QString &overwrite = "rename", int threads = 0, QList<DroppedLink> *dropped_links = nullptr);
+                const QString &overwrite = "rename", int threads = 0, QList<DroppedLink> *dropped_links = nullptr,
+                Damaged *damaged = nullptr);
+bool can_keep_damaged(const QString &path);   // its tool tells which files are damaged (unrar, 7z, unzip)
 // A symlink target that leads out of the folder an archive is extracted into: an absolute one, or one whose ".."s
 // climb above it. depth: how many folders below that folder the link is.
 bool link_escapes(int depth, const QByteArray &target);

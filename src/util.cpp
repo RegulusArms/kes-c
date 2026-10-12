@@ -658,7 +658,7 @@ QByteArray read_file(const QString &p, bool *ok)
     return f.readAll();
 }
 
-static bool walk_impl(const QString &top, const WalkFn &fn, bool topdown)
+static bool walk_impl(const QString &top, const WalkFn &fn, bool topdown, bool dirs_only)
 {
     DIR *d = ::opendir(enc(top).constData());
     if (!d)
@@ -667,6 +667,8 @@ static bool walk_impl(const QString &top, const WalkFn &fn, bool topdown)
     while (struct dirent *e = ::readdir(d)) {
         if (std::strcmp(e->d_name, ".") == 0 || std::strcmp(e->d_name, "..") == 0)
             continue;
+        if (dirs_only && e->d_type != DT_DIR && e->d_type != DT_LNK && e->d_type != DT_UNKNOWN)
+            continue;   // a file: what d_type says is enough, as for tree -d
         QString name = dec(e->d_name);
         bool is_dir = false, is_link = false;
         if (e->d_type == DT_DIR) {
@@ -684,7 +686,10 @@ static bool walk_impl(const QString &top, const WalkFn &fn, bool topdown)
             if (is_link && stat_(full, st))
                 is_dir = S_ISDIR(st.st_mode);
         }
-        (is_dir ? dirs : files) << name;
+        if (is_dir)
+            dirs << name;
+        else if (!dirs_only)
+            files << name;
         if (is_dir && !is_link)
             walk_into << name;
     }
@@ -696,18 +701,21 @@ static bool walk_impl(const QString &top, const WalkFn &fn, bool topdown)
             QString p = join(top, n);
             if (islink(p))
                 continue;
-            if (!walk_impl(p, fn, topdown))
+            if (!walk_impl(p, fn, topdown, dirs_only))
                 return false;
         }
         return true;
     }
     for (const QString &n : walk_into)
-        if (!walk_impl(join(top, n), fn, topdown))
+        if (!walk_impl(join(top, n), fn, topdown, dirs_only))
             return false;
     return fn(top, dirs, files);
 }
 
-void walk(const QString &top, const WalkFn &fn, bool topdown) { walk_impl(top, fn, topdown); }
+void walk(const QString &top, const WalkFn &fn, bool topdown, bool dirs_only)
+{
+    walk_impl(top, fn, topdown, dirs_only);
+}
 
 // ---------------------------------------------------------------- strings
 

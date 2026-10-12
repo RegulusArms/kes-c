@@ -8,13 +8,13 @@
 #include <QBuffer>
 #include <QDateTime>
 #include <QFile>
+#include <QIcon>
 #include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPainter>
 #include <QPainterPath>
-#include <QSemaphore>
 
 #include <cstdlib>
 #include <fcntl.h>
@@ -438,6 +438,37 @@ QImage compose_folder(const QList<QImage> &images, int size, const QString &colo
     return canvas;
 }
 
+QImage add_folder_symbol(const QImage &folder, const QString &icon, const QString &color)
+{
+    int s = folder.width();
+    QIcon sym = icon.isEmpty() ? QIcon() : theme_icon(icon + "-symbolic");
+    if (sym.isNull() || s < 32)   // too small to make out
+        return folder;
+    int n = qRound(s * 0.36);
+    QImage glyph = sym.pixmap(QSize(n, n)).toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (glyph.isNull())
+        return folder;
+    if (glyph.width() != n)   // a theme with fixed sizes only (Breeze has 16-48 px)
+        glyph = glyph.scaled(n, n, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // the front panel's colour (compose_folder), made darker on a light folder and lighter on a dark one
+    QColor front = QColor(color).lighter(118);
+    float h, sat, l, a;
+    front.getHslF(&h, &sat, &l, &a);
+    QColor tone = QColor::fromHslF(h, sat, l > 0.55f ? l - 0.42f : l + 0.42f, 0.9f);
+    QPainter g(&glyph);
+    g.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    g.fillRect(glyph.rect(), tone);
+    g.end();
+    QImage out = folder.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter p(&out);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    // centred on the front panel (compose_folder: from 0.22 to 0.97 of the height)
+    double cx = s / 2.0, cy = s * (0.03 + 0.19 + 0.75 / 2);
+    p.drawImage(QPointF(cx - glyph.width() / 2.0, cy - glyph.height() / 2.0), glyph);
+    p.end();
+    return out;
+}
+
 QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts)
 {
     QString tag = QString("v2|%1|%2|%3|%4|%5").arg(mtime).arg(opts.count).arg(opts.order, opts.color, opts.cover);
@@ -696,12 +727,17 @@ void ThumbnailManager::set_folder_previews(const QStringList &folders, bool on)
     set_style(folders, "previews", on ? QVariant() : QVariant(false));
 }
 
-QPixmap ThumbnailManager::plain_folder(const QString &color, int size)
+QPixmap ThumbnailManager::plain_folder(const QString &color, int size, const QString &symbol)
 {
-    QPair<QString, int> k(color, thumbs::bucket_for(size));
+    int b = thumbs::bucket_for(size);
+    QString k = QStringList{color, QString::number(b), symbol}.join('\x1f');
     auto it = plain_cache.find(k);
-    if (it == plain_cache.end())
-        it = plain_cache.insert(k, QPixmap::fromImage(thumbs::compose_folder({}, k.second, color, {})));
+    if (it == plain_cache.end()) {
+        QImage img = thumbs::compose_folder({}, b, color, {});
+        if (!symbol.isEmpty())
+            img = thumbs::add_folder_symbol(img, symbol, color);
+        it = plain_cache.insert(k, QPixmap::fromImage(img));
+    }
     return *it;
 }
 
@@ -712,8 +748,13 @@ QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int s
         if (!pm.isNull())
             return pm;
     }
+    // with previews on, a folder without images (or whose preview is still being made) is a plain folder in its
+    // colour, like the folders beside it; with them off, only a folder with its own colour isn't the theme's icon
+    QString symbol = special_dir_icons().value(path);   // Downloads, Music…: their symbol on the plain folder
+    if (previews)
+        return plain_folder(color_for(path), size, symbol);
     QString color = custom_color(path);
-    return color.isEmpty() ? QPixmap() : plain_folder(color, size);
+    return color.isEmpty() ? QPixmap() : plain_folder(color, size, symbol);
 }
 
 void ThumbnailManager::set_cover(const QString &folder, const QString &image)
@@ -920,8 +961,9 @@ void ThumbnailManager::on_done(const QString &k, const QString &path, const QIma
 // ---------------------------------------------------------------- recursive pre-generation
 
 RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent,
-                                   int workers)
-    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), current(root)
+                                   int workers, bool folders_only, int depth)
+    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
+      depth(depth), current(root)
 {
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
@@ -984,40 +1026,42 @@ void RecursiveBuilder::run()
     exts.unite(VIDEO_EXTS);
     QThreadPool workers_pool;
     workers_pool.setMaxThreadCount(workers);
-    QSemaphore slots(workers * 16);   // cap queued work / memory
+    // The walk queues everything it finds without waiting for the workers: listing a tree takes seconds where making
+    // its previews takes minutes, so the total is known early (a cap on queued work held the walk to the workers' pace,
+    // "scanning" until nearly the end). The queue is a path per item.
     auto submit = [&](char kind, const QString &path) {
-        while (!slots.tryAcquire(1, 200))
-            if (stop)
-                return false;
+        if (stop)
+            return false;
         {
             QMutexLocker g(&lock);
             total += 1;
         }
-        workers_pool.start([this, kind, path, &slots]() {
-            one(kind, path);
-            slots.release();
-        });
+        workers_pool.start([this, kind, path]() { one(kind, path); });
         return true;
     };
+    QString top = rstrip(root, '/');
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
         if (stop)
             return false;
         QStringList keep;
-        for (const QString &d : dirs)
-            if (!d.startsWith('.'))
-                keep << d;
+        int level = rstrip(dir, '/') == top ? 0 : QStringView(dir).mid(top.size()).count('/');
+        if (depth < 0 || level < depth)
+            for (const QString &d : dirs)
+                if (!d.startsWith('.'))
+                    keep << d;
         natural_sort(keep);
         dirs = keep;
         natural_sort(files);
-        for (const QString &f : files)
-            if (!f.startsWith('.') && exts.contains(ext_of(f)))
-                if (!submit('f', join(dir, f)))
-                    return false;
+        if (!folders_only)
+            for (const QString &f : files)
+                if (!f.startsWith('.') && exts.contains(ext_of(f)))
+                    if (!submit('f', join(dir, f)))
+                        return false;
         if (stop || (!no_previews.contains(dir) && !submit('d', dir)))
             return false;
         emit_progress();
         return true;
-    });
+    }, true, folders_only);   // folder previews only: just the folders, like tree -d (each preview lists its own)
     {
         QMutexLocker g(&lock);
         scanning = false;

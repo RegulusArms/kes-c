@@ -38,6 +38,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSlider>
+#include <QTabBar>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStorageInfo>
@@ -90,6 +91,8 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     tabs->setTabBarAutoHide(true);
     connect(tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
     connect(tabs, &QTabWidget::currentChanged, this, &MainWindow::tab_changed);
+    tabs->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(tabs->tabBar(), &QWidget::customContextMenuRequested, this, &MainWindow::tab_menu);
     info = new InfoPanel(thumbs);
     info->folder_previews = folder_previews;
     split = new QSplitter;
@@ -279,6 +282,17 @@ void MainWindow::fill_sort_menu()
         a->setCheckable(true);
         a->setChecked(o == order);
     }
+    m->addSeparator();
+    QAction *a = m->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
+    a->setCheckable(true);
+    a->setChecked(p->pinned_first());
+}
+
+void MainWindow::set_pinned_first(bool on)
+{
+    set_view_value("pinned_first", on);
+    for (Pane *p : panes())
+        p->set_pinned_first(on);
 }
 
 QAction *MainWindow::act(const QString &text, const QStringList &keys, std::function<void()> fn,
@@ -474,6 +488,47 @@ void MainWindow::close_tab(int i)
     w->deleteLater();
 }
 
+// A copy of tab i beside it, with its history.
+void MainWindow::duplicate_tab(int i)
+{
+    auto *src = qobject_cast<Pane *>(tabs->widget(i));
+    Pane *p = src ? new_tab(src->path, false) : nullptr;
+    if (!p)
+        return;
+    p->back_stack = src->back_stack;
+    p->fwd_stack = src->fwd_stack;
+    tabs->tabBar()->moveTab(tabs->indexOf(p), i + 1);
+    tabs->setCurrentWidget(p);
+    pane_path_changed(p);   // the back/forward buttons
+}
+
+// The menu of tab i (right-click on the tab). The caller deletes it.
+QMenu *MainWindow::build_tab_menu(int i)
+{
+    auto *m = new QMenu(this);
+    m->addAction("Duplicate Tab", this, [this, i]() { duplicate_tab(i); });
+    if (!chooser_mode)
+        m->addAction("Open in New Window", this, [this, i]() {
+            if (auto *p = qobject_cast<Pane *>(tabs->widget(i))) {
+                open_window({p->path});
+                close_tab(i);
+            }
+        });
+    m->addSeparator();
+    m->addAction("Close Tab", this, [this, i]() { close_tab(i); });
+    return m;
+}
+
+void MainWindow::tab_menu(const QPoint &pos)
+{
+    int i = tabs->tabBar()->tabAt(pos);
+    if (i < 0)
+        return;
+    QMenu *m = build_tab_menu(i);
+    m->exec(tabs->tabBar()->mapToGlobal(pos));
+    delete m;
+}
+
 void MainWindow::tab_changed(int)
 {
     if (pane()) {
@@ -633,7 +688,7 @@ void MainWindow::set_folder_previews(bool on)
 
 // -- recursive preview build
 
-void MainWindow::build_previews(const QString &root)
+void MainWindow::build_previews(const QString &root, bool folders_only, int depth)
 {
     if (builder) {
         QMessageBox::information(this, "Generate Previews",
@@ -641,14 +696,14 @@ void MainWindow::build_previews(const QString &root)
         return;
     }
     int size = pane() ? pane()->grid_size : 160;
-    auto *b = new RecursiveBuilder(root, size, thumbs);
+    auto *b = new RecursiveBuilder(root, size, thumbs, nullptr, 3, folders_only, depth);
     connect(b, &RecursiveBuilder::progress, this, &MainWindow::build_progress);
     connect(b, &RecursiveBuilder::finished_build, this, &MainWindow::build_finished);
     connect(b, &QThread::finished, b, &QObject::deleteLater);
     builder = b;
     build_root = root;
     QString name = basename(rstrip(root, '/'));
-    build_label->setText("Previews: " + (name.isEmpty() ? root : name));
+    build_label->setText((folders_only ? "Folder previews: " : "Previews: ") + (name.isEmpty() ? root : name));
     build_label->setToolTip(root);
     build_bar->setRange(0, 0);   // busy while scanning
     build_bar->setFormat("Scanning…");
@@ -827,6 +882,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                       [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::AscendingOrder); });
         sm->addAction("Descending", this,
                       [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::DescendingOrder); });
+        sm->addSeparator();
+        QAction *sf = sm->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
+        sf->setCheckable(true);
+        sf->setChecked(p->pinned_first());
         QAction *a = m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); });
         a->setCheckable(true);
         a->setChecked(show_hidden);
@@ -834,6 +893,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); });
         m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
+                     [this, cur]() { build_previews(cur, true, 1); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
+                     [this, cur]() { build_previews(cur, true); });
         if (in_trash(join(cur, "x"))) {
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
             if (fileops::can_shred())
@@ -928,6 +991,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     bool starred = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_starred(x); });
     m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
                  starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); });
+    // pinned in its own folder: sorted to the top there by Pinned & Starred First
+    bool pinned = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_pinned(x); });
+    m->addAction(icon({"view-pin-symbolic", "view-pin", "pin"}), pinned ? "Unpin" : "Pin", this,
+                 [paths, pinned]() { places::set_pinned(paths, !pinned); });
 
     QString here = p->dir();   // empty in Starred / Recent: no "… Here" there
     QMenu *lm = m->addMenu(icon({"emblem-symbolic-link", "insert-link"}), "Links && Shortcuts");
@@ -1008,6 +1075,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         });
         m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
                      [this, single]() { build_previews(single); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
+                     [this, single]() { build_previews(single, true, 1); });
+        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
+                     [this, single]() { build_previews(single, true); });
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
     }
     m->addSeparator();
