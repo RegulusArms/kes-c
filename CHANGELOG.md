@@ -3,7 +3,11 @@
 What changed in each version of Kestrel Explorer, newest first. Versions with a GitHub release: 0.2.1-alpha1,
 0.2.1-alpha.2, 0.2.1-alpha.3, 0.3.0-alpha.0, 0.3.0-alpha.2 and 0.3.1-alpha.2.
 
-## 0.3.1-alpha.4
+## 0.3.1-alpha.5
+
+- Nothing yet.
+
+## 0.3.1-alpha.4 (2026-10-12)
 
 - **Keep damaged files when extracting:** Extract To… has a new "Keep damaged files" option for rar, 7z and zip
   archives. Files that fail their checksum are kept as far as they could be extracted, so the extraction no longer
@@ -17,6 +21,8 @@ What changed in each version of Kestrel Explorer, newest first. Versions with a 
   fast as the previews were made, so "scanning…" lasted almost the whole build.
   The folder-preview builds only look at folders while scanning, like `tree -d`: each folder's files are read when
   its preview is made, as when you open it.
+- **Documentation:** the README is now a short overview. The details moved to docs/ (features, install, archives,
+  admin sessions, dependencies, development, performance), and the version history to this CHANGELOG.
 
 ## 0.3.1-alpha.3 (2026-10-12)
 
