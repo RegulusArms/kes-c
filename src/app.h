@@ -69,7 +69,8 @@ public:
     void toggle_view();
     void sync_zoom_slider();
     void set_folder_previews(bool on);
-    void build_previews(const QString &root);
+    // folders_only: only folder previews, not every file's thumbnail; depth: as RecursiveBuilder's (-1: the whole tree)
+    void build_previews(const QString &root, bool folders_only = false, int depth = -1);
     void stop_build();
     void toggle_hidden(bool on);
     void update_status();

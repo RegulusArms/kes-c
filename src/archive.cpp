@@ -859,7 +859,7 @@ struct ExtractCommand {
 };
 
 static ExtractCommand extract_command(const QString &path, const QString &dest, const QString &password,
-                                      const QString &overwrite, int threads)
+                                      const QString &overwrite, int threads, bool keep_damaged)
 {
     ExtractCommand c;
     c.tool = extract_tool(path);
@@ -884,6 +884,8 @@ static ExtractCommand extract_command(const QString &path, const QString &dest, 
             c.stdin_text = password + "\n";
         if (threads)
             c.argv << QString("-mt%1").arg(threads);
+        if (keep_damaged)
+            c.argv << "-kb";   // keep a file that fails its checksum (unrar deletes it otherwise; 7z and unzip keep it)
         c.argv << "--" << path << rstrip(dest, '/') + "/";
     } else if (t == "zpaq") {
         c.argv = QStringList{tool("zpaq"), "x", path, "-to", dest};
@@ -1203,8 +1205,37 @@ private:
     struct timespec since;
 };
 
+bool can_keep_damaged(const QString &path)
+{
+    QString t = extract_tool(path);
+    return t == "unrar" || t == "7z" || t == "unzip";
+}
+
+// The files `t` said failed their checksum or were cut short, by their names in the archive (unzip's by the path it
+// wrote, made relative to dest again)
+static QStringList damaged_files(const QString &t, const QString &text, const QString &dest)
+{
+    static const QRegularExpression unrar_re("^(.+?)\\s+- checksum error$|(?:Checksum error|CRC failed) in the encrypted "
+                                             "file (.+?)\\. Corrupt file or wrong password",
+                                             QRegularExpression::MultilineOption);
+    static const QRegularExpression sevenz_re("ERROR: (?:CRC Failed|Data Error|Unexpected end of data)[^:\\n]* : ([^\\n]+)");
+    static const QRegularExpression unzip_re("(?:extracting|inflating): +(.+?) +bad CRC");
+    const QRegularExpression &re = t == "unrar" ? unrar_re : t == "7z" ? sevenz_re : unzip_re;
+    QStringList files;
+    auto it = re.globalMatch(QString(text).remove('\b').replace('\r', '\n'));
+    while (it.hasNext()) {
+        auto m = it.next();
+        QString f = m.captured(1).isEmpty() ? m.captured(2) : m.captured(1);
+        if (t == "unzip" && f.startsWith(rstrip(dest, '/') + "/"))
+            f = f.mid(rstrip(dest, '/').size() + 1);
+        if (!f.isEmpty() && !files.contains(f))
+            files << f;
+    }
+    return files;
+}
+
 QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
-                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links)
+                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links, Damaged *damaged)
 {
     QList<DroppedLink> unused;
     QList<DroppedLink> &report = dropped_links ? *dropped_links : unused;
@@ -1218,7 +1249,8 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
     }
     if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
-    ExtractCommand c = extract_command(path, dest, password, overwrite, threads);
+    bool keep_damaged = damaged && can_keep_damaged(path);
+    ExtractCommand c = extract_command(path, dest, password, overwrite, threads, keep_damaged);
     EscapingLinkSweep sweep(dest, c.tool, report);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
                                     QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
@@ -1229,9 +1261,21 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
         throw WrongPassword();
     if (t == "7z" && rc == 2 && text.toLower().contains("encrypted"))
         throw WrongPassword();
+    if (keep_damaged) {   // damage is the tools' "data error" exit code: unrar 3, 7z 2, unzip 2 (also used for others)
+        QStringList broken = damaged_files(t, text, dest);
+        if (!broken.isEmpty() && (rc <= 1 || (t == "unrar" && rc == 3) || ((t == "7z" || t == "unzip") && rc == 2))) {
+            damaged->files = broken;
+            damaged->details = tail(text, 20);
+            return dest;
+        }
+    }
     if (rc != 0 && !((t == "7z" || t == "unrar") && rc == 1) && !(t == "unzip" && rc == 1)) {
         QString tl = tail(text);
-        throw Error(tl.isEmpty() ? QString("%1 failed (exit code %2)").arg(t, QString::number(rc)) : tl);
+        QString msg = tl.isEmpty() ? QString("%1 failed (exit code %2)").arg(t, QString::number(rc)) : tl;
+        if (!keep_damaged && can_keep_damaged(path) && !damaged_files(t, text, dest).isEmpty())
+            msg += "\n\nSome files in the archive are damaged. To keep what could be extracted of them, use "
+                   "Extract To… and tick “Keep damaged files”.";
+        throw Error(msg);
     }
     return dest;
 }
