@@ -122,6 +122,8 @@ context menu, empty space > Sort By > Modified
 context menu, empty space > Sort By > ---
 context menu, empty space > Sort By > Ascending
 context menu, empty space > Sort By > Descending
+context menu, empty space > Sort By > ---
+context menu, empty space > Sort By > Pinned & Starred First (toggle)
 context menu, empty space > Show Hidden Files (toggle)
 context menu, empty space > ---
 context menu, empty space > Open in Terminal
@@ -143,6 +145,7 @@ context menu, a file > Copy Path / Name > Copy Full Path
 context menu, a file > Copy Path / Name > Copy Name
 context menu, a file > Copy Path / Name > Copy URI
 context menu, a file > Star
+context menu, a file > Pin
 context menu, a file > Links & Shortcuts
 context menu, a file > Links & Shortcuts > Create Symbolic Link Here
 context menu, a file > Links & Shortcuts > Create Relative Symbolic Link Here
@@ -177,6 +180,7 @@ context menu, a folder > Copy Path / Name > Copy Full Path
 context menu, a folder > Copy Path / Name > Copy Name
 context menu, a folder > Copy Path / Name > Copy URI
 context menu, a folder > Star
+context menu, a folder > Pin
 context menu, a folder > Links & Shortcuts
 context menu, a folder > Links & Shortcuts > Create Symbolic Link Here
 context menu, a folder > Links & Shortcuts > Create Relative Symbolic Link Here
@@ -225,6 +229,7 @@ context menu, two files > Copy Path / Name > Copy Full Path
 context menu, two files > Copy Path / Name > Copy Name
 context menu, two files > Copy Path / Name > Copy URI
 context menu, two files > Star
+context menu, two files > Pin
 context menu, two files > Links & Shortcuts
 context menu, two files > Links & Shortcuts > Create Symbolic Link Here
 context menu, two files > Links & Shortcuts > Create Relative Symbolic Link Here

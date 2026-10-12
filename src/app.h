@@ -117,6 +117,7 @@ public:
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
     void set_view_value(const QString &key, const QVariant &value);
     int default_zoom(bool grid) const;
+    void set_pinned_first(bool on);   // Pinned & Starred First, for this window's tabs and its saved view setting
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
