@@ -142,6 +142,57 @@ int main(int argc, char **argv)
     check(filled && g_thumbs->folder_pixmap(empty_dir, empty_mtime, 128, false).isNull(),
           "a folder without images is drawn in the default folder colour like the others (the theme's icon only with "
           "folder previews off)");
+    // a special folder (Downloads, Home…) without images shows its symbol on the plain folder, in a shade of the
+    // folder's colour that stands out from it, whatever the colour
+    setup_icon_theme();
+    if (QIcon::hasThemeIcon("folder-download-symbolic") && QIcon::hasThemeIcon("user-home-symbolic")) {
+        auto shows_symbol = [](const QString &color) {
+            QImage plain = g_thumbs->plain_folder(color, 128).toImage();
+            QImage sym = g_thumbs->plain_folder(color, 128, "folder-download").toImage();
+            int front = QColor(plain.pixel(64, 80)).lightness(), stands_out = 0;
+            for (int y = 0; y < sym.height(); ++y)
+                for (int x = 0; x < sym.width(); ++x)
+                    if (sym.pixel(x, y) != plain.pixel(x, y) && std::abs(QColor(sym.pixel(x, y)).lightness() - front) > 70)
+                        stands_out += 1;
+            return stands_out > 100;
+        };
+        QStringList faint;
+        for (const QString &c : {QString("#3584e4"), QString("#f6d32d"), QString("#ffffff"), QString("#000000")})
+            if (!shows_symbol(c))
+                faint << c;
+        check(faint.isEmpty(), "a special folder's symbol stands out on a plain folder of any colour (light, dark, "
+                               "white, black)" + (faint.isEmpty() ? QString() : " (not on " + faint.join(", ") + ")"));
+        QString home = HOME();
+        qint64 home_mtime = QFileInfo(home).lastModified().toSecsSinceEpoch();
+        QImage want = g_thumbs->plain_folder(g_thumbs->color_for(home), 128, "user-home").toImage();
+        bool symbol = wait_for([&]() { return g_thumbs->folder_pixmap(home, home_mtime, 128).toImage() == want; }) &&
+                      want != g_thumbs->plain_folder(g_thumbs->color_for(home), 128).toImage();
+        check(symbol, "a special folder without images (the home folder) is drawn with its symbol");
+    } else {
+        skip("special folder symbols (the icon theme has no folder-download-symbolic)");
+    }
+    // a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default
+    // colour, a network one a plain folder in it: not the theme's folder icon
+    {
+        auto card_pic = [](const QString &target) {
+            BookmarkCard card(target, "x", g_thumbs);
+            QList<QLabel *> labels = card.findChildren<QLabel *>();
+            return labels.isEmpty() ? QImage() : labels.first()->pixmap().toImage();
+        };
+        QImage drive = card_pic("/media/kes-test-unplugged/folder"), gone = card_pic(home_path("gone")),
+               net = card_pic("smb://nas/share");
+        // a point on the front panel, beside the symbol
+        int fh = QColor(g_thumbs->folder_color).lighter(118).hsvHue();
+        auto colored = [&](const QImage &img, bool faded) {
+            if (img.isNull())
+                return false;
+            QColor c = img.pixelColor(img.width() / 5, img.height() * 3 / 4);
+            return std::abs(c.hsvHue() - fh) <= 6 && (faded ? c.alpha() > 60 && c.alpha() < 160 : c.alpha() == 255);
+        };
+        check(colored(drive, true) && colored(gone, true) && colored(net, false),
+              "a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default "
+              "colour, a network one a folder in it");
+    }
     check(thumbs::follows_accent("accent") && thumbs::follows_accent("") && thumbs::follows_accent("#D9652F") &&
               !thumbs::follows_accent("#33d17a"),
           "“accent”, no setting and the old fixed default follow the accent; a chosen colour doesn't");
