@@ -1,11 +1,11 @@
 #!/usr/bin/python3
-"""Benchmark Kestrel Explorer (C++) against GNOME Files, or Nemo on Linux Mint. See README.md.
+"""Benchmark Kestrel Explorer (C++) against GNOME Files, or Nemo on Linux Mint. See bench/README.md; the results go in docs/performance.md.
 
   bench/run.sh                      build, generate the data (first time), run everything, print the tables
   bench/run.sh --runs 5             more runs per measurement (medians are reported)
   bench/run.sh --only startup,copy  re-run only some measurements (the rest are kept from the last run)
   bench/run.sh --report             rebuild the tables from the last results without running anything
-The tables are printed and written to bench/results.md, as Performance sections ready to paste into the README.
+The tables are printed and written to bench/results.md, as Performance sections ready to paste into docs/performance.md.
 
 Every run happens on a headless X server (Xvfb) with a fresh home folder and a private D-Bus session bus on which
 only the desktop's settings (dconf) and virtual file system (gvfs) services can start, so caches are empty and no
@@ -570,7 +570,7 @@ TIMED = [("Startup (launch to window shown)", "startup", "s"),
 
 
 def tables(res, other):
-    """The tables comparing Kestrel with `other` (a key of OTHERS), the summary for the README text, and notes on what
+    """The tables comparing Kestrel with `other` (a key of OTHERS), the summary for the docs/performance.md text, and notes on what
     `other` couldn't be timed on."""
     apps = ("kestrel", other)
     if not OTHERS[other]["thumbnails"]:   # also drops results saved before its folder tests were skipped
@@ -755,8 +755,8 @@ These are measured inside the app, because {label} has no equivalent ("Generate 
 
 
 def write_results(sections):
-    """bench/results.md: a README Performance section for each app compared with ("Kestrel vs GNOME Files", and/or
-    "Kestrel vs Nemo" from a run on Linux Mint), to paste into the README."""
+    """bench/results.md: a Performance section (docs/performance.md) for each app compared with ("Kestrel vs GNOME Files", and/or
+    "Kestrel vs Nemo" from a run on Linux Mint), to paste into docs/performance.md."""
     path = os.path.join(HERE, "results.md")
     with open(path, "w") as f:
         f.write("\n".join(sections))
