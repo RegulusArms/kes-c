@@ -95,6 +95,9 @@ int main(int argc, char **argv)
         walk(m, "context menu, " + name, out);
         delete m;
     }
+    QMenu *tab_menu = w->build_tab_menu(0);
+    walk(tab_menu, "context menu, a tab", out);
+    delete tab_menu;
 
     // -- accessibility: every control has a name a screen reader can say (Qt's own accessibility layer, which screen
     // readers use), as the window opens and with the search bar, the list view and the info panel open
@@ -161,6 +164,40 @@ int main(int argc, char **argv)
     check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view, and the folder is highlighted "
                                   "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
+
+    // -- the tab menu: Duplicate Tab puts a copy (same folder and history) beside the tab, Open in New Window moves the
+    // tab to a new window, Close Tab closes it
+    auto tab_action = [&](int i, const QString &text) {
+        QMenu *m = w->build_tab_menu(i);
+        for (QAction *a : m->actions())
+            if (label(a) == text)
+                a->trigger();
+        delete m;
+    };
+    w->navigate(home_path("folder"));
+    wait_for([&]() { return w->pane()->path == home_path("folder"); });
+    w->new_tab(home);   // the tab to the right of the one duplicated
+    int before = w->tabs->count();
+    tab_action(0, "Duplicate Tab");
+    auto *copy = qobject_cast<Pane *>(w->tabs->widget(1));
+    auto *orig = qobject_cast<Pane *>(w->tabs->widget(0));
+    bool dup = w->tabs->count() == before + 1 && copy && copy != orig && copy->path == home_path("folder") &&
+               w->pane() == copy && copy->back_stack.size() == orig->back_stack.size() && !copy->back_stack.isEmpty() &&
+               copy->back_stack.last().path == home;
+    check(dup, "Duplicate Tab opens a copy of the tab (its folder and back history) right after it, and shows it");
+    int windows = WINDOWS.size(), tabs_before = w->tabs->count();
+    tab_action(1, "Open in New Window");
+    spin(100);
+    MainWindow *nw = WINDOWS.size() == windows + 1 ? WINDOWS.last() : nullptr;
+    bool moved = nw && nw != w && wait_for([&]() { return nw->pane() && nw->pane()->path == home_path("folder"); }) &&
+                 w->tabs->count() == tabs_before - 1;
+    check(moved, "Open in New Window opens the tab's folder in a new window and closes the tab here");
+    if (nw)
+        nw->close();
+    tabs_before = w->tabs->count();
+    QWidget *last = w->tabs->widget(tabs_before - 1);
+    tab_action(tabs_before - 1, "Close Tab");
+    check(w->tabs->count() == tabs_before - 1 && w->tabs->indexOf(last) < 0, "Close Tab in the tab menu closes that tab");
 
     QString dump = qEnvironmentVariable("KESTREL_UI_DUMP");
     if (!dump.isEmpty()) {
