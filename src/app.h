@@ -57,6 +57,9 @@ public:
     QList<Pane *> panes() const;
     Pane *new_tab(const QString &path, bool activate = true);
     void close_tab(int i);
+    void duplicate_tab(int i);
+    void tab_menu(const QPoint &pos);
+    QMenu *build_tab_menu(int i);
     void navigate(const QString &path);
     QString homepage() const;
     void go_home();

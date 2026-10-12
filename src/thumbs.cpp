@@ -712,6 +712,10 @@ QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int s
         if (!pm.isNull())
             return pm;
     }
+    // with previews on, a folder without images (or whose preview is still being made) is a plain folder in its
+    // colour, like the folders beside it; with them off, only a folder with its own colour isn't the theme's icon
+    if (previews)
+        return plain_folder(color_for(path), size);
     QString color = custom_color(path);
     return color.isEmpty() ? QPixmap() : plain_folder(color, size);
 }

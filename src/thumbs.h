@@ -88,8 +88,8 @@ public:
     void set_folder_color(const QStringList &folders, const QString &color);   // empty color = default
     void set_folder_previews(const QStringList &folders, bool on);
     QPixmap plain_folder(const QString &color, int size);   // a plain folder icon in `color` (cached)
-    // What to draw for a folder: its preview mosaic (in its colour), a plain folder in its custom colour while there
-    // is no mosaic, or a null pixmap for the theme's folder icon. previews=false skips the mosaic.
+    // What to draw for a folder: its preview mosaic (in its colour), else a plain folder in its colour. previews=false
+    // skips the mosaic and gives a plain folder only in a custom colour, else a null pixmap for the theme's icon.
     QPixmap folder_pixmap(const QString &path, qint64 mtime, int size, bool previews = true);
     QHash<QString, QVariantMap> styles;
 

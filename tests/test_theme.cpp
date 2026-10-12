@@ -134,6 +134,14 @@ int main(int argc, char **argv)
           "the Overview's cards take the new colours");
     check(g_thumbs->folder_color == "#2a7fd4" && g_thumbs->color_for(home_path("any")) == "#2a7fd4",
           "the default folder colour follows the accent, also in folder previews");
+    QString empty_dir = home_path("no-images");
+    makedirs(empty_dir, true);
+    qint64 empty_mtime = QFileInfo(empty_dir).lastModified().toSecsSinceEpoch();
+    QImage plain = g_thumbs->plain_folder(g_thumbs->folder_color, 128).toImage();
+    bool filled = wait_for([&]() { return g_thumbs->folder_pixmap(empty_dir, empty_mtime, 128).toImage() == plain; });
+    check(filled && g_thumbs->folder_pixmap(empty_dir, empty_mtime, 128, false).isNull(),
+          "a folder without images is drawn in the default folder colour like the others (the theme's icon only with "
+          "folder previews off)");
     check(thumbs::follows_accent("accent") && thumbs::follows_accent("") && thumbs::follows_accent("#D9652F") &&
               !thumbs::follows_accent("#33d17a"),
           "“accent”, no setting and the old fixed default follow the accent; a chosen colour doesn't");

@@ -38,6 +38,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSlider>
+#include <QTabBar>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStorageInfo>
@@ -90,6 +91,8 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     tabs->setTabBarAutoHide(true);
     connect(tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
     connect(tabs, &QTabWidget::currentChanged, this, &MainWindow::tab_changed);
+    tabs->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(tabs->tabBar(), &QWidget::customContextMenuRequested, this, &MainWindow::tab_menu);
     info = new InfoPanel(thumbs);
     info->folder_previews = folder_previews;
     split = new QSplitter;
@@ -483,6 +486,47 @@ void MainWindow::close_tab(int i)
     w->stop_search();
     tabs->removeTab(i);
     w->deleteLater();
+}
+
+// A copy of tab i beside it, with its history.
+void MainWindow::duplicate_tab(int i)
+{
+    auto *src = qobject_cast<Pane *>(tabs->widget(i));
+    Pane *p = src ? new_tab(src->path, false) : nullptr;
+    if (!p)
+        return;
+    p->back_stack = src->back_stack;
+    p->fwd_stack = src->fwd_stack;
+    tabs->tabBar()->moveTab(tabs->indexOf(p), i + 1);
+    tabs->setCurrentWidget(p);
+    pane_path_changed(p);   // the back/forward buttons
+}
+
+// The menu of tab i (right-click on the tab). The caller deletes it.
+QMenu *MainWindow::build_tab_menu(int i)
+{
+    auto *m = new QMenu(this);
+    m->addAction("Duplicate Tab", this, [this, i]() { duplicate_tab(i); });
+    if (!chooser_mode)
+        m->addAction("Open in New Window", this, [this, i]() {
+            if (auto *p = qobject_cast<Pane *>(tabs->widget(i))) {
+                open_window({p->path});
+                close_tab(i);
+            }
+        });
+    m->addSeparator();
+    m->addAction("Close Tab", this, [this, i]() { close_tab(i); });
+    return m;
+}
+
+void MainWindow::tab_menu(const QPoint &pos)
+{
+    int i = tabs->tabBar()->tabAt(pos);
+    if (i < 0)
+        return;
+    QMenu *m = build_tab_menu(i);
+    m->exec(tabs->tabBar()->mapToGlobal(pos));
+    delete m;
 }
 
 void MainWindow::tab_changed(int)

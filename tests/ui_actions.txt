@@ -247,3 +247,7 @@ context menu, two files > Move to Trash
 context menu, two files > Delete Permanently…
 context menu, two files > ---
 context menu, two files > Properties
+context menu, a tab > Duplicate Tab
+context menu, a tab > Open in New Window
+context menu, a tab > ---
+context menu, a tab > Close Tab
