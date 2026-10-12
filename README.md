@@ -110,7 +110,7 @@ The installer does all of this (everything but the PATH) by running `kes-setup`,
 **Cleaning up with BleachBit:** `kes-setup --bleachbit` adds Kestrel Explorer to [BleachBit](https://www.bleachbit.org) (as `~/.config/bleachbit/cleaners/kestrel-explorer.xml`), with four options:
 - **Cache:** folder preview mosaics, the video clips played in the file view, copies of phone videos made to play them, and exiftool's tag lists.
 - **History:** the servers you connected to recently, and the folder the last Open or Save dialog was left in. These are taken out of Kestrel's settings, and every other setting stays.
-- **Starred items** and **Folder covers and colours:** the lists of starred files and folders, and of folders given a cover, a colour or no image previews. You chose these, so BleachBit warns before cleaning them.
+- **Starred items**, **Pinned items** and **Folder covers and colours:** the lists of starred files and folders, of pinned ones, and of folders given a cover, a colour or no image previews. You chose these, so BleachBit warns before cleaning them.
 
 The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files are cleaned by BleachBit's own Thumbnails and Recent documents options, and undo history is never written to disk. BleachBit won't clean while Kestrel is open. `kes-setup --undo` removes the cleaner again.
 
@@ -224,6 +224,7 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 - Duplicate, Move To…, Copy To…, and Compress / Extract (see [Archives](#archives)).
 - **Undo (Ctrl+Z)** for moves, renames (also batch), Move to Trash, and anything created by copy, paste, duplicate, new folder/file or links (undoing those moves them to the trash). The Edit menu shows what will be undone. Permanent deletes, merges into existing folders, archives and admin-session operations can't be undone. Each Kestrel undoes only what was done in it (its own windows); turn on Preferences → *Share undo between all Kestrel windows* to have Ctrl+Z in any window undo the newest action from any Kestrel. The shared history is kept by the tower (see below) and is cleared when the last Kestrel closes.
 - **Starred and Recent** in the sidebar. Right-click anything → **Star** (starred items show a ★). Recent lists the desktop's recently used files; files you open from Kestrel are added unless "File History" is off in GNOME's Privacy settings.
+- **Pinned items.** Right-click → **Pin** marks an item in its own folder (a red pin); it isn't added to Starred. **Sort → Pinned & Starred First** puts pinned and starred items at the top of their folder, each group still in the chosen order.
 - **Several Kestrels stay in sync.** Each folder opened from another app may start its own Kestrel, so a crash only closes that one. A small background helper, the tower (`kes --atc`, started automatically and gone about 10 seconds after the last Kestrel closes), passes changes between them: saved Preferences, stars, folder colours, covers and preview switches, bookmarks, and cleared preview caches show up in every open window straight away, and every window's status bar also shows the operations running in the others. A newly opened window sees operations already running, and a Kestrel that closes or crashes drops out of the list. With Preferences → *Open folders from other apps as tabs in an open Kestrel window* (off by default), a folder opened from another app, from the terminal (`kes ~/Pictures`) or with "Show in folder" becomes a tab in the Kestrel window you used last, instead of a new window. Starting Kestrel without a folder (e.g. from the app grid) still opens a new window, and a Kestrel started from a conda environment you activated always opens its own. Admin sessions are not shared: each window keeps its own.
 - **Search file contents**: the search bar's *File contents* option searches inside files using the desktop's search index (`localsearch`), within the current folder and its subfolders.
 - **Thumbnails for other files** (PDFs, fonts, audio covers, comics…) come from the system thumbnailers GNOME Files uses. Images and videos keep Kestrel's own fast thumbnailing; a system thumbnailer is only a fallback when an image can't be decoded.
@@ -536,7 +537,7 @@ Messages are JSON; a Kestrel speaking another protocol version is ignored. If th
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
 | `src/viewer.cpp` | Image viewer |
 | `src/fileops.cpp` | Background tasks and the status-bar task panel; copy, move and delete (retrying denied ones as administrator); conflict handling; links |
-| `src/places.cpp` | Starred and Recent: places that list files from anywhere |
+| `src/places.cpp` | Starred and Recent: places that list files from anywhere; pinned items |
 | `src/undo.cpp` | Undo for file operations, shared by a Kestrel's windows (or every Kestrel's) |
 | `src/sharing.cpp` | What GNOME Files offers through extensions: code editors, Nautilus scripts, Send To, Samba sharing |
 | `src/animate.cpp` | Animated GIFs and WebM clips playing in the file view |

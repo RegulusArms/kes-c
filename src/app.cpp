@@ -279,6 +279,17 @@ void MainWindow::fill_sort_menu()
         a->setCheckable(true);
         a->setChecked(o == order);
     }
+    m->addSeparator();
+    QAction *a = m->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
+    a->setCheckable(true);
+    a->setChecked(p->pinned_first());
+}
+
+void MainWindow::set_pinned_first(bool on)
+{
+    set_view_value("pinned_first", on);
+    for (Pane *p : panes())
+        p->set_pinned_first(on);
 }
 
 QAction *MainWindow::act(const QString &text, const QStringList &keys, std::function<void()> fn,
@@ -827,6 +838,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                       [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::AscendingOrder); });
         sm->addAction("Descending", this,
                       [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::DescendingOrder); });
+        sm->addSeparator();
+        QAction *sf = sm->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
+        sf->setCheckable(true);
+        sf->setChecked(p->pinned_first());
         QAction *a = m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); });
         a->setCheckable(true);
         a->setChecked(show_hidden);
@@ -928,6 +943,10 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     bool starred = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_starred(x); });
     m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
                  starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); });
+    // pinned in its own folder: sorted to the top there by Pinned & Starred First
+    bool pinned = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_pinned(x); });
+    m->addAction(icon({"view-pin-symbolic", "view-pin", "pin"}), pinned ? "Unpin" : "Pin", this,
+                 [paths, pinned]() { places::set_pinned(paths, !pinned); });
 
     QString here = p->dir();   // empty in Starred / Recent: no "… Here" there
     QMenu *lm = m->addMenu(icon({"emblem-symbolic-link", "insert-link"}), "Links && Shortcuts");

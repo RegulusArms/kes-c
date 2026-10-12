@@ -12,6 +12,7 @@ class MainWindow;
 class OverviewPage;
 class SearchModel;
 class SearchThread;
+class PinSortProxy;
 class ThumbnailManager;
 class QAbstractItemModel;
 class QAbstractItemView;
@@ -72,6 +73,8 @@ public:
     QString current_path() const;
     void invert_selection();
     void sort_by(int col, int order = -1);
+    void set_pinned_first(bool on);   // pinned and starred items first
+    bool pinned_first() const;
     QString title() const;
     bool searching() const;
     void set_type_filter(const QStringList &globs);   // chooser: show folders and only these files
@@ -132,6 +135,7 @@ private:
     OverviewPage *overview;
     QLabel *empty;
     FSModel *model = nullptr;
+    PinSortProxy *proxy = nullptr;   // between model and the views (PinSortProxy)
     SearchModel *search_model = nullptr;
     GridDelegate *delegate;
     QStringList type_filters;   // chooser: the chosen file type's globs
