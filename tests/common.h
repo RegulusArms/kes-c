@@ -156,7 +156,7 @@ public:
         return out;
     }
 
-    void check_in() { call("CheckIn", R"({"pid":1,"impl":"fake"})"); }
+    void check_in() { call("CheckIn", QString(R"({"pid":1,"impl":"fake","protocol":%1})").arg(atc::PROTOCOL).toUtf8()); }
     void report(const QJsonObject &o) { call("Report", QJsonDocument(o).toJson(QJsonDocument::Compact)); }
 
     bool heard_type(const QString &type, const QString &from) const

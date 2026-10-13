@@ -67,7 +67,7 @@ The installer does all of this (everything but the PATH) by running `kes-setup`,
 **Cleaning up with BleachBit:** `kes-setup --bleachbit` adds Kestrel Explorer to [BleachBit](https://www.bleachbit.org) (as `~/.config/bleachbit/cleaners/kestrel-explorer.xml`), with four options:
 - **Cache:** folder preview mosaics, the video clips played in the file view, copies of phone videos made to play them, and exiftool's tag lists.
 - **History:** the servers you connected to recently, and the folder the last Open or Save dialog was left in. These are taken out of Kestrel's settings, and every other setting stays.
-- **Starred items**, **Pinned items** and **Folder covers and colours:** the lists of starred files and folders, of pinned ones, and of folders given a cover, a colour or no image previews. You chose these, so BleachBit warns before cleaning them.
+- **Starred items**, **Pinned items** and **Folder covers, colours and sorts:** the lists of starred files and folders, of pinned ones, and of folders given a cover, a colour, no image previews or a sort of their own. You chose these, so BleachBit warns before cleaning them.
 
 The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files are cleaned by BleachBit's own Thumbnails and Recent documents options, and undo history is never written to disk. BleachBit won't clean while Kestrel is open. `kes-setup --undo` removes the cleaner again.
 

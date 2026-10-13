@@ -123,6 +123,8 @@ public:
     void set_view_value(const QString &key, const QVariant &value);
     int default_zoom(bool grid) const;
     void set_pinned_first(bool on);   // Pinned & Starred First, for this window's tabs and its saved view setting
+    void set_default_sort(Pane *p);   // Sort → Set as Default: p's sort, for folders without their own
+    void sort_subfolders(Pane *p);    // Sort → Apply to Subfolders: p's sort, for every folder below p's
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
@@ -130,6 +132,7 @@ protected:
 private:
     void build_toolbar();
     void fill_sort_menu();
+    void add_sort_items(QMenu *m, Pane *p);   // the Sort menu's items, for p's folder
     QAction *act(const QString &text, const QStringList &keys, std::function<void()> fn,
                  const QStringList &icon_names = {}, bool checkable = false, QMenu *menu = nullptr);
     void build_actions();

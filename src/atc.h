@@ -24,7 +24,7 @@ extern const char *NAME;   // the tower's bus name
 // names none predates the version and speaks 1). Messages from other programs on the session bus are checked by the
 // tower and again by each radio: a JSON object of at most MAX_MESSAGE bytes, a known "type", each known field of the
 // right type, absolute paths. Unknown fields are allowed (and ignored), so a newer Kestrel can add some.
-constexpr int PROTOCOL = 1;
+constexpr int PROTOCOL = 2;
 constexpr int MAX_MESSAGE = 1 << 20;
 bool valid_message(const QJsonObject &msg);   // a Report / Broadcast message
 bool valid_undo(const QJsonObject &op);       // a shared undo entry: {"kind", "label", "items": [[a, b], …]}

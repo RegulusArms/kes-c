@@ -3,7 +3,21 @@
 What changed in each version of Kestrel Explorer, newest first. Versions with a GitHub release: 0.2.1-alpha1,
 0.2.1-alpha.2, 0.2.1-alpha.3, 0.3.0-alpha.0, 0.3.0-alpha.2 and 0.3.1-alpha.2.
 
-## 0.3.1-alpha.5
+## 0.3.1-alpha.6
+
+- **Each folder keeps its own sort:** changing the sort (a column header or the Sort menu) now changes it for that
+  folder only, and the folder keeps it. Before, it changed the sort of every folder. Folders you haven't sorted use the
+  default, which is the sort you last chose before this version; **Sort → Set as Default** makes the current sort the
+  default. Other tabs and windows showing the folder follow the change.
+- **Sort → Apply to Subfolders:** gives every folder below the current one (all levels) the same sort, replacing any
+  they had. It runs in the status bar and can be cancelled, which leaves every folder as it was.
+- The right-click Sort By menu now shows the chosen sort, like the toolbar's Sort menu.
+- BleachBit's Kestrel cleaner (`kes-setup --bleachbit`) can now delete the folders' sorts too, under "Folder covers,
+  colours and sorts". Run `kes-setup --bleachbit` again to update it.
+- Kestrels of this version don't share stars, tasks, undo or hand-offs with running Kestrels of earlier versions (the
+  messages between them changed); close the old windows after updating.
+
+## 0.3.1-alpha.5 (2026-10-12)
 
 - **Follows the desktop's dark style:** with Dark chosen in GNOME's Settings (or any desktop's dark colour scheme),
   Kestrel now opens with a dark background and light text, and switches when the style changes. Before, it stayed

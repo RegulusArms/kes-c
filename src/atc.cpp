@@ -48,6 +48,7 @@ static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"sidebar", {}},         // the sidebar's order or collapsed sections changed
     {"bookmarks", {}},       // the GTK bookmarks changed
     {"starred", {}},         // starred.json changed
+    {"sorts", {}},           // sorts.json changed
     {"thumbs_cleared", {}},  // the preview cache was cleared
     {"left", {}},            // (the tower's) a flight has gone
     {"folders", {{"paths", PATHS}}},   // folder colours, covers or previews changed
@@ -127,7 +128,7 @@ static QJsonObject parse(const char *arg)
 
 static bool speaks_our_protocol(const QJsonObject &info)
 {
-    return !info.contains("protocol") || info.value("protocol").toInt(-1) == PROTOCOL;
+    return (info.contains("protocol") ? info.value("protocol").toInt(-1) : 1) == PROTOCOL;
 }
 
 // ---------------------------------------------------------------- the tower

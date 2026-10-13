@@ -4,6 +4,26 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.6
+
+Added:
+- **Folder sorts** (`pinned`): sorting a folder sorts only that folder, leaving the other folders and the default as
+  they were; it's saved in `sorts.json`, kept when coming back, followed by other tabs showing the folder and by other
+  Kestrels (both ways). Apply to Subfolders reaches every folder below and none outside it; Set as Default changes
+  only folders without a sort of their own. These cover the new per-folder sort, which replaced one sort for all
+  folders.
+- **Old protocol** (`atc_sync`): a flight that names no protocol (one from before the protocol was named, speaking 1) is
+  ignored now that the protocol is 2 (the new "sorts" message). The tower used to accept such a flight as speaking the
+  current protocol.
+
+Changed:
+- `FakeFlight::check_in()` in `common.h` names the current protocol: without one, the tower now takes it for an old
+  flight and ignores it.
+- `ui_actions.txt`: the empty-space Sort By menu shows which sort is chosen (its entries are toggles now, like the
+  toolbar's Sort menu) and has Set as Default and Apply to Subfolders.
+- `installer`: the BleachBit cleaner's expected actions, dry-run listing and clean include `sorts.json` (under Folder
+  covers, colours and sorts).
+
 ## 0.3.1-alpha.5
 
 Added:

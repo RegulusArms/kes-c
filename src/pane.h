@@ -72,7 +72,8 @@ public:
     QStringList all_paths() const;
     QString current_path() const;
     void invert_selection();
-    void sort_by(int col, int order = -1);
+    void sort_by(int col, int order = -1);   // for this folder (or place) only
+    void apply_folder_sort();   // show the folder's own sort, or the default when it has none
     void set_pinned_first(bool on);   // pinned and starred items first
     bool pinned_first() const;
     QString title() const;
@@ -120,6 +121,7 @@ private:
     void starred_changed();
 
     ThumbnailManager *thumbs;
+    bool applying_sort = false;     // apply_folder_sort is setting the header: not a sort to remember
     bool search_recorded = false;   // the folder as it was before the active search is on back_stack
     QString pending_select;
     int trash_gen = 0;              // bumps on every combined-trash reload, so stale loads are dropped

@@ -167,6 +167,65 @@ void reload_starred()
     Q_EMIT signals_()->starred_changed();
 }
 
+// ---------------------------------------------------------------- folder sorts
+
+static QString sorts_file() { return join(CONFIG_DIR(), "sorts.json"); }
+
+static std::optional<QHash<QString, FolderSort>> sort_map;
+
+static QHash<QString, FolderSort> &sorts()
+{
+    if (!sort_map) {
+        bool ok = false;
+        QHash<QString, FolderSort> m;
+        QJsonObject o = QJsonDocument::fromJson(read_file(sorts_file(), &ok)).object();
+        for (auto it = o.begin(); it != o.end(); ++it) {
+            QJsonArray a = it.value().toArray();
+            if (a.size() != 2 || !a[0].isDouble() || !a[1].isDouble())
+                continue;
+            int col = a[0].toInt(-1), order = a[1].toInt(-1);
+            if (col >= 0 && col < 4 && (order == Qt::AscendingOrder || order == Qt::DescendingOrder))
+                m.insert(it.key(), FolderSort{col, order});
+        }
+        sort_map = m;
+    }
+    return *sort_map;
+}
+
+std::optional<FolderSort> folder_sort(const QString &dir)
+{
+    auto &m = sorts();
+    auto it = m.constFind(dir);
+    if (it == m.constEnd())
+        return std::nullopt;
+    return *it;
+}
+
+void set_folder_sort(const QStringList &dirs, FolderSort sort)
+{
+    sort_map.reset();   // another Kestrel may have changed it since
+    QHash<QString, FolderSort> m = sorts();
+    for (const QString &d : dirs)
+        m.insert(d, sort);
+    sort_map = m;
+    QJsonObject o;
+    for (auto it = m.begin(); it != m.end(); ++it)
+        o.insert(it.key(), QJsonArray{it->column, it->order});
+    try {
+        makedirs(dirname(sorts_file()), true);
+        write_atomic(sorts_file(), QJsonDocument(o).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {
+    }
+    Q_EMIT signals_()->sorts_changed();
+    atc::announce("sorts");
+}
+
+void reload_sorts()
+{
+    sort_map.reset();
+    Q_EMIT signals_()->sorts_changed();
+}
+
 QList<QPair<QString, QString>> items(const QString &place)
 {
     QStringList paths;

@@ -377,6 +377,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     model = make_model();
     search_model = new SearchModel(thumbs, this);
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
+    connect(places::signals_(), &places::Signals::sorts_changed, this, &Pane::apply_folder_sort);
     attach(proxy);
     set_view_mode(win->view_value("view_mode", "grid").toString());
     if (win->chooser)
@@ -614,6 +615,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         stack->setCurrentWidget(mode_view);
         view()->selectionModel()->clear();
         pending_select = select;
+        apply_folder_sort();
         Q_EMIT path_changed();
         show_trash();
         return true;
@@ -649,6 +651,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     QModelIndex root = proxy->mapFromSource(src_root);
     grid->setRootIndex(root);
     tree->setRootIndex(root);
+    apply_folder_sort();
     view()->selectionModel()->clear();   // drop the previous folder's selection and current item
     pending_select = !select.isEmpty() ? select : (!prev.isEmpty() && dirname(prev) == p ? prev : QString());
     QTimer::singleShot(0, this, &Pane::try_select);
@@ -1167,10 +1170,31 @@ void Pane::invert_selection()
     select_paths(inv);
 }
 
+// Sorting (the header, the Sort menu) changes the folder's own sort, which it keeps: other folders keep theirs, or the
+// default (Sort → Set as Default).
 void Pane::sort_changed(int col, Qt::SortOrder order)
 {
-    win->set_view_value("sort_col", col);
-    win->set_view_value("sort_order", int(order));
+    if (applying_sort || path.isEmpty() || is_overview())
+        return;
+    places::set_folder_sort({path}, {col, int(order)});
+}
+
+void Pane::apply_folder_sort()
+{
+    if (path.isEmpty() || is_overview())
+        return;
+    int col = win->view_value("sort_col", 0).toInt();
+    int order = win->view_value("sort_order", 0).toInt();
+    if (auto own = places::folder_sort(path)) {
+        col = own->column;
+        order = own->order;
+    }
+    QHeaderView *h = tree->header();
+    if (h->sortIndicatorSection() == col && h->sortIndicatorOrder() == Qt::SortOrder(order))
+        return;
+    applying_sort = true;
+    h->setSortIndicator(col, Qt::SortOrder(order));   // the view sorts the model by it
+    applying_sort = false;
 }
 
 void Pane::set_pinned_first(bool on)

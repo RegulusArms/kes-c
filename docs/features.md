@@ -11,6 +11,9 @@
 - The sidebar shows standard places, your GTK bookmarks (shared with GNOME Files), mounted drives and connected phones, with an unmount option. Drag entries to reorder them within a section, drag a section header to move the whole section, and click a header to collapse it.
 - Right-click a bookmark → **Edit Bookmark…** to change its name and location (with a folder picker), or remove it or move it up and down.
 - Grid and list views, sorting, hidden files (Ctrl+H).
+- **A sort for each folder.** Changing the sort (the column headers or the Sort menu) changes it for that folder
+  only, which keeps it. Folders that were never sorted use the default: **Sort → Set as Default** makes the current
+  sort the default. **Sort → Apply to Subfolders** gives every folder below this one the same sort.
 - Search the current folder by typing to filter, or search subfolders recursively. Wildcards are supported.
 - Cut, copy and paste work with GNOME Files' clipboard. Paste as link and pasting image data are supported.
 - Drag and drop:

@@ -266,9 +266,12 @@ void MainWindow::build_toolbar()
 
 void MainWindow::fill_sort_menu()
 {
-    QMenu *m = sort_menu;
-    m->clear();
-    Pane *p = pane();
+    sort_menu->clear();
+    add_sort_items(sort_menu, pane());
+}
+
+void MainWindow::add_sort_items(QMenu *m, Pane *p)
+{
     int col = p->tree->header()->sortIndicatorSection();
     Qt::SortOrder order = p->tree->header()->sortIndicatorOrder();
     for (int i = 0; i < SORT_COLUMNS.size(); ++i) {
@@ -287,6 +290,60 @@ void MainWindow::fill_sort_menu()
     QAction *a = m->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
     a->setCheckable(true);
     a->setChecked(p->pinned_first());
+    m->addSeparator();
+    QPointer<Pane> pp(p);
+    m->addAction("Set as Default", this, [this, pp]() {
+        if (pp)
+            set_default_sort(pp);
+    });
+    m->addAction("Apply to Subfolders", this, [this, pp]() {
+        if (pp)
+            sort_subfolders(pp);
+    })->setEnabled(!p->dir().isEmpty() && !p->is_trash());
+}
+
+// The sort of folders that haven't been given their own.
+void MainWindow::set_default_sort(Pane *p)
+{
+    set_view_value("sort_col", p->tree->header()->sortIndicatorSection());
+    set_view_value("sort_order", int(p->tree->header()->sortIndicatorOrder()));
+    for (MainWindow *w : WINDOWS)
+        for (Pane *q : w->panes())
+            q->apply_folder_sort();
+    statusBar()->showMessage("Folders without a sort of their own now use this one", 5000);
+}
+
+// Copy the folder's sort to every folder below it (replacing theirs). The walk runs on a thread; nothing is changed
+// until it has finished, so a cancel leaves every folder as it was.
+void MainWindow::sort_subfolders(Pane *p)
+{
+    QString root = p->dir();
+    if (root.isEmpty())
+        return;
+    places::FolderSort sort{p->tree->header()->sortIndicatorSection(), int(p->tree->header()->sortIndicatorOrder())};
+    auto work = [root](Task *task) -> QVariant {
+        QStringList found;
+        walk(
+            root,
+            [&](const QString &dir, QStringList &dirs, QStringList &) {
+                task->check();
+                for (const QString &d : dirs)
+                    found << join(dir, d);
+                return true;
+            },
+            true, true);
+        return found;
+    };
+    auto done = [this, root, sort](const QVariant &v) {
+        if (!v.isValid())
+            return;   // cancelled
+        QStringList dirs = v.toStringList();
+        places::set_folder_sort(dirs + QStringList{root}, sort);
+        statusBar()->showMessage(dirs.size() == 1 ? QString("Sort applied to 1 subfolder")
+                                                  : QString("Sort applied to %1 subfolders").arg(group_digits(dirs.size())),
+                                 5000);
+    };
+    fileops::run_job(this, "Applying sort to subfolders", work, done);
 }
 
 void MainWindow::set_pinned_first(bool on)
@@ -876,18 +933,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         pl->setEnabled(have_files);
         m->addAction("Select All", this, [p]() { p->view()->selectAll(); });
         m->addSeparator();
-        QMenu *sm = m->addMenu("Sort By");
-        for (int i = 0; i < SORT_COLUMNS.size(); ++i)
-            sm->addAction(SORT_COLUMNS[i], this, [p, i]() { p->sort_by(i); });
-        sm->addSeparator();
-        sm->addAction("Ascending", this,
-                      [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::AscendingOrder); });
-        sm->addAction("Descending", this,
-                      [p]() { p->sort_by(p->tree->header()->sortIndicatorSection(), Qt::DescendingOrder); });
-        sm->addSeparator();
-        QAction *sf = sm->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
-        sf->setCheckable(true);
-        sf->setChecked(p->pinned_first());
+        add_sort_items(m->addMenu("Sort By"), p);
         QAction *a = m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); });
         a->setCheckable(true);
         a->setChecked(show_hidden);

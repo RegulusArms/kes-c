@@ -115,15 +115,18 @@ context menu, empty space > Paste as Link
 context menu, empty space > Select All
 context menu, empty space > ---
 context menu, empty space > Sort By
-context menu, empty space > Sort By > Name
-context menu, empty space > Sort By > Size
-context menu, empty space > Sort By > Type
-context menu, empty space > Sort By > Modified
+context menu, empty space > Sort By > Name (toggle)
+context menu, empty space > Sort By > Size (toggle)
+context menu, empty space > Sort By > Type (toggle)
+context menu, empty space > Sort By > Modified (toggle)
 context menu, empty space > Sort By > ---
-context menu, empty space > Sort By > Ascending
-context menu, empty space > Sort By > Descending
+context menu, empty space > Sort By > Ascending (toggle)
+context menu, empty space > Sort By > Descending (toggle)
 context menu, empty space > Sort By > ---
 context menu, empty space > Sort By > Pinned & Starred First (toggle)
+context menu, empty space > Sort By > ---
+context menu, empty space > Sort By > Set as Default
+context menu, empty space > Sort By > Apply to Subfolders
 context menu, empty space > Show Hidden Files (toggle)
 context menu, empty space > ---
 context menu, empty space > Open in Terminal
