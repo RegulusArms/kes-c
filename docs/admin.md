@@ -4,6 +4,18 @@
 
 Running a whole file manager as root (`sudo kes`) is risky and mostly doesn't work on a modern desktop. Kestrel instead keeps running as you, and does only the operations that need admin rights as root.
 
+## What it's for
+
+The admin session is for **everyday file operations that happen to need admin rights**: copying a file into `/opt`, deleting something root left in your Downloads, renaming a file in a system folder. It does the same simple operations Kestrel does for you anywhere else, one deliberate action at a time.
+
+It is **not a tool for administering your system,** and isn't meant to replace the terminal. Kestrel is a file manager for everyday use, not a hardened tool for root work, so it deliberately leaves out operations where one mistake as root could break the system or open a security hole. For that kind of work, use:
+
+- **the terminal** (`sudo`), where you see exactly what runs, for changes to system files, bulk changes and anything you'd want to review first;
+- **your package manager** (`apt`, the Software app) to install or remove software, rather than copying or extracting it into system folders;
+- **your desktop's settings tools** for users, permissions of devices, services and the like.
+
+Requests to extend the admin session into those areas are out of scope and won't be added.
+
 ## How it works
 
 1. An operation fails with "permission denied". Kestrel lists what failed and offers **Retry as Administrator**.
@@ -15,16 +27,23 @@ Running a whole file manager as root (`sudo kes`) is risky and mostly doesn't wo
 
 ## What it covers
 
-| Covered | Not yet |
-|---|---|
-| Copy, move, paste, drag and drop, duplicate, Move To / Copy To | Batch rename |
-| Delete permanently and empty trash (including files owned by root in the trash) | Extracting archives into protected folders |
-| Rename (F2 and the Properties name field) | Editing metadata |
-| New folder, new empty file | |
-| Symbolic links, hard links and `.desktop` shortcuts | |
-| Changing permissions in Properties | |
+- Copy, move, paste, drag and drop, duplicate, Move To / Copy To
+- Delete permanently and empty trash (including files owned by root in the trash)
+- Rename (F2 and the Properties name field)
+- New folder, new empty file
+- Symbolic links, hard links and `.desktop` shortcuts
+- Changing permissions in Properties
 
-Move to Trash itself doesn't run as administrator: if an item can't be trashed, Kestrel offers to delete it permanently instead, and that can use the session.
+## What it doesn't do, on purpose
+
+These fail with "permission denied" as usual, with no **Retry as Administrator**. They're left out by design, not waiting to be added:
+
+- **Batch rename.** One pattern applied to many files at once is easy to get wrong, and in a system folder a wrong rename can stop the computer from starting, with no easy way back. Rename system files one at a time (F2), or in the terminal.
+- **Extracting archives into protected folders.** An archive's contents are whatever its author put in it. Unpacked into a system folder, they could replace programs or settings, and files left owned by you there would let anything running as you change them later. Extract into your own folders; install software with your package manager.
+- **Editing metadata** of files you don't own.
+- **Move to Trash.** Your trash is yours: an item that can't be trashed can be deleted permanently instead, and that can use the session.
+- **Opening files or running programs as root,** and editing files' contents. Kestrel never starts an app, editor or terminal as administrator; use `sudo` (or `sudoedit` for a file) in a terminal.
+- **Changing owners** (`chown`) and anything beyond a file's permissions in Properties.
 
 ## Safety
 

@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.1-alpha.6.** This is an early alpha release, so expect rough edges.
+**Version 0.3.1-alpha.7.** This is an early alpha release, so expect rough edges.
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -12,7 +12,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 
 **Terminal jobs, in the window:**
 - **Archives:** create and extract 7z, zip, rar, zpaq and every tar format, with the options the command-line tools offer (level, method, threads, passwords, split volumes), and a preview of the exact command that will run. Double-click an archive to extract it.
-- **Admin rights only when needed:** when something fails with "permission denied", choose **Retry as Administrator** and enter your password once per session, instead of running `sudo` or a file manager as root.
+- **Admin rights only when needed:** when an everyday file operation fails with "permission denied", choose **Retry as Administrator** and enter your password once per session, instead of running a file manager as root. It's for simple copies, moves, renames and deletes, not a replacement for the terminal for system administration.
 - **Permissions and links:** permissions, including setuid, setgid and the sticky bit; symbolic, relative and hard links; and MD5/SHA checksums with verification. Double-click a checksum file (`.sfv`, `.md5`, `.sha256`, `SHA256SUMS`…) to check every file it lists. Right-click files or folders and choose **Create Checksum File…** to make one.
 - **Metadata:** view and edit EXIF, XMP and other metadata with `exiftool`, from a searchable list of tags.
 - **Search and rename:** search subfolders with wildcards or inside files, and batch rename with templates or regular expressions.
