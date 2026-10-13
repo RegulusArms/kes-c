@@ -181,11 +181,11 @@ static QHash<QString, FolderSort> &sorts()
         QJsonObject o = QJsonDocument::fromJson(read_file(sorts_file(), &ok)).object();
         for (auto it = o.begin(); it != o.end(); ++it) {
             QJsonArray a = it.value().toArray();
-            if (a.size() != 2 || !a[0].isDouble() || !a[1].isDouble())
+            if (a.size() < 2 || !a[0].isDouble() || !a[1].isDouble())
                 continue;
             int col = a[0].toInt(-1), order = a[1].toInt(-1);
             if (col >= 0 && col < 4 && (order == Qt::AscendingOrder || order == Qt::DescendingOrder))
-                m.insert(it.key(), FolderSort{col, order});
+                m.insert(it.key(), FolderSort{col, order, std::clamp(a.at(2).toInt(), 0, 2), std::clamp(a.at(3).toInt(), 0, 2)});
         }
         sort_map = m;
     }
@@ -210,7 +210,7 @@ void set_folder_sort(const QStringList &dirs, FolderSort sort)
     sort_map = m;
     QJsonObject o;
     for (auto it = m.begin(); it != m.end(); ++it)
-        o.insert(it.key(), QJsonArray{it->column, it->order});
+        o.insert(it.key(), QJsonArray{it->column, it->order, it->group, it->group_by});
     try {
         makedirs(dirname(sorts_file()), true);
         write_atomic(sorts_file(), QJsonDocument(o).toJson(QJsonDocument::Compact));

@@ -10,6 +10,7 @@
 #include "fileops.h"
 #include "hashcheck.h"
 #include "fm1.h"
+#include "groups.h"
 #include "incoming.h"
 #include "overview.h"
 #include "places.h"
@@ -290,8 +291,35 @@ void MainWindow::add_sort_items(QMenu *m, Pane *p)
     QAction *a = m->addAction("Pinned && Starred First", this, [this, p]() { set_pinned_first(!p->pinned_first()); });
     a->setCheckable(true);
     a->setChecked(p->pinned_first());
-    m->addSeparator();
     QPointer<Pane> pp(p);
+    m->addSeparator();
+    // grouping: by period or by day (choosing the one that's on turns it off), and which date
+    for (auto [mode, name] : {std::pair{groups::PERIOD, "Group by Period"}, std::pair{groups::DAY, "Group by Day"}}) {
+        int md = mode;
+        QAction *g = m->addAction(name, this, [pp, md]() {
+            if (pp)
+                pp->set_grouping(pp->grouping() == md ? groups::NONE : md, pp->grouping_by());
+        });
+        g->setCheckable(true);
+        g->setChecked(p->grouping() == mode);
+        g->setEnabled(!p->is_overview());
+    }
+    QMenu *dm = m->addMenu("Date to Group By");
+    dm->setEnabled(!p->is_overview());
+    for (auto [by, name] : {std::pair{groups::MODIFIED, "Date Modified"}, std::pair{groups::CREATED, "Date Created"},
+                            std::pair{groups::TAKEN, "Date Taken (Metadata)"}}) {
+        int b = by;
+        QAction *d = dm->addAction(name, this, [pp, b]() {
+            if (pp)
+                pp->set_grouping(pp->grouping(), b);
+        });
+        d->setCheckable(true);
+        d->setChecked(p->grouping_by() == by);
+        if (by == groups::TAKEN)
+            d->setToolTip("When a photo or video was taken, from its metadata; the date created when it has none");
+    }
+    dm->setToolTipsVisible(true);
+    m->addSeparator();
     m->addAction("Set as Default", this, [this, pp]() {
         if (pp)
             set_default_sort(pp);
@@ -307,6 +335,8 @@ void MainWindow::set_default_sort(Pane *p)
 {
     set_view_value("sort_col", p->tree->header()->sortIndicatorSection());
     set_view_value("sort_order", int(p->tree->header()->sortIndicatorOrder()));
+    set_view_value("sort_group", p->grouping());
+    set_view_value("sort_group_by", p->grouping_by());
     for (MainWindow *w : WINDOWS)
         for (Pane *q : w->panes())
             q->apply_folder_sort();
@@ -320,7 +350,8 @@ void MainWindow::sort_subfolders(Pane *p)
     QString root = p->dir();
     if (root.isEmpty())
         return;
-    places::FolderSort sort{p->tree->header()->sortIndicatorSection(), int(p->tree->header()->sortIndicatorOrder())};
+    places::FolderSort sort{p->tree->header()->sortIndicatorSection(), int(p->tree->header()->sortIndicatorOrder()),
+                            p->grouping(), p->grouping_by()};
     auto work = [root](Task *task) -> QVariant {
         QStringList found;
         walk(
@@ -886,7 +917,7 @@ void MainWindow::context_menu(Pane *p, QAbstractItemView *view, const QPoint &po
 {
     QModelIndex idx = view->indexAt(pos);
     QStringList paths;
-    if (idx.isValid()) {
+    if (idx.isValid() && !idx.siblingAtColumn(0).data(PathRole).toString().isEmpty()) {   // not a group's header
         QString x = idx.siblingAtColumn(0).data(PathRole).toString();
         if (!p->selected_paths().contains(x))
             p->select_paths({x});

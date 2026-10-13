@@ -3,6 +3,7 @@
 #include "animate.h"
 #include "atc.h"
 #include "dialogs.h"
+#include "groups.h"
 #include "metadata.h"
 #include "overview.h"
 #include "places.h"
@@ -375,7 +376,68 @@ QSize GridDelegate::cell_size() const
     return QSize(w, icon_size + 14 + fm.height() * 2 + 6);
 }
 
-QSize GridDelegate::sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const { return cell_size(); }
+QSize GridDelegate::sizeHint(const QStyleOptionViewItem &, const QModelIndex &index) const
+{
+    if (index.data(GroupRole).isValid())
+        return QSize(header_width, group_header_height(pane->fontMetrics()));
+    return cell.isValid() ? cell : cell_size();
+}
+
+int group_header_height(const QFontMetrics &fm) { return fm.height() * 2 + 4; }
+
+void paint_group_header(QPainter *p, const QRect &rect, const QModelIndex &index, const QStyleOptionViewItem &option)
+{
+    p->save();
+    p->setRenderHint(QPainter::Antialiasing);
+    const QPalette &pal = option.palette;
+    QRect r = rect.adjusted(8, 0, -8, 0);
+    if (option.state & QStyle::State_MouseOver) {
+        QColor c = pal.color(QPalette::Highlight);
+        c.setAlpha(25);
+        p->fillRect(rect, c);
+    }
+    QFont f = option.font;
+    f.setWeight(QFont::DemiBold);
+    p->setFont(f);
+    QFontMetrics fm(f);
+    // the arrow: down when open, right when collapsed
+    double a = fm.height() * 0.3, cx = r.left() + a, cy = r.center().y() + 0.5;
+    QPainterPath arrow;
+    if (index.data(GroupFoldedRole).toBool()) {
+        arrow.moveTo(cx - a * 0.5, cy - a);
+        arrow.lineTo(cx + a * 0.6, cy);
+        arrow.lineTo(cx - a * 0.5, cy + a);
+    } else {
+        arrow.moveTo(cx - a, cy - a * 0.5);
+        arrow.lineTo(cx, cy + a * 0.6);
+        arrow.lineTo(cx + a, cy - a * 0.5);
+    }
+    arrow.closeSubpath();
+    p->setPen(Qt::NoPen);
+    p->setBrush(pal.color(QPalette::Text));
+    p->drawPath(arrow);
+    QString text = index.data(Qt::DisplayRole).toString();
+    int x = r.left() + int(a * 2) + 8;
+    QRect tr(x, r.top(), r.right() - x, r.height());
+    p->setPen(pal.color(QPalette::Text));
+    p->drawText(tr, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(text, Qt::ElideRight, tr.width()));
+    int line_x = x + fm.horizontalAdvance(text) + 12;
+    if (line_x < r.right()) {
+        QColor c = pal.color(QPalette::Text);
+        c.setAlpha(50);
+        p->setPen(QPen(c, 1));
+        p->drawLine(QPointF(line_x, cy), QPointF(r.right(), cy));
+    }
+    p->restore();
+}
+
+void ListDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+    if (index.data(GroupRole).isValid())
+        paint_group_header(p, option.rect, index, option);
+    else
+        QStyledItemDelegate::paint(p, option, index);
+}
 
 QStringList GridDelegate::lines(const QFontMetrics &fm, const QString &text, int width) const
 {
@@ -395,6 +457,10 @@ QStringList GridDelegate::lines(const QFontMetrics &fm, const QString &text, int
 
 void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
+    if (index.data(GroupRole).isValid()) {
+        paint_group_header(p, option.rect, index, option);
+        return;
+    }
     p->save();
     p->setRenderHint(QPainter::Antialiasing);
     p->setRenderHint(QPainter::SmoothPixmapTransform);

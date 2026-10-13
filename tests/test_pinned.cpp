@@ -94,7 +94,7 @@ int main(int argc, char **argv)
     check(wait_for([&]() { return p->all_paths().filter(".txt") == QStringList({join(other, "y.txt"), join(other, "x.txt")}); }),
           "sorting a folder sorts it");
     check(QJsonDocument::fromJson(read_file(join(CONFIG_DIR(), "sorts.json"))).object().value(other).toArray() ==
-              QJsonArray({0, int(Qt::DescendingOrder)}),
+              QJsonArray({0, int(Qt::DescendingOrder), 0, 0}),
           "the folder's sort is saved in sorts.json");
     check(wait_for([&]() { return fake.heard_type("sorts", me); }), "a folder's sort is reported to other Kestrels");
     check(order_in(fsub) == Qt::AscendingOrder && w->view_value("sort_order", 0).toInt() == Qt::AscendingOrder,

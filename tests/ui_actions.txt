@@ -125,6 +125,13 @@ context menu, empty space > Sort By > Descending (toggle)
 context menu, empty space > Sort By > ---
 context menu, empty space > Sort By > Pinned & Starred First (toggle)
 context menu, empty space > Sort By > ---
+context menu, empty space > Sort By > Group by Period (toggle)
+context menu, empty space > Sort By > Group by Day (toggle)
+context menu, empty space > Sort By > Date to Group By
+context menu, empty space > Sort By > Date to Group By > Date Modified (toggle)
+context menu, empty space > Sort By > Date to Group By > Date Created (toggle)
+context menu, empty space > Sort By > Date to Group By > Date Taken (Metadata) (toggle)
+context menu, empty space > Sort By > ---
 context menu, empty space > Sort By > Set as Default
 context menu, empty space > Sort By > Apply to Subfolders
 context menu, empty space > Show Hidden Files (toggle)
