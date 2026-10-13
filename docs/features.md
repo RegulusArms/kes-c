@@ -6,7 +6,7 @@
 
 **File management**
 - Tabs, back/forward history, a clickable path bar (Ctrl+L to type a path), and a sidebar.
-- Follows the desktop's theme: light or dark, accent colour, fonts and icons, including switching while Kestrel is open. On GTK desktops this needs `qt6-gtk-platformtheme` (see [Dependencies](dependencies.md)).
+- Follows the desktop's theme: light or dark, accent colour, fonts and icons, including switching while Kestrel is open. On GTK desktops the theme's own look needs `qt6-gtk-platformtheme` (see [Dependencies](dependencies.md)); the dark style is followed without it too.
 - **Other apps' Open and Save dialogs** (a browser's "Save image as", Flatpak and Snap apps, and GTK 4 and Qt apps that use the desktop portal) open as a Kestrel window, with the file name, the file type and Save/Open at the bottom, once you've run `./install.sh --default` (see [Build / install](install.md#build--install)).
 - The sidebar shows standard places, your GTK bookmarks (shared with GNOME Files), mounted drives and connected phones, with an unmount option. Drag entries to reorder them within a section, drag a section header to move the whole section, and click a header to collapse it.
 - Right-click a bookmark → **Edit Bookmark…** to change its name and location (with a folder picker), or remove it or move it up and down.

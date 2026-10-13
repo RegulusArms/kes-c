@@ -8,6 +8,14 @@ What changed in each version of Kestrel Explorer, newest first.
   file operations that happen to need admin rights, not a replacement for the terminal, and explains why batch rename,
   extracting archives into system folders, editing metadata, running programs as root and changing owners are left
   out on purpose rather than "not yet". No change to what it does.
+- **Documentation brought up to date:** the README and Features list the per-folder sort and grouping by date; the
+  build instructions include `libxcb1-dev`, which building needs; Dependencies says what `python3` and
+  `qt6-gtk-platformtheme` are used for since the dark-style fix; Archives describes Keep damaged files; the Install
+  guide's BleachBit section counts its five options; Development and the test README have the current source files,
+  test counts and run time; and the review Roadmap is marked complete.
+- The apt package now suggests every optional package Kestrel can use (`rar`, the multi-core `.bz2` and `.lz` tools,
+  `lz4` and `zfsutils-linux` as well as exiftool, ffmpeg and BleachBit), as `kes-setup --install-optional` and the
+  Dependencies page list them.
 
 ## 0.3.1-alpha.6 (2026-10-13)
 
