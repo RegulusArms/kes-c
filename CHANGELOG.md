@@ -1,7 +1,6 @@
 # Changelog
 
-What changed in each version of Kestrel Explorer, newest first. Versions with a GitHub release: 0.2.1-alpha1,
-0.2.1-alpha.2, 0.2.1-alpha.3, 0.3.0-alpha.0, 0.3.0-alpha.2 and 0.3.1-alpha.2.
+What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.1-alpha.6
 
