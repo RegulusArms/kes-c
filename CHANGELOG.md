@@ -2,7 +2,14 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.6
+## 0.3.1-alpha.7
+
+- **The admin session's purpose is spelled out:** the [Admin session](docs/admin.md) page now says it's for everyday
+  file operations that happen to need admin rights, not a replacement for the terminal, and explains why batch rename,
+  extracting archives into system folders, editing metadata, running programs as root and changing owners are left
+  out on purpose rather than "not yet". No change to what it does.
+
+## 0.3.1-alpha.6 (2026-10-13)
 
 - **Each folder keeps its own sort:** changing the sort (a column header or the Sort menu) now changes it for that
   folder only, and the folder keeps it. Before, it changed the sort of every folder. Folders you haven't sorted use the
