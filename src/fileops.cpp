@@ -6,6 +6,7 @@
 #include "undo.h"
 #include "stats.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -15,7 +16,6 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QMainWindow>
-#include <QMessageBox>
 #include <QRegularExpression>
 #include <QPainter>
 #include <QProgressBar>
@@ -378,7 +378,7 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
         QPointer<QWidget> p(parent);
-        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { QMessageBox::warning(p, title, msg); });
+        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
     }
@@ -1020,7 +1020,7 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
         }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            QMessageBox::warning(p, title, "Some items could not be processed:\n\n" + errors.mid(0, 20).join('\n'));
+            warn(p, title, "Some items could not be processed:\n\n" + errors.mid(0, 20).join('\n'));
         if (!denied.isEmpty() && res.isValid()) {
             retry_denied_as_admin(p, title, denied, on_done);
             return;
@@ -1035,61 +1035,99 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
     return run_job(parent, title, work, finished);
 }
 
-std::optional<QList<Job>> plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir,
-                                        const QString &op)
-{
+namespace {
+struct Plan {
+    QPointer<QWidget> parent;
+    bool has_parent;
+    QStringList sources;
+    QString dest_dir, op, dest_real;
+    QString apply_all;   // a conflict's answer, "for all"
     QList<Job> jobs;
-    QString apply_all;
-    QString dest_real = realpath(dest_dir);
-    for (const QString &src : sources) {
+    int next = 0;
+    std::function<void(const QList<Job> &)> planned;
+};
+}  // namespace
+
+static void plan_job(Plan &p, const QString &choice, const QString &src, const QString &dst, const QString &name)
+{
+    if (choice == "skip")
+        return;
+    if (choice == "both") {
+        p.jobs << Job{p.op, src, unique_path(p.dest_dir, name, "num")};
+    } else {
+        bool merge = isdir(dst) && isdir(src);
+        p.jobs << Job{merge ? "merge_" + p.op : p.op, src, dst, true};
+    }
+}
+
+static void plan_next(std::shared_ptr<Plan> p)
+{
+    if (p->has_parent && !p->parent)
+        return;
+    for (; p->next < p->sources.size(); ++p->next) {
+        const QString &src = p->sources[p->next];
         QString name = basename(rstrip(src, '/'));
         QString src_parent = dirname(abspath(src));
         if (isdir(src) && !islink(src)) {
             QString sr = realpath(src);
-            if (dest_real == sr || dest_real.startsWith(sr + "/")) {
-                QMessageBox::warning(parent, "Cannot transfer", QString("Cannot %1 “%2” into itself.").arg(op, name));
+            if (p->dest_real == sr || p->dest_real.startsWith(sr + "/")) {
+                warn(p->parent, "Cannot transfer", QString("Cannot %1 “%2” into itself.").arg(p->op, name));
                 continue;
             }
         }
-        if (realpath(src_parent) == dest_real) {
-            if (op == "move")
-                continue;
-            jobs << Job{op, src, unique_path(dest_dir, name)};
+        if (realpath(src_parent) == p->dest_real) {
+            if (p->op != "move")
+                p->jobs << Job{p->op, src, unique_path(p->dest_dir, name)};
             continue;
         }
-        QString dst = join(dest_dir, name);
-        if (lexists(dst)) {
-            QString choice = apply_all;
-            if (choice.isEmpty()) {
-                ConflictDialog dlg(parent, dst, isdir(dst));
-                dlg.exec();
-                choice = dlg.choice;
-                if (choice == "cancel")
-                    return std::nullopt;
-                if (dlg.all_box->isChecked())
-                    apply_all = choice;
-            }
-            if (choice == "skip")
-                continue;
-            if (choice == "both") {
-                jobs << Job{op, src, unique_path(dest_dir, name, "num")};
-            } else {
-                bool merge = isdir(dst) && isdir(src);
-                jobs << Job{merge ? "merge_" + op : op, src, dst, true};
-            }
-        } else {
-            jobs << Job{op, src, dst};
+        QString dst = join(p->dest_dir, name);
+        if (!lexists(dst)) {
+            p->jobs << Job{p->op, src, dst};
+            continue;
         }
+        if (!p->apply_all.isEmpty()) {
+            plan_job(*p, p->apply_all, src, dst, name);
+            continue;
+        }
+        // ask, and go on with the rest once it's answered
+        auto *dlg = new ConflictDialog(p->parent, dst, isdir(dst));
+        QObject::connect(dlg, &QDialog::finished, dlg, [p, dlg, src, dst, name]() {
+            if (dlg->choice == "cancel")
+                return;
+            if (dlg->all_box->isChecked())
+                p->apply_all = dlg->choice;
+            plan_job(*p, dlg->choice, src, dst, name);
+            ++p->next;
+            plan_next(p);
+        });
+        show_free(dlg);
+        return;
     }
-    return jobs;
+    p->planned(p->jobs);
+}
+
+void plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
+                   std::function<void(const QList<Job> &)> planned)
+{
+    auto p = std::make_shared<Plan>();
+    p->parent = parent;
+    p->has_parent = parent != nullptr;
+    p->sources = sources;
+    p->dest_dir = dest_dir;
+    p->op = op;
+    p->dest_real = realpath(dest_dir);
+    p->planned = std::move(planned);
+    plan_next(p);
 }
 
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
               std::function<void()> on_done)
 {
-    auto jobs = plan_transfer(parent, sources, dest_dir, op);
-    if (jobs && !jobs->isEmpty())
-        start_ops(parent, *jobs, op == "copy" ? "Copying" : "Moving", on_done, op == "copy" ? "Copy" : "Move");
+    QPointer<QWidget> owner(parent);
+    plan_transfer(parent, sources, dest_dir, op, [owner, op, on_done](const QList<Job> &jobs) {
+        if (!jobs.isEmpty())
+            start_ops(owner, jobs, op == "copy" ? "Copying" : "Moving", on_done, op == "copy" ? "Copy" : "Move");
+    });
 }
 
 // ---------------------------------------------------------------- links & shortcuts

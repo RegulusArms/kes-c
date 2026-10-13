@@ -13,6 +13,7 @@
 #include "stats.h"
 #include "util.h"
 #include "widgets.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QDrag>
@@ -29,7 +30,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
-#include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
 #include <QScrollBar>
@@ -624,11 +624,11 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         p = dirname(p);
     }
     if (!isdir(p)) {
-        QMessageBox::warning(this, "Not found", QString("“%1” does not exist.").arg(p));
+        warn(this, "Not found", QString("“%1” does not exist.").arg(p));
         return false;
     }
     if (!util::access(p, R_OK | X_OK)) {
-        QMessageBox::warning(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
+        warn(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
         return false;
     }
     QString prev = path;

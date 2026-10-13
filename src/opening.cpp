@@ -15,8 +15,8 @@
 #include "util.h"
 #include "viewer.h"
 #include "widgets.h"
+#include "windows.h"
 
-#include <QMessageBox>
 #include <QPointer>
 
 using namespace util;
@@ -87,14 +87,14 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         open_videos(videos);
     for (const QString &f : others)
         if (!open_file(f))
-            QMessageBox::warning(this, "Open", "Could not open " + f);
+            warn(this, "Open", "Could not open " + f);
 }
 
 void MainWindow::open_videos(const QStringList &videos)
 {
     for (const QString &f : open_with_choice(videos, settings().value("video_opener", "system").toString()))
         if (!open_file(f))
-            QMessageBox::warning(this, "Open", "Could not open " + f);
+            warn(this, "Open", "Could not open " + f);
 }
 
 QStringList MainWindow::open_with_choice(const QStringList &files, const QString &choice)
@@ -107,7 +107,7 @@ QStringList MainWindow::open_with_choice(const QStringList &files, const QString
         launch_app(app, files);
         return {};
     } catch (const Error &e) {
-        QMessageBox::warning(this, "Open", QString("Could not open with %1: %2").arg(app_name(app), e.message()));
+        warn(this, "Open", QString("Could not open with %1: %2").arg(app_name(app), e.message()));
         return files;
     }
 }
@@ -170,7 +170,7 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
             sidebar->refresh();
             return true;
         } catch (const OSError &e) {
-            QMessageBox::warning(this, "Move to Trash", e.message());
+            warn(this, "Move to Trash", e.message());
             return false;
         }
     };
@@ -184,7 +184,7 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
         viewers = keep;
     };
     cb.on_properties = [this, viewer_ptr](const QString &path) { properties({path}, viewer_ptr->data()); };
-    cb.on_open_with = [viewer_ptr](const QString &path) { OpenWithDialog(viewer_ptr->data(), {path}).exec(); };
+    cb.on_open_with = [viewer_ptr](const QString &path) { show_free(new OpenWithDialog(viewer_ptr->data(), {path})); };
     auto *v = new ImageViewer(images, idx, cb);
     *viewer_ptr = v;
     viewers << v;

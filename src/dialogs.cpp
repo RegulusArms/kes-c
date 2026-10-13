@@ -6,6 +6,7 @@
 #include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
+#include "windows.h"
 
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -16,7 +17,6 @@
 #include <QCryptographicHash>
 #include <QDialogButtonBox>
 #include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -41,6 +41,7 @@
 #include <QTreeView>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <QWindow>
 
 #include <grp.h>
 #include <pwd.h>
@@ -315,12 +316,12 @@ void MetaTagDialog::ok()
     QString key = tag();
     static const QRegularExpression re("^[\\w-]+(:[\\w-]+)?$", QRegularExpression::UseUnicodePropertiesOption);
     if (key.isEmpty() || !re.match(key).hasMatch()) {
-        QMessageBox::warning(this, windowTitle(), "Choose a tag, or type one like “Artist” or “XMP-dc:Description”.");
+        warn(this, windowTitle(), "Choose a tag, or type one like “Artist” or “XMP-dc:Description”.");
         return;
     }
     QString group = key.contains(':') ? key.section(':', 0, 0) : QString();
     if (!group.isEmpty() && !metadata::is_editable(group, "", key.section(':', 1, 1))) {
-        QMessageBox::warning(this, windowTitle(), QString("%1 tags can't be edited.").arg(group));
+        warn(this, windowTitle(), QString("%1 tags can't be edited.").arg(group));
         return;
     }
     accept();
@@ -340,15 +341,6 @@ metadata::Change MetaTagDialog::result_change() const
         c.values << text;
     }
     return c;
-}
-
-std::optional<metadata::Change> MetaTagDialog::ask(QWidget *parent, const QString &key, const QString &value,
-                                                   const QString &path, const QHash<QString, QString> &existing)
-{
-    MetaTagDialog d(parent, key, value, path, existing);
-    if (d.exec() != QDialog::Accepted)
-        return std::nullopt;
-    return d.result_change();
 }
 
 // ---------------------------------------------------------------- properties
@@ -538,10 +530,13 @@ void PropertiesDialog::show_dir_size(const QVariant &res)
 
 void PropertiesDialog::change_app()
 {
-    OpenWithDialog dlg(this, {path}, false);
-    dlg.default_box->setChecked(true);
-    if (dlg.exec() && dlg.selected_app())
-        app_label->setText(app_name(dlg.selected_app()));
+    auto *dlg = new OpenWithDialog(this, {path}, false);
+    dlg->default_box->setChecked(true);
+    connect(dlg, &QDialog::accepted, this, [this, dlg]() {
+        if (dlg->selected_app())
+            app_label->setText(app_name(dlg->selected_app()));
+    });
+    show_free(dlg);
 }
 
 QWidget *PropertiesDialog::perm_tab()
@@ -735,7 +730,7 @@ void PropertiesDialog::meta_write(std::function<QStringList()> fn)
     run([fn]() { return QVariant(fn()); },
         [this](const QVariant &warnings) {
             if (!warnings.toStringList().isEmpty())
-                QMessageBox::information(this, "Metadata", warnings.toStringList().join('\n'));
+                inform(this, "Metadata", warnings.toStringList().join('\n'));
             reload_meta();
         },
         "Writing metadata");
@@ -762,15 +757,22 @@ void PropertiesDialog::meta_edit(QTreeWidgetItem *it)
         return;
     QString val = it->data(2, Qt::UserRole).toString();
     if (!meta_row_editable(it)) {
-        TextDialog(this, it->text(1), val).exec();
+        show_free(new TextDialog(this, it->text(1), val));
         return;
     }
-    auto res = MetaTagDialog::ask(this, meta_key(it), val, path);
-    if (res) {
+    meta_ask(meta_key(it), val);
+}
+
+// the Edit / Add Tag window; saving writes the tag
+void PropertiesDialog::meta_ask(const QString &key, const QString &value, const QHash<QString, QString> &existing)
+{
+    auto *d = new MetaTagDialog(this, key, value, path, existing);
+    connect(d, &QDialog::accepted, this, [this, d]() {
         QString p = path;
-        metadata::Change c = *res;
+        metadata::Change c = d->result_change();
         meta_write([p, c]() { return metadata::set_tags(p, {c}); });
-    }
+    });
+    show_free(d);
 }
 
 void PropertiesDialog::meta_add()
@@ -780,12 +782,7 @@ void PropertiesDialog::meta_add()
         QTreeWidgetItem *it = meta_tree->topLevelItem(i);
         existing.insert(meta_key(it), it->data(2, Qt::UserRole).toString());
     }
-    auto res = MetaTagDialog::ask(this, "", "", path, existing);
-    if (res) {
-        QString p = path;
-        metadata::Change c = *res;
-        meta_write([p, c]() { return metadata::set_tags(p, {c}); });
-    }
+    meta_ask("", "", existing);
 }
 
 void PropertiesDialog::meta_remove()
@@ -797,37 +794,44 @@ void PropertiesDialog::meta_remove()
     for (QTreeWidgetItem *it : sel)
         keys << meta_key(it);
     QString what = keys.size() == 1 ? keys.first() : QString("%1 tags").arg(keys.size());
-    if (QMessageBox::question(this, "Remove Metadata", QString("Remove %1 from this file?\n\nThis can't be undone.").arg(what)) !=
-        QMessageBox::Yes)
-        return;
-    QList<metadata::Change> changes;
-    for (const QString &k : keys) {
-        metadata::Change c;
-        c.key = k;
-        c.remove = true;
-        changes << c;
-    }
-    QString p = path;
-    meta_write([p, changes]() { return metadata::set_tags(p, changes); });
+    auto *box = new QMessageBox(QMessageBox::Question, "Remove Metadata",
+                                "Remove " + what + " from this file?\n\nThis can't be undone.",
+                                QMessageBox::Yes | QMessageBox::No, this);
+    connect(box, &QMessageBox::buttonClicked, this, [this, box, keys](QAbstractButton *b) {
+        if (b != box->button(QMessageBox::Yes))
+            return;
+        QList<metadata::Change> changes;
+        for (const QString &k : keys) {
+            metadata::Change c;
+            c.key = k;
+            c.remove = true;
+            changes << c;
+        }
+        QString p = path;
+        meta_write([p, changes]() { return metadata::set_tags(p, changes); });
+    });
+    show_free(box);
 }
 
 void PropertiesDialog::meta_clear()
 {
-    QMessageBox box(QMessageBox::Warning, "Clear All Metadata",
-                    QString("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, image-generation prompts…) from “%1”?"
-                            "\n\nThis can't be undone.")
-                        .arg(basename(path)),
-                    QMessageBox::Cancel, this);
-    QPushButton *clear = box.addButton("Clear All", QMessageBox::DestructiveRole);
+    auto *box = new QMessageBox(QMessageBox::Warning, "Clear All Metadata",
+                                QString("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, image-generation prompts…) "
+                                        "from “%1”?\n\nThis can't be undone.")
+                                    .arg(basename(path)),
+                                QMessageBox::Cancel, this);
+    QPushButton *clear = box->addButton("Clear All", QMessageBox::DestructiveRole);
     auto *keep = new QCheckBox("Keep orientation and colour profile");
     keep->setChecked(true);
-    box.setCheckBox(keep);
-    box.exec();
-    if (box.clickedButton() != clear)
-        return;
-    bool k = keep->isChecked();
-    QString p = path;
-    meta_write([p, k]() { return metadata::clear_all(p, k); });
+    box->setCheckBox(keep);
+    connect(box, &QMessageBox::buttonClicked, this, [this, clear, keep](QAbstractButton *b) {
+        if (b != clear)
+            return;
+        bool k = keep->isChecked();
+        QString p = path;
+        meta_write([p, k]() { return metadata::clear_all(p, k); });
+    });
+    show_free(box);
 }
 
 void PropertiesDialog::maybe_load_meta(int idx)
@@ -893,7 +897,7 @@ void PropertiesDialog::meta_menu(const QPoint &pos)
     QMenu m(this);
     m.addAction("Copy Value", this, [val]() { QGuiApplication::clipboard()->setText(val); });
     m.addAction("Copy Row", this, [row]() { QGuiApplication::clipboard()->setText(row); });
-    m.addAction("View Value…", this, [this, tag, val]() { TextDialog(this, tag, val).exec(); });
+    m.addAction("View Value…", this, [this, tag, val]() { show_free(new TextDialog(this, tag, val)); });
     if (meta_editable) {
         m.addSeparator();
         if (meta_row_editable(it))
@@ -968,9 +972,8 @@ QWidget *PropertiesDialog::checksum_tab()
     form->addRow("", hash_result);
     connect(browse, &QPushButton::clicked, this, [this]() {
         QString start = hash_edit->text().isEmpty() ? dirname(path) : dirname(hash_edit->text());
-        QString f = QFileDialog::getOpenFileName(this, "Choose Checksum File", start, hashcheck::file_filter());
-        if (!f.isEmpty())
-            verify_against(f);
+        choose_file(this, "Choose Checksum File", start, hashcheck::file_filter(),
+                    [this](const QString &f) { verify_against(f); });
     });
     return w;
 }
@@ -1037,7 +1040,7 @@ void PropertiesDialog::apply()
                                 return QStringList();
                             });
                     } else {
-                        QMessageBox::warning(this, "Permissions", errno_text(e, path));
+                        warn(owner, "Permissions", errno_text(e, path));   // owner: this may close below
                     }
                 }
             }
@@ -1056,7 +1059,7 @@ void PropertiesDialog::apply()
                                           return QStringList();
                                       });
             } else if (!res.error.isEmpty()) {
-                QMessageBox::warning(this, "Rename", res.error);
+                warn(this, "Rename", res.error);
                 return;
             }
         }
@@ -1135,7 +1138,7 @@ void OpenWithDialog::ok()
         if (launch)
             launch_app(app, paths);
     } catch (const Error &e) {
-        QMessageBox::warning(this, "Open With", e.message());
+        warn(parentWidget(), "Open With", e.message());   // not this: it closes now
     }
     accept();
 }
@@ -1317,7 +1320,7 @@ void BatchRenameDialog::apply()
         QString msg = e.message();
         if (!stuck.isEmpty())
             msg += "\n\nThese couldn't be put back under their old names:\n" + stuck.join('\n');
-        QMessageBox::warning(this, "Rename", msg);
+        warn(this, "Rename", msg);
         return;
     }
     QList<QPair<QString, QString>> renamed;
@@ -1329,6 +1332,11 @@ void BatchRenameDialog::apply()
 }
 
 // ---------------------------------------------------------------- preferences
+
+// Folder preview picks: the choices and their folder_order setting (thumbs::pick_folder_images)
+static const QList<QPair<QString, QString>> FOLDER_ORDERS = {
+    {"First by name", "name"}, {"Last by name", "last"}, {"Newest first", "newest"}, {"Oldest first", "oldest"},
+    {"Beginning, middle and end", "spread"}};
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
 {
@@ -1360,8 +1368,9 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     count->setRange(1, 4);
     count->setValue(s.value("folder_count", 4).toInt());
     order = new QComboBox;
-    order->addItems({"First by name", "Newest first"});
-    order->setCurrentIndex(s.value("folder_order", "name").toString() == "newest" ? 1 : 0);
+    for (auto [label, value] : FOLDER_ORDERS)
+        order->addItem(label, value);
+    order->setCurrentIndex(std::max(0, order->findData(s.value("folder_order", "name").toString())));
     QString color_setting = s.value("folder_color", "accent").toString();
     color_accent = new QCheckBox("Use the desktop's accent colour");
     color_accent->setChecked(thumbs::follows_accent(color_setting));
@@ -1452,9 +1461,7 @@ QComboBox *PreferencesDialog::opener_combo(const QString &ct, const QString &cur
 void PreferencesDialog::browse_home()
 {
     QString start = hp_edit->text().startsWith('/') ? hp_edit->text() : HOME();
-    QString d = QFileDialog::getExistingDirectory(this, "Choose Homepage Folder", start);
-    if (!d.isEmpty())
-        hp_edit->setText(d);
+    choose_folder(this, "Choose Homepage Folder", start, [this](const QString &d) { hp_edit->setText(d); });
 }
 
 void PreferencesDialog::paint_color()
@@ -1466,11 +1473,14 @@ void PreferencesDialog::paint_color()
 
 void PreferencesDialog::pick_color()
 {
-    QColor c = QColorDialog::getColor(color, this, "Folder colour");
-    if (c.isValid()) {
+    auto *d = new QColorDialog(color, this);
+    d->setWindowTitle("Folder colour");
+    d->setOption(QColorDialog::DontUseNativeDialog);   // the desktop's own one would be modal
+    connect(d, &QColorDialog::colorSelected, this, [this](const QColor &c) {
         color = c;
         paint_color();
-    }
+    });
+    show_free(d);
 }
 
 void PreferencesDialog::save()
@@ -1480,13 +1490,13 @@ void PreferencesDialog::save()
     QString custom = hp_edit->text().trimmed();
     if (m == 2) {
         if (custom.isEmpty()) {
-            QMessageBox::warning(this, "Homepage", "Enter a folder or network location for the homepage.");
+            warn(this, "Homepage", "Enter a folder or network location for the homepage.");
             return;
         }
         if (custom.startsWith('~'))
             custom = expanduser(custom);
         if (custom.startsWith('/') && !isdir(custom)) {
-            QMessageBox::warning(this, "Homepage", QString("“%1” is not a folder.").arg(custom));
+            warn(this, "Homepage", QString("“%1” is not a folder.").arg(custom));
             return;
         }
         s.setValue("homepage", custom);
@@ -1494,7 +1504,7 @@ void PreferencesDialog::save()
         s.setValue("homepage", m == 0 ? "overview" : "home");
     }
     s.setValue("folder_count", count->value());
-    s.setValue("folder_order", order->currentIndex() == 1 ? "newest" : "name");
+    s.setValue("folder_order", order->currentData().toString());
     s.setValue("folder_color", color_accent->isChecked() ? QString("accent") : color.name());
     s.setValue("thumb_max_mb", max_mb->value());
     s.setValue("image_opener", img_opener->currentData());
@@ -1530,12 +1540,12 @@ RenameResult do_rename(const QString &path, const QString &new_name)
     return {};
 }
 
-QString ask_rename(QWidget *parent, const QString &path)
+void ask_rename(QWidget *parent, const QString &path, std::function<void(const QString &)> renamed)
 {
-    QDialog dlg(parent);
+    auto *dlg = new QDialog(parent);
     bool is_dir = isdir(path);
-    dlg.setWindowTitle(is_dir ? "Rename Folder" : "Rename File");
-    auto *lay = new QVBoxLayout(&dlg);
+    dlg->setWindowTitle(is_dir ? "Rename Folder" : "Rename File");
+    auto *lay = new QVBoxLayout(dlg);
     QString old = basename(path);
     auto *edit = new QLineEdit(old);
     edit->setMinimumWidth(380);
@@ -1548,7 +1558,7 @@ QString ask_rename(QWidget *parent, const QString &path)
     lay->addWidget(bb);
     int stem_len = is_dir ? old.size() : split_ext(old).first.size();
     QTimer::singleShot(0, edit, [edit, stem_len]() { edit->setSelection(0, stem_len); });
-    QObject::connect(edit, &QLineEdit::textChanged, &dlg, [=](const QString &text) {
+    QObject::connect(edit, &QLineEdit::textChanged, dlg, [=](const QString &text) {
         QString t = text.trimmed();
         QString msg;
         if (t.isEmpty())
@@ -1560,19 +1570,16 @@ QString ask_rename(QWidget *parent, const QString &path)
         err->setText(msg.trimmed());
         bb->button(QDialogButtonBox::Ok)->setEnabled(msg.isEmpty());
     });
-    QObject::connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    if (dlg.exec() && edit->text().trimmed() != old)
-        return edit->text().trimmed();
-    return QString();
+    QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+    QObject::connect(dlg, &QDialog::accepted, dlg, [edit, old, renamed]() {
+        if (edit->text().trimmed() != old)
+            renamed(edit->text().trimmed());
+    });
+    show_free(dlg);
 }
 
-QString choose_dir(QWidget *parent, const QString &title, const QString &start)
-{
-    return QFileDialog::getExistingDirectory(parent, title, start);
-}
-
-bool edit_bookmark(QWidget *parent, const QString &target)
+void edit_bookmark(QWidget *parent, const QString &target, std::function<void()> saved)
 {
     auto bms = read_bookmarks();
     int idx = -1;
@@ -1582,19 +1589,17 @@ bool edit_bookmark(QWidget *parent, const QString &target)
             break;
         }
     if (idx < 0)
-        return false;
-    QDialog d(parent);
-    d.setWindowTitle("Edit Bookmark");
-    d.setMinimumWidth(460);
-    auto *form = new QFormLayout(&d);
+        return;
+    auto *d = new QDialog(parent);
+    d->setWindowTitle("Edit Bookmark");
+    d->setMinimumWidth(460);
+    auto *form = new QFormLayout(d);
     auto *name = new QLineEdit(bms[idx].second);
     auto *path = new QLineEdit(bms[idx].first);
     auto *browse = new QPushButton("Browse…");
-    QObject::connect(browse, &QPushButton::clicked, &d, [&d, path]() {
+    QObject::connect(browse, &QPushButton::clicked, d, [d, path]() {
         QString start = path->text().trimmed();
-        QString p = choose_dir(&d, "Bookmark Location", isdir(start) ? start : HOME());
-        if (!p.isEmpty())
-            path->setText(p);
+        choose_folder(d, "Bookmark Location", isdir(start) ? start : HOME(), [path](const QString &p) { path->setText(p); });
     });
     auto *row = new QHBoxLayout;
     row->addWidget(path, 1);
@@ -1603,38 +1608,43 @@ bool edit_bookmark(QWidget *parent, const QString &target)
     form->addRow("Location:", row);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
     form->addRow(bb);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
-    QObject::connect(bb, &QDialogButtonBox::accepted, &d, [&d, path]() {
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::accepted, d, [d, path]() {
         QString p = path->text().trimmed();
         if (p.startsWith('~'))
             p = expanduser(p);
         if (p.isEmpty()) {
-            QMessageBox::warning(&d, "Edit Bookmark", "Location can't be empty.");
+            warn(d, "Edit Bookmark", "Location can't be empty.");
             return;
         }
-        if (!p.contains("://") && !isdir(p)) {
-            if (QMessageBox::question(&d, "Edit Bookmark", QString("“%1” is not an existing folder. Save anyway?").arg(p)) !=
-                QMessageBox::Yes)
+        if (!p.contains("://") && !isdir(p))
+            ask_yes(d, "Edit Bookmark", QString("“%1” is not an existing folder. Save anyway?").arg(p), [d]() { d->accept(); });
+        else
+            d->accept();
+    });
+    QObject::connect(d, &QDialog::accepted, d, [target, name, path, saved]() {
+        QString p = path->text().trimmed();
+        if (p.startsWith('~'))
+            p = expanduser(p);
+        if (!p.contains("://"))
+            p = normpath(abspath(p));
+        QString label = name->text().trimmed();
+        if (label.isEmpty())
+            label = basename(rstrip(p, '/'));
+        if (label.isEmpty())
+            label = p;
+        auto now = read_bookmarks();   // as they are now: they may have changed while this was open
+        for (auto &b : now)
+            if (b.first == target) {
+                b = qMakePair(p, label);
+                write_bookmarks(now);
+                if (saved)
+                    saved();
                 return;
-        }
-        d.accept();
+            }
     });
     name->selectAll();
-    if (d.exec() != QDialog::Accepted)
-        return false;
-    QString p = path->text().trimmed();
-    if (p.startsWith('~'))
-        p = expanduser(p);
-    if (!p.contains("://"))
-        p = normpath(abspath(p));
-    QString label = name->text().trimmed();
-    if (label.isEmpty())
-        label = basename(rstrip(p, '/'));
-    if (label.isEmpty())
-        label = p;
-    bms[idx] = qMakePair(p, label);
-    write_bookmarks(bms);
-    return true;
+    show_free(d);
 }
 
 }  // namespace dialogs

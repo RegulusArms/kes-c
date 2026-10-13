@@ -31,6 +31,7 @@ add_executable(kes
     src/chooser.cpp
     src/places.cpp
     src/sharing.cpp
+    src/windows.cpp
     src/undo.cpp
     src/admin.cpp
     src/animate.cpp

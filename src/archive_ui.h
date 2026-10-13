@@ -5,6 +5,8 @@
 
 #include <QDialog>
 
+#include <functional>
+
 class MainWindow;
 class QCheckBox;
 class QComboBox;
@@ -31,6 +33,7 @@ private:
     void browse();
     void update_preview();
     void ok();
+    void save(const archive::Spec &sp);   // ok(), once a replace is confirmed
 
     QStringList paths, rels;
     QString base;
@@ -57,6 +60,7 @@ public:
 private:
     void browse();
     void ok();
+    void save();   // ok(), once a missing folder is made
     QString path;
     bool encrypted;
     QLineEdit *dest, *pw;
@@ -66,7 +70,8 @@ private:
 
 namespace archive_ui {
 
-QString ask_password(QWidget *parent, const QString &path, bool wrong = false);   // null if cancelled
+// asks for the archive's password; ok(password) runs with it, unless cancelled or left empty
+void ask_password(QWidget *parent, const QString &path, bool wrong, std::function<void(const QString &)> ok);
 void extract_here(MainWindow *win, const QString &path);
 void extract_dialog(MainWindow *win, const QString &path);
 // Tell the user which of the archive's symlinks were left out for leading outside the folder, and warn about any that

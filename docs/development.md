@@ -89,6 +89,26 @@ Examples:
 
 Messages are JSON; a Kestrel speaking another protocol version is ignored. If the tower goes down, the next Kestrel to notice starts a new one and every Kestrel checks in again.
 
+## Windows
+
+Every window Kestrel opens can be moved anywhere and left open until it's needed: Properties, Preferences, Open With,
+Compress and Extract, a question, an error message, the folder picker. None is modal, so none blocks the window it came
+from or (on GNOME, which attaches modal dialogs to their parent) drags it along. None is kept above another window, and
+several can be open at once. A window goes when the Kestrel window it belongs to closes.
+
+To keep it that way, a new window:
+
+- is made on the heap and shown with `show_free()` (`src/windows.h`), never with `exec()`, `open()`, `setModal()` or a
+  window modality;
+- uses `warn()` / `inform()` for a message, `ask()` / `ask_yes()` / `ask_box()` for a question, `ask_text()` for a line
+  of text, and `choose_folder()` / `choose_file()` for a picker (Kestrel's own chooser window), never the static functions
+  of `QMessageBox`, `QInputDialog`, `QFileDialog` or `QColorDialog`, which are all modal;
+- does what follows the answer in a callback (on `accepted`, or the helper's), since nothing waits for it. Re-read
+  anything that may have changed while it was open, and parent a message to a window that stays open (not to a
+  dialog that closes right after).
+
+tests/test_ui.cpp checks the source for modal calls, so one that slips in fails the tests.
+
 ## Layout
 
 | File | Purpose |
@@ -112,6 +132,7 @@ Messages are JSON; a Kestrel speaking another protocol version is ignored. If th
 | `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`) |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
+| `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
 | `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark, preferences |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
