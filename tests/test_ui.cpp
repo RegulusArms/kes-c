@@ -199,11 +199,20 @@ int main(int argc, char **argv)
         check(native.isEmpty(), "opening those windows doesn't give the widgets in Kestrel's or Properties' window native "
                                 "windows of their own" + (native.isEmpty() ? QString() : " (" + native.join(", ") + ")"));
         QPointer<PropertiesDialog> first = open.value(0);
+        QPointer<TextDialog> opened = value;
         if (first)
             first->close();
-        spin(100);
-        check(!first && props_open().size() == 1, "closing a Properties window deletes it (and what it opened) and "
-                                                  "leaves the others open");
+        // a deleteLater() is carried out by the app's event loop; this test runs outside it, and Qt 6.4 doesn't carry
+        // one out in the nested loop spin() runs, so do it here (nothing is pending if the window isn't deleted on close)
+        bool gone = wait_for([&]() {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return !first && !opened;
+        }, 3000);
+        int left = int(props_open().size());
+        check(gone && left == 1, QString("closing a Properties window deletes it (and what it opened) and leaves the "
+                                         "others open (deleted: %1, open: %2)")
+                                     .arg(gone ? "yes" : "no")
+                                     .arg(left));
         for (auto &d : props_open())
             d->close();
         spin(50);

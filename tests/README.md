@@ -1,6 +1,6 @@
 # Tests
 
-Automated tests for Kestrel Explorer.
+Automated tests for Kestrel Explorer. What changed in them for each version, and why: [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 tests/run.sh                     # build, then run every test
@@ -83,6 +83,8 @@ Each test is one small program in `tests/`, built from `test_<name>.cpp`:
 
 1. Create `tests/test_<name>.cpp` with `#include "common.h"`. Start `main` with the `is_tower` check (see the existing tests), then call `setup_app()`, use `check(ok, "what it means")`, and end with `finish()`.
 2. Add `<name>` to the `foreach` list in `tests/CMakeLists.txt` and to `ALL` in `tests/run.sh`.
+3. Say what it covers and why under the current version in [CHANGELOG.md](CHANGELOG.md) (as for any check added,
+   changed or removed).
 
 ## Not covered
 
