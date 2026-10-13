@@ -85,6 +85,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
 | [Performance](docs/performance.md) | Benchmarks against GNOME Files and Nemo |
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
+| [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |
 | [Changelog](CHANGELOG.md) | What changed in each version |
 
 ## License
