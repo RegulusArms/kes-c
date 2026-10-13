@@ -27,6 +27,8 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - Background copies with progress and Cancel in the status bar.
 - Phones and cameras (iPhone, Android, PTP cameras) on the Overview page and in the sidebar, with thumbnails from the phone's own previews.
 - A sidebar you can rearrange and collapse.
+- A sort for each folder, and grouping by date (Today, Last week… or one group per day), by the date modified, created
+  or taken (from photos' and videos' metadata), with each group still sorted by name, size or type.
 - Follows the desktop's theme and accent colour, also when you change them while it's open.
 - Other apps' Open and Save dialogs, such as a browser's "Save image as", can open in Kestrel.
 - Several windows that stay in sync.
