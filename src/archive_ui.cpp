@@ -2,11 +2,11 @@
 
 #include "app.h"
 #include "fileops.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QFileDialog>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -59,11 +59,11 @@ static bool argv_tool(const QString &t) { return t == "zpaq"; }
 
 namespace archive_ui {
 
-QString ask_password(QWidget *parent, const QString &path, bool wrong)
+void ask_password(QWidget *parent, const QString &path, bool wrong, std::function<void(const QString &)> ok)
 {
-    QDialog dlg(parent);
-    dlg.setWindowTitle("Password Required");
-    auto *lay = new QVBoxLayout(&dlg);
+    auto *dlg = new QDialog(parent);
+    dlg->setWindowTitle("Password Required");
+    auto *lay = new QVBoxLayout(dlg);
     QString msg = wrong ? QString("<b>Wrong password</b> for “%1”. Try again:").arg(basename(path).toHtmlEscaped())
                         : QString("“%1” is encrypted. Enter its password:").arg(basename(path));
     auto *lbl = new QLabel(msg);
@@ -77,14 +77,16 @@ QString ask_password(QWidget *parent, const QString &path, bool wrong)
         lay->addWidget(small(QString(ARGV_NOTE).arg(t)));
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     bb->button(QDialogButtonBox::Ok)->setText("Extract");
-    QObject::connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+    QObject::connect(dlg, &QDialog::accepted, dlg, [edit, ok]() {
+        if (!edit->text().isEmpty())
+            ok(edit->text());
+    });
     lay->addWidget(bb);
-    dlg.resize(420, dlg.sizeHint().height());
+    dlg->resize(420, dlg->sizeHint().height());
     edit->setFocus();
-    if (dlg.exec() && !edit->text().isEmpty())
-        return edit->text();
-    return QString();
+    show_free(dlg);
 }
 
 }  // namespace archive_ui
@@ -385,9 +387,8 @@ void CompressDialog::level_changed()
 
 void CompressDialog::browse()
 {
-    QString d = QFileDialog::getExistingDirectory(this, "Save Archive In", dest->text().isEmpty() ? base : dest->text());
-    if (!d.isEmpty())
-        dest->setText(d);
+    choose_folder(this, "Save Archive In", dest->text().isEmpty() ? base : dest->text(),
+                  [this](const QString &d) { dest->setText(d); });
 }
 
 archive::Spec CompressDialog::spec() const
@@ -442,19 +443,19 @@ void CompressDialog::ok()
     archive::Spec sp = spec();
     QString out_name = basename(sp.out);
     if (name->text().trimmed().isEmpty() || name->text().contains('/')) {
-        QMessageBox::warning(this, "Compress", "Enter a name for the archive.");
+        warn(this, "Compress", "Enter a name for the archive.");
         return;
     }
     if (!isdir(dirname(sp.out))) {
-        QMessageBox::warning(this, "Compress", QString("“%1” is not a folder.").arg(dirname(sp.out)));
+        warn(this, "Compress", QString("“%1” is not a folder.").arg(dirname(sp.out)));
         return;
     }
     if (!sp.password.isEmpty() && pw->text() != pw2->text()) {
-        QMessageBox::warning(this, "Compress", "The passwords don't match.");
+        warn(this, "Compress", "The passwords don't match.");
         return;
     }
     if (enc->isVisible() && enc->isChecked() && sp.password.isEmpty()) {
-        QMessageBox::warning(this, "Compress", "Enter a password, or turn off encryption.");
+        warn(this, "Compress", "Enter a password, or turn off encryption.");
         return;
     }
     if (!extra->text().trimmed().isEmpty()) {
@@ -462,14 +463,18 @@ void CompressDialog::ok()
         QString err;
         shlex_split(extra->text(), &parsed, &err);
         if (!parsed) {
-            QMessageBox::warning(this, "Compress", "Extra options: " + err);
+            warn(this, "Compress", "Extra options: " + err);
             return;
         }
     }
-    if (exists(sp.out) &&
-        QMessageBox::question(this, "Compress", QString("“%1” already exists. Replace it?").arg(out_name)) !=
-            QMessageBox::Yes)
-        return;
+    if (exists(sp.out))
+        ask_yes(this, "Compress", QString("“%1” already exists. Replace it?").arg(out_name), [this, sp]() { save(sp); });
+    else
+        save(sp);
+}
+
+void CompressDialog::save(const archive::Spec &sp)
+{
     QSettings &s = settings();
     s.setValue("archive/format", sp.format.id);
     s.setValue(key("tool"), sp.tool);
@@ -547,28 +552,33 @@ ExtractDialog::ExtractDialog(QWidget *parent, const QString &path, bool encrypte
 
 void ExtractDialog::browse()
 {
-    QString d = QFileDialog::getExistingDirectory(this, "Extract To", dest->text());
-    if (!d.isEmpty())
-        dest->setText(d);
+    choose_folder(this, "Extract To", dest->text(), [this](const QString &d) { dest->setText(d); });
 }
 
 void ExtractDialog::ok()
 {
     QString d = expanduser(dest->text().trimmed());
-    if (!isdir(d)) {
-        if (QMessageBox::question(this, "Extract", QString("“%1” doesn't exist. Create it?").arg(d)) != QMessageBox::Yes)
-            return;
-        try {
-            makedirs(d);
-        } catch (const OSError &e) {
-            QMessageBox::warning(this, "Extract", e.message());
-            return;
-        }
-    }
     if (encrypted && pw->text().isEmpty()) {
-        QMessageBox::warning(this, "Extract", "This archive is encrypted. Enter its password.");
+        warn(this, "Extract", "This archive is encrypted. Enter its password.");
         return;
     }
+    if (!isdir(d)) {
+        ask_yes(this, "Extract", QString("“%1” doesn't exist. Create it?").arg(d), [this, d]() {
+            try {
+                makedirs(d);
+            } catch (const OSError &e) {
+                warn(this, "Extract", e.message());
+                return;
+            }
+            save();
+        });
+        return;
+    }
+    save();
+}
+
+void ExtractDialog::save()
+{
     QSettings &s = settings();
     s.setValue("archive/x_subfolder", subfolder->isChecked());
     s.setValue("archive/x_overwrite", overwrite->currentData());
@@ -593,9 +603,9 @@ static bool check_tool(MainWindow *win, const QString &path)
 {
     QString missing = archive::missing_extract_tool(path);
     if (!missing.isEmpty()) {
-        QMessageBox::warning(win, "Extract",
-                             QString("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install %2")
-                                 .arg(basename(path), missing));
+        warn(win, "Extract",
+             QString("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install %2")
+                 .arg(basename(path), missing));
         return false;
     }
     return true;
@@ -618,7 +628,7 @@ static void probe_then(MainWindow *win, const QString &path, std::function<void(
             if (!res.isValid())
                 return;
             if (!info["error"].toString().isEmpty())
-                QMessageBox::warning(w, "Extract", info["error"].toString());
+                warn(w, "Extract", info["error"].toString());
             else
                 then(info["encrypted"].toBool());
         });
@@ -663,16 +673,16 @@ void say_dropped_links(QWidget *win, const QString &name, const QVariantList &dr
                 "through them reaches what they point to:\n\n" +
                 stuck.mid(0, 20).join('\n');
     if (stuck.isEmpty())
-        QMessageBox::information(win, "Extracting " + name, text.trimmed());
+        inform(win, "Extracting " + name, text.trimmed());
     else
-        QMessageBox::warning(win, "Extracting " + name, text.trimmed());
+        warn(win, "Extracting " + name, text.trimmed());
 }
 
 // Tell the user which files were kept although they're damaged. damaged: their names in the archive.
 static void say_damaged(QWidget *win, const QString &name, const QStringList &damaged, const QString &details,
                         bool with_password)
 {
-    QMessageBox box(QMessageBox::Warning, "Extracting " + name, QString(), QMessageBox::Ok, win);
+    auto *box = new QMessageBox(QMessageBox::Warning, "Extracting " + name, QString(), QMessageBox::Ok, win);
     QString text = QString("%1 file%2 failed %3 checksum and %4 kept as far as %5 could be extracted. Expect %6 to be "
                            "broken in places:\n\n")
                        .arg(QString::number(damaged.size()), damaged.size() > 1 ? "s" : "",
@@ -683,9 +693,9 @@ static void say_damaged(QWidget *win, const QString &name, const QStringList &da
         text += QString("\n… and %1 more").arg(damaged.size() - 20);
     if (with_password)
         text += "\n\nIn an older (RAR4) archive a wrong password looks like damage too.";
-    box.setText(text);
-    box.setDetailedText(details);
-    box.exec();
+    box->setText(text);
+    box->setDetailedText(details);
+    show_free(box);
 }
 
 static void run_extract(MainWindow *win, const QString &path, const QVariantMap &opts)
@@ -736,12 +746,11 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         }
         QVariantMap res = r.toMap();
         if (res.value("wrong_password").toBool()) {
-            QString pw = ask_password(w, path, true);
-            if (!pw.isNull()) {
+            ask_password(w, path, true, [w, path, opts](const QString &pw) {
                 QVariantMap again = opts;
                 again["password"] = pw;
                 run_extract(w, path, again);
-            }
+            });
             return;
         }
         QString out = res["out"].toString();
@@ -771,15 +780,16 @@ void extract_here(MainWindow *win, const QString &path)
     probe_then(win, path, [w, path](bool encrypted) {
         if (!w)
             return;
-        QString pw;
-        if (encrypted) {
-            pw = ask_password(w, path);
-            if (pw.isNull())
-                return;
-        }
-        run_extract(w, path,
-                    {{"dest", dirname(path)}, {"subfolder", true}, {"overwrite", "rename"}, {"password", pw},
-                     {"trash_after", false}, {"open_after", false}});
+        auto go = [w, path](const QString &pw) {
+            if (w)
+                run_extract(w, path,
+                            {{"dest", dirname(path)}, {"subfolder", true}, {"overwrite", "rename"}, {"password", pw},
+                             {"trash_after", false}, {"open_after", false}});
+        };
+        if (encrypted)
+            ask_password(w, path, false, go);
+        else
+            go(QString());
     });
 }
 
@@ -789,17 +799,17 @@ void extract_dialog(MainWindow *win, const QString &path)
     probe_then(win, path, [w, path](bool encrypted) {
         if (!w)
             return;
-        ExtractDialog dlg(w, path, encrypted);
-        if (dlg.exec())
-            run_extract(w, path, dlg.options());
+        auto *dlg = new ExtractDialog(w, path, encrypted);
+        QObject::connect(dlg, &QDialog::accepted, w, [w, dlg, path]() { run_extract(w, path, dlg->options()); });
+        show_free(dlg);
     });
 }
 
 void compress_dialog(MainWindow *win, const QStringList &paths)
 {
-    CompressDialog dlg(win, paths);
-    if (dlg.exec())
-        run_compress(win, dlg.spec());
+    auto *dlg = new CompressDialog(win, paths);
+    QObject::connect(dlg, &QDialog::accepted, win, [win, dlg]() { run_compress(win, dlg->spec()); });
+    show_free(dlg);
 }
 
 void run_compress(MainWindow *win, const archive::Spec &spec_in)

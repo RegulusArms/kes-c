@@ -68,9 +68,9 @@ int main(int argc, char **argv)
     setup_app();
     stats::enable();   // KESTREL_STATS: checked at the end
     MainWindow *w = open_window({HOME()});
-    QTimer closer;   // error boxes are modal: note their text and close them
+    QTimer closer;   // message boxes: note their text and close them
     QObject::connect(&closer, &QTimer::timeout, []() {
-        if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+        if (auto *m = shown_window<QMessageBox>()) {
             boxes << m->text();
             m->done(0);
         }
@@ -309,6 +309,7 @@ int main(int argc, char **argv)
         make(P("race/small.txt"), "small");
         boxes.clear();
         bool ran = run_ops(w, {{"copy", P("race/small.txt"), P("race/taken.txt")}, {"move", P("race/small.txt"), P("race/taken.txt")}});
+        wait_for([]() { return !boxes.isEmpty(); }, 3000);   // the message comes up beside it, not blocking
         check(ran && text_of(P("race/taken.txt")) == "mine" && text_of(P("race/small.txt")) == "small" &&
                   !boxes.isEmpty() && boxes.last().contains("appeared"),
               "a copy or move to a name that's taken by the time it starts (not chosen as Replace) replaces nothing");
@@ -380,6 +381,7 @@ int main(int argc, char **argv)
         for (QPushButton *b : dlg.findChildren<QPushButton *>())
             if (b->text() == "Rename")
                 b->click();
+        wait_for([]() { return !boxes.isEmpty(); }, 3000);
         QStringList left = listdir(P("br"));
         left.sort();
         check(left == QStringList({"b-x.txt", "b.txt", "lnk"}) && islink(P("br/lnk")) && text_of(P("br/b.txt")) == "b" &&
@@ -412,7 +414,7 @@ int main(int argc, char **argv)
         QStringList earlier = boxes;
         boxes.clear();
         w->trash_paths({trashed_item, P("mt/normal.txt")});
-        check(wait_for([&]() { return !lexists(P("mt/normal.txt")); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
+        check(wait_for([&]() { return !lexists(P("mt/normal.txt")) && !boxes.isEmpty(); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
                   exists(trashed_item) && !boxes.isEmpty() && boxes.first().contains("Permanently delete “in-trash.txt”"),
               "Move to Trash on a mixed selection trashes the items outside the trash and asks only about the one in it");
         boxes = earlier;
@@ -552,9 +554,9 @@ int main(int argc, char **argv)
     make(P("arc/in.txt"));
     proc::run({"tar", "czf", P("arc.tar.gz"), "-C", P("arc"), "in.txt"});
     bool extract_shown = false;
-    QTimer extract_closer;   // the Extract dialog is modal: note it and close it
+    QTimer extract_closer;   // the Extract dialog: note it and close it
     QObject::connect(&extract_closer, &QTimer::timeout, [&extract_shown]() {
-        if (auto *d = qobject_cast<ExtractDialog *>(QApplication::activeModalWidget())) {
+        if (auto *d = shown_window<ExtractDialog>()) {
             extract_shown = true;
             d->reject();
         }

@@ -12,6 +12,7 @@
 class Animator;
 class FSModel;
 class PreferencesDialog;
+class QMessageBox;
 class GridDelegate;
 class ImageViewer;
 class InfoPanel;
@@ -148,6 +149,12 @@ private:
     void sync_undo();
     void preferences_saved();
     void run_shred(const QStringList &targets, const QString &title);
+    void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
+    void make_folder(const QString &dir, const QString &name);   // New Folder / New File, once the name is given
+    void make_file(const QString &dir, const QString &name, const QString &tmpl);
+    void delete_now(const QStringList &paths);   // Delete Permanently, once confirmed
+    void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
+    QPointer<QMessageBox> close_box;             // "Operations Running", while it's asking
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

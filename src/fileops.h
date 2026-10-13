@@ -153,9 +153,10 @@ struct Job {
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
                 const QString &undo_label = QString());
 
-// Resolve conflicts interactively; the job list for start_ops (nullopt if cancelled).
-std::optional<QList<Job>> plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir,
-                                        const QString &op);
+// Resolve conflicts interactively (a window for each, answered one after another); planned(jobs) then runs with the
+// job list for start_ops, unless the user cancels or parent is closed meanwhile.
+void plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
+                   std::function<void(const QList<Job> &)> planned);
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
               std::function<void()> on_done = nullptr);
 

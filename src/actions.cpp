@@ -9,12 +9,12 @@
 #include "undo.h"
 #include "util.h"
 #include "widgets.h"
+#include "windows.h"
 
 #include <QClipboard>
 #include <QCursor>
 #include <QFile>
 #include <QGuiApplication>
-#include <QInputDialog>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
@@ -114,7 +114,7 @@ void MainWindow::paste(const QString &target_in, bool as_link)
                 undo::record_paths("create", "Paste", {dst});
                 pane()->select_later(dst);
             } catch (const OSError &e) {
-                QMessageBox::warning(this, "Paste", e.message());
+                warn(this, "Paste", e.message());
             }
         }
         return;
@@ -168,9 +168,8 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
 
 void MainWindow::transfer_to(const QStringList &paths, const QString &op)
 {
-    QString d = dialogs::choose_dir(this, op == "move" ? "Move To" : "Copy To", cur_dir().isEmpty() ? HOME() : cur_dir());
-    if (!d.isEmpty())
-        fileops::transfer(this, paths, d, op);
+    choose_folder(this, op == "move" ? "Move To" : "Copy To", cur_dir().isEmpty() ? HOME() : cur_dir(),
+                  [this, paths, op](const QString &d) { fileops::transfer(this, paths, d, op); });
 }
 
 void MainWindow::duplicate(const QStringList &paths)
@@ -189,9 +188,12 @@ void MainWindow::new_folder()
     if (cur.isEmpty())
         return;
     QString def = basename(unique_path(cur, "New Folder", "num"));
-    bool ok = false;
-    QString name = QInputDialog::getText(this, "New Folder", "Folder name:", QLineEdit::Normal, def, &ok);
-    if (!ok || name.trimmed().isEmpty())
+    ask_text(this, "New Folder", "Folder name:", def, [this, cur](const QString &name) { make_folder(cur, name); });
+}
+
+void MainWindow::make_folder(const QString &cur, const QString &name)
+{
+    if (name.trimmed().isEmpty())
         return;
     QString p = join(cur, name.trimmed());
     try {
@@ -212,7 +214,7 @@ void MainWindow::new_folder()
                         self->pane()->select_later(p);
                 });
         } else {
-            QMessageBox::warning(this, "New Folder", e.message());
+            warn(this, "New Folder", e.message());
         }
     }
 }
@@ -224,13 +226,16 @@ void MainWindow::new_file(const QString &tmpl)
         return;
     QString base = tmpl.isEmpty() ? QString("Untitled.txt") : basename(tmpl);
     QString def = basename(unique_path(cur, base, "num"));
-    bool ok = false;
-    QString name = QInputDialog::getText(this, "New File", "File name:", QLineEdit::Normal, def, &ok);
-    if (!ok || name.trimmed().isEmpty())
+    ask_text(this, "New File", "File name:", def, [this, cur, tmpl](const QString &name) { make_file(cur, name, tmpl); });
+}
+
+void MainWindow::make_file(const QString &cur, const QString &name, const QString &tmpl)
+{
+    if (name.trimmed().isEmpty())
         return;
     QString p = join(cur, name.trimmed());
     if (lexists(p)) {
-        QMessageBox::warning(this, "New File", "A file with that name already exists.");
+        warn(this, "New File", "A file with that name already exists.");
         return;
     }
     try {
@@ -257,7 +262,7 @@ void MainWindow::new_file(const QString &tmpl)
                         self->pane()->select_later(p);
                 });
         } else {
-            QMessageBox::warning(this, "New File", e.message());
+            warn(this, "New File", e.message());
         }
     }
 }
@@ -267,12 +272,16 @@ void MainWindow::rename(const QStringList &paths)
     if (paths.isEmpty())
         return;
     if (paths.size() > 1) {
-        BatchRenameDialog(this, paths).exec();
+        show_free(new BatchRenameDialog(this, paths));
         return;
     }
-    QString nw = dialogs::ask_rename(this, paths.first());
-    if (nw.isEmpty())
-        return;
+    QString src = paths.first();
+    dialogs::ask_rename(this, src, [this, src](const QString &nw) { rename_to(src, nw); });
+}
+
+void MainWindow::rename_to(const QString &src, const QString &nw)
+{
+    QStringList paths{src};
     QString target = join(dirname(paths.first()), nw);
     QPointer<MainWindow> self(this);
     auto renamed = [self, target](bool ok) {
@@ -284,7 +293,6 @@ void MainWindow::rename(const QStringList &paths)
     };
     auto res = dialogs::do_rename(paths.first(), nw);
     if (res.denied) {
-        QString src = paths.first();
         admin::retry_as_admin(this, "Rename", QString("You don't have permission to rename “%1”.").arg(basename(src)),
                               [src, target](Task *task) {
                                   admin::session().call(task, "rename", {{"src", src}, {"dst", target}});
@@ -294,7 +302,7 @@ void MainWindow::rename(const QStringList &paths)
         return;
     }
     if (!res.error.isEmpty())
-        QMessageBox::warning(this, "Rename", res.error);
+        warn(this, "Rename", res.error);
     else {
         undo::record("rename", "Rename", {qMakePair(paths.first(), target)});
         renamed(true);
@@ -333,15 +341,15 @@ void MainWindow::trash_paths(const QStringList &selected)
         sidebar->refresh();
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
-            auto r = QMessageBox::question(this, "Cannot move to trash",
-                                           QString("%1 item(s) could not be moved to the trash:\n%2\n\nDelete them permanently?")
-                                               .arg(QString::number(failed.size()), failed.first().toStringList().value(1)));
-            if (r == QMessageBox::Yes) {
-                QList<fileops::Job> jobs;
-                for (const QVariant &f : failed)
-                    jobs << fileops::Job{"delete", f.toStringList().value(0), QString()};
-                fileops::start_ops(this, jobs, "Deleting");
-            }
+            ask_yes(this, "Cannot move to trash",
+                    QString("%1 item(s) could not be moved to the trash:\n%2\n\nDelete them permanently?")
+                        .arg(QString::number(failed.size()), failed.first().toStringList().value(1)),
+                    [this, failed]() {
+                        QList<fileops::Job> jobs;
+                        for (const QVariant &f : failed)
+                            jobs << fileops::Job{"delete", f.toStringList().value(0), QString()};
+                        fileops::start_ops(this, jobs, "Deleting");
+                    });
         } else if (res.isValid()) {
             statusBar()->showMessage(QString("Moved %1 item(s) to the trash").arg(group_digits(paths.size())), 4000);
         } else {
@@ -357,13 +365,18 @@ void MainWindow::delete_paths(const QStringList &paths)
         return;
     QString what = paths.size() == 1 ? QString("“%1”").arg(basename(paths.first()))
                                      : QString("these %1 items").arg(paths.size());
-    QMessageBox box(QMessageBox::Warning, "Delete Permanently",
-                    QString("Permanently delete %1?\n\nThis cannot be undone.").arg(what), QMessageBox::Cancel, this);
-    QPushButton *del = box.addButton("Delete", QMessageBox::DestructiveRole);
-    box.setDefaultButton(QMessageBox::Cancel);
-    box.exec();
-    if (box.clickedButton() != del)
-        return;
+    auto *box = new QMessageBox(QMessageBox::Warning, "Delete Permanently",
+                                QString("Permanently delete %1?\n\nThis cannot be undone.").arg(what), QMessageBox::Cancel, this);
+    QPushButton *del = box->addButton("Delete", QMessageBox::DestructiveRole);
+    box->setDefaultButton(QMessageBox::Cancel);
+    ask_box(box, [this, del, paths](QAbstractButton *b) {
+        if (b == del)
+            delete_now(paths);
+    });
+}
+
+void MainWindow::delete_now(const QStringList &paths)
+{
     QPointer<MainWindow> self(this);
     auto done = [self, paths]() {
         for (const QString &p : paths) {
@@ -410,25 +423,26 @@ void MainWindow::restore(const QStringList &paths)
         sidebar->refresh();
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            QMessageBox::warning(this, "Restore", errors.mid(0, 20).join('\n'));
+            warn(this, "Restore", errors.mid(0, 20).join('\n'));
     };
     fileops::run_job(this, "Restoring", work, done);
 }
 
 void MainWindow::empty_trash()
 {
-    auto r = QMessageBox::warning(this, "Empty Trash", "Permanently delete all items in the trash?",
-                                  QMessageBox::Yes | QMessageBox::Cancel);
-    if (r != QMessageBox::Yes)
-        return;
-    QList<fileops::Job> jobs;
-    for (const QString &p : fileops::trash_contents())
-        jobs << fileops::Job{"delete", p, QString()};
-    QPointer<MainWindow> self(this);
-    fileops::start_ops(this, jobs, "Emptying trash", [self]() {
-        if (self)
-            self->sidebar->refresh();
-    });
+    ask(this, QMessageBox::Warning, "Empty Trash", "Permanently delete all items in the trash?",
+        QMessageBox::Yes | QMessageBox::Cancel, [this](QMessageBox::StandardButton b) {
+            if (b != QMessageBox::Yes)
+                return;
+            QList<fileops::Job> jobs;
+            for (const QString &p : fileops::trash_contents())
+                jobs << fileops::Job{"delete", p, QString()};
+            QPointer<MainWindow> self(this);
+            fileops::start_ops(this, jobs, "Emptying trash", [self]() {
+                if (self)
+                    self->sidebar->refresh();
+            });
+        });
 }
 
 // -- shredding with BleachBit (only offered when it's installed: fileops::can_shred)
@@ -437,14 +451,17 @@ static const char *SHRED_NOTE = "BleachBit overwrites them and then deletes them
                                 "from the trash. On SSDs and some file systems, overwriting can't guarantee that every "
                                 "old copy of the data is gone.";
 
-static bool confirm_shred(QWidget *parent, const QString &title, const QString &question, const QString &button)
+static void confirm_shred(QWidget *parent, const QString &title, const QString &question, const QString &button,
+                          std::function<void()> yes)
 {
-    QMessageBox box(QMessageBox::Warning, title, question, QMessageBox::Cancel, parent);
-    box.setInformativeText(SHRED_NOTE);
-    QPushButton *yes = box.addButton(button, QMessageBox::DestructiveRole);
-    box.setDefaultButton(QMessageBox::Cancel);
-    box.exec();
-    return box.clickedButton() == yes;
+    auto *box = new QMessageBox(QMessageBox::Warning, title, question, QMessageBox::Cancel, parent);
+    box->setInformativeText(SHRED_NOTE);
+    QPushButton *ok = box->addButton(button, QMessageBox::DestructiveRole);
+    box->setDefaultButton(QMessageBox::Cancel);
+    ask_box(box, [ok, yes](QAbstractButton *b) {
+        if (b == ok)
+            yes();
+    });
 }
 
 void MainWindow::shred_paths(const QStringList &paths)
@@ -452,29 +469,27 @@ void MainWindow::shred_paths(const QStringList &paths)
     if (paths.isEmpty())
         return;
     QString what = paths.size() == 1 ? "“" + basename(paths.first()) + "”" : QString("%1 items").arg(paths.size());
-    if (!confirm_shred(this, "Shred with BleachBit", "Shred " + what + "?", "Shred"))
-        return;
-    QStringList targets = paths;
-    for (const QString &p : paths) {   // an item in the trash: its record of where it came from too
-        QString info = trash_info_path(p);
-        struct stat st;
-        if (!info.isEmpty() && lstat_(info, st))
-            targets << info;
-    }
-    run_shred(targets, "Shredding with BleachBit");
+    confirm_shred(this, "Shred with BleachBit", "Shred " + what + "?", "Shred", [this, paths]() {
+        QStringList targets = paths;
+        for (const QString &p : paths) {   // an item in the trash: its record of where it came from too
+            QString info = trash_info_path(p);
+            struct stat st;
+            if (!info.isEmpty() && lstat_(info, st))
+                targets << info;
+        }
+        run_shred(targets, "Shredding with BleachBit");
+    });
 }
 
 void MainWindow::empty_trash_with_bleachbit()
 {
     QStringList items = fileops::trash_contents();
     if (items.isEmpty()) {
-        QMessageBox::information(this, "Empty Trash with BleachBit", "The trash is empty.");
+        inform(this, "Empty Trash with BleachBit", "The trash is empty.");
         return;
     }
-    if (!confirm_shred(this, "Empty Trash with BleachBit",
-                       "Shred everything in the trash with BleachBit, on every drive?", "Empty Trash"))
-        return;
-    run_shred(items, "Emptying trash with BleachBit");
+    confirm_shred(this, "Empty Trash with BleachBit", "Shred everything in the trash with BleachBit, on every drive?",
+                  "Empty Trash", [this]() { run_shred(fileops::trash_contents(), "Emptying trash with BleachBit"); });
 }
 
 void MainWindow::run_shred(const QStringList &targets, const QString &title)
@@ -493,25 +508,25 @@ void MainWindow::run_shred(const QStringList &targets, const QString &title)
         QString list = names.mid(0, 10).join("\n");
         if (names.size() > 10)
             list += QString("\n… and %1 more").arg(names.size() - 10);
-        QMessageBox::warning(self, "Shred with BleachBit",
-                             "BleachBit couldn't shred these, so they're still there (you may not have permission to "
-                             "change them):\n\n" + list);
+        warn(self, "Shred with BleachBit",
+             "BleachBit couldn't shred these, so they're still there (you may not have permission to "
+             "change them):\n\n" + list);
     });
 }
 
 void MainWindow::make_links(const QStringList &paths, QString dest, const QString &kind)
 {
     if (dest.isEmpty()) {
-        dest = dialogs::choose_dir(this, "Create Links In", cur_dir().isEmpty() ? HOME() : cur_dir());
-        if (dest.isEmpty())
-            return;
+        choose_folder(this, "Create Links In", cur_dir().isEmpty() ? HOME() : cur_dir(),
+                      [this, paths, kind](const QString &d) { make_links(paths, d, kind); });
+        return;
     }
     QStringList made, errors;
     QList<QVariantMap> denied;
     try {
         makedirs(dest, true);
     } catch (const OSError &e) {
-        QMessageBox::warning(this, "Create Link", e.message());
+        warn(this, "Create Link", e.message());
         return;
     }
     for (const QString &p : paths) {
@@ -529,7 +544,7 @@ void MainWindow::make_links(const QStringList &paths, QString dest, const QStrin
         }
     }
     if (!errors.isEmpty())
-        QMessageBox::warning(this, "Create Link", errors.join('\n'));
+        warn(this, "Create Link", errors.join('\n'));
     undo::record_paths("create", "Create Link", made);
     QPointer<MainWindow> self(this);
     auto finish = [self, made, denied, dest](bool) {

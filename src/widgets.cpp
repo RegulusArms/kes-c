@@ -9,6 +9,7 @@
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -20,7 +21,6 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QMenu>
-#include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
 #include <QPainterPath>
@@ -1166,7 +1166,7 @@ void Sidebar::unmount(const QString &path)
         r = proc::run({"umount", path});
     if (r.rc != 0) {
         QString err = QString::fromUtf8(r.err);
-        QMessageBox::warning(this, "Unmount", err.isEmpty() ? "Unmount failed" : err);
+        warn(this, "Unmount", err.isEmpty() ? "Unmount failed" : err);
     }
     refresh();
 }
@@ -1180,15 +1180,14 @@ void Sidebar::eject_phone(int i)
         if (!self)
             return;
         if (!err.isEmpty())
-            QMessageBox::warning(self, "Unmount", err);
+            warn(self, "Unmount", err);
         self->refresh();
     });
 }
 
 void Sidebar::edit_bookmark(const QString &path)
 {
-    if (dialogs::edit_bookmark(this, path))
-        refresh();
+    dialogs::edit_bookmark(this, path, [this]() { refresh(); });
 }
 
 void Sidebar::remove_bookmark(int i)

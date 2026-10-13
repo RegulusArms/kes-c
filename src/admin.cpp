@@ -2,6 +2,7 @@
 
 #include "fileops.h"
 #include "proc.h"
+#include "windows.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -310,8 +311,8 @@ Indicator::Indicator(QWidget *parent) : QToolButton(parent)
 void start_session(QWidget *parent)
 {
     if (!session().available()) {
-        QMessageBox::warning(parent, "Admin Session",
-                             "Administrator actions need pkexec. Install it with:\n\nsudo apt install pkexec");
+        warn(parent, "Admin Session",
+             "Administrator actions need pkexec. Install it with:\n\nsudo apt install pkexec");
         return;
     }
     QPointer<QWidget> p(parent);
@@ -327,7 +328,7 @@ void start_session(QWidget *parent)
         },
         [p](const QVariant &err) {
             if (!err.toString().isEmpty())
-                QMessageBox::warning(p, "Admin Session", err.toString());
+                warn(p, "Admin Session", err.toString());
         },
         false)
         ->admin = true;
@@ -338,45 +339,54 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
 {
     AdminSession &s = session();
     if (!s.available()) {
-        QMessageBox::warning(parent, title, message + "\n\nInstall pkexec to retry as administrator.");
+        warn(parent, title, message + "\n\nInstall pkexec to retry as administrator.");
         if (on_done)
             on_done(false);
         return;
     }
-    if (!s.active()) {
-        QMessageBox box(QMessageBox::Warning, title,
-                        message + QString("\n\nRetry as administrator? You'll be asked for your password once. The "
-                                          "admin session then stays open (🛡 Admin in the status bar) until you end "
-                                          "it or it's unused for %1 minutes.")
-                                      .arg(IDLE_MINUTES),
-                        QMessageBox::Cancel, parent);
-        QPushButton *retry = box.addButton("Retry as Administrator", QMessageBox::AcceptRole);
-        box.setDefaultButton(retry);
-        box.exec();
-        if (box.clickedButton() != retry) {
+    QPointer<QWidget> p(parent);
+    auto run = [p, has_parent = parent != nullptr, title, work, on_done]() {
+        if (has_parent && !p) {   // its window was closed meanwhile
             if (on_done)
                 on_done(false);
             return;
         }
+        auto job = [work](Task *task) -> QVariant {
+            QStringList errors;
+            try {
+                errors = work(task);
+            } catch (const AdminError &e) {
+                errors = QStringList{e.message()};
+            }
+            return QVariantMap{{"errors", errors}};
+        };
+        auto done = [p, title, on_done](const QVariant &res) {
+            QStringList errors = res.toMap().value("errors").toStringList();
+            if (!errors.isEmpty())
+                warn(p, title, errors.mid(0, 20).join('\n'));
+            if (on_done)
+                on_done(res.isValid() && errors.isEmpty());
+        };
+        fileops::run_job(p, title + " (as administrator)", job, done)->admin = true;
+    };
+    if (s.active()) {
+        run();
+        return;
     }
-    auto job = [work](Task *task) -> QVariant {
-        QStringList errors;
-        try {
-            errors = work(task);
-        } catch (const AdminError &e) {
-            errors = QStringList{e.message()};
-        }
-        return QVariantMap{{"errors", errors}};
-    };
-    QPointer<QWidget> p(parent);
-    auto done = [p, title, on_done](const QVariant &res) {
-        QStringList errors = res.toMap().value("errors").toStringList();
-        if (!errors.isEmpty())
-            QMessageBox::warning(p, title, errors.mid(0, 20).join('\n'));
-        if (on_done)
-            on_done(res.isValid() && errors.isEmpty());
-    };
-    fileops::run_job(parent, title + " (as administrator)", job, done)->admin = true;
+    auto *box = new QMessageBox(QMessageBox::Warning, title,
+                                message + QString("\n\nRetry as administrator? You'll be asked for your password once. "
+                                                  "The admin session then stays open (🛡 Admin in the status bar) until "
+                                                  "you end it or it's unused for %1 minutes.")
+                                              .arg(IDLE_MINUTES),
+                                QMessageBox::Cancel, parent);
+    QPushButton *retry = box->addButton("Retry as Administrator", QMessageBox::AcceptRole);
+    box->setDefaultButton(retry);
+    ask_box(box, [retry, run, on_done](QAbstractButton *b) {
+        if (b == retry)
+            run();
+        else if (on_done)
+            on_done(false);
+    });
 }
 
 }  // namespace admin

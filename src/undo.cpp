@@ -5,11 +5,11 @@
 #include "fileops.h"
 #include "util.h"
 #include "widgets.h"
+#include "windows.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QMessageBox>
 #include <QPointer>
 #include <QStatusBar>
 
@@ -143,7 +143,7 @@ void undo(MainWindow *win)
         w->sidebar->refresh();
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            QMessageBox::warning(w, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
+            warn(w, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
         else if (res.isValid())
             w->statusBar()->showMessage("Undid: " + op.label, 4000);
     };
@@ -160,7 +160,7 @@ void undo(MainWindow *win)
                 jobs << fileops::Job{"move", dst, src};
         }
         if (!errors.isEmpty())
-            QMessageBox::warning(win, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
+            warn(win, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
         if (!jobs.isEmpty())
             fileops::start_ops(win, jobs, title, [done]() { done(QStringList()); });
         return;

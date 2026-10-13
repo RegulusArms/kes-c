@@ -4,6 +4,7 @@
 
 #include "metadata.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QDialog>
 #include <QHash>
@@ -41,9 +42,6 @@ class MetaTagDialog : public QDialog {
 public:
     MetaTagDialog(QWidget *parent, const QString &key, const QString &value, const QString &path = QString(),
                   const QHash<QString, QString> &existing = {});
-    static std::optional<metadata::Change> ask(QWidget *parent, const QString &key, const QString &value,
-                                               const QString &path = QString(),
-                                               const QHash<QString, QString> &existing = {});
     QString tag() const;
     metadata::Change result_change() const;
 
@@ -95,6 +93,7 @@ private:
     void meta_write(std::function<QStringList()> fn);
     void reload_meta();
     void meta_edit(QTreeWidgetItem *it);
+    void meta_ask(const QString &key, const QString &value, const QHash<QString, QString> &existing = {});
     void meta_add();
     void meta_remove();
     void meta_clear();
@@ -197,9 +196,9 @@ struct RenameResult {
     bool denied = false;  // permission denied: callers offer to retry as administrator
 };
 RenameResult do_rename(const QString &path, const QString &new_name);
-QString ask_rename(QWidget *parent, const QString &path);   // null if cancelled or unchanged
-QString choose_dir(QWidget *parent, const QString &title, const QString &start);
-// Edit the name and location of the bookmark pointing at `target`. Returns true if saved.
-bool edit_bookmark(QWidget *parent, const QString &target);
+// asks for a new name; renamed(name) runs with it, unless cancelled or unchanged
+void ask_rename(QWidget *parent, const QString &path, std::function<void(const QString &)> renamed);
+// Edit the name and location of the bookmark pointing at `target`; saved() runs once it's saved.
+void edit_bookmark(QWidget *parent, const QString &target, std::function<void()> saved);
 
 }  // namespace dialogs

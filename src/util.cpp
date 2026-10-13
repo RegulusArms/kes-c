@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QPalette>
 #include <QProcess>
+#include <QStyleHints>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -1299,10 +1300,13 @@ void on_palette_change(QObject *owner, std::function<void()> fn)
 
 // ---------------------------------------------------------------- the GTK theme's colours (Qt < 6.5)
 
-// prints the theme's named colours as JSON (GTK 3 reads the desktop's current theme when it starts)
-const char *GTK_COLORS_SCRIPT = R"(import json, gi
+// prints the theme's named colours as JSON (GTK 3 reads the desktop's current theme when it starts); with the argument
+// "dark", its dark variant's (Adwaita and Yaru are light themes with one, which GNOME's dark style asks for)
+const char *GTK_COLORS_SCRIPT = R"(import json, sys, gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
+if "dark" in sys.argv[1:]:
+    Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
 ctx = Gtk.Window().get_style_context()
 out = {}
 for name in ("theme_bg_color", "theme_fg_color", "theme_base_color", "theme_text_color", "theme_selected_bg_color",
@@ -1353,43 +1357,110 @@ QPalette gtk_palette_from(const QJsonObject &colors, bool *ok)
     return p;
 }
 
+QPalette theme_palette(const QJsonObject &colors, bool dark, bool *ok)
+{
+    QPalette p = gtk_palette_from(colors, ok);
+    if (!dark || (*ok && p.color(QPalette::Window).lightness() < 128))
+        return p;
+    // Adwaita's dark colours (GTK 3)
+    return gtk_palette_from(
+        QJsonObject{{"theme_bg_color", "#353535"}, {"theme_fg_color", "#eeeeec"}, {"theme_base_color", "#2d2d2d"},
+                    {"theme_text_color", "#ffffff"}, {"theme_selected_bg_color", "#15539e"},
+                    {"theme_selected_fg_color", "#ffffff"}, {"insensitive_fg_color", "#919190"},
+                    {"link_color", "#3584e4"}},
+        ok);
+}
+
+static GSettings *interface_settings()   // GNOME's, or Cinnamon's own; null if neither is installed
+{
+    static GSettings *s = nullptr;   // kept for the life of the app
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        QString schema = desktop_schema("org.gnome.desktop.interface");
+        if (has_schema_key(schema))
+            s = g_settings_new(schema.toUtf8().constData());
+    }
+    return s;
+}
+
+bool desktop_prefers_dark()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark)   // the portal's setting (KDE too)
+        return true;
+#endif
+    GSettings *s = interface_settings();
+    if (!s || !has_schema_key(desktop_schema("org.gnome.desktop.interface"), "color-scheme"))
+        return false;
+    gchar *scheme = g_settings_get_string(s, "color-scheme");
+    bool dark = qstrcmp(scheme, "prefer-dark") == 0;
+    g_free(scheme);
+    return dark;
+}
+
+static bool gtk_palette_set = false;   // the palette is Kestrel's, from the GTK theme, rather than Qt's own
+
 static void apply_gtk_palette(bool wait)
 {
     // read the theme's colours with GTK in a helper process (Kestrel itself doesn't link GTK)
+    bool dark = desktop_prefers_dark();
     auto *proc = new QProcess(qApp);
-    auto apply = [proc]() {
+    auto apply = [proc, dark]() {
         bool ok = false;
-        QPalette p = gtk_palette_from(QJsonDocument::fromJson(proc->readAllStandardOutput()).object(), &ok);
-        if (ok && p != QGuiApplication::palette())
+        QPalette p = theme_palette(QJsonDocument::fromJson(proc->readAllStandardOutput()).object(), dark, &ok);
+        if (ok && p != QGuiApplication::palette()) {
+            gtk_palette_set = true;
             QApplication::setPalette(p);   // on_palette_change() then updates what was drawn in the old colours
+        }
         proc->deleteLater();
     };
+    QStringList args = {"-c", GTK_COLORS_SCRIPT};
+    if (dark)
+        args << "dark";
     if (wait) {   // at startup: the first window opens in the theme's colours
-        proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+        proc->start("/usr/bin/python3", args);
         proc->waitForFinished(3000);
-        apply();
+        apply();   // no python3 or GTK bindings: the built-in dark colours, if dark is wanted
         return;
     }
     QObject::connect(proc, &QProcess::finished, qApp, apply);
-    QObject::connect(proc, &QProcess::errorOccurred, proc, &QObject::deleteLater);
-    proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+    QObject::connect(proc, &QProcess::errorOccurred, qApp, [proc, apply](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart)
+            apply();
+    });
+    proc->start("/usr/bin/python3", args);
+}
+
+// Qt before 6.5 always needs the GTK theme's colours. Newer Qt reads them itself, but follows GNOME's dark style only
+// when the GTK theme is a dark one (Yaru-dark, not Adwaita or Yaru with the dark style), and not at all without its
+// GTK plugin (qt6-gtk-platformtheme): there they're used once the desktop wants dark and Qt's colours are light.
+static void sync_gtk_palette(bool wait)
+{
+    if (gtk_palette_set || needs_gtk_palette(QString::fromLatin1(qVersion())) ||
+        (desktop_prefers_dark() && !dark_theme()))
+        apply_gtk_palette(wait);
 }
 
 void follow_gtk_theme()
 {
     QString platform = QGuiApplication::platformName();
-    if (!needs_gtk_palette(QString::fromLatin1(qVersion())) || (platform != "xcb" && platform != "wayland"))
+    if (platform != "xcb" && platform != "wayland")
         return;
-    apply_gtk_palette(true);
+    sync_gtk_palette(true);
     static QTimer *later = nullptr;   // the desktop changes several settings at once; GTK picks them up shortly after
     later = new QTimer(qApp);
     later->setSingleShot(true);
     later->setInterval(600);
-    QObject::connect(later, &QTimer::timeout, qApp, []() { apply_gtk_palette(false); });
-    QString schema = desktop_schema("org.gnome.desktop.interface");   // GNOME's, or Cinnamon's own
-    if (!has_schema_key(schema))
+    QObject::connect(later, &QTimer::timeout, qApp, []() { sync_gtk_palette(false); });
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, later,
+                     [](Qt::ColorScheme) { later->start(); });
+#endif
+    QString schema = desktop_schema("org.gnome.desktop.interface");
+    GSettings *s = interface_settings();
+    if (!s)
         return;
-    GSettings *s = g_settings_new(schema.toUtf8().constData());   // kept for the life of the app
     for (const char *key : {"gtk-theme", "color-scheme"})
         if (has_schema_key(schema, key))
             g_signal_connect(s, QString("changed::%1").arg(key).toUtf8().constData(),

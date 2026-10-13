@@ -22,6 +22,7 @@
 #include "uwp.h"
 #include "viewer.h"
 #include "widgets.h"
+#include "windows.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -434,9 +435,10 @@ void MainWindow::build_actions()
     A("Keyboard Shortcuts", {"F1"}, [this]() { show_shortcuts(); }, menu);
     A("About", {},
       [this]() {
-          QMessageBox::about(this, APP_NAME,
-                             QString("<b>%1</b> %2<br>A lightweight image-gallery-oriented file manager.")
-                                 .arg(APP_NAME, VERSION));
+          QMessageBox *box = tell(this, QMessageBox::NoIcon, QString("About ") + APP_NAME,
+                                  QString("<b>%1</b> %2<br>A lightweight image-gallery-oriented file manager.")
+                                      .arg(APP_NAME, VERSION));
+          box->setIconPixmap(windowIcon().pixmap(64));
       },
       menu);
 }
@@ -600,7 +602,7 @@ void MainWindow::open_location(const QString &target_in, bool new_tab_)
                 if (overview::is_phone_scheme(scheme))
                     msg += "\n\n" + overview::phone_hint(scheme, target);
                 QString title = overview::is_phone_scheme(scheme) ? "Connect to Device" : "Connect to Server";
-                QMessageBox::warning(self, title, msg);
+                warn(self, title, msg);
             } else if (!path.isEmpty()) {
                 self->remember_server(target);
                 self->sidebar->refresh();
@@ -691,8 +693,8 @@ void MainWindow::set_folder_previews(bool on)
 void MainWindow::build_previews(const QString &root, bool folders_only, int depth)
 {
     if (builder) {
-        QMessageBox::information(this, "Generate Previews",
-                                 "A preview build is already running. Stop it first (✕ in the status bar).");
+        inform(this, "Generate Previews",
+               "A preview build is already running. Stop it first (✕ in the status bar).");
         return;
     }
     int size = pane() ? pane()->grid_size : 160;
@@ -934,7 +936,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addAction("Open in New Window", this, [paths]() { open_window(paths); });
     }
     if (is_dir) {
-        sharing::add_open_folder_menu(m, single, [this, paths]() { OpenWithDialog(this, paths).exec(); });
+        sharing::add_open_folder_menu(m, single, [this, paths]() { show_free(new OpenWithDialog(this, paths)); });
     }
     QStringList imgs;
     for (const QString &x : paths)
@@ -954,12 +956,12 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                 try {
                     launch_app(app, paths);
                 } catch (const Error &e) {
-                    QMessageBox::warning(this, "Open With", e.message());
+                    warn(this, "Open With", e.message());
                 }
             });
         }
         ow->addSeparator();
-        ow->addAction("Other Application…", this, [this, paths]() { OpenWithDialog(this, paths).exec(); });
+        ow->addAction("Other Application…", this, [this, paths]() { show_free(new OpenWithDialog(this, paths)); });
     }
     m->addSeparator();
     m->addAction(icon({"edit-cut"}), "Cut", this, [this, paths]() { clip(true, paths); });
@@ -1125,33 +1127,30 @@ void MainWindow::uwp_add(const QString &path)
     if (uwp::add_to_selected(path))
         statusBar()->showMessage(QString("Sent %1 to the selected UWP monitor").arg(basename(path)), 4000);
     else
-        QMessageBox::warning(this, "UWP", "Couldn't reach UWP. Is its editor window still open?");
+        warn(this, "UWP", "Couldn't reach UWP. Is its editor window still open?");
 }
 
 void MainWindow::properties(const QStringList &paths, QWidget *parent)
 {
     if (paths.isEmpty())
         return;
-    PropertiesDialog(parent ? parent : this, paths).exec();
-    update_status();
+    auto *d = new PropertiesDialog(parent ? parent : this, paths);   // several can be open, each a window of its own
+    connect(d, &QDialog::finished, this, &MainWindow::update_status);
+    show_free(d);
 }
 
 // -- settings
 
 void MainWindow::preferences()
 {
-    // A separate, non-modal window: GNOME attaches modal dialogs to their parent ("attach-modal-dialogs"), so
-    // dragging a modal Preferences would drag the whole Kestrel window with it.
-    if (prefs) {
+    if (prefs) {   // one at a time: it edits the same settings
         prefs->raise();
         prefs->activateWindow();
         return;
     }
     prefs = new PreferencesDialog(this);
-    prefs->setWindowModality(Qt::NonModal);
-    prefs->setAttribute(Qt::WA_DeleteOnClose);
     connect(prefs, &QDialog::accepted, this, &MainWindow::preferences_saved);
-    prefs->show();
+    show_free(prefs);
 }
 
 void repaint_all()
@@ -1192,21 +1191,25 @@ void MainWindow::clear_cache()
 
 void MainWindow::purge_thumbnails()
 {
-    QMessageBox box(QMessageBox::Warning, "Delete All Thumbnails",
-                    QString("Delete every thumbnail and folder preview %1 has made?\n\n"
-                            "• Folder mosaics in %2\n"
-                            "• Image/video thumbnails it wrote to %3\n\n"
-                            "They will be regenerated as you browse.")
-                        .arg(APP_NAME, join(APP_CACHE(), "folders"), THUMB_DIR()),
-                    QMessageBox::Cancel, this);
-    QPushButton *go = box.addButton("Delete", QMessageBox::DestructiveRole);
+    auto *box = new QMessageBox(QMessageBox::Warning, "Delete All Thumbnails",
+                                QString("Delete every thumbnail and folder preview %1 has made?\n\n"
+                                        "• Folder mosaics in %2\n"
+                                        "• Image/video thumbnails it wrote to %3\n\n"
+                                        "They will be regenerated as you browse.")
+                                    .arg(APP_NAME, join(APP_CACHE(), "folders"), THUMB_DIR()),
+                                QMessageBox::Cancel, this);
+    QPushButton *go = box->addButton("Delete", QMessageBox::DestructiveRole);
     auto *shared = new QCheckBox("Also delete thumbnails made by other apps (GNOME Files, etc.)");
-    box.setCheckBox(shared);
-    box.exec();
-    if (box.clickedButton() != go)
-        return;
+    box->setCheckBox(shared);
+    ask_box(box, [this, go, shared](QAbstractButton *b) {
+        if (b == go)
+            purge_now(shared->isChecked());
+    });
+}
+
+void MainWindow::purge_now(bool include)
+{
     thumbs->cancel_pending();
-    bool include = shared->isChecked();
     fileops::run_task(
         this, "Deleting thumbnails",
         [include]() {
@@ -1254,7 +1257,7 @@ void MainWindow::show_shortcuts()
 <tr><td><b>I</b></td><td>Toggle info overlay</td></tr>
 <tr><td><b>Delete</b></td><td>Move to trash</td></tr>
 </table>)";
-    QMessageBox::information(this, "Keyboard Shortcuts", text);
+    inform(this, "Keyboard Shortcuts", text);
 }
 
 void MainWindow::closeEvent(QCloseEvent *ev)
@@ -1265,22 +1268,28 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         QStringList names;
         for (int i = 0; i < std::min<qsizetype>(5, tasks.size()); ++i)
             names << "• " + tasks[i]->title;
-        QMessageBox box(QMessageBox::Question, "Operations Running",
-                        QString("These operations are still running:\n\n%1\n\n"
-                                "Stop them and close the window? Items already processed stay processed.")
-                            .arg(names.join('\n')),
-                        QMessageBox::NoButton, this);
-        QPushButton *stop = box.addButton("Stop and Close", QMessageBox::DestructiveRole);
-        box.addButton("Keep Running", QMessageBox::RejectRole);
-        box.exec();
         ev->ignore();
-        if (box.clickedButton() == stop) {
-            for (Task *t : tasks)
+        if (close_box) {   // already asked
+            close_box->raise();
+            close_box->activateWindow();
+            return;
+        }
+        close_box = new QMessageBox(QMessageBox::Question, "Operations Running",
+                                    QString("These operations are still running:\n\n%1\n\n"
+                                            "Stop them and close the window? Items already processed stay processed.")
+                                        .arg(names.join('\n')),
+                                    QMessageBox::NoButton, this);
+        QPushButton *stop = close_box->addButton("Stop and Close", QMessageBox::DestructiveRole);
+        close_box->addButton("Keep Running", QMessageBox::RejectRole);
+        ask_box(close_box, [this, stop](QAbstractButton *b) {
+            if (b != stop)
+                return;
+            for (Task *t : task_panel->tasks)
                 t->cancel();
             task_panel->refresh();
             centralWidget()->setEnabled(false);   // stay visible (showing "cancelling…") until stopped
             close_when_idle();
-        }
+        });
         return;
     }
     if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
@@ -1429,7 +1438,7 @@ int kes_main(int argc, char **argv)
     stats::print_at_quit();   // KESTREL_STATS=1
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
-    follow_gtk_theme();   // Qt < 6.5: the GTK theme's colours, following changes
+    follow_gtk_theme();   // the GTK theme's colours where Qt lacks them (Qt < 6.5, or dark style), following changes
     app.setWindowIcon(app_icon());
     migrate_legacy();
     ensure_desktop_entry();

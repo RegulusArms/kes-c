@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -30,6 +31,7 @@
 
 #include <gio/gio.h>
 
+#include <memory>
 #include <sys/sysmacros.h>
 
 using namespace util;
@@ -169,14 +171,33 @@ static qint64 sysfs_size(const QString &dev)
 
 // ---------------------------------------------------------------- GIO mount helpers
 
-// A GMountOperation that asks for passwords/questions with Qt dialogs.
+// A GMountOperation that asks for passwords/questions with free windows. GIO waits for the reply, which comes when
+// the window is answered (aborted if it's closed or goes with its Kestrel window).
+static void reply_when_done(QDialog *dlg, GMountOperation *op, std::function<bool()> answered)
+{
+    g_object_ref(op);
+    auto replied = std::make_shared<bool>(false);
+    QObject::connect(dlg, &QDialog::finished, dlg, [op, replied, answered]() {
+        *replied = true;
+        g_mount_operation_reply(op, answered() ? G_MOUNT_OPERATION_HANDLED : G_MOUNT_OPERATION_ABORTED);
+        g_object_unref(op);
+    });
+    QObject::connect(dlg, &QObject::destroyed, [op, replied]() {
+        if (*replied)
+            return;
+        g_mount_operation_reply(op, G_MOUNT_OPERATION_ABORTED);
+        g_object_unref(op);
+    });
+    show_free(dlg);
+}
+
 static void ask_password(GMountOperation *op, const char *message, const char *default_user,
                          const char *default_domain, GAskPasswordFlags flags, gpointer data)
 {
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
-    QDialog dlg(parent);
-    dlg.setWindowTitle("Authentication Required");
-    auto *form = new QFormLayout(&dlg);
+    auto *dlg = new QDialog(parent);
+    dlg->setWindowTitle("Authentication Required");
+    auto *form = new QFormLayout(dlg);
     auto *msg = new QLabel(QString::fromUtf8(message));
     msg->setWordWrap(true);
     form->addRow(msg);
@@ -208,27 +229,27 @@ static void ask_password(GMountOperation *op, const char *message, const char *d
         form->addRow("", save);
     }
     if (anon)
-        QObject::connect(anon, &QCheckBox::toggled, &dlg, [=](bool on) {
+        QObject::connect(anon, &QCheckBox::toggled, dlg, [=](bool on) {
             for (QWidget *w : std::initializer_list<QWidget *>{user, domain, pw, save})
                 if (w)
                     w->setEnabled(!on);
         });
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     bb->button(QDialogButtonBox::Ok)->setText("Connect");
-    QObject::connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
     form->addRow(bb);
     if (pw)
         pw->setFocus();
     else if (user)
         user->setFocus();
-    if (!dlg.exec()) {
-        g_mount_operation_reply(op, G_MOUNT_OPERATION_ABORTED);
-        return;
-    }
-    if (anon && anon->isChecked()) {
-        g_mount_operation_set_anonymous(op, TRUE);
-    } else {
+    reply_when_done(dlg, op, [=]() {
+        if (dlg->result() != QDialog::Accepted)
+            return false;
+        if (anon && anon->isChecked()) {
+            g_mount_operation_set_anonymous(op, TRUE);
+            return true;
+        }
         if (user)
             g_mount_operation_set_username(op, user->text().toUtf8().constData());
         if (domain)
@@ -240,25 +261,24 @@ static void ask_password(GMountOperation *op, const char *message, const char *d
                                            G_PASSWORD_SAVE_PERMANENTLY};
             g_mount_operation_set_password_save(op, modes[save->currentIndex()]);
         }
-    }
-    g_mount_operation_reply(op, G_MOUNT_OPERATION_HANDLED);
+        return true;
+    });
 }
 
 static void ask_question(GMountOperation *op, const char *message, const char **choices, gpointer data)
 {
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
-    QMessageBox box(QMessageBox::Question, "Question", QString::fromUtf8(message), QMessageBox::NoButton, parent);
+    auto *box = new QMessageBox(QMessageBox::Question, "Question", QString::fromUtf8(message), QMessageBox::NoButton, parent);
     QList<QAbstractButton *> buttons;
     for (const char **c = choices; c && *c; ++c)
-        buttons << box.addButton(QString::fromUtf8(*c), QMessageBox::AcceptRole);
-    box.exec();
-    int i = buttons.indexOf(box.clickedButton());
-    if (i >= 0) {
+        buttons << box->addButton(QString::fromUtf8(*c), QMessageBox::AcceptRole);
+    reply_when_done(box, op, [box, buttons, op]() {
+        int i = buttons.indexOf(box->clickedButton());
+        if (i < 0)
+            return false;
         g_mount_operation_set_choice(op, i);
-        g_mount_operation_reply(op, G_MOUNT_OPERATION_HANDLED);
-    } else {
-        g_mount_operation_reply(op, G_MOUNT_OPERATION_ABORTED);
-    }
+        return true;
+    });
 }
 
 static GMountOperation *make_mount_operation(QWidget *parent)
@@ -1011,7 +1031,7 @@ void OverviewPage::do_mount(const overview::VolumeRef &volume)
         if (!self)
             return;
         if (!err.isEmpty())
-            QMessageBox::warning(self, "Mount", hint.isEmpty() ? err : err + "\n\n" + hint);
+            warn(self, "Mount", hint.isEmpty() ? err : err + "\n\n" + hint);
         Q_EMIT self->sidebar_changed();
         self->refresh();
         if (!path.isEmpty())
@@ -1026,7 +1046,7 @@ void OverviewPage::do_unmount(const overview::MountRef &mount)
         if (!self)
             return;
         if (!err.isEmpty())
-            QMessageBox::warning(self, "Unmount", err);
+            warn(self, "Unmount", err);
         Q_EMIT self->sidebar_changed();
         self->refresh();
     });
@@ -1061,10 +1081,10 @@ void OverviewPage::bookmark_menu(const QString &target, const QPoint &pos)
     m.addAction("Open in New Tab", this, [this, target]() { Q_EMIT open_in_tab(target); });
     m.addSeparator();
     m.addAction("Edit Bookmark…", this, [this, target]() {
-        if (dialogs::edit_bookmark(this, target)) {
+        dialogs::edit_bookmark(this, target, [this]() {
             Q_EMIT sidebar_changed();
             rebuild();
-        }
+        });
     });
     m.addAction("Remove Bookmark", this, [this, target]() {
         auto bms = read_bookmarks();

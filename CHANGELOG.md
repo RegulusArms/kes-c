@@ -5,7 +5,21 @@ What changed in each version of Kestrel Explorer, newest first. Versions with a 
 
 ## 0.3.1-alpha.5
 
-- Nothing yet.
+- **Follows the desktop's dark style:** with Dark chosen in GNOME's Settings (or any desktop's dark colour scheme),
+  Kestrel now opens with a dark background and light text, and switches when the style changes. Before, it stayed
+  light unless the GTK theme itself was a dark one (such as Yaru-dark): with Adwaita or Yaru plus the dark style, or
+  on Ubuntu 26.04 without the qt6-gtk-platformtheme package, it was white. It uses the theme's own dark colours,
+  or Adwaita's dark ones when the theme has none.
+- **More ways to pick a folder preview's pictures:** Preferences → Folder preview picks now also offers Last by
+  name, Oldest first, and Beginning, middle and end (pictures evenly spaced through the folder by name, so a preview
+  shows the whole set rather than its first few). Folders of galleries pick their subfolders the same way.
+- **Every window moves freely:** Properties, Preferences, Open With, Rename, Batch Rename, Compress and Extract,
+  Create Checksum File, Network Sharing, Edit Bookmark, password prompts, the file-conflict question during a copy,
+  confirmations and error messages are now windows of their own. Before, most were modal: they blocked Kestrel, and on
+  GNOME dragging one dragged the whole Kestrel window along. Now none blocks Kestrel or stays on top of it, so you can
+  move one aside and leave it open until you need it, and several can be open at once (several Properties windows, for
+  example). They still close with the Kestrel window they belong to. Choosing a folder or file (Move To, Copy To,
+  Create Links In, Browse… buttons) now opens Kestrel's own chooser window instead of the toolkit's. There is no way any unintended consequences could come of this.
 
 ## 0.3.1-alpha.4 (2026-10-12)
 
