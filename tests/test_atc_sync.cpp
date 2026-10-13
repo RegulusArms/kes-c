@@ -127,14 +127,19 @@ int main(int argc, char **argv)
     fake.call("UndoPush", R"({"kind":"move","label":"Move","items":[["/a","/b"]]})");
     check(none && QJsonDocument::fromJson(fake.call("UndoPop").toUtf8()).object().value("label").toString() == "Move",
           "the tower keeps only valid undo entries");
-    FakeFlight other;
+    FakeFlight other, older;
     other.call("CheckIn", R"({"pid":2,"impl":"fake","protocol":999})");
     other.report({{"type", "starred"}});
+    older.call("CheckIn", R"({"pid":3,"impl":"fake"})");   // names no protocol: speaks 1
+    older.report({{"type", "starred"}});
     spin(500);
-    bool from_other = false;
-    for (const auto &[f, m] : fake.heard)
+    bool from_other = false, from_older = false;
+    for (const auto &[f, m] : fake.heard) {
         from_other = from_other || f == other.name();
+        from_older = from_older || f == older.name();
+    }
     check(!from_other, "a flight speaking another protocol version isn't passed on");
+    check(!from_older, "a flight naming no protocol speaks 1, an old one, and isn't passed on");
 
     // ---- the tower goes down: the Kestrel starts a new one and checks in again
     qint64 old = fake.tower_pid();

@@ -125,11 +125,12 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <action command="delete" search="file" path="$conf/pinned.json"/>
   </option>
   <option id="folder_looks">
-    <label>Folder covers and colours</label>
-    <description>Delete the list of folders given a cover image, a colour, or no image previews</description>
-    <warning>Those folders go back to their usual look.</warning>
+    <label>Folder covers, colours and sorts</label>
+    <description>Delete the list of folders given a cover image, a colour, no image previews, or a sort of their own</description>
+    <warning>Those folders go back to their usual look and the default sort.</warning>
     <action command="delete" search="file" path="$conf/covers.json"/>
     <action command="delete" search="file" path="$conf/folder_styles.json"/>
+    <action command="delete" search="file" path="$conf/sorts.json"/>
   </option>
 </cleaner>
 XML
@@ -337,6 +338,6 @@ if (( BLEACHBIT )); then
     mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
     bleachbit_cleaner > "$BLEACHBIT_CLEANER"
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder), Starred," \
-         "pinned items, and folder covers and colours."
+         "pinned items, and folder covers, colours and sorts."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi
