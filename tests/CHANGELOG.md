@@ -12,6 +12,18 @@ Added:
   Kestrels (both ways). Apply to Subfolders reaches every folder below and none outside it; Set as Default changes
   only folders without a sort of their own. These cover the new per-folder sort, which replaced one sort for all
   folders.
+- **Grouping by date** (`groups`, a new test): which period a date falls in (each period, weeks starting on the
+  locale's first day, a week across two months, January, and that going back in time never returns to a newer group);
+  a key and title per day for Group by Day; the date taken read from a photo's EXIF, a video's movie header and a PNG's
+  Creation Time (files built in the test), and none from a file without one. A folder grouped by period shows its
+  items under date headers, each group keeping the chosen sort (name both ways, size) and the oldest group first
+  when sorted by Modified ascending; by day, a header per date; by Date Created, when the files were made (skipped
+  where the file system keeps no creation times); by Date Taken, photos and videos under when they were taken once
+  read in the background, the rest under their date created; Select All leaving headers out; collapsing by click and Enter, and selecting an
+  item of a collapsed group opening it; in the grid a header taking a whole line, in the list spanning the columns;
+  new, removed and changed files moving between groups (the changed one staying selected); a drop on a header going
+  into the folder; grouping (mode and date) saved per folder and with Set as Default; Starred grouped too. These
+  cover the new Group by Period and Group by Day views and the Date to Group By choice.
 - **Old protocol** (`atc_sync`): a flight that names no protocol (one from before the protocol was named, speaking 1) is
   ignored now that the protocol is 2 (the new "sorts" message). The tower used to accept such a flight as speaking the
   current protocol.
@@ -20,7 +32,9 @@ Changed:
 - `FakeFlight::check_in()` in `common.h` names the current protocol: without one, the tower now takes it for an old
   flight and ignores it.
 - `ui_actions.txt`: the empty-space Sort By menu shows which sort is chosen (its entries are toggles now, like the
-  toolbar's Sort menu) and has Set as Default and Apply to Subfolders.
+  toolbar's Sort menu) and has Group by Period, Group by Day, the Date to Group By submenu, Set as Default and Apply to
+  Subfolders.
+- `pinned`: a folder's entry in `sorts.json` has two more values, its grouping and the date it groups by.
 - `installer`: the BleachBit cleaner's expected actions, dry-run listing and clean include `sorts.json` (under Folder
   covers, colours and sorts).
 

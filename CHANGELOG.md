@@ -11,6 +11,18 @@ What changed in each version of Kestrel Explorer, newest first. Versions with a 
   default. Other tabs and windows showing the folder follow the change.
 - **Sort → Apply to Subfolders:** gives every folder below the current one (all levels) the same sort, replacing any
   they had. It runs in the status bar and can be cancelled, which leaves every folder as it was.
+- **Sort → Group by Period / Group by Day:** shows the folder's items under date headers. By period: Today,
+  Yesterday, Earlier this week, Last week, Earlier this month, Last month, Earlier this year, then one per year. By day:
+  one header per date ("Tuesday, 13 October 2026"). Each header shows how many items it has; click it (or press Enter
+  on it) to collapse or expand the group. The groups stay in date order, newest first, whatever you sort by; inside
+  each group the items follow the chosen sort (name, size, type or date). Sorting by Modified, oldest first, puts the
+  oldest group first.
+- **Sort → Date to Group By:** Date Modified, Date Created, or Date Taken (Metadata): when a photo or video was taken,
+  from its EXIF (JPEG, PNG, WebP, TIFF, DNG), a PNG's Creation Time, or an MP4 / MOV / 3GP video's header. Those dates
+  are read in the background, so photos move to their groups a moment after the folder opens; files without one go by
+  their date created (and that by the date modified where the drive keeps no creation dates).
+- Grouping works in the grid and the list, in search results, Starred, Recent and Trash, and is kept per folder like
+  the sort (Set as Default and Apply to Subfolders include it).
 - The right-click Sort By menu now shows the chosen sort, like the toolbar's Sort menu.
 - BleachBit's Kestrel cleaner (`kes-setup --bleachbit`) can now delete the folders' sorts too, under "Folder covers,
   colours and sorts". Run `kes-setup --bleachbit` again to update it.

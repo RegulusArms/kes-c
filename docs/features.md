@@ -14,6 +14,12 @@
 - **A sort for each folder.** Changing the sort (the column headers or the Sort menu) changes it for that folder
   only, which keeps it. Folders that were never sorted use the default: **Sort → Set as Default** makes the current
   sort the default. **Sort → Apply to Subfolders** gives every folder below this one the same sort.
+- **Group by Period / Group by Day** (Sort menu). The items go under date headers, newest first: by period (Today,
+  Yesterday, Earlier this week, Last week, Earlier this month, Last month, Earlier this year, then each year) or one
+  per day. Inside each group they keep the chosen sort, so you can group by date and sort by name, size or type. Click
+  a header (or press Enter on it) to collapse its group. **Date to Group By** picks the date: modified, created, or
+  taken (a photo's EXIF, a PNG's Creation Time, an MP4 / MOV video's header; read in the background, falling back to
+  the date created). Also in search results, Starred, Recent and Trash; kept per folder, like the sort.
 - Search the current folder by typing to filter, or search subfolders recursively. Wildcards are supported.
 - Cut, copy and paste work with GNOME Files' clipboard. Paste as link and pasting image data are supported.
 - Drag and drop:

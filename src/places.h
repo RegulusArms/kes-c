@@ -7,8 +7,10 @@
 // Pinned items (~/.config/kestrel-explorer/pinned.json, {folder: [names]}) aren't listed anywhere: "Pinned & Starred
 // First" sorts them to the top of their folder.
 //
-// Folder sorts (~/.config/kestrel-explorer/sorts.json, {folder: [column, order]}): each folder keeps the sort it was
-// last given; folders without one use the default (the "sort_col" / "sort_order" view settings).
+// Folder sorts (~/.config/kestrel-explorer/sorts.json, {folder: [column, order, group, group_by]}): each folder keeps
+// the sort it was last given, and its grouping (groups.h: none, by period or by day, of the date modified, created or
+// taken); folders without one use the default (the "sort_col", "sort_order", "sort_group" and "sort_group_by" view
+// settings).
 #pragma once
 
 #include <QObject>
@@ -47,6 +49,8 @@ void set_pinned(const QStringList &paths, bool on);   // each in its own folder
 struct FolderSort {
     int column = 0;
     int order = 0;   // Qt::SortOrder
+    int group = 0;      // groups::Mode
+    int group_by = 0;   // groups::DateBy
 };
 std::optional<FolderSort> folder_sort(const QString &dir);   // dir's own sort, if it has one
 void set_folder_sort(const QStringList &dirs, FolderSort sort);   // also announced to the other Kestrels

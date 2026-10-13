@@ -40,6 +40,7 @@ add_executable(kes
     src/metadata.cpp
     src/viewer.cpp
     src/widgets.cpp
+    src/groups.cpp
     src/overview.cpp
     src/dialogs.cpp
     src/archive.cpp
