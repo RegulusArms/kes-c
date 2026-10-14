@@ -16,6 +16,8 @@
 #include <QPainter>
 #include <QPainterPath>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fcntl.h>
 #include <gio/gio.h>
@@ -308,20 +310,37 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             if (!n.startsWith('.') && VIDEO_EXTS.contains(ext_of(n)))
                 images << n;
     }
-    bool newest = order == "newest";
+    // name: first by name; last: last by name; newest / oldest: by modification time; spread: by name, from the
+    // beginning, middle and end (evenly spaced)
+    bool by_time = order == "newest" || order == "oldest";
+    bool reverse = order == "newest" || order == "last";
     auto mtime = [&](const QString &n) -> double {
         struct stat st;
         return stat_(join(folder, n), st) ? st.st_mtim.tv_sec + st.st_mtim.tv_nsec / 1e9 : 0;
     };
     auto sort_list = [&](QStringList &l) {
-        if (newest) {
+        if (by_time) {
             QHash<QString, double> m;
             for (const QString &n : l)
                 m[n] = mtime(n);
-            std::stable_sort(l.begin(), l.end(), [&](const QString &a, const QString &b) { return m[a] > m[b]; });
+            natural_sort(l);   // equal times in name order
+            std::stable_sort(l.begin(), l.end(), [&](const QString &a, const QString &b) {
+                return reverse ? m[a] > m[b] : m[a] < m[b];
+            });
         } else {
             natural_sort(l);
+            if (reverse)
+                std::reverse(l.begin(), l.end());
         }
+    };
+    // spread: k of the list, evenly spaced from its first to its last (the first alone when k is 1)
+    auto spaced = [&](const QStringList &l, int k) {
+        if (order != "spread" || k <= 0 || l.size() <= k)
+            return l;
+        QStringList out;
+        for (int i = 0; i < k; ++i)
+            out << l.at(k == 1 ? 0 : int(std::lround(double(i) * (l.size() - 1) / (k - 1))));
+        return out;
     };
     sort_list(images);
     if (picks.isEmpty()) {
@@ -333,11 +352,15 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             }
         }
     }
-    for (const QString &name : images) {
+    QStringList rest;
+    for (const QString &name : images)
+        if (!picks.contains(join(folder, name)))
+            rest << name;
+    for (const QString &name : spaced(rest, count - int(picks.size()))) {
         if (picks.size() >= count)
             break;
         QString p = join(folder, name);
-        if (!picks.contains(p) && isfile(p))
+        if (isfile(p))
             picks << p;
     }
     if (picks.isEmpty()) {   // look one level down for nested galleries
@@ -346,7 +369,7 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             if (!n.startsWith('.') && isdir(join(folder, n)))
                 dirs << n;
         sort_list(dirs);
-        for (const QString &d : dirs.mid(0, 12)) {
+        for (const QString &d : spaced(dirs, count).mid(0, 12)) {
             if (picks.size() >= count)
                 break;
             picks += pick_folder_images(join(folder, d), 1, order).mid(0, 1);

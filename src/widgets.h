@@ -152,6 +152,10 @@ public:
     void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     int icon_size = 128;
     Animator *animator = nullptr;   // GIF / WebM playing in place of thumbnails
+    // grouped (groups.h): the grid has no fixed cells (a header takes a line of its own), so each item is given this size
+    // and each header this width
+    QSize cell;
+    int header_width = 0;
 
 private:
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
@@ -161,6 +165,17 @@ private:
     QWidget *pane;
     ThumbnailManager *thumbs;
     std::function<bool(const QString &)> is_cut;
+};
+
+// The headers of grouped views (groups.h): an arrow (pointing right when collapsed), the group's name and count, and a line.
+int group_header_height(const QFontMetrics &fm);
+void paint_group_header(QPainter *p, const QRect &rect, const QModelIndex &index, const QStyleOptionViewItem &option);
+
+// The list view's: headers drawn as above, everything else as usual.
+class ListDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 };
 
 // ---------------------------------------------------------------- path bar

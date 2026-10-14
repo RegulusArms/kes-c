@@ -229,11 +229,16 @@ QColor named_accent(const QString &name);
 // stylesheets that use palette(...) are reapplied first, then fn runs. Stops when owner is deleted.
 void on_palette_change(QObject *owner, std::function<void()> fn);
 // Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
-// 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's
-// python3 with GTK's bindings) and follows the desktop's theme setting. follow_gtk_theme() does nothing on newer Qt.
+// 6.5+ does both, but stays light under GNOME's dark style unless the GTK theme itself is a dark one. Kestrel reads the
+// theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's python3 with GTK's bindings; its dark
+// variant when the desktop prefers dark) and follows the desktop's theme settings: always on Qt < 6.5, and on newer Qt
+// once the desktop wants dark and Qt's own colours are light.
 extern const char *GTK_COLORS_SCRIPT;
 bool needs_gtk_palette(const QString &qt_version);
 QPalette gtk_palette_from(const QJsonObject &colors, bool *ok);   // ok: the theme had the basic colours
+// gtk_palette_from, but with dark wanted and the colours light or missing, Adwaita's dark ones
+QPalette theme_palette(const QJsonObject &colors, bool dark, bool *ok);
+bool desktop_prefers_dark();   // the desktop's dark style is on (GNOME's color-scheme setting, or Qt 6.5+'s reading)
 void follow_gtk_theme();   // after QApplication: apply the theme's colours now, then follow changes
 
 // ---------------------------------------------------------------- applications (GIO)

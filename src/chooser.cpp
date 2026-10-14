@@ -2,6 +2,7 @@
 
 #include "app.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -389,17 +390,19 @@ void ChooserBar::activated(const QStringList &files)
     }
 }
 
-static bool confirm_replace(QWidget *parent, const QStringList &existing)
+static void confirm_replace(QWidget *parent, const QStringList &existing, std::function<void()> yes)
 {
     QString text = existing.size() == 1
                        ? QString("A file named “%1” already exists. Do you want to replace it?").arg(basename(existing[0]))
                        : QString("%1 of these files already exist in this folder. Do you want to replace them?")
                              .arg(existing.size());
-    QMessageBox box(QMessageBox::Question, "Replace File", text, QMessageBox::NoButton, parent);
-    QPushButton *replace = box.addButton("Replace", QMessageBox::DestructiveRole);
-    box.addButton(QMessageBox::Cancel);
-    box.exec();
-    return box.clickedButton() == replace;
+    auto *box = new QMessageBox(QMessageBox::Question, "Replace File", text, QMessageBox::NoButton, parent);
+    QPushButton *replace = box->addButton("Replace", QMessageBox::DestructiveRole);
+    box->addButton(QMessageBox::Cancel);
+    ask_box(box, [replace, yes](QAbstractButton *b) {
+        if (b == replace)
+            yes();
+    });
 }
 
 void ChooserBar::accept()
@@ -417,12 +420,13 @@ void ChooserBar::accept()
             return;
         }
         if (!isdir(dirname(target))) {
-            QMessageBox::warning(this, "Save", QString("The folder “%1” doesn't exist.").arg(dirname(target)));
+            warn(this, "Save", QString("The folder “%1” doesn't exist.").arg(dirname(target)));
             return;
         }
-        if (lexists(target) && !confirm_replace(this, {target}))
-            return;
-        finish(true, {target});
+        if (lexists(target))
+            confirm_replace(this, {target}, [this, target]() { finish(true, {target}); });
+        else
+            finish(true, {target});
     } else if (req.method == "SaveFiles") {
         QString folder = sel.size() == 1 && isdir(sel[0]) ? sel[0] : dir;
         QStringList targets, existing;
@@ -431,9 +435,10 @@ void ChooserBar::accept()
             if (lexists(targets.last()))
                 existing << targets.last();
         }
-        if (!existing.isEmpty() && !confirm_replace(this, existing))
-            return;
-        finish(true, targets);
+        if (!existing.isEmpty())
+            confirm_replace(this, existing, [this, targets]() { finish(true, targets); });
+        else
+            finish(true, targets);
     } else if (req.directory) {
         QStringList dirs;
         for (const QString &p : sel)

@@ -2,6 +2,7 @@
 
 #include "proc.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QDialog>
@@ -9,8 +10,8 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QMenu>
-#include <QMessageBox>
 #include <QProcess>
 
 #include <gio/gdesktopappinfo.h>
@@ -216,14 +217,17 @@ static QHash<QString, QHash<QString, QString>> usershares()
     return shares;
 }
 
+static void apply_share(QWidget *parent, const QString &folder, bool existing, const QHash<QString, QString> &ex,
+                        bool share, const QString &share_name, const QString &comment, bool writable, bool guest);
+
 void share_dialog(QWidget *parent, const QString &folder)
 {
     auto shares = usershares();
     bool existing = shares.contains(folder);
     QHash<QString, QString> ex = shares.value(folder);
-    QDialog d(parent);
-    d.setWindowTitle("Network Sharing");
-    auto *form = new QFormLayout(&d);
+    auto *d = new QDialog(parent);
+    d->setWindowTitle("Network Sharing");
+    auto *form = new QFormLayout(d);
     auto *on = new QCheckBox("Share this folder");
     on->setChecked(existing);
     form->addRow(on);
@@ -247,29 +251,39 @@ void share_dialog(QWidget *parent, const QString &folder)
         QObject::connect(on, &QCheckBox::toggled, w, &QWidget::setEnabled);
     }
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QObject::connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::accepted, d, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
     form->addRow(bb);
-    d.resize(460, d.sizeHint().height());
-    if (!d.exec())
-        return;
-    if (existing && (!on->isChecked() || ex.value("name") != name->text().trimmed()))
+    d->resize(460, d->sizeHint().height());
+    QPointer<QWidget> owner(parent);
+    QObject::connect(d, &QDialog::accepted, d, [=]() {
+        apply_share(owner, folder, existing, ex, on->isChecked(), name->text().trimmed(), comment->text(),
+                    write->isChecked(), guest->isChecked());
+    });
+    show_free(d);
+}
+
+// Network Sharing's OK: (un)share the folder as the dialog says
+static void apply_share(QWidget *parent, const QString &folder, bool existing, const QHash<QString, QString> &ex,
+                        bool share, const QString &share_name, const QString &comment, bool writable, bool guest)
+{
+    if (existing && (!share || ex.value("name") != share_name))
         proc::run({"net", "usershare", "delete", ex.value("name")}, 10000);
-    if (!on->isChecked())
+    if (!share)
         return;
-    QString acl = write->isChecked() ? "Everyone:F" : "Everyone:R";
-    auto r = proc::run({"net", "usershare", "add", name->text().trimmed(), folder, comment->text(), acl,
-                        QString("guest_ok=%1").arg(guest->isChecked() ? "y" : "n")},
+    QString acl = writable ? "Everyone:F" : "Everyone:R";
+    auto r = proc::run({"net", "usershare", "add", share_name, folder, comment, acl,
+                        QString("guest_ok=%1").arg(guest ? "y" : "n")},
                        10000);
     if (r.rc != 0) {
         QString err = QString::fromUtf8(r.err + r.out).trimmed();
-        QMessageBox::warning(parent, "Network Sharing", err.isEmpty() ? QString("Sharing failed.") : err);
+        warn(parent, "Network Sharing", err.isEmpty() ? QString("Sharing failed.") : err);
     } else {
         struct stat st;
-        if (write->isChecked() && stat_(folder, st) && !(st.st_mode & 0002))
-            QMessageBox::information(parent, "Network Sharing",
-                                     "The folder is shared. For others to create files in it, it must also be writable "
-                                     "by others (Properties → Permissions).");
+        if (writable && stat_(folder, st) && !(st.st_mode & 0002))
+            inform(parent, "Network Sharing",
+                   "The folder is shared. For others to create files in it, it must also be writable "
+                   "by others (Properties → Permissions).");
     }
 }
 

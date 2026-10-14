@@ -15,6 +15,8 @@ Right-click an archive:
   - the destination folder (created if needed);
   - whether to use a new folder named after the archive;
   - what to do with files that already exist: keep both (rename), replace or skip;
+  - for rar, 7z and zip, **Keep damaged files**: files that fail their checksum are kept as far as they could be
+    extracted, and listed afterwards, instead of the whole extraction failing;
   - whether to move the archive to the trash afterwards, and whether to open the extracted folder.
 
   These choices, except the destination, are remembered.

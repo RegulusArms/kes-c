@@ -6,11 +6,11 @@
 #include "fileops.h"
 #include "pane.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QCryptographicHash>
 #include <QDialogButtonBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -18,7 +18,6 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
@@ -477,11 +476,7 @@ bool open_dialog(QWidget *parent, const QString &path)
     QList<Entry> entries = parse(path);
     if (entries.isEmpty())
         return false;
-    auto *d = new VerifyDialog(parent, path, entries);
-    d->setAttribute(Qt::WA_DeleteOnClose);
-    d->show();
-    d->raise();
-    d->activateWindow();
+    show_free(new VerifyDialog(parent, path, entries));
     return true;
 }
 
@@ -671,9 +666,7 @@ CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(
     connect(name, &QLineEdit::textChanged, this, &CreateDialog::update);
     connect(folder, &QLineEdit::textChanged, this, &CreateDialog::update);
     connect(browse, &QPushButton::clicked, this, [this]() {
-        QString d = QFileDialog::getExistingDirectory(this, "Save Checksum File In", folder->text());
-        if (!d.isEmpty())
-            folder->setText(d);
+        choose_folder(this, "Save Checksum File In", folder->text(), [this](const QString &d) { folder->setText(d); });
     });
 
     preview = new QLabel;
@@ -732,20 +725,24 @@ void CreateDialog::ok()
     for (const QString &o : outputs())
         if (lexists(o))
             existing << basename(o);
-    if (!existing.isEmpty() &&
-        QMessageBox::question(this, "Create Checksum File",
-                              "Replace " + existing.join(", ") + "?") != QMessageBox::Yes)
-        return;
-    settings().setValue("checksum_algorithms", algos().join(','));
-    settings().setValue("checksum_one_file", one_file());
-    accept();
+    auto go = [this]() {
+        settings().setValue("checksum_algorithms", algos().join(','));
+        settings().setValue("checksum_one_file", one_file());
+        accept();
+    };
+    if (!existing.isEmpty())
+        ask_yes(this, "Create Checksum File", "Replace " + existing.join(", ") + "?", go);
+    else
+        go();
 }
 
 void create_dialog(MainWindow *win, const QStringList &paths)
 {
-    CreateDialog dlg(win, paths);
-    if (dlg.exec())
-        run_create(win, paths, dlg.dir(), dlg.stem(), dlg.algos(), dlg.one_file());
+    auto *dlg = new CreateDialog(win, paths);
+    QObject::connect(dlg, &QDialog::accepted, win, [win, dlg, paths]() {
+        run_create(win, paths, dlg->dir(), dlg->stem(), dlg->algos(), dlg->one_file());
+    });
+    show_free(dlg);
 }
 
 void run_create(MainWindow *win, const QStringList &paths, const QString &dir, const QString &stem,
@@ -778,7 +775,7 @@ void run_create(MainWindow *win, const QStringList &paths, const QString &dir, c
             QString head = errors.size() == 1
                                ? QString("1 file couldn't be read and was left out:")
                                : QString("%1 files couldn't be read and were left out:").arg(errors.size());
-            QMessageBox::warning(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
+            warn(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
         }
     };
     fileops::run_job(win, "Creating checksums", work, done);

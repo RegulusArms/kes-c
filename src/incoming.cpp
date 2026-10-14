@@ -191,6 +191,8 @@ void on_atc(const QJsonObject &m)
         apply_preferences();
     } else if (type == "starred") {
         places::reload_starred();
+    } else if (type == "sorts") {
+        places::reload_sorts();
     } else if (type == "folders") {
         g_thumbs->reload_styles();
         for (const QJsonValue &v : m.value("paths").toArray())

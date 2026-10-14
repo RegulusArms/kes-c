@@ -4,6 +4,9 @@
 
 #include <QLabel>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+
 using namespace test;
 
 // Stand-ins for Cinnamon's settings (Linux Mint), compiled before GLib first reads the schemas. False if the schema
@@ -78,11 +81,12 @@ int main(int argc, char **argv)
               !needs_gtk_palette("6.10.2"),
           "Qt before 6.5 needs Kestrel to read the GTK theme's colours; 6.5 and newer do it themselves");
     bool ok = false;
-    QPalette gp = gtk_palette_from(
-        QJsonObject{{"theme_bg_color", "#2b2b2b"}, {"theme_fg_color", "#dadada"}, {"theme_base_color", "#323232"},
-                    {"theme_text_color", "#ffffff"}, {"theme_selected_bg_color", "#35a854"},
-                    {"theme_selected_fg_color", "#ffffff"}, {"insensitive_fg_color", "#888888"}},
-        &ok);
+    auto gp_colors = []() {
+        return QJsonObject{{"theme_bg_color", "#2b2b2b"}, {"theme_fg_color", "#dadada"}, {"theme_base_color", "#323232"},
+                           {"theme_text_color", "#ffffff"}, {"theme_selected_bg_color", "#35a854"},
+                           {"theme_selected_fg_color", "#ffffff"}, {"insensitive_fg_color", "#888888"}};
+    };
+    QPalette gp = gtk_palette_from(gp_colors(), &ok);
     check(ok && gp.color(QPalette::Window) == QColor("#2b2b2b") && gp.color(QPalette::WindowText) == QColor("#dadada") &&
               gp.color(QPalette::Base) == QColor("#323232") && gp.color(QPalette::Text) == QColor("#ffffff") &&
               gp.color(QPalette::Highlight) == QColor("#35a854") &&
@@ -90,6 +94,18 @@ int main(int argc, char **argv)
           "a GTK theme's colours become the palette (window, text, selection, disabled text)");
     gtk_palette_from(QJsonObject{{"theme_fg_color", "#dadada"}}, &ok);
     check(!ok, "a theme without the basic colours changes nothing");
+    QJsonObject yaru{{"theme_bg_color", "#fafafa"}, {"theme_fg_color", "#3d3d3d"}, {"theme_selected_bg_color", "#e95420"}};
+    QPalette lp = theme_palette(yaru, false, &ok);
+    check(ok && lp.color(QPalette::Window) == QColor("#fafafa"), "with the light style, a light theme's colours are used");
+    QPalette dp = theme_palette(yaru, true, &ok);
+    check(ok && dp.color(QPalette::Window).lightness() < 128 && dp.color(QPalette::Text).lightness() > 200 &&
+              dp.color(QPalette::WindowText).lightness() > 200,
+          "with the dark style, a theme that stays light gives a dark background and light text");
+    QPalette none = theme_palette(QJsonObject(), true, &ok);
+    check(ok && none.color(QPalette::Window).lightness() < 128,
+          "with the dark style and no theme colours (no python3 or GTK), the background is still dark");
+    check(theme_palette(gp_colors(), true, &ok).color(QPalette::Window) == QColor("#2b2b2b"),
+          "with the dark style, a dark theme's own colours are kept");
 
     const QPalette LIGHT = palette_of("#fafafa", "#e95420"), DARK = palette_of("#2a2a2a", "#2a7fd4");
     QApplication::setPalette(LIGHT);
@@ -192,6 +208,42 @@ int main(int argc, char **argv)
         check(colored(drive, true) && colored(gone, true) && colored(net, false),
               "a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default "
               "colour, a network one a folder in it");
+    }
+    // -- which pictures a folder preview shows (Preferences → Folder preview picks)
+    {
+        QString pics = home_path("picks"), nested = home_path("picks-nested");
+        makedirs(pics, true);
+        const int when[] = {5, 9, 1, 7, 3, 8, 2, 6, 4};   // p1.jpg's age, p2.jpg's…: not in name order
+        for (int i = 1; i <= 9; ++i) {
+            QString f = join(pics, QString("p%1.jpg").arg(i));
+            write_text(f, "x");
+            struct timespec t[2] = {{1700000000 + when[i - 1] * 100, 0}, {1700000000 + when[i - 1] * 100, 0}};
+            utimensat(AT_FDCWD, f.toLocal8Bit().constData(), t, 0);
+        }
+        for (const char *d : {"a", "b", "c", "d", "e"}) {
+            makedirs(join(nested, d), true);
+            write_text(join(join(nested, d), QString(d) + ".png"), "x");
+        }
+        auto names = [](const QStringList &paths) {
+            QStringList out;
+            for (const QString &p : paths)
+                out << basename(p);
+            return out.join(' ');
+        };
+        auto picks = [&](int count, const QString &order) { return names(thumbs::pick_folder_images(pics, count, order)); };
+        check(picks(3, "name") == "p1.jpg p2.jpg p3.jpg", "first by name: " + picks(3, "name"));
+        check(picks(3, "last") == "p9.jpg p8.jpg p7.jpg", "last by name: " + picks(3, "last"));
+        check(picks(3, "newest") == "p2.jpg p6.jpg p4.jpg", "newest first: " + picks(3, "newest"));
+        check(picks(3, "oldest") == "p3.jpg p7.jpg p5.jpg", "oldest first: " + picks(3, "oldest"));
+        check(picks(3, "spread") == "p1.jpg p5.jpg p9.jpg" && picks(4, "spread") == "p1.jpg p4.jpg p6.jpg p9.jpg" &&
+                  picks(1, "spread") == "p1.jpg",
+              "beginning, middle and end: evenly spaced by name (" + picks(3, "spread") + " / " + picks(4, "spread") + ")");
+        check(names(thumbs::pick_folder_images(pics, 3, "spread", join(pics, "p2.jpg"))) == "p2.jpg p1.jpg p9.jpg",
+              "beginning, middle and end: a chosen cover comes first, the rest spread over the others");
+        check(picks(2, "something-newer") == "p1.jpg p2.jpg", "an unknown setting picks first by name");
+        check(names(thumbs::pick_folder_images(nested, 3, "spread")) == "a.png c.png e.png" &&
+                  names(thumbs::pick_folder_images(nested, 2, "last")) == "e.png d.png",
+              "a folder of galleries takes its subfolders in the same order");
     }
     check(thumbs::follows_accent("accent") && thumbs::follows_accent("") && thumbs::follows_accent("#D9652F") &&
               !thumbs::follows_accent("#33d17a"),

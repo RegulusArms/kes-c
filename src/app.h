@@ -12,6 +12,7 @@
 class Animator;
 class FSModel;
 class PreferencesDialog;
+class QMessageBox;
 class GridDelegate;
 class ImageViewer;
 class InfoPanel;
@@ -122,6 +123,8 @@ public:
     void set_view_value(const QString &key, const QVariant &value);
     int default_zoom(bool grid) const;
     void set_pinned_first(bool on);   // Pinned & Starred First, for this window's tabs and its saved view setting
+    void set_default_sort(Pane *p);   // Sort → Set as Default: p's sort, for folders without their own
+    void sort_subfolders(Pane *p);    // Sort → Apply to Subfolders: p's sort, for every folder below p's
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
@@ -129,6 +132,7 @@ protected:
 private:
     void build_toolbar();
     void fill_sort_menu();
+    void add_sort_items(QMenu *m, Pane *p);   // the Sort menu's items, for p's folder
     QAction *act(const QString &text, const QStringList &keys, std::function<void()> fn,
                  const QStringList &icon_names = {}, bool checkable = false, QMenu *menu = nullptr);
     void build_actions();
@@ -148,6 +152,12 @@ private:
     void sync_undo();
     void preferences_saved();
     void run_shred(const QStringList &targets, const QString &title);
+    void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
+    void make_folder(const QString &dir, const QString &name);   // New Folder / New File, once the name is given
+    void make_file(const QString &dir, const QString &name, const QString &tmpl);
+    void delete_now(const QStringList &paths);   // Delete Permanently, once confirmed
+    void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
+    QPointer<QMessageBox> close_box;             // "Operations Running", while it's asking
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

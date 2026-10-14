@@ -7,10 +7,14 @@
 #include <QAbstractSlider>
 #include <QAccessible>
 #include <QComboBox>
+#include <QDir>
 #include <QDropEvent>
 #include <QFile>
 #include <QHeaderView>
+#include <QInputDialog>
+#include <QMessageBox>
 #include <QMimeData>
+#include <QRegularExpression>
 
 using namespace test;
 
@@ -164,6 +168,142 @@ int main(int argc, char **argv)
     check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view, and the folder is highlighted "
                                   "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
+
+    // -- Properties windows: each a free window of its own (not modal, not kept above or attached to Kestrel), several
+    // at once, and the windows they open the same
+    {
+        auto props_open = []() {
+            QList<QPointer<PropertiesDialog>> out;
+            for (QWidget *t : QApplication::topLevelWidgets())
+                if (auto *d = qobject_cast<PropertiesDialog *>(t); d && d->isVisible())
+                    out << d;
+            return out;
+        };
+        auto free_window = is_free_window;
+        w->properties({home_path("file.txt")});
+        w->properties({home_path("other.txt")});
+        spin(100);
+        auto open = props_open();
+        bool both = open.size() == 2 && free_window(open.value(0)) && free_window(open.value(1)) &&
+                    !QApplication::activeModalWidget();
+        check(both, "Properties opens as a free window, not modal or kept above Kestrel, and several can be open at once");
+        auto *value = open.isEmpty() ? nullptr : new TextDialog(open.first(), "Tag", "value");
+        if (value)
+            show_free(value);
+        spin(50);
+        check(free_window(value), "a window Properties opens (View Value…) is a free window too");
+        QStringList native;   // a native window inside Kestrel's or Properties' window glitches on Wayland
+        for (QWidget *x : QApplication::allWidgets())
+            if (x->internalWinId() && !x->isWindow())
+                native << QString(x->metaObject()->className()) + " in " + x->window()->metaObject()->className();
+        check(native.isEmpty(), "opening those windows doesn't give the widgets in Kestrel's or Properties' window native "
+                                "windows of their own" + (native.isEmpty() ? QString() : " (" + native.join(", ") + ")"));
+        QPointer<PropertiesDialog> first = open.value(0);
+        QPointer<TextDialog> opened = value;
+        if (first)
+            first->close();
+        // a deleteLater() is carried out by the app's event loop; this test runs outside it, and Qt 6.4 doesn't carry
+        // one out in the nested loop spin() runs, so do it here (nothing is pending if the window isn't deleted on close)
+        bool gone = wait_for([&]() {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return !first && !opened;
+        }, 3000);
+        int left = int(props_open().size());
+        check(gone && left == 1, QString("closing a Properties window deletes it (and what it opened) and leaves the "
+                                         "others open (deleted: %1, open: %2)")
+                                     .arg(gone ? "yes" : "no")
+                                     .arg(left));
+        for (auto &d : props_open())
+            d->close();
+        spin(50);
+    }
+
+    // -- every window Kestrel opens is free (windows.h): messages, questions, text, pickers, and the conflict question
+    // of a copy; none is opened modally anywhere in the source
+    {
+        QMessageBox *msg = warn(w, "Test", "a message");
+        spin(50);
+        check(is_free_window(msg), "a message is a free window");
+        msg->close();
+        QMessageBox::StandardButton got = QMessageBox::Cancel;
+        int answers = 0;
+        QMessageBox *q = ask(w, QMessageBox::Question, "Test", "yes?", QMessageBox::Yes | QMessageBox::No,
+                             [&](QMessageBox::StandardButton b) { got = b, ++answers; });
+        spin(50);
+        bool free_q = is_free_window(q);
+        if (q)
+            q->button(QMessageBox::Yes)->click();
+        spin(50);
+        check(free_q && got == QMessageBox::Yes && answers == 1, "a question is a free window, and its answer comes back");
+        q = ask(w, QMessageBox::Question, "Test", "yes?", QMessageBox::Yes | QMessageBox::No,
+                [&](QMessageBox::StandardButton b) { got = b, ++answers; });
+        spin(50);
+        q->close();
+        spin(50);
+        check(got == QMessageBox::NoButton && answers == 2, "a question closed without an answer answers nothing, once");
+        QString typed;
+        ask_text(w, "Test", "Name:", "start", [&](const QString &t) { typed = t; });
+        spin(50);
+        auto *input = shown_window<QInputDialog>();
+        bool free_input = is_free_window(input);
+        if (input) {
+            input->setTextValue("typed");
+            input->accept();
+        }
+        spin(50);
+        check(free_input && typed == "typed", "asking for text is a free window, and the text comes back");
+
+        QString picked;
+        choose_folder(w, "Pick", home, [&](const QString &p) { picked = p; });
+        spin(200);
+        MainWindow *picker = nullptr;
+        for (QWidget *t : QApplication::topLevelWidgets())
+            if (auto *m = qobject_cast<MainWindow *>(t); m && m->isVisible() && m->chooser)
+                picker = m;
+        bool free_picker = is_free_window(picker) && !WINDOWS.contains(picker);
+        if (picker)
+            picker->chooser->finish(true, {home_path("folder")});
+        spin(100);
+        check(free_picker && picked == home_path("folder"),
+              "choosing a folder opens Kestrel's own chooser as a free window, and the folder comes back");
+
+        makedirs(home_path("conflict-from"), true);
+        makedirs(home_path("conflict-to"), true);
+        write_text(home_path("conflict-from/same.txt"), "new");
+        write_text(home_path("conflict-to/same.txt"), "old");
+        QList<fileops::Job> planned;
+        bool done = false;
+        fileops::plan_transfer(w, {home_path("conflict-from/same.txt")}, home_path("conflict-to"), "copy",
+                               [&](const QList<fileops::Job> &jobs) { planned = jobs, done = true; });
+        spin(50);
+        auto *conflict = shown_window<ConflictDialog>();
+        bool free_conflict = is_free_window(conflict) && !done;
+        if (conflict)
+            for (QPushButton *b : conflict->findChildren<QPushButton *>())
+                if (b->text() == "Keep Both")
+                    b->click();
+        spin(50);
+        check(free_conflict && done && planned.size() == 1 && planned.value(0).dst != home_path("conflict-to/same.txt"),
+              "a copy's name conflict asks in a free window, and the copy is planned with the answer");
+
+        // the source: nothing opened modally (exec(), open(), the static dialog functions, a modality)
+        static const QRegularExpression modal(
+            R"(\bexec\(\)|\bopen\(\)|QMessageBox::(warning|question|information|critical|about|aboutQt)\(|)"
+            R"(QInputDialog::get|QFileDialog::get|QColorDialog::get|QFontDialog::get|setModal\(true\)|)"
+            R"(Qt::ApplicationModal|Qt::WindowModal)");
+        QStringList found;
+        QDir src(QString(TESTS_DIR) + "/../src");
+        for (const QString &f : src.entryList({"*.cpp", "*.h"}, QDir::Files)) {
+            int n = 0;
+            for (const QString &line : QString::fromUtf8(read_file(src.filePath(f))).split('\n')) {
+                ++n;
+                if (modal.match(line).hasMatch() && !line.contains("app.exec()") && !line.trimmed().startsWith("//"))
+                    found << f + ":" + QString::number(n) + ": " + line.trimmed();
+            }
+        }
+        check(found.isEmpty(), "no window is opened modally anywhere in the source" +
+                                   (found.isEmpty() ? QString() : ":\n  " + found.join("\n  ")));
+    }
 
     // -- the tab menu: Duplicate Tab puts a copy (same folder and history) beside the tab, Open in New Window moves the
     // tab to a new window, Close Tab closes it

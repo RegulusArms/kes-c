@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QJsonValue>
 #include <QList>
 #include <QPair>
@@ -20,6 +21,10 @@ struct MetaRow {
 Rows basic_info(const QString &path);   // fast summary for the info panel
 Rows ai_info(const QString &path);      // Stable Diffusion / ComfyUI generation info
 QList<MetaRow> full_metadata(const QString &path);
+// When a photo or video was taken, from its metadata (EXIF DateTimeOriginal / DateTimeDigitized, a PNG's Creation Time,
+// an MP4 / MOV movie header's creation time); invalid when it has none. Reads the file: not on the UI thread.
+QDateTime taken(const QString &path);
+bool may_have_taken(const QString &path);   // a type taken() reads (by its name)
 // An object's keys in the order they were written, with their values (each key once, as Python's json.loads): the
 // object `json` is, or the first in an array of them (exiftool's -j output); empty if it isn't valid JSON
 QList<QPair<QString, QJsonValue>> ordered_object(const QByteArray &json);
