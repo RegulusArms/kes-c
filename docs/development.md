@@ -9,7 +9,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 370 checks in 13 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
+There are 487 checks in 15 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, pinned items and folder sorts, grouping by date, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
 
 ## Architecture
 
@@ -63,8 +63,8 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │   can show jobs running elsewhere                             │
        │ • ✕ Cancel: passed to the Kestrel that owns the job           │
        │ • shared undo list (optional, off by default)                 │
-       │ • shared changes: Preferences, stars, folder colours,         │
-       │   covers, bookmarks, cleared caches                           │
+       │ • shared changes: Preferences, stars, pins, folder colours,   │
+       │   covers, folder sorts, bookmarks, cleared caches             │
        │ • hands folders to an open window ("open folders as tabs")    │
        │                                                               │
        │ Checks every message (protocol version, known types, the      │
@@ -89,6 +89,26 @@ Examples:
 
 Messages are JSON; a Kestrel speaking another protocol version is ignored. If the tower goes down, the next Kestrel to notice starts a new one and every Kestrel checks in again.
 
+## Windows
+
+Every window Kestrel opens can be moved anywhere and left open until it's needed: Properties, Preferences, Open With,
+Compress and Extract, a question, an error message, the folder picker. None is modal, so none blocks the window it came
+from or (on GNOME, which attaches modal dialogs to their parent) drags it along. None is kept above another window, and
+several can be open at once. A window goes when the Kestrel window it belongs to closes.
+
+To keep it that way, a new window:
+
+- is made on the heap and shown with `show_free()` (`src/windows.h`), never with `exec()`, `open()`, `setModal()` or a
+  window modality;
+- uses `warn()` / `inform()` for a message, `ask()` / `ask_yes()` / `ask_box()` for a question, `ask_text()` for a line
+  of text, and `choose_folder()` / `choose_file()` for a picker (Kestrel's own chooser window), never the static functions
+  of `QMessageBox`, `QInputDialog`, `QFileDialog` or `QColorDialog`, which are all modal;
+- does what follows the answer in a callback (on `accepted`, or the helper's), since nothing waits for it. Re-read
+  anything that may have changed while it was open, and parent a message to a window that stays open (not to a
+  dialog that closes right after).
+
+tests/test_ui.cpp checks the source for modal calls, so one that slips in fails the tests.
+
 ## Layout
 
 | File | Purpose |
@@ -98,12 +118,13 @@ Messages are JSON; a Kestrel speaking another protocol version is ignored. If th
 | `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
 | `src/incoming.cpp` | Requests from outside this Kestrel: changes other Kestrels report through the tower, folders handed over to open as tabs, and other apps' "Show in folder" (FileManager1) |
-| `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection |
+| `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection, each folder's sort and grouping |
+| `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
 | `src/viewer.cpp` | Image viewer |
 | `src/fileops.cpp` | Background tasks and the status-bar task panel; copy, move and delete (retrying denied ones as administrator); conflict handling; links |
-| `src/places.cpp` | Starred and Recent: places that list files from anywhere; pinned items |
+| `src/places.cpp` | Starred and Recent: places that list files from anywhere; pinned items; each folder's sort and grouping (`sorts.json`) |
 | `src/undo.cpp` | Undo for file operations, shared by a Kestrel's windows (or every Kestrel's) |
 | `src/sharing.cpp` | What GNOME Files offers through extensions: code editors, Nautilus scripts, Send To, Samba sharing |
 | `src/animate.cpp` | Animated GIFs and WebM clips playing in the file view |
@@ -112,8 +133,10 @@ Messages are JSON; a Kestrel speaking another protocol version is ignored. If th
 | `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`) |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
+| `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
 | `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark, preferences |
-| `src/metadata.cpp` | EXIF and PNG-text reading, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
+| `src/hashcheck.cpp` | Checksum files: Verify Checksums, Create Checksum File…, and checking one file in Properties |
+| `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |

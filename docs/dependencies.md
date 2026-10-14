@@ -13,8 +13,9 @@ Package names below are Ubuntu's; Linux Mint uses the same ones.
 | `g++`, `cmake`, `pkg-config` | Compiling |
 | `qt6-base-dev` | The whole user interface (Qt 6 Widgets), image decoding, settings |
 | `libglib2.0-dev` | GIO: default and "Open With" apps, file type detection, trash, drive and network mounting, D-Bus for UWP |
+| `libxcb1-dev` | Giving the focus to the app files are dropped into, on X11 |
 
-At run time these become the ordinary `libqt6widgets6` and `libglib2.0` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed (only on Qt 6.4 systems is the system's `python3` used, to read the GTK theme's colours; see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)).
+At run time these become the ordinary `libqt6widgets6`, `libglib2.0` and `libxcb1` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed. The system's `python3` (with `python3-gi`) is used only to read the GTK theme's colours: always on Qt 6.4 (see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)), and on newer Qt when the desktop wants the dark style but Qt's own colours are light. Without it, Kestrel uses its built-in dark colours there.
 
 **Recommended**: run `./install.sh --install-recommended` to install any of these you're missing. Ubuntu already includes most of them. The ones you'll usually need to add are `kimageformat6-plugins` (RAW and HEIC previews) and some of the archive tools, such as `unrar`, `pigz`, `zpaq` and `lzip`.
 
@@ -28,7 +29,7 @@ At run time these become the ordinary `libqt6widgets6` and `libglib2.0` librarie
 | `qt6-svg-plugins` (in `libqt6svg6` on Ubuntu 24.04 / Linux Mint 22) | SVG images |
 | `kimageformat6-plugins` | Camera RAW (`.raf`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`…), HEIC, AVIF, JPEG XL and PSD. Without it these files get no preview and don't open in the viewer |
 | `adwaita-icon-theme` | Fallback icons when your icon theme is missing one |
-| `qt6-gtk-platformtheme` | The desktop's theme on GTK desktops (GNOME, Cinnamon, MATE, Xfce, Budgie): its colours, accent, light or dark mode and fonts. Without it Qt uses its own generic look there. KDE Plasma has its own (`plasma-integration`) |
+| `qt6-gtk-platformtheme` | The desktop's theme on GTK desktops (GNOME, Cinnamon, MATE, Xfce, Budgie): its colours, accent and fonts. Without it Qt uses its own generic look there, though Kestrel still follows the desktop's light or dark style. KDE Plasma has its own (`plasma-integration`) |
 | `7zip` (or `p7zip-full` on older releases) | Creating and extracting 7z and zip (with AES-256 passwords and split volumes), and extracting iso, cab, deb, rpm and other formats |
 | `unrar` (in Ubuntu's multiverse section) | Extracting `.rar`, including encrypted and multi-volume archives. 7-Zip on Ubuntu can't decompress RAR |
 | `zip`, `unzip` | zip archives without 7-Zip |

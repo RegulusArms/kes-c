@@ -87,6 +87,24 @@ inline bool is_tower(int argc, char **argv, int *rc)
 
 inline QString home_path(const QString &name) { return join(HOME(), name); }
 
+// A visible window of type T, or null. Kestrel's windows aren't modal (windows.h), so a test finds the one it waits
+// for among the top-level windows.
+template <typename T> T *shown_window()
+{
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (auto *t = qobject_cast<T *>(w); t && t->isVisible())
+            return t;
+    return nullptr;
+}
+
+// Shown as Kestrel's windows should be (windows.h): visible, not modal, a normal window (not a dialog) and not kept
+// above another window
+inline bool is_free_window(QWidget *d)
+{
+    return d && d->isVisible() && !d->isModal() && d->windowType() == Qt::Window && d->windowHandle() &&
+           !d->windowHandle()->transientParent() && !QApplication::activeModalWidget();
+}
+
 // ---------------------------------------------------------------- a fake second Kestrel on the bus
 
 // Plays "another Kestrel" through its own bus connection: it can check in, report, call tower methods, and records
@@ -138,7 +156,7 @@ public:
         return out;
     }
 
-    void check_in() { call("CheckIn", R"({"pid":1,"impl":"fake"})"); }
+    void check_in() { call("CheckIn", QString(R"({"pid":1,"impl":"fake","protocol":%1})").arg(atc::PROTOCOL).toUtf8()); }
     void report(const QJsonObject &o) { call("Report", QJsonDocument(o).toJson(QJsonDocument::Compact)); }
 
     bool heard_type(const QString &type, const QString &from) const

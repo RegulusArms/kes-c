@@ -6,11 +6,18 @@
 //
 // Pinned items (~/.config/kestrel-explorer/pinned.json, {folder: [names]}) aren't listed anywhere: "Pinned & Starred
 // First" sorts them to the top of their folder.
+//
+// Folder sorts (~/.config/kestrel-explorer/sorts.json, {folder: [column, order, group, group_by]}): each folder keeps
+// the sort it was last given, and its grouping (groups.h: none, by period or by day, of the date modified, created or
+// taken); folders without one use the default (the "sort_col", "sort_order", "sort_group" and "sort_group_by" view
+// settings).
 #pragma once
 
 #include <QObject>
 #include <QPair>
 #include <QStringList>
+
+#include <optional>
 
 namespace places {
 
@@ -26,6 +33,7 @@ class Signals : public QObject {
     Q_OBJECT
 Q_SIGNALS:
     void starred_changed();   // the stars or the pins
+    void sorts_changed();     // the folder sorts
 };
 Signals *signals_();
 
@@ -37,6 +45,16 @@ void reload_starred();   // re-read the lists, also the pins (another Kestrel ch
 QStringList pinned(const QString &dir);   // the names pinned in dir (also ones now gone)
 bool is_pinned(const QString &path);
 void set_pinned(const QStringList &paths, bool on);   // each in its own folder
+
+struct FolderSort {
+    int column = 0;
+    int order = 0;   // Qt::SortOrder
+    int group = 0;      // groups::Mode
+    int group_by = 0;   // groups::DateBy
+};
+std::optional<FolderSort> folder_sort(const QString &dir);   // dir's own sort, if it has one
+void set_folder_sort(const QStringList &dirs, FolderSort sort);   // also announced to the other Kestrels
+void reload_sorts();   // re-read them (another Kestrel changed them); emit sorts_changed
 
 // (path, original path) for a place, as util::trashed_items() gives for the trash (here both the same)
 QList<QPair<QString, QString>> items(const QString &place);

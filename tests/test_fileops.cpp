@@ -68,9 +68,9 @@ int main(int argc, char **argv)
     setup_app();
     stats::enable();   // KESTREL_STATS: checked at the end
     MainWindow *w = open_window({HOME()});
-    QTimer closer;   // error boxes are modal: note their text and close them
+    QTimer closer;   // message boxes: note their text and close them
     QObject::connect(&closer, &QTimer::timeout, []() {
-        if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+        if (auto *m = shown_window<QMessageBox>()) {
             boxes << m->text();
             m->done(0);
         }
@@ -165,6 +165,50 @@ int main(int argc, char **argv)
     check(*cut && whole, "cancel: no half-copied file is left behind");
     QDir(P("big2")).removeRecursively();
 
+    // -- a folder copied to a new name is made under that name at once, and each file appears in it as soon as it's
+    // complete (an SD card's photos show up one by one), never in a hidden folder until the whole copy is done
+    {
+        ::chmod(enc(P("big")).constData(), 0750);   // not the 0700 a folder is made with
+        auto seen = std::make_shared<std::atomic<int>>(0);   // 1: a finished file in big3 while the copy still ran
+        auto beside = std::make_shared<std::atomic<bool>>(false);   // a hidden part beside big3 at some point
+        Task *ft = fileops::start_ops(w, {{"copy", P("big"), P("big3")}}, "Test", []() {}, "Copy");
+        QPointer<Task> ftp(ft);
+        QObject::connect(ft, &Task::progress, ft, [ft, seen, beside](double, const QString &text) {
+            if (!text.endsWith(".bin") || *seen)
+                return;
+            for (const QString &n : listdir(HOME()))
+                if (n.startsWith(".kes-"))
+                    *beside = true;
+            if (!isdir(P("big3")))
+                return;
+            for (const QString &n : listdir(P("big3")))
+                if (!n.startsWith(".") && getsize(join(P("big3"), n)) == qint64(48) << 20) {
+                    *seen = 1;
+                    ft->cancel();   // and then a cancel part-way
+                    return;
+                }
+        }, Qt::DirectConnection);
+        wait_for([&]() { return !ftp; }, 20000);
+        check(*seen == 1 && !*beside,
+              "a folder being copied to a new name has its own name from the start, and a finished file shows up in "
+              "it while the copy still runs");
+        QStringList got = isdir(P("big3")) ? listdir(P("big3")) : QStringList();
+        bool all_whole = !got.isEmpty();
+        for (const QString &n : got)
+            all_whole = all_whole && !n.startsWith(".") && getsize(join(P("big3"), n)) == LONG;
+        struct stat fst;
+        check(all_whole && got.size() < 24 && ::stat(enc(P("big3")).constData(), &fst) == 0 && (fst.st_mode & 07777) == 0750,
+              QString("cancelled part-way, the files finished so far stay, whole (%1 of 24), with no part file, and the "
+                      "folder has the original's permissions").arg(got.size()));
+        check(undo::label() == "Copy" && undo_and_wait(w, []() { return !lexists(P("big3")); }),
+              "a folder copy cancelled part-way can be undone (what was copied goes to the trash)");
+        QDir(join(TRASH_DIR(), "files")).removeRecursively();
+        makedirs(join(TRASH_DIR(), "files"), true);
+        QDir(join(TRASH_DIR(), "info")).removeRecursively();
+        makedirs(join(TRASH_DIR(), "info"), true);
+        ::chmod(enc(P("big")).constData(), 0755);
+    }
+
     // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink
     // in the way is replaced, not written through; another hard link of the old file keeps its contents
     {
@@ -246,6 +290,29 @@ int main(int argc, char **argv)
         ::signal(SIGXFSZ, old_handler);
         check(old_intact() && leftovers().isEmpty(),
               "a folder copy that fails part-way (a write error) keeps the folder it would have replaced");
+        // to a new name: the files finished before the error stay, whole, and the one that failed isn't there. (First
+        // the error above is collected, so it can't turn up among a later check's messages.)
+        wait_for([]() { return boxes.join(" ").contains("olddir/huge") && !shown_window<QMessageBox>(); }, 5000);
+        make(P("rep/newdir/a.txt"), "a");
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        boxes.clear();
+        run_ops(w, {{"copy", P("rep/newdir"), P("rep/fresh")}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QStringList in_fresh = isdir(P("rep/fresh")) ? listdir(P("rep/fresh")) : QStringList{"(no folder)"};
+        bool fresh_ok = !in_fresh.contains("huge") && leftovers().isEmpty();
+        for (const QString &n : in_fresh)
+            fresh_ok = fresh_ok && !n.startsWith(".") && n != "(no folder)";
+        if (in_fresh.contains("a.txt"))
+            fresh_ok = fresh_ok && text_of(P("rep/fresh/a.txt")) == "a";
+        check(fresh_ok && wait_for([]() { return !boxes.isEmpty() && boxes.last().contains("fresh/huge"); }, 5000),
+              "a folder copy to a new name that fails part-way keeps the files finished before it, whole, leaves no "
+              "part file, and reports the error (" + in_fresh.join(", ") + ")");
+        QDir(P("rep/fresh")).removeRecursively();
         ::truncate(enc(P("rep/newdir/huge")).constData(), 10);
         make(P("rep/mvsrc/moved.txt"), "moved");
         make(P("rep/mvdst/old.txt"), "old");
@@ -301,14 +368,20 @@ int main(int argc, char **argv)
         check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
                   boxes.last().contains("appeared"),
               "a file another program saves under the new name while a copy runs is kept, and the conflict is reported");
-        stepped = run_racing({"copy", P("race/dir"), P("race/newdir")}, []() { make(P("race/newdir/theirs.txt"), "t"); });
-        check(stepped && listdir(P("race/newdir")) == QStringList{"theirs.txt"} && leftovers().isEmpty() &&
-                  !boxes.isEmpty() && boxes.last().contains("appeared"),
-              "...and so is a folder made under the new name while a folder copy runs");
+        // a folder copy claims its new name by making the folder there (never replacing): one another program made
+        // under that name after the copy was planned is kept
+        make(P("race/newdir/theirs.txt"), "t");
+        boxes.clear();
+        run_ops(w, {{"copy", P("race/dir"), P("race/newdir")}});
+        wait_for([]() { return !boxes.isEmpty(); }, 3000);
+        check(listdir(P("race/newdir")) == QStringList{"theirs.txt"} && leftovers().isEmpty() && !boxes.isEmpty() &&
+                  boxes.last().contains("appeared"),
+              "...and so is a folder made under the new name after a folder copy was planned");
         make(P("race/taken.txt"), "mine");
         make(P("race/small.txt"), "small");
         boxes.clear();
         bool ran = run_ops(w, {{"copy", P("race/small.txt"), P("race/taken.txt")}, {"move", P("race/small.txt"), P("race/taken.txt")}});
+        wait_for([]() { return !boxes.isEmpty(); }, 3000);   // the message comes up beside it, not blocking
         check(ran && text_of(P("race/taken.txt")) == "mine" && text_of(P("race/small.txt")) == "small" &&
                   !boxes.isEmpty() && boxes.last().contains("appeared"),
               "a copy or move to a name that's taken by the time it starts (not chosen as Replace) replaces nothing");
@@ -380,6 +453,7 @@ int main(int argc, char **argv)
         for (QPushButton *b : dlg.findChildren<QPushButton *>())
             if (b->text() == "Rename")
                 b->click();
+        wait_for([]() { return !boxes.isEmpty(); }, 3000);
         QStringList left = listdir(P("br"));
         left.sort();
         check(left == QStringList({"b-x.txt", "b.txt", "lnk"}) && islink(P("br/lnk")) && text_of(P("br/b.txt")) == "b" &&
@@ -412,7 +486,7 @@ int main(int argc, char **argv)
         QStringList earlier = boxes;
         boxes.clear();
         w->trash_paths({trashed_item, P("mt/normal.txt")});
-        check(wait_for([&]() { return !lexists(P("mt/normal.txt")); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
+        check(wait_for([&]() { return !lexists(P("mt/normal.txt")) && !boxes.isEmpty(); }) && exists(join(TRASH_DIR(), "files/normal.txt")) &&
                   exists(trashed_item) && !boxes.isEmpty() && boxes.first().contains("Permanently delete “in-trash.txt”"),
               "Move to Trash on a mixed selection trashes the items outside the trash and asks only about the one in it");
         boxes = earlier;
@@ -552,9 +626,9 @@ int main(int argc, char **argv)
     make(P("arc/in.txt"));
     proc::run({"tar", "czf", P("arc.tar.gz"), "-C", P("arc"), "in.txt"});
     bool extract_shown = false;
-    QTimer extract_closer;   // the Extract dialog is modal: note it and close it
+    QTimer extract_closer;   // the Extract dialog: note it and close it
     QObject::connect(&extract_closer, &QTimer::timeout, [&extract_shown]() {
-        if (auto *d = qobject_cast<ExtractDialog *>(QApplication::activeModalWidget())) {
+        if (auto *d = shown_window<ExtractDialog>()) {
             extract_shown = true;
             d->reject();
         }

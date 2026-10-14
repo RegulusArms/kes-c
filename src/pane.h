@@ -2,10 +2,13 @@
 // search, history and selection.
 #pragma once
 
+#include "places.h"
+
 #include <QPointer>
 #include <QWidget>
 
 class Animator;
+class DateGroupProxy;
 class FSModel;
 class GridDelegate;
 class MainWindow;
@@ -15,6 +18,7 @@ class SearchThread;
 class PinSortProxy;
 class ThumbnailManager;
 class QAbstractItemModel;
+class QModelIndex;
 class QAbstractItemView;
 class QCheckBox;
 class QFileSystemWatcher;
@@ -72,7 +76,11 @@ public:
     QStringList all_paths() const;
     QString current_path() const;
     void invert_selection();
-    void sort_by(int col, int order = -1);
+    void sort_by(int col, int order = -1);   // for this folder (or place) only
+    void apply_folder_sort();   // show the folder's own sort, or the default when it has none
+    int grouping() const { return group_mode; }     // groups::Mode
+    int grouping_by() const { return group_by; }   // groups::DateBy
+    void set_grouping(int mode, int by);   // for this folder (or place) only, like its sort
     void set_pinned_first(bool on);   // pinned and starred items first
     bool pinned_first() const;
     QString title() const;
@@ -102,6 +110,11 @@ private:
     void setup_tree();
     FSModel *make_model();
     void attach(QAbstractItemModel *model);
+    void set_root(const QModelIndex &root);   // the folder shown, in the attached model
+    void apply_grouping(int mode, int by);
+    void span_headers();
+    QModelIndex source_index_for(const QString &p) const;   // in the attached model
+    places::FolderSort folder_sort(const QString &p) const;   // its own, or the default
     void fill_trash(const QVariant &items, int gen);
     void add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel);
     void trash_changed();
@@ -120,6 +133,10 @@ private:
     void starred_changed();
 
     ThumbnailManager *thumbs;
+    QAbstractItemModel *attached = nullptr;   // the folder's (proxy) or the results' (search_model)
+    bool grouped = false;   // group_mode isn't groups::NONE
+    int group_mode = 0, group_by = 0;
+    bool applying_sort = false;     // apply_folder_sort is setting the header: not a sort to remember
     bool search_recorded = false;   // the folder as it was before the active search is on back_stack
     QString pending_select;
     int trash_gen = 0;              // bumps on every combined-trash reload, so stale loads are dropped
@@ -135,6 +152,7 @@ private:
     OverviewPage *overview;
     QLabel *empty;
     FSModel *model = nullptr;
+    DateGroupProxy *grouper = nullptr;   // between the model attached and the views while grouped by date (groups.h)
     PinSortProxy *proxy = nullptr;   // between model and the views (PinSortProxy)
     SearchModel *search_model = nullptr;
     GridDelegate *delegate;

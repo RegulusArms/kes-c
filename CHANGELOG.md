@@ -1,9 +1,77 @@
 # Changelog
 
-What changed in each version of Kestrel Explorer, newest first. Versions with a GitHub release: 0.2.1-alpha1,
-0.2.1-alpha.2, 0.2.1-alpha.3, 0.3.0-alpha.0, 0.3.0-alpha.2 and 0.3.1-alpha.2.
+What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.4
+## 0.3.1-alpha.8
+
+- **Copied folders fill in as they go:** copying a folder to a new place (photos from a camera's SD card to a hard
+  drive, for example) now makes the folder under its real name straight away, and each file appears in it as soon as
+  it has been copied. Before, the whole folder was built under a hidden `.kes-….part` name and only appeared when
+  everything was done. Each file is still written under a hidden name and renamed when complete, so no half-written
+  file ever shows. Cancelling now keeps the files copied so far instead of removing them, and Ctrl+Z puts that
+  partial copy in the trash. Moving a folder to another drive works the same way (the originals are deleted once
+  everything is copied). Replacing an existing folder still keeps the old one intact until the new one is complete.
+
+## 0.3.1-alpha.7 (2026-10-13)
+
+- **The admin session's purpose is spelled out:** the [Admin session](docs/admin.md) page now says it's for everyday
+  file operations that happen to need admin rights, not a replacement for the terminal, and explains why batch rename,
+  extracting archives into system folders, editing metadata, running programs as root and changing owners are left
+  out on purpose rather than "not yet". No change to what it does.
+- **Documentation brought up to date:** the README and Features list the per-folder sort and grouping by date; the
+  build instructions include `libxcb1-dev`, which building needs; Dependencies says what `python3` and
+  `qt6-gtk-platformtheme` are used for since the dark-style fix; Archives describes Keep damaged files; the Install
+  guide's BleachBit section counts its five options; Development and the test README have the current source files,
+  test counts and run time; and the review Roadmap is marked complete.
+- The apt package now suggests every optional package Kestrel can use (`rar`, the multi-core `.bz2` and `.lz` tools,
+  `lz4` and `zfsutils-linux` as well as exiftool, ffmpeg and BleachBit), as `kes-setup --install-optional` and the
+  Dependencies page list them.
+
+## 0.3.1-alpha.6 (2026-10-13)
+
+- **Each folder keeps its own sort:** changing the sort (a column header or the Sort menu) now changes it for that
+  folder only, and the folder keeps it. Before, it changed the sort of every folder. Folders you haven't sorted use the
+  default, which is the sort you last chose before this version; **Sort → Set as Default** makes the current sort the
+  default. Other tabs and windows showing the folder follow the change.
+- **Sort → Apply to Subfolders:** gives every folder below the current one (all levels) the same sort, replacing any
+  they had. It runs in the status bar and can be cancelled, which leaves every folder as it was.
+- **Sort → Group by Period / Group by Day:** shows the folder's items under date headers. By period: Today,
+  Yesterday, Earlier this week, Last week, Earlier this month, Last month, Earlier this year, then one per year. By day:
+  one header per date ("Tuesday, 13 October 2026"). Each header shows how many items it has; click it (or press Enter
+  on it) to collapse or expand the group. The groups stay in date order, newest first, whatever you sort by; inside
+  each group the items follow the chosen sort (name, size, type or date). Sorting by Modified, oldest first, puts the
+  oldest group first.
+- **Sort → Date to Group By:** Date Modified, Date Created, or Date Taken (Metadata): when a photo or video was taken,
+  from its EXIF (JPEG, PNG, WebP, TIFF, DNG), a PNG's Creation Time, or an MP4 / MOV / 3GP video's header. Those dates
+  are read in the background, so photos move to their groups a moment after the folder opens; files without one go by
+  their date created (and that by the date modified where the drive keeps no creation dates).
+- Grouping works in the grid and the list, in search results, Starred, Recent and Trash, and is kept per folder like
+  the sort (Set as Default and Apply to Subfolders include it).
+- The right-click Sort By menu now shows the chosen sort, like the toolbar's Sort menu.
+- BleachBit's Kestrel cleaner (`kes-setup --bleachbit`) can now delete the folders' sorts too, under "Folder covers,
+  colours and sorts". Run `kes-setup --bleachbit` again to update it.
+- Kestrels of this version don't share stars, tasks, undo or hand-offs with running Kestrels of earlier versions (the
+  messages between them changed); close the old windows after updating.
+
+## 0.3.1-alpha.5 (2026-10-12)
+
+- **Follows the desktop's dark style:** with Dark chosen in GNOME's Settings (or any desktop's dark colour scheme),
+  Kestrel now opens with a dark background and light text, and switches when the style changes. Before, it stayed
+  light unless the GTK theme itself was a dark one (such as Yaru-dark): with Adwaita or Yaru plus the dark style, or
+  on Ubuntu 26.04 without the qt6-gtk-platformtheme package, it was white. It uses the theme's own dark colours,
+  or Adwaita's dark ones when the theme has none.
+- **More ways to pick a folder preview's pictures:** Preferences → Folder preview picks now also offers Last by
+  name, Oldest first, and Beginning, middle and end (pictures evenly spaced through the folder by name, so a preview
+  shows the whole set rather than its first few). Folders of galleries pick their subfolders the same way.
+- **Every window moves freely:** Properties, Preferences, Open With, Rename, Batch Rename, Compress and Extract,
+  Create Checksum File, Network Sharing, Edit Bookmark, password prompts, the file-conflict question during a copy,
+  confirmations and error messages are now windows of their own. Before, most were modal: they blocked Kestrel, and on
+  GNOME dragging one dragged the whole Kestrel window along. Now none blocks Kestrel or stays on top of it, so you can
+  move one aside and leave it open until you need it, and several can be open at once (several Properties windows, for
+  example). They still close with the Kestrel window they belong to. Choosing a folder or file (Move To, Copy To,
+  Create Links In, Browse… buttons) now opens Kestrel's own chooser window instead of the toolkit's. There is no way any unintended consequences could come of this.
+
+## 0.3.1-alpha.4 (2026-10-12)
 
 - **Keep damaged files when extracting:** Extract To… has a new "Keep damaged files" option for rar, 7z and zip
   archives. Files that fail their checksum are kept as far as they could be extracted, so the extraction no longer
@@ -17,6 +85,8 @@ What changed in each version of Kestrel Explorer, newest first. Versions with a 
   fast as the previews were made, so "scanning…" lasted almost the whole build.
   The folder-preview builds only look at folders while scanning, like `tree -d`: each folder's files are read when
   its preview is made, as when you open it.
+- **Documentation:** the README is now a short overview. The details moved to docs/ (features, install, archives,
+  admin sessions, dependencies, development, performance), and the version history to this CHANGELOG.
 
 ## 0.3.1-alpha.3 (2026-10-12)
 

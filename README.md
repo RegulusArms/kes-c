@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.1-alpha.4.** This is an early alpha release, so expect rough edges.
+**Version 0.3.1-alpha.8.** This is an early alpha release, so expect rough edges.
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -12,7 +12,7 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 
 **Terminal jobs, in the window:**
 - **Archives:** create and extract 7z, zip, rar, zpaq and every tar format, with the options the command-line tools offer (level, method, threads, passwords, split volumes), and a preview of the exact command that will run. Double-click an archive to extract it.
-- **Admin rights only when needed:** when something fails with "permission denied", choose **Retry as Administrator** and enter your password once per session, instead of running `sudo` or a file manager as root.
+- **Admin rights only when needed:** when an everyday file operation fails with "permission denied", choose **Retry as Administrator** and enter your password once per session, instead of running a file manager as root. It's for simple copies, moves, renames and deletes, not a replacement for the terminal for system administration.
 - **Permissions and links:** permissions, including setuid, setgid and the sticky bit; symbolic, relative and hard links; and MD5/SHA checksums with verification. Double-click a checksum file (`.sfv`, `.md5`, `.sha256`, `SHA256SUMS`…) to check every file it lists. Right-click files or folders and choose **Create Checksum File…** to make one.
 - **Metadata:** view and edit EXIF, XMP and other metadata with `exiftool`, from a searchable list of tags.
 - **Search and rename:** search subfolders with wildcards or inside files, and batch rename with templates or regular expressions.
@@ -27,6 +27,8 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - Background copies with progress and Cancel in the status bar.
 - Phones and cameras (iPhone, Android, PTP cameras) on the Overview page and in the sidebar, with thumbnails from the phone's own previews.
 - A sidebar you can rearrange and collapse.
+- A sort for each folder, and grouping by date (Today, Last week… or one group per day), by the date modified, created
+  or taken (from photos' and videos' metadata), with each group still sorted by name, size or type.
 - Follows the desktop's theme and accent colour, also when you change them while it's open.
 - Other apps' Open and Save dialogs, such as a browser's "Save image as", can open in Kestrel.
 - Several windows that stay in sync.
@@ -85,6 +87,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
 | [Performance](docs/performance.md) | Benchmarks against GNOME Files and Nemo |
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
+| [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |
 | [Changelog](CHANGELOG.md) | What changed in each version |
 
 ## License

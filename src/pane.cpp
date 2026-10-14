@@ -7,12 +7,14 @@
 #include "chooser.h"
 #include "fileops.h"
 #include "focus.h"
+#include "groups.h"
 #include "overview.h"
 #include "places.h"
 #include "thumbs.h"
 #include "stats.h"
 #include "util.h"
 #include "widgets.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QDrag>
@@ -29,7 +31,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
-#include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
 #include <QScrollBar>
@@ -376,7 +377,12 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
 
     model = make_model();
     search_model = new SearchModel(thumbs, this);
+    grouper = new DateGroupProxy(this);
+    // after the tree view has taken in the change (a reset clears its spanned rows)
+    connect(grouper, &QAbstractItemModel::layoutChanged, this, &Pane::span_headers, Qt::QueuedConnection);
+    connect(grouper, &QAbstractItemModel::modelReset, this, &Pane::span_headers, Qt::QueuedConnection);
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
+    connect(places::signals_(), &places::Signals::sorts_changed, this, &Pane::apply_folder_sort);
     attach(proxy);
     set_view_mode(win->view_value("view_mode", "grid").toString());
     if (win->chooser)
@@ -455,6 +461,7 @@ void Pane::setup_tree()
     t->setAlternatingRowColors(true);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
     t->setSortingEnabled(true);
+    t->setItemDelegate(new ListDelegate(t));
     t->header()->setAccessibleName("Columns");
     t->setFrameShape(QFrame::NoFrame);
     t->setIconSize(QSize(list_size, list_size));
@@ -486,8 +493,14 @@ FSModel *Pane::make_model()
     return m;
 }
 
-void Pane::attach(QAbstractItemModel *m)
+void Pane::attach(QAbstractItemModel *src)
 {
+    attached = src;
+    QAbstractItemModel *m = src;
+    if (grouped) {
+        grouper->set_source(nullptr, QModelIndex(), nullptr);   // set_root gives it the folder
+        m = grouper;
+    }
     QItemSelectionModel *old_shared = tree->selectionModel();
     grid->setModel(m);
     QItemSelectionModel *grid_own = grid->selectionModel();
@@ -505,11 +518,93 @@ void Pane::attach(QAbstractItemModel *m)
     apply_folder_previews();
 }
 
-void Pane::use_model_root()
+void Pane::use_model_root() { set_root(proxy->mapFromSource(model->index(path))); }
+
+void Pane::set_root(const QModelIndex &root)
 {
-    QModelIndex root = proxy->mapFromSource(model->index(path));
-    grid->setRootIndex(root);
-    tree->setRootIndex(root);
+    if (!grouped) {
+        grid->setRootIndex(root);
+        tree->setRootIndex(root);
+        return;
+    }
+    // an item's path and modification time (seconds)
+    std::function<QPair<QString, qint64>(const QModelIndex &)> file_of;
+    if (attached == search_model) {
+        file_of = [](const QModelIndex &i) {
+            return qMakePair(i.data(PathRole).toString(), i.data(StatRole).toList().value(1).toLongLong());
+        };
+    } else {
+        FSModel *fm = model;
+        PinSortProxy *px = proxy;
+        file_of = [fm, px](const QModelIndex &i) {
+            QModelIndex s = px->mapToSource(i);
+            return qMakePair(fm->filePath(s), fm->lastModified(s).toSecsSinceEpoch());
+        };
+    }
+    int by = group_by;
+    auto date_of = [file_of, by](const QModelIndex &i) {
+        auto [p, mtime] = file_of(i);
+        if (p.isEmpty())
+            return QDate();
+        if (by == groups::CREATED)
+            return groups::Dates::instance()->created(p, mtime);
+        if (by == groups::TAKEN)
+            return groups::Dates::instance()->taken(p, mtime);
+        return QDateTime::fromSecsSinceEpoch(mtime).date();
+    };
+    grouper->set_order(tree->header()->sortIndicatorSection(), tree->header()->sortIndicatorOrder());
+    grouper->set_mode(group_mode);
+    grouper->set_watch_dates(by == groups::TAKEN);
+    grouper->set_source(attached, root, date_of);
+    grid->setRootIndex(QModelIndex());
+    tree->setRootIndex(QModelIndex());
+    span_headers();
+}
+
+void Pane::span_headers()
+{
+    if (!grouped)
+        return;
+    for (int r : grouper->header_rows())
+        tree->setFirstColumnSpanned(r, QModelIndex(), true);
+}
+
+// Grouping (groups.h): the views show the grouper, which shows the folder (or the results); the grid then has no fixed
+// cells, so that a header can take a line of its own (update_grid_size sizes the items instead).
+void Pane::apply_grouping(int mode, int by)
+{
+    if (mode == group_mode && (by == group_by || mode == groups::NONE)) {
+        group_by = by;
+        return;
+    }
+    QStringList sel = selected_paths();
+    bool on = mode != groups::NONE;
+    // persistent: attaching sorts the model (QTreeView::setModel), which can move the folder's index
+    QPersistentModelIndex root = grouped ? grouper->source_root() : grid->rootIndex();
+    bool reattach = on != grouped;
+    group_mode = mode;
+    group_by = by;
+    grouped = on;
+    grid->setUniformItemSizes(!on);
+    if (reattach)
+        attach(attached);
+    set_root(root);
+    if (!on) {
+        grouper->set_source(nullptr, QModelIndex(), nullptr);
+        grouper->set_watch_dates(false);
+    }
+    update_grid_size();
+    if (!sel.isEmpty())
+        select_paths(sel);
+}
+
+void Pane::set_grouping(int mode, int by)
+{
+    apply_grouping(mode, by);
+    if (path.isEmpty() || is_overview())
+        return;
+    places::set_folder_sort({path}, {tree->header()->sortIndicatorSection(), int(tree->header()->sortIndicatorOrder()),
+                                     group_mode, group_by});
 }
 
 // -- view mode / zoom
@@ -579,6 +674,17 @@ void Pane::update_grid_size()
     int cols = std::max(1, avail / cell.width());
     int extra = cols > 1 ? (avail - cols * cell.width()) / cols : 0;
     QSize size(cell.width() + std::max(0, extra), cell.height());
+    if (grouped) {
+        if (grid->gridSize().isValid())
+            grid->setGridSize(QSize());
+        if (size != delegate->cell || avail != delegate->header_width) {
+            delegate->cell = size;
+            delegate->header_width = avail;
+            grid->doItemsLayout();   // the items' sizes are kept by the view
+        }
+        return;
+    }
+    delegate->cell = QSize();
     if (size != grid->gridSize())
         grid->setGridSize(size);
 }
@@ -614,6 +720,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         stack->setCurrentWidget(mode_view);
         view()->selectionModel()->clear();
         pending_select = select;
+        apply_folder_sort();
         Q_EMIT path_changed();
         show_trash();
         return true;
@@ -624,11 +731,11 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         p = dirname(p);
     }
     if (!isdir(p)) {
-        QMessageBox::warning(this, "Not found", QString("“%1” does not exist.").arg(p));
+        warn(this, "Not found", QString("“%1” does not exist.").arg(p));
         return false;
     }
     if (!util::access(p, R_OK | X_OK)) {
-        QMessageBox::warning(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
+        warn(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
         return false;
     }
     QString prev = path;
@@ -646,9 +753,8 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     model->setNameFilters(type_filters);
     QModelIndex src_root = model->setRootPath(p);
     proxy->set_root(p);   // before mapping: it may start or stop sorting
-    QModelIndex root = proxy->mapFromSource(src_root);
-    grid->setRootIndex(root);
-    tree->setRootIndex(root);
+    set_root(proxy->mapFromSource(src_root));
+    apply_folder_sort();
     view()->selectionModel()->clear();   // drop the previous folder's selection and current item
     pending_select = !select.isEmpty() ? select : (!prev.isEmpty() && dirname(prev) == p ? prev : QString());
     QTimer::singleShot(0, this, &Pane::try_select);
@@ -707,8 +813,7 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
     if (!in_search) {
         in_search = true;
         attach(search_model);
-        grid->setRootIndex(QModelIndex());
-        tree->setRootIndex(QModelIndex());
+        set_root(QModelIndex());
     }
     QStringList sel = selected_paths();
     search_model->clear_results();
@@ -780,7 +885,7 @@ void Pane::try_select()
 {
     if (pending_select.isEmpty() || is_overview())
         return;
-    QModelIndex idx = index_for(pending_select);
+    QModelIndex idx = source_index_for(pending_select);   // also in a collapsed group (select_paths expands it)
     if (idx.isValid()) {
         select_paths({pending_select});
         pending_select.clear();
@@ -803,6 +908,8 @@ void Pane::select_paths(const QStringList &paths)
     sm->clearSelection();
     QModelIndex first;
     for (const QString &p : paths) {
+        if (grouped)
+            grouper->reveal(source_index_for(p));
         QModelIndex idx = index_for(p);
         if (idx.isValid()) {
             sm->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
@@ -829,13 +936,19 @@ void Pane::scroll_to_current(const QString &p)
         view()->scrollTo(idx);
 }
 
-QModelIndex Pane::index_for(const QString &p) const
+QModelIndex Pane::source_index_for(const QString &p) const
 {
     if (in_search) {
         QStandardItem *item = search_model->rows.value(p);
         return item ? item->index() : QModelIndex();
     }
     return proxy->mapFromSource(model->index(p));
+}
+
+QModelIndex Pane::index_for(const QString &p) const
+{
+    QModelIndex i = source_index_for(p);
+    return grouped ? grouper->mapFromSource(i) : i;
 }
 
 Pane::HistoryEntry Pane::snapshot(const QString &dest, bool search) const
@@ -936,9 +1049,7 @@ void Pane::refresh()
         attach(proxy);
         QModelIndex src_root = model->setRootPath(path);
         proxy->set_root(path);
-        QModelIndex root = proxy->mapFromSource(src_root);
-        grid->setRootIndex(root);
-        tree->setRootIndex(root);
+        set_root(proxy->mapFromSource(src_root));
         pending_select = sel.isEmpty() ? QString() : sel.first();
     }
     old->deleteLater();
@@ -1074,8 +1185,7 @@ void Pane::do_search()
         if (!in_search) {
             in_search = true;
             attach(search_model);
-            grid->setRootIndex(QModelIndex());
-            tree->setRootIndex(QModelIndex());
+            set_root(QModelIndex());
         }
         search_model->clear_results();
         auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents);
@@ -1139,6 +1249,12 @@ QStringList Pane::all_paths() const
     if (is_overview())
         return {};
     QStringList out;
+    if (grouped) {   // in the groups' order, also the collapsed ones
+        QModelIndex root = grouper->source_root();
+        for (int r : grouper->source_rows())
+            out << attached->index(r, 0, root).data(PathRole).toString();
+        return out;
+    }
     if (in_search) {
         for (int r = 0; r < search_model->rowCount(); ++r)
             out << search_model->item(r, 0)->data(PathRole).toString();
@@ -1167,10 +1283,36 @@ void Pane::invert_selection()
     select_paths(inv);
 }
 
+// Sorting (the header, the Sort menu) changes the folder's own sort, which it keeps: other folders keep theirs, or the
+// default (Sort → Set as Default).
 void Pane::sort_changed(int col, Qt::SortOrder order)
 {
-    win->set_view_value("sort_col", col);
-    win->set_view_value("sort_order", int(order));
+    if (applying_sort || path.isEmpty() || is_overview())
+        return;
+    places::set_folder_sort({path}, {col, int(order), group_mode, group_by});
+}
+
+places::FolderSort Pane::folder_sort(const QString &p) const
+{
+    if (auto own = places::folder_sort(p))
+        return *own;
+    return {win->view_value("sort_col", 0).toInt(), win->view_value("sort_order", 0).toInt(),
+            win->view_value("sort_group", 0).toInt(), win->view_value("sort_group_by", 0).toInt()};
+}
+
+void Pane::apply_folder_sort()
+{
+    if (path.isEmpty() || is_overview())
+        return;
+    places::FolderSort sort = folder_sort(path);
+    int col = sort.column, order = sort.order;
+    apply_grouping(sort.group, sort.group_by);
+    QHeaderView *h = tree->header();
+    if (h->sortIndicatorSection() == col && h->sortIndicatorOrder() == Qt::SortOrder(order))
+        return;
+    applying_sort = true;
+    h->setSortIndicator(col, Qt::SortOrder(order));   // the view sorts the model by it
+    applying_sort = false;
 }
 
 void Pane::set_pinned_first(bool on)
@@ -1192,12 +1334,19 @@ void Pane::sort_by(int col, int order)
 
 void Pane::clicked(const QModelIndex &idx)
 {
+    if (grouper->is_header(idx)) {
+        if (QGuiApplication::keyboardModifiers() == Qt::NoModifier)
+            grouper->toggle(idx);
+        return;
+    }
     if (settings().value("single_click", false).toBool() && QGuiApplication::keyboardModifiers() == Qt::NoModifier)
         win->open_paths(this, {idx.siblingAtColumn(0).data(PathRole).toString()});
 }
 
 void Pane::double_clicked(const QModelIndex &idx)
 {
+    if (grouper->is_header(idx))
+        return;
     if (!settings().value("single_click", false).toBool())
         win->open_paths(this, {idx.siblingAtColumn(0).data(PathRole).toString()});
 }
@@ -1213,9 +1362,10 @@ bool Pane::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Down || ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) {
             view()->setFocus();
-            if (view()->model()->rowCount(view()->rootIndex())) {
-                QModelIndex first = view()->model()->index(0, 0, view()->rootIndex());
-                if (!view()->currentIndex().isValid())
+            QAbstractItemModel *m = view()->model();
+            for (int r = 0; r < m->rowCount(view()->rootIndex()) && !view()->currentIndex().isValid(); ++r) {
+                QModelIndex first = m->index(r, 0, view()->rootIndex());
+                if (!grouper->is_header(first))
                     view()->setCurrentIndex(first);
             }
             return true;
@@ -1226,6 +1376,12 @@ bool Pane::eventFilter(QObject *obj, QEvent *ev)
         auto *ke = static_cast<QKeyEvent *>(ev);
         int k = ke->key();
         Qt::KeyboardModifiers mods = ke->modifiers();
+        QModelIndex cur = view()->currentIndex();   // a group's header, with nothing selected: Enter or Space folds it
+        if ((k == Qt::Key_Return || k == Qt::Key_Enter || k == Qt::Key_Space) && mods == Qt::NoModifier &&
+            grouper->is_header(cur) && !view()->selectionModel()->hasSelection()) {
+            grouper->toggle(cur);
+            return true;
+        }
         if ((k == Qt::Key_Return || k == Qt::Key_Enter) && !(mods & Qt::AltModifier)) {
             QStringList paths = selected_paths();
             if (!paths.isEmpty())

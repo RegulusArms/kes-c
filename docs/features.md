@@ -6,11 +6,20 @@
 
 **File management**
 - Tabs, back/forward history, a clickable path bar (Ctrl+L to type a path), and a sidebar.
-- Follows the desktop's theme: light or dark, accent colour, fonts and icons, including switching while Kestrel is open. On GTK desktops this needs `qt6-gtk-platformtheme` (see [Dependencies](dependencies.md)).
+- Follows the desktop's theme: light or dark, accent colour, fonts and icons, including switching while Kestrel is open. On GTK desktops the theme's own look needs `qt6-gtk-platformtheme` (see [Dependencies](dependencies.md)); the dark style is followed without it too.
 - **Other apps' Open and Save dialogs** (a browser's "Save image as", Flatpak and Snap apps, and GTK 4 and Qt apps that use the desktop portal) open as a Kestrel window, with the file name, the file type and Save/Open at the bottom, once you've run `./install.sh --default` (see [Build / install](install.md#build--install)).
 - The sidebar shows standard places, your GTK bookmarks (shared with GNOME Files), mounted drives and connected phones, with an unmount option. Drag entries to reorder them within a section, drag a section header to move the whole section, and click a header to collapse it.
 - Right-click a bookmark → **Edit Bookmark…** to change its name and location (with a folder picker), or remove it or move it up and down.
 - Grid and list views, sorting, hidden files (Ctrl+H).
+- **A sort for each folder.** Changing the sort (the column headers or the Sort menu) changes it for that folder
+  only, which keeps it. Folders that were never sorted use the default: **Sort → Set as Default** makes the current
+  sort the default. **Sort → Apply to Subfolders** gives every folder below this one the same sort.
+- **Group by Period / Group by Day** (Sort menu). The items go under date headers, newest first: by period (Today,
+  Yesterday, Earlier this week, Last week, Earlier this month, Last month, Earlier this year, then each year) or one
+  per day. Inside each group they keep the chosen sort, so you can group by date and sort by name, size or type. Click
+  a header (or press Enter on it) to collapse its group. **Date to Group By** picks the date: modified, created, or
+  taken (a photo's EXIF, a PNG's Creation Time, an MP4 / MOV video's header; read in the background, falling back to
+  the date created). Also in search results, Starred, Recent and Trash; kept per folder, like the sort.
 - Search the current folder by typing to filter, or search subfolders recursively. Wildcards are supported.
 - Cut, copy and paste work with GNOME Files' clipboard. Paste as link and pasting image data are supported.
 - Drag and drop:
@@ -21,7 +30,8 @@
 - If a name already exists when copying or moving, you can replace, merge, skip or keep both.
 - Trash, permanent delete, and restoring or emptying the trash. The Trash shows everything you've deleted on every drive in one list: your home trash plus the trash folder each drive keeps for files deleted on it (`.Trash-<uid>`, the same as GNOME Files). The Location column shows where each item came from, and Restore, Delete Permanently and Empty Trash work across all of them.
 - **Shred with BleachBit:** with [BleachBit](https://www.bleachbit.org) installed, right-click files or folders → **Shred with BleachBit…** overwrites them and then deletes them, so they can't be recovered; **Empty Trash with BleachBit…** (in the Trash and on the sidebar's Trash) does the same to everything in the trash, on every drive. Both ask first, run in the status bar with ✕ to stop, and list anything BleachBit couldn't shred. On SSDs and some file systems, overwriting can't guarantee that every old copy of the data is gone.
-- Nothing is replaced until its replacement is complete. Copies, moves, decompressing a single file (`.gz`, `.xz`, …), compressing over an older archive, checksum files, shortcuts, pasted images and Kestrel's own settings files are written under a hidden name (`.kes-….part`) beside their destination and renamed into place at the end. A full disk, a cancel or a crash leaves the old version as it was, never a half-written one. Merges, deletes and moves between drives can't be all-or-nothing, so each file in them is still handled whole and nothing is lost. Files are staged through temporary `.kes-*.part` paths where supported; extraction directly into an existing folder may leave partial results after a failure or cancellation, and overwritten files are not rolled back.
+- Nothing is replaced until its replacement is complete, and no file appears half-written. Each file a copy or move writes, decompressing a single file (`.gz`, `.xz`, …), compressing over an older archive, checksum files, shortcuts, pasted images and Kestrel's own settings files are written under a hidden name (`.kes-….part`) beside their destination and renamed into place the moment they're complete. A full disk, a cancel or a crash leaves the old version as it was, never a half-written one.
+- Copying a folder to a new place (from a camera's SD card, say) makes the folder under its own name straight away, and each file shows up in it as soon as it's copied, not when the whole copy is done. Cancelling keeps the files copied so far (Ctrl+Z puts them in the trash). Replacing an existing folder is different: the new one is built beside it and swapped in only when complete, so cancelling leaves the old one as it was. Merges, deletes and moves between drives can't be all-or-nothing either, so each file in them is still handled whole and nothing is lost; extracting directly into an existing folder may leave partial results after a failure or cancel, and files it overwrote are not rolled back.
 - A copy, move or extracted file going to a name that was free never replaces something another program saves there in the meantime: that file is kept, and Kestrel says so. Only **Replace** replaces.
 - Deleting handles read-only folders you own (common in extracted Windows archives): they're made writable and deleted.
 - Copies and deletes never follow a symbolic link inside the folders they work through, so a folder swapped for a link while they run can't send them anywhere else. A delete also stops at another drive mounted inside the folder, instead of emptying it.
@@ -66,6 +76,7 @@
 **Admin session** (details in [Admin session](admin.md))
 - When something fails because you don't have permission (copying into `/opt`, deleting files owned by root, renaming in a system folder…), Kestrel offers **Retry as Administrator**.
 - You enter your password once. After that, a 🛡 **Admin** indicator shows in the status bar, and further operations that need admin rights run without asking again, until you end the session or it's unused for 15 minutes.
+- It covers simple, everyday operations only. Batch renames, extracting archives into system folders and other work where one mistake as root could break the system are left to the terminal and the package manager, on purpose ([why](admin.md#what-it-doesnt-do-on-purpose)).
 - Kestrel itself never runs as root.
 
 **Overview (default homepage)**
@@ -100,7 +111,7 @@
 - The info panel (F3) shows EXIF details: camera, lens, exposure and GPS.
 - It also shows the prompts and settings that Stable Diffusion, ComfyUI and other image generators save in PNG, WebP and JPEG files. Kestrel only reads that text from the file.
 
-Press F1 in the app for all keyboard shortcuts. Settings are in the ☰ menu under Preferences: homepage, how many images a mosaic uses, whether it picks images by name or newest first, folder colour (the desktop's accent colour unless you pick one), the thumbnail size limit, which apps open images and videos, single-click, folder previews in list view, slideshow speed, playing GIFs and WebM videos, sharing undo between windows, and opening folders from other apps as tabs.
+Press F1 in the app for all keyboard shortcuts. Settings are in the ☰ menu under Preferences: homepage, how many images a mosaic uses, which images it picks (first or last by name, newest or oldest first, or from the beginning, middle and end), folder colour (the desktop's accent colour unless you pick one), the thumbnail size limit, which apps open images and videos, single-click, folder previews in list view, slideshow speed, playing GIFs and WebM videos, sharing undo between windows, and opening folders from other apps as tabs.
 
 ## Checksum files
 

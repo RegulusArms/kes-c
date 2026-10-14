@@ -3,6 +3,7 @@
 #include "proc.h"
 #include "util.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QHash>
 #include <QImageReader>
@@ -211,7 +212,7 @@ QByteArray inflate(const QByteArray &z)
 
 QByteArray strip_exif_header(const QByteArray &b) { return b.startsWith(QByteArray("Exif\0\0", 6)) ? b.mid(6) : b; }
 
-FileMeta read_file_meta(const QString &path)
+FileMeta read_file_meta(const QString &path, qint64 max_tiff = 32 << 20)
 {
     FileMeta m;
     QFile f(path);
@@ -295,7 +296,7 @@ FileMeta read_file_meta(const QString &path)
         }
     } else if (head.startsWith("II*\0") || head.startsWith("MM\0*")) {
         f.seek(0);
-        m.exif_blob = f.read(32 << 20);
+        m.exif_blob = f.read(max_tiff);
     }
     return m;
 }
@@ -371,7 +372,94 @@ QString mode_of(QImage::Format f)
     }
 }
 
+// When an MP4 / MOV / 3GP file was recorded: its movie header's creation time (seconds since 1904, UTC). Invalid when
+// there's none, or it's 0 (cameras that don't keep the time).
+QDateTime movie_created(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return QDateTime();
+    // the box `type` among the boxes in [from, to): its contents' start and end
+    auto find = [&f](qint64 from, qint64 to, const char *type, qint64 *body, qint64 *body_end) {
+        for (qint64 pos = from; pos + 8 <= to;) {
+            f.seek(pos);
+            QByteArray h = f.read(8);
+            if (h.size() < 8)
+                return false;
+            quint64 size = be32(h.constData());
+            qint64 hdr = 8;
+            if (size == 1) {
+                QByteArray ext = f.read(8);
+                if (ext.size() < 8)
+                    return false;
+                size = (quint64(be32(ext.constData())) << 32) | be32(ext.constData() + 4);
+                hdr = 16;
+            } else if (size == 0) {
+                size = quint64(to - pos);   // to the end
+            }
+            if (size < quint64(hdr) || size > quint64(to - pos))
+                return false;
+            if (h.mid(4, 4) == type) {
+                *body = pos + hdr;
+                *body_end = pos + qint64(size);
+                return true;
+            }
+            pos += qint64(size);
+        }
+        return false;
+    };
+    qint64 moov, moov_end, mvhd, mvhd_end;
+    if (!find(0, f.size(), "moov", &moov, &moov_end) || !find(moov, moov_end, "mvhd", &mvhd, &mvhd_end))
+        return QDateTime();
+    f.seek(mvhd);
+    QByteArray b = f.read(12);
+    if (b.size() < 12)
+        return QDateTime();
+    quint64 secs = b[0] == 1 ? (quint64(be32(b.constData() + 4)) << 32) | be32(b.constData() + 8)
+                             : be32(b.constData() + 4);
+    const quint64 to_unix = 2082844800;   // 1904-01-01 to 1970-01-01
+    if (secs <= to_unix)
+        return QDateTime();
+    return QDateTime::fromSecsSinceEpoch(qint64(secs - to_unix));   // local time
+}
+
 }  // namespace
+
+bool may_have_taken(const QString &path)
+{
+    static const QSet<QString> exts = {"jpg", "jpeg", "jpe", "png", "webp", "tif", "tiff", "dng",
+                                       "mp4", "m4v", "mov", "3gp"};
+    QString name = basename(path);
+    int dot = name.lastIndexOf('.');
+    return dot > 0 && exts.contains(name.mid(dot + 1).toLower());
+}
+
+QDateTime taken(const QString &path)
+{
+    if (!may_have_taken(path))
+        return QDateTime();
+    QString ext = basename(path).section('.', -1).toLower();
+    if (ext == "mp4" || ext == "m4v" || ext == "mov" || ext == "3gp")
+        return movie_created(path);
+    FileMeta fm = read_file_meta(path, 1 << 20);   // a TIFF's tags are near its start
+    if (!fm.exif_blob.isEmpty()) {
+        Exif exif = TiffReader(fm.exif_blob).parse();
+        for (int tag : {0x9003, 0x9004}) {   // DateTimeOriginal, DateTimeDigitized: "YYYY:MM:DD HH:MM:SS", local
+            QString t = exif.exif.value(tag).text().trimmed();
+            QDateTime dt = QDateTime::fromString(t.left(19), "yyyy:MM:dd HH:mm:ss");
+            if (dt.isValid())
+                return dt;
+        }
+    }
+    for (const auto &[key, value] : fm.text)   // PNG: "Creation Time", in whatever form the writer chose
+        if (key == "Creation Time")
+            for (Qt::DateFormat form : {Qt::ISODate, Qt::RFC2822Date, Qt::TextDate}) {
+                QDateTime dt = QDateTime::fromString(value.trimmed(), form);
+                if (dt.isValid())
+                    return dt.toLocalTime();
+            }
+    return QDateTime();
+}
 
 Rows basic_info(const QString &path)
 {

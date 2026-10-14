@@ -116,9 +116,9 @@ int main(int argc, char **argv)
                 w->close();
         });
     });
-    QTimer boxes;   // question boxes are modal: answer them
+    QTimer boxes;   // question boxes: answer them
     QObject::connect(&boxes, &QTimer::timeout, []() {
-        if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+        if (auto *m = shown_window<QMessageBox>()) {
             box_seen = true;
             for (QAbstractButton *b : m->buttons())
                 if (b->text() == answer_box)
