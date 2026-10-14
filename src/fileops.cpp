@@ -504,6 +504,7 @@ public:
     QStringList errors;
     QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
     QList<Job> completed;   // jobs that succeeded (for undo)
+    QStringList partial;    // new folders a copy left part-way (cancelled, or an error inside): undone like a copy
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
 
     QStringList run()
@@ -522,6 +523,11 @@ public:
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
             bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
+            bool fresh = j.op == "copy" && !lexists(j.dst);
+            auto left_part_way = [&]() {
+                if (fresh && isdir(j.dst) && !islink(j.dst))
+                    partial << j.dst;
+            };
             try {
                 if (j.op == "delete")
                     remove(j.src);
@@ -536,12 +542,22 @@ public:
                 else
                     completed << j;
             } catch (const OSError &e) {
-                if (e.permission())
-                    denied << j;
-                else
+                if (e.permission()) {
+                    // retried as administrator; a new folder already begun is finished by merging into it
+                    Job retry = j;
+                    if (fresh && isdir(j.dst) && !islink(j.dst))
+                        retry.op = "merge_copy";
+                    denied << retry;
+                } else {
+                    left_part_way();
                     errors << basename(j.src) + ": " + e.message();
+                }
             } catch (const Error &e) {
+                left_part_way();
                 errors << basename(j.src) + ": " + e.message();
+            } catch (const Cancelled &) {
+                left_part_way();
+                throw;
             }
         }
         qint64 ms = stats::now_ms() - started;
@@ -741,7 +757,26 @@ private:
                     throw Error(dst + " exists and isn't a folder");
                 Fd out(open_dir_at(ddir, dname, dst_st, dst));
                 copy_into(out.fd);
+            } else if (!dst_exists && ::mkdirat(ddir, enc(dname).constData(), 0700) == 0) {
+                // a new folder (nothing to replace): made under its own name straight away, so each file shows up
+                // there as soon as it's complete (each is still written under a hidden name and renamed when whole).
+                // Not all-or-nothing: a cancel or an error leaves the files finished so far, whole, and removes only
+                // the one being written. The folder gets the source's permissions and times even then.
+                struct stat made;
+                if (!stat_at(ddir, dname, made))
+                    throw_errno(dst);
+                Fd out(open_dir_at(ddir, dname, made, dst));
+                try {
+                    copy_into(out.fd);
+                } catch (...) {
+                    copy_times_mode(out.fd, st);
+                    throw;
+                }
             } else {
+                if (!dst_exists && errno != EEXIST)
+                    throw_errno(dst);
+                if (!dst_exists && claim)   // the name was taken meanwhile: never replaced
+                    throw conflict(dst);
                 // built under a hidden name beside dst and put in its place only when complete (swap_in): a cancel or
                 // an error leaves dst as it was, and no half-made copy
                 QString part;
@@ -1006,6 +1041,7 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
                 else if (j.op == "copy")
                     copies << j.dst;
             }
+            copies << (*ops)->partial;
             if (!moves.isEmpty())
                 undo::record("move", undo_label, moves);
             else if (!copies.isEmpty())

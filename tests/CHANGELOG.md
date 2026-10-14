@@ -4,6 +4,22 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.8
+
+Added:
+- **Folder copies fill in as they go** (`fileops`): a folder copied to a new name has that name from the start, with no
+  hidden part folder beside it, and a finished file shows up in it while the copy still runs; cancelled part-way, the
+  files finished so far stay whole (no part file left), the folder gets the original's permissions, and Ctrl+Z puts
+  the partial copy in the trash; a write that fails part-way (RLIMIT_FSIZE) keeps the files finished before it and
+  reports the error. These cover copies that used to show nothing until the whole folder was done.
+
+Changed:
+- `fileops`: "a folder made under the new name while a folder copy runs" relied on the hidden part folder the copy
+  used to build beside its destination; there's none now (the new folder is claimed by making it). It now checks that
+  a folder already under the new name when the copy starts is kept and reported.
+- `fileops`: before the new write-failure check, the previous check's error message is waited for, so it can't turn
+  up among a later check's messages (it made "a file another program saves under the new name…" fail now and then).
+
 ## 0.3.1-alpha.7
 
 No test changes.
