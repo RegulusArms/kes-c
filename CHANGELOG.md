@@ -2,7 +2,17 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.7
+## 0.3.1-alpha.8
+
+- **Copied folders fill in as they go:** copying a folder to a new place (photos from a camera's SD card to a hard
+  drive, for example) now makes the folder under its real name straight away, and each file appears in it as soon as
+  it has been copied. Before, the whole folder was built under a hidden `.kes-….part` name and only appeared when
+  everything was done. Each file is still written under a hidden name and renamed when complete, so no half-written
+  file ever shows. Cancelling now keeps the files copied so far instead of removing them, and Ctrl+Z puts that
+  partial copy in the trash. Moving a folder to another drive works the same way (the originals are deleted once
+  everything is copied). Replacing an existing folder still keeps the old one intact until the new one is complete.
+
+## 0.3.1-alpha.7 (2026-10-13)
 
 - **The admin session's purpose is spelled out:** the [Admin session](docs/admin.md) page now says it's for everyday
   file operations that happen to need admin rights, not a replacement for the terminal, and explains why batch rename,
