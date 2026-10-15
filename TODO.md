@@ -24,6 +24,44 @@ into.
   - Test (`ui`): scroll down a long folder, drop several items from the top onto a subfolder further down, wait for
     the move, and check the scroll position is unchanged, in the grid and the list (and grouped).
 
+- [ ] **A folder's picture slides across the view when going back up** (reported 2026-10-15). Going back up a level
+  (with the mouse's back button; forward/back used to move between the folders), a picture of the folder you were
+  just in (its preview mosaic) slides across the view into that folder's place in the parent, for a moment, as the
+  parent folder loads. Seems to happen after selecting things in the lower folder, then going back up.
+  - What it is: the only animation in the file views is the drag "fly" (`FileView::fly()` in `src/pane.cpp`), and a
+    picture sliding *into an item's own place* is its second form: a drag that ended with nothing (refused, Esc,
+    dropped where it can't go) shows the picture going back where the items are. So a drag of that folder, from the
+    parent view, ended as "nothing" and its slide-back was drawn after the parent was shown again. (Its first form,
+    shrinking into a drop target, isn't this.)
+  - Leads to check: (1) a click on the folder in the parent (on the way in) moving a few pixels starts a drag of it
+    (`startDrag`), and that drag only finishes later, e.g. ended by the mouse's back/forward buttons or by the
+    navigation, so `fly()` runs then, with the picture and positions saved when the drag began; (2) the mouse's
+    back/forward button press is taken by `Pane::eventFilter` (go back / forward) while a drag or a press on an item
+    is still in progress in the view, which then ends it as "nothing"; (3) `drag_pm` / `from` kept from an older drag
+    and used again. Adding a log line (or a breakpoint) in `fly()` and `startDrag()` with the time and the pane's path
+    will show which.
+  - Fix ideas: don't fly back when the pane has changed folder since the drag began (compare the path, or the
+    root index), or when the drag never got further than the start distance; cancel any running fly when the pane
+    navigates; ignore (or finish cleanly) a drag when a back/forward button is pressed during it.
+  - Test (`ui`): start a drag of a folder that goes nowhere, navigate (back/forward, also with the mouse buttons)
+    before or while it ends, and check no fly label appears in the view after the navigation.
+
+- [ ] **A rare single gap in the grid** (reported 2026-10-15). Now and then one empty space appears among the items in
+  the grid, usually at the end of a row; no file is missing, the items are just arranged around one gap. Rare, not a
+  repeating pattern; seen on opening a folder fresh, or perhaps after files were added or removed.
+  - Most likely a hole left by a change in the folder model during layout: QListView in IconMode lays the folder out
+    in batches (`setLayoutMode(Batched)`, 400 at a time) while the folder model is still adding rows and sorting
+    (QFileSystemModel inserts, then sorts later), and after rows are removed or moved it can keep a cell for an item
+    that's gone until the next full layout. A one-off gap that a resize or F5 clears points to this.
+  - Also possible: the grid's cell size changing (`update_grid_size`: the scrollbar appearing after the first batch,
+    a zoom, or the window resizing) between batches, so one row was laid out with the old width.
+  - To check when it shows up: does resizing the window, F5, or switching to the list view and back close it? Grouped
+    by date or not? (A screenshot, and whether the folder was still loading.)
+  - Fix ideas: a full `doItemsLayout()` when the folder has finished loading (`directoryLoaded`) and after rows are
+    removed or the model re-sorts, coalesced so a big folder isn't laid out over and over.
+  - Test (`ui`): fill a folder while it's shown (rows arriving in several batches, some removed), wait, and check that
+    the items' cells are packed: every row but the last full, no empty cell between items.
+
 ## New features
 
 - [ ] **Extract several archives at once.** Selecting more than one archive and right-clicking offers **Extract All
