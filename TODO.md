@@ -311,6 +311,23 @@ into.
     Ctrl+Shift+Minus / Plus, on the current item's group.
   - Keep: a collapsed group still counts its items, and selecting an item in it opens it (as now).
 
+- [ ] **Drag an image out of the viewer.** With an image open in Kestrel's image viewer, drag it out and drop a copy
+  anywhere that takes files: the desktop, another Kestrel or GNOME Files window, a browser's upload field, a chat or
+  mail app.
+  - What's dragged: the file itself (`text/uri-list`, the `file://` URL, as the file views drag it), offered as a
+    **copy** (never a move: the original stays), plus the image data (`image/png` or the original's type) for apps that
+    only take pasted pixels. The drag shows the image's thumbnail under the pointer (Kestrel's own drag picture on
+    Wayland, as the file views do), and the app it's dropped into gets the focus (the drop focus extension), as for
+    drags from the file views.
+  - Telling a drag-out from panning: left-drag pans the image today. Options: start a drag-out when the image fits the
+    window (nothing to pan) and pan when zoomed in; or drag-out with a modifier (Alt or Ctrl) or the middle button; or
+    from a small handle / the filmstrip thumbnail (see the viewer improvements item). To decide; maybe the first plus a
+    modifier for zoomed images.
+  - A rotated or flipped view that hasn't been saved: drag the file as it is on disk (and say so), or the image as
+    shown (a temporary copy) — to decide with the rotation-saving item.
+  - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
+    folder pastes a copy of the file.
+
 ## Done
 
 (nothing yet)
