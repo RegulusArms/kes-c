@@ -53,7 +53,7 @@ Everything `install.sh` needs to build, plus a few tools a normal Ubuntu desktop
 ## In CI, sanitizers, and the package
 
 GitHub Actions (`.github/workflows/deb.yml`, on Ubuntu 24.04) runs `tests/run.sh` before building the .deb; a failing
-test stops the run. Two more jobs:
+test stops the run. A push or pull request that only changes Markdown files doesn't start it. Two more jobs:
 
 - **Sanitizers:** the whole suite with AddressSanitizer and UndefinedBehaviorSanitizer, which find memory errors (use
   after free, overflows) and undefined behaviour that a normal run can miss. Locally:

@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.9
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes Markdown files (`*.md`: the docs, changelogs, README, TODO)
+  no longer starts the workflow, so the tests, sanitizers and package jobs don't run for it, and no package is built
+  or published. A change to anything else, in the same push or later, runs everything as before.
+
 ## 0.3.1-alpha.8
 
 Added:

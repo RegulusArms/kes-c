@@ -6,6 +6,7 @@
 #   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
 #   pull request to main  → build only (the .deb is kept as a workflow artifact)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
+# A push or pull request that only changes Markdown files (*.md) doesn't start it at all.
 # DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch, suites "dev" and "stable"),
 # signed with the APT_GPG_PRIVATE_KEY secret.
 name: Build .deb
@@ -13,9 +14,11 @@ name: Build .deb
 on:
   push:
     branches: [DEV, main]
+    paths-ignore: ['**.md']   # only Markdown changed (docs, changelogs, TODO): nothing to build, test or publish
   pull_request:
     branches: [main]
-  workflow_dispatch:
+    paths-ignore: ['**.md']
+  workflow_dispatch:   # run by hand from the Actions tab, whatever changed
 
 permissions:
   contents: write   # to create releases and tags
