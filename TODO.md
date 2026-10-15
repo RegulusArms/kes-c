@@ -106,6 +106,29 @@ into.
   - Numbering: `util::unique_path(..., "number")` starts at ` (2)`; downloads want ` (1)` first, so it needs a style
     for that (and it already strips an existing ` (n)` before numbering).
 
+- [ ] **Convert videos with ffmpeg.** Right-click one or more video files → **Convert Video…** (shown only when `ffmpeg`
+  is installed, like the other tool-dependent entries) opens a settings window with the options in plain terms, the
+  way Compress… presents an archive tool's options.
+  - **Presets first:** e.g. "MP4 (H.264), plays everywhere", "Smaller file (H.265)", "WebM for the web", "Audio only
+    (MP3 / M4A / Opus)", "GIF", "Same format, just smaller". Choosing one fills in the options below; changing any
+    option makes it "Custom".
+  - **Options, in an easy form:** container (MP4, MKV, WebM, MOV, GIF, audio-only), video codec (H.264, H.265, VP9,
+    AV1, copy as is), quality as a slider from "smaller file" to "better quality" (CRF underneath) or a target size,
+    resolution (keep, 4K, 1080p, 720p, 480p, or a width), frame rate (keep, 60, 30, 24), audio (keep, re-encode with a
+    bitrate, remove), speed vs. size (ffmpeg's preset), trim (start and end time), rotate/flip, and **Extra options**
+    passed straight to ffmpeg for anything else.
+  - Only what the installed ffmpeg can do is offered (ask it for its encoders: `ffmpeg -encoders`); hardware encoding
+    (VAAPI / NVENC) when available, off by default.
+  - Shows the source's details (`ffprobe`: length, resolution, codecs, size) and a rough estimate of the new size
+    where it can.
+  - **Command preview** at the bottom showing exactly what will run, as the Compress dialog does; the last settings are
+    remembered (per preset).
+  - Output: beside the original as `name.converted.mp4` (or a chosen folder and name), never replacing the original
+    unless asked; written under a hidden part name and renamed when finished, so a cancel or failure leaves no
+    half-made video. Optionally move the original to the trash afterwards.
+  - Runs in the status bar with a real percentage (ffmpeg's `-progress` output against the length from ffprobe), the
+    time left, and ✕ to cancel. Several files are converted one after another as one job, with one summary at the end.
+
 ## Done
 
 (nothing yet)
