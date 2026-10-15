@@ -328,6 +328,25 @@ into.
   - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
     folder pastes a copy of the file.
 
+- [ ] **A Tower window: see what the tower is doing.** ☰ → **Tower…** (and `kes --tower-monitor` from a terminal) opens a
+  window showing the tower (`kes --atc`, which keeps several Kestrels in sync) live.
+  - The tower itself stays windowless (it must keep running between Kestrel windows and outlive any of them): the
+    window is an ordinary Kestrel window that watches it over D-Bus, like any other client, read-only.
+  - **Status:** whether the tower is running, its process id, how long it has been up, its protocol version, and when
+    it will land (about 10 s after the last Kestrel leaves). A "Restart Tower" button for when it's stuck (the next
+    Kestrel to notice starts a new one, as now).
+  - **Flights:** every Kestrel checked in (from the existing `Flights` method): pid, version, protocol, how many
+    windows and which one was used last, its running jobs (from `Kept`: tasks, windows).
+  - **Live message log:** every message the tower passes on (listening to its `Broadcast` signal): time, from which
+    Kestrel, type (starred, sorts, folders, tasks, cancel, open…) and the fields, newest at the bottom, with a filter by
+    type and a pause button. With `KESTREL_STATS`-style delay figures (how long each took through the tower).
+  - **Shared undo list** when sharing undo is on: what Ctrl+Z would undo, in order. Needs a new read-only method
+    (`UndoPop` takes the entry off), and a `Status` method for the uptime and landing time: tower changes, so bump
+    PROTOCOL.
+  - Refused messages (malformed, unknown type, another protocol) could be counted too, to spot a misbehaving program on
+    the session bus.
+  - Mostly a debugging and curiosity tool; maybe only shown with a "Show developer tools" preference.
+
 ## Done
 
 (nothing yet)
