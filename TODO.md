@@ -3,7 +3,28 @@
 Things to add, fix or change. Newest at the bottom; tick an item off (`[x]`) when it's done, with the version it went
 into.
 
-## Open
+## Bugs
+
+- [ ] **The file view jumps after a drag into a subfolder** (reported 2026-10-15). Select several files or folders,
+  drag them onto a subfolder in the same view: once the move is done, the view scrolls to another place in the folder
+  instead of staying where it was. The place looks random but seems to be the same each time in a given folder.
+  (The window itself doesn't move.)
+  - Likely cause: the item pressed to start the drag is the view's current item. When the move removes it from the
+    folder, the selection model makes a neighbouring item current, and Qt's view scrolls to the new current item
+    (`QAbstractItemView::currentChanged` → `scrollTo`, while `autoScroll` is on). So the view jumps to where the
+    dragged items were, which is somewhere else in the folder whenever the user scrolled to reach the subfolder.
+    Check this first: it explains "the same spot in each folder".
+  - Other suspects if not: the rows being removed and re-laid out without keeping the scroll position (the grid's
+    batched layout, or the grouped grid without fixed cells), the "shrinking into the folder" drop animation, or a
+    re-selection afterwards (`select_later` / `try_select` → `scrollTo` in `src/pane.cpp`).
+  - Fix idea: keep the scroll position across a move out of the folder (remember it before, put it back after the
+    rows go), or don't let a current item that vanished cause a scroll (clear the current index, or set a new one
+    with `QItemSelectionModel::NoUpdate` and no scroll). Keep edge auto-scrolling while dragging, which also uses
+    `autoScroll`.
+  - Test (`ui`): scroll down a long folder, drop several items from the top onto a subfolder further down, wait for
+    the move, and check the scroll position is unchanged, in the grid and the list (and grouped).
+
+## New features
 
 - [ ] **Extract several archives at once.** Selecting more than one archive and right-clicking offers **Extract All
   Here** and **Extract All To…** (today Extract only appears for a single archive).
@@ -255,6 +276,40 @@ into.
   - **Compare:** two images side by side (or A/B toggle) with linked zoom, for picking the better shot.
   - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
   - **Remembered:** window size and position, fullscreen, filmstrip and info panel state.
+
+- [ ] **A Jobs window.** Clicking the job progress bar in the status bar opens a **Jobs** window (a free window, as
+  every Kestrel window is). Today the status bar shows the oldest job with "+N more" and a hover list (TaskPanel in
+  `src/fileops.cpp`).
+  - **Left: the jobs,** in a scrolling list: every running and queued job of this window, then those of Kestrel's other
+    windows and other Kestrels (from the shared task list, `TaskBoard`), then recently finished ones (done, failed,
+    cancelled) until cleared. Each row: title, what it's on now, its own progress bar, elapsed time and time left,
+    a 🛡 for admin-session jobs, and ✕ to cancel (another Kestrel's job is asked to cancel, as now).
+  - **What a job is going to do:** a job made of several steps (a copy of 20 items, a batch of conversions or
+    extractions, a sync) lists its steps under it, done / in progress / waiting, so the user can see what's coming.
+  - **Right: the selected job's details.** For jobs that run a command-line tool (7z, tar, zpaq, rar/unrar, exiftool,
+    BleachBit, ffmpeg and the planned tools): the exact command and its **live output** as it runs, scrolling, with a
+    copy button; for Kestrel's own jobs (copy, move, delete, trash), a log of what it did: each item, conflicts and
+    how they were answered, errors, and the summary.
+  - Output is kept per job, capped in size (the start and the end of a very long output), for as long as the job is
+    in the list; nothing is written to disk unless a "Save log…" button is used. Passwords never appear (they're
+    already passed to the tools out of the command line where the tool allows; mask them in the shown command).
+  - Another Kestrel's job: its progress is shared already; its output would need to go through the tower too (new
+    message fields, so bump PROTOCOL) or be shown as "open it in that window".
+  - Keyboard: Delete cancels the selected job; the window remembers its size and the split between the two sides.
+
+- [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
+  all the way back up to its header to collapse it. Make it collapsible from the bottom too, and without scrolling:
+  - **A footer at the end of each group:** a slim row ("▴ Collapse Today (1,240)") after the group's last item that
+    collapses it, then keeps the view on that group's header so the user doesn't lose their place. A new row kind in
+    `DateGroupProxy` (`src/groups.cpp`), drawn like the header, not selectable, spanning the list's columns and taking
+    a whole line in the grid, as headers do.
+  - **A sticky header:** the header of the group at the top of the view stays pinned there while scrolling through it
+    (as phones' photo apps and many file managers do), still clickable to collapse. Collapsing from it scrolls so the
+    collapsed header is at the top. Could replace the footer, or come with it (to decide; maybe a preference).
+  - **From anywhere:** right-click an item → **Collapse This Group**, plus **Collapse All Groups** / **Expand All
+    Groups** (Sort menu and right-click on empty space); a key for it, e.g. Ctrl+Left / Ctrl+Right or
+    Ctrl+Shift+Minus / Plus, on the current item's group.
+  - Keep: a collapsed group still counts its items, and selecting an item in it opens it (as now).
 
 ## Done
 
