@@ -129,6 +129,36 @@ into.
   - Runs in the status bar with a real percentage (ffmpeg's `-progress` output against the length from ffprobe), the
     time left, and ✕ to cancel. Several files are converted one after another as one job, with one summary at the end.
 
+- [ ] **Extract audio from videos.** Right-click one or more videos → **Extract Audio…** (shown when `ffmpeg` is
+  installed).
+  - **Keep the original audio** (default when it fits a common container): the audio stream copied out unchanged
+    (`-vn -c:a copy`), instant and lossless, into the matching file type (AAC → `.m4a`, Opus → `.opus`/`.ogg`, MP3 →
+    `.mp3`, anything else → `.mka`).
+  - **Or convert it:** MP3, M4A (AAC), Opus, FLAC or WAV, with a quality choice in plain terms (e.g. "Good (192 kbps)").
+  - A video with several audio tracks: choose which (language/title from `ffprobe`), or all of them.
+  - Same handling as Convert Video: written under a hidden part name, beside the video by default, never replacing a
+    file, progress and ✕ in the status bar, several files as one job.
+
+- [ ] **Convert images.** Right-click one or more images → **Convert Image…**: to JPEG, PNG, WebP, AVIF, HEIC or TIFF
+  (only formats something installed can write), e.g. iPhone HEIC photos to JPEG.
+  - Options in plain terms: quality slider for lossy formats, resize (keep, a longest side, a percentage), keep or strip
+    the metadata (EXIF, location), and what to do with transparency when the target has none (a background colour).
+  - Decoding: Qt's image plugins first (Kestrel already reads HEIC, AVIF, JPEG XL and camera RAW through
+    `kimageformat6-plugins`); ffmpeg where Qt can't. Encoding: Qt's writers where they exist, ffmpeg (or the
+    format's own tool) for the rest. Offer only the targets that can actually be written on this system.
+  - Keep the photo's orientation right (apply the EXIF rotation, or carry it over), and its colour profile where the
+    target supports one.
+  - Output beside the originals (or a chosen folder), never replacing a file; part names; progress and ✕ in the status
+    bar for a batch; optionally move the originals to the trash afterwards.
+
+- [ ] **Convert audio files.** Right-click one or more audio files → **Convert Audio…** (with `ffmpeg`): FLAC, WAV,
+  ALAC, MP3, M4A (AAC), Opus or OGG, e.g. a FLAC album to MP3 or Opus for a phone or music player.
+  - Quality in plain terms (bitrate or VBR level), sample rate and channels (keep, or 44.1/48 kHz, stereo/mono).
+  - Tags and cover art kept (title, artist, album, track number; embedded cover where the target supports it).
+  - Optional **loudness normalisation** (ffmpeg's `loudnorm`, two passes) so a batch plays at the same volume.
+  - A whole folder at once, keeping its subfolders in the output folder.
+  - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
+
 ## Done
 
 (nothing yet)
