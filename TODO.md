@@ -159,6 +159,103 @@ into.
   - A whole folder at once, keeping its subfolders in the output folder.
   - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
 
+- [ ] **Rotate images losslessly.** Right-click one image or a selection → **Rotate** → **90° clockwise**, **180°**,
+  **90° counter-clockwise (270°)**, and **Flip horizontally / vertically**, saved to the files. Today rotating only
+  exists in the image viewer (R / L), and only for display.
+  - JPEG: lossless (`jpegtran -rotate 90 -perfect -copy all`, or `exiftran`; package `libjpeg-turbo-progs` /
+    `exiftran`): the picture data is turned without re-compressing, so no quality is lost. Where a JPEG's size isn't a
+    multiple of its block size, `-perfect` refuses; then offer either trimming the odd edge pixels (`-trim`) or, as an
+    option, just setting the EXIF orientation flag instead.
+  - **Or only change the orientation flag** (EXIF Orientation, through exiftool or by rewriting the tag): instant,
+    changes nothing else, and every modern viewer honours it. Possibly the default for JPEGs that already have one.
+  - Other formats: PNG, WebP (lossless), TIFF are re-saved losslessly (Qt or the format's tool); lossy WebP, HEIC and
+    AVIF re-encoding loses a little quality, so say so (or only set the orientation where the format has one).
+  - Keeps the metadata (EXIF, dates) and resets the orientation flag to "normal" after turning the pixels, so the photo
+    isn't turned twice. Written under a hidden part name and renamed over the original when done (fsync first, as it
+    replaces data); a batch in the status bar with ✕. Thumbnails and folder mosaics refresh.
+  - The viewer's R / L could then offer to save the rotation too.
+
+- [ ] **Verify signatures.** Double-click a `.sig` / `.asc` / `.gpg` signature (or `SHA256SUMS.gpg`, `*.asc` next to a
+  download) → **Verify Signature**: checks it with `gpg --verify` against the file it signs (the same name without
+  the extension, or the one inside a clearsigned file) and says plainly: valid, signed by *name / key ID*, on *date*;
+  or bad signature; or the signer's key isn't in your keyring (with its key ID and fingerprint, and a button to fetch
+  it from a keyserver, asking first).
+  - Ties in with the checksum files Kestrel already verifies: a signed `SHA256SUMS` (+ `.gpg`/`.asc`) checks the
+    signature first, then every file it lists.
+  - Trust in plain terms: a valid signature from a key you haven't marked as trusted is still "valid, but this key
+    isn't verified by you", not a scary wall of gpg output.
+  - Optional, later: **Encrypt / Decrypt** with gpg (to a recipient or with a password).
+
+- [ ] **Drive health on the Overview.** Each drive card (and Properties of a drive) shows its health from S.M.A.R.T.:
+  "Healthy", or a warning such as "3 bad sectors" or "failing", plus its temperature and power-on time.
+  - Read through udisks (`org.freedesktop.UDisks2.Drive.Ata`: SmartFailing, SmartTemperature, SmartPowerOnSeconds,
+    SmartNumBadSectors), which works without root for ATA/SATA drives; NVMe through udisks' NVMe interface where the
+    installed udisks has it. `smartctl` needs root, so it isn't used. USB enclosures often don't pass S.M.A.R.T.
+    through: show "health not available" rather than nothing.
+  - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
+  - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
+
+- [ ] **Find duplicate files.** Right-click a folder (or several, or a drive) → **Find Duplicates…**: lists groups of
+  identical files and lets the user choose which copies to keep and move the rest to the trash.
+  - Fast: group by size first, then hash only same-size files (Kestrel already hashes for checksums), with byte-by-byte
+    comparison or a strong hash to be sure. Runs on a thread with progress and ✕. Optionally `jdupes`/`rmlint` when
+    installed, but not needed.
+  - Options: minimum size, include hidden files, skip hard links (already the same file), follow into subfolders.
+  - Results: each group with thumbnails, path, date and size; "keep the oldest / newest / in this folder" helpers;
+    Move to Trash (undoable) or replace duplicates with hard links (same drive only, asking first). Space to be freed
+    shown at the top.
+  - Later: similar images (not identical bytes), e.g. the same photo at another size.
+
+- [ ] **Compare and sync folders.** Right-click a folder → **Compare With…** and **Sync To…**.
+  - **Compare:** two folders side by side, the differences listed: only on the left, only on the right, newer on one
+    side, same name but different contents (by size and date, or by contents for a deep compare). Open, copy across
+    or trash from the list.
+  - **Sync:** make a destination match a source (one way, e.g. Pictures → backup drive): a preview of exactly what will
+    be copied, replaced and (optionally) deleted, then run it. With `rsync` when installed (resumes interrupted
+    copies, only sends changes), else Kestrel's own copy engine. Deleting on the destination is off by default and
+    asks again.
+  - Saved sync pairs ("Pictures → Backup HDD") to run again in one click, recognising the drive by its id (see the
+    friendly drive names item).
+  - Every replacement still goes through part files (nothing half-copied over a good file).
+
+- [ ] **Better search: filters, and grep.** The search bar gains filters, and a way to search inside files that
+  doesn't depend on the desktop's index.
+  - **Filters** (what `find` does): type (images, videos, audio, documents, archives, folders), size (over / under),
+    modified/created date (today, this week, a range), combined with the name; usable with "search subfolders".
+    Shown as chips or a small filter row, and remembered for the session.
+  - **grep** (search file contents directly): today *File contents* uses the desktop's search index (`localsearch`),
+    which only covers indexed folders (not external drives, network shares or folders it skips) and doesn't do regular
+    expressions. Add a direct content search with `grep -r` (or `ripgrep` when installed, much faster): plain text or
+    a regular expression, case-sensitive or not, skipping binary files, on a thread with ✕. Results show the matching
+    line and line number, and open the file (in a text editor at that line where possible).
+  - Use the index when it covers the folder (instant), grep otherwise, or let the user pick.
+
+- [ ] **Image viewer: quality-of-life improvements.** The viewer (`src/viewer.cpp`) covers the basics today: arrows,
+  wheel and mouse back/forward to move between images, Ctrl+wheel zoom at the pointer, drag to pan, fit (0) and
+  actual size (1), fullscreen, slideshow, the info overlay (I), trash, copy, and a cache of the nearby images.
+  Rotate and flip only change the display. Ideas, to choose from when this is picked up:
+  - **Saving rotation:** R / L / H can save the change to the file, losslessly (see the rotate item above), with an
+    "always save" choice so it doesn't ask each time.
+  - **A filmstrip** of thumbnails along the bottom (toggle), to jump to any image; the current one highlighted.
+  - **Same order as the folder:** the images in the order the folder is sorted (and grouped) in Kestrel, and only the
+    selection when several were selected.
+  - **Zoom:** the zoom level shown briefly when it changes; double-click toggles fit / 100% at the pointer;
+    pinch-to-zoom on touchpads; keep the zoom and position when moving to the next image (an option, for comparing).
+  - **Faster:** preload the next and previous images in the background at screen size (larger cache for big folders),
+    full-resolution decode only when zoomed in; show the embedded/thumbnail preview first for RAW and huge files.
+  - **Info:** a side panel option for the full EXIF (camera, lens, exposure, GPS with a map link, the image-generation
+    prompt) instead of only the overlay; a histogram.
+  - **Quick actions:** star / pin (the badges Kestrel shows elsewhere), rate, set as wallpaper, open the containing
+    folder with the file selected, Open With, copy to / move to a recent folder with one key (for sorting a card of
+    photos), and undo for trash from inside the viewer.
+  - **Light edits:** crop (saved under a new name or over the original, asking), resize, and auto-straighten the
+    orientation flag; anything bigger stays with a real editor (Open With).
+  - **Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default app),
+    with play/pause and a seek bar.
+  - **Compare:** two images side by side (or A/B toggle) with linked zoom, for picking the better shot.
+  - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
+  - **Remembered:** window size and position, fullscreen, filmstrip and info panel state.
+
 ## Done
 
 (nothing yet)
