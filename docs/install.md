@@ -16,7 +16,7 @@ printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nC
 sudo apt update && sudo apt install kestrel-explorer
 ```
 
-**Development builds** (the newest build of the `DEV` branch, updated on every push):
+**Development builds** (the newest build of the `DEV` branch, updated on every push that changes the code):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings

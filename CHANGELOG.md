@@ -2,7 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.8
+## 0.3.1-alpha.9
+
+- **No builds for documentation-only changes:** a push or pull request that only changes Markdown files (the README,
+  the docs, the changelogs, the to-do list) no longer runs the build, the tests or the package jobs, and doesn't
+  publish a new development build. Any other change runs everything as before. (The build can still be started by
+  hand from GitHub's Actions tab.)
+- The README links to the new [to-do list](TODO.md) of planned additions, fixes and changes.
+
+## 0.3.1-alpha.8 (2026-10-13)
 
 - **Copied folders fill in as they go:** copying a folder to a new place (photos from a camera's SD card to a hard
   drive, for example) now makes the folder under its real name straight away, and each file appears in it as soon as
