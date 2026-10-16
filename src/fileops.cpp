@@ -1,6 +1,7 @@
 #include "fileops.h"
 
 #include "admin.h"
+#include "drives.h"
 #include "atc.h"
 #include "proc.h"
 #include "undo.h"
@@ -63,11 +64,11 @@ void Task::check()
         throw Cancelled();
 }
 
-void Task::report(double done, double total, const QString &t)
+void Task::report(double done, double total, const QString &t, bool force)
 {
     // at most ~12 updates a second, so thousands of tiny files can't flood the UI thread
     qint64 now = monotonic_ms();
-    if (now - last < 80)
+    if (now - last < 80 && !force)
         return;
     last = now;
     Q_EMIT progress(total > 0 ? std::min(done / total, 1.0) : -1.0, t);
@@ -505,6 +506,7 @@ public:
     QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
     QList<Job> completed;   // jobs that succeeded (for undo)
     QStringList partial;    // new folders a copy left part-way (cancelled, or an error inside): undone like a copy
+    QList<Job> touched;     // jobs that changed something (done, or begun): a tape among them gets its index written
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
 
     QStringList run()
@@ -518,12 +520,29 @@ public:
         }
         total = std::max<qint64>(total, 1);
         qint64 started = stats::now_ms();
+        // jobs reading a tape go in the order their files lie on the tape (by partition and block), so the drive
+        // streams instead of winding back and forth; the others keep their order, after them
+        QList<QPair<QPair<qint64, qint64>, Job>> keyed;
         for (const Job &j : jobs) {
+            QPair<qint64, qint64> at{LLONG_MAX, LLONG_MAX};
+            if (drives::slow_kind(j.src) == drives::Slow::Tape) {
+                at = drives::tape_position(j.src);
+                if (at.first < 0)
+                    at = {LLONG_MAX - 1, LLONG_MAX - 1};
+            }
+            keyed << qMakePair(at, j);
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+        for (const auto &[at, j] : keyed) {
             task->check();
+            // one job at a time on a tape or floppy (another job of this Kestrel using it: wait, saying so)
+            drives::Lanes lane({j.src, j.dst}, task,
+                               [this](const QString &text) { task->report(double(done), double(total), text, true); });
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
             bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
             bool fresh = j.op == "copy" && !lexists(j.dst);
+            touched << j;
             auto left_part_way = [&]() {
                 if (fresh && isdir(j.dst) && !islink(j.dst))
                     partial << j.dst;
@@ -744,7 +763,16 @@ private:
         } else if (S_ISDIR(st.st_mode)) {
             Fd in(open_dir_at(sdir, sname, st, src));
             auto copy_into = [&](int out) {
-                for (const QString &e : names_in(in.fd, src)) {
+                QStringList names = names_in(in.fd, src);
+                if (drives::slow_kind(src) == drives::Slow::Tape) {   // in tape order (folders, which have none, last)
+                    QHash<QString, QPair<qint64, qint64>> at;
+                    for (const QString &e : names) {
+                        QPair<qint64, qint64> pos = drives::tape_position(join(src, e));
+                        at.insert(e, pos.first < 0 ? qMakePair(LLONG_MAX, LLONG_MAX) : pos);
+                    }
+                    std::stable_sort(names.begin(), names.end(), [&](const QString &a, const QString &b) { return at[a] < at[b]; });
+                }
+                for (const QString &e : names) {
                     struct stat est;
                     if (!stat_at(in.fd, e, est))
                         throw_errno(join(src, e));
@@ -832,6 +860,8 @@ private:
             throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
         }
         Fd out(part_fd);
+        if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
+            task->report(double(done), double(total), "Positioning the tape — " + name, true);
         try {
             std::unique_ptr<char[]> buf(new char[CHUNK]);
             for (;;) {
@@ -890,23 +920,31 @@ private:
     // fails on a taken name, and check-then-rename for a folder). A taken name throws conflict().
     void claim_name(int src_dir, const QString &src, int dst_dir, const QString &dst, const QString &shown)
     {
-        if (::renameat2(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), RENAME_NOREPLACE) == 0)
+        QByteArray s = enc(src), d = enc(dst);
+        if (util::rename_noreplace(src_dir, s.constData(), dst_dir, d.constData()) == 0)
             return;
         int e = errno;
         if (e == EINVAL) {
             struct stat st, existing;
-            if (stat_at(src_dir, src, st) && S_ISDIR(st.st_mode)) {
+            bool dir = stat_at(src_dir, src, st) && S_ISDIR(st.st_mode), check_then_rename = dir;
+            if (!dir) {
+                if (util::link_at(src_dir, s.constData(), dst_dir, d.constData()) == 0) {
+                    ::unlinkat(src_dir, s.constData(), 0);
+                    return;
+                }
+                e = errno;
+                check_then_rename = util::no_link_support(e);
+            }
+            // a folder can't be linked, and some file systems link nothing (LTFS tapes: link() fails with EPERM, which
+            // isn't a permission problem): check, then rename. Not atomic: a file another program makes under that name
+            // between the two could be replaced; the best these file systems allow
+            if (check_then_rename) {
                 if (stat_at(dst_dir, dst, existing))
                     e = EEXIST;
-                else if (::renameat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData()) == 0)
+                else if (::renameat(src_dir, s.constData(), dst_dir, d.constData()) == 0)
                     return;
                 else
                     e = errno;
-            } else if (::linkat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), 0) == 0) {
-                ::unlinkat(src_dir, enc(src).constData(), 0);
-                return;
-            } else {
-                e = errno;
             }
         }
         if (e == EEXIST)
@@ -1054,6 +1092,18 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
                     win->statusBar()->showMessage(what + " can't be undone: what was replaced is gone.", 8000);
             }
         }
+        // a tape changed: its index written now (LTFS otherwise writes it only at unmount or on its own timer), so a crash
+        // or power cut afterwards doesn't lose what was put on it
+        if (*ops) {
+            QSet<QString> tapes;
+            for (const Job &j : (*ops)->touched) {
+                for (const QString &path : {j.dst, j.op.contains("move") || j.op == "delete" ? j.src : QString()})
+                    if (drives::slow_kind(path) == drives::Slow::Tape)
+                        tapes << drives::slow_root(path);
+            }
+            for (const QString &root : tapes)
+                drives::sync_tape_job(p, root);
+        }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
             warn(p, title, "Some items could not be processed:\n\n" + errors.mid(0, 20).join('\n'));
@@ -1153,7 +1203,51 @@ void plan_transfer(QWidget *parent, const QStringList &sources, const QString &d
     p->op = op;
     p->dest_real = realpath(dest_dir);
     p->planned = std::move(planned);
-    plan_next(p);
+    if (drives::slow_kind(dest_dir) != drives::Slow::Tape) {
+        plan_next(p);
+        return;
+    }
+    // to a tape: many small files are slow to write and waste tape (each costs about as much as a large one), so
+    // the user is asked first; counted on a worker (the sources may be large, or slow themselves)
+    const int many = 1000;
+    run_task(
+        parent, "Counting files",
+        [sources, many]() {
+            int small = 0;
+            for (const QString &src : sources) {
+                struct stat st;
+                if (!lstat_(src, st))
+                    continue;
+                if (!S_ISDIR(st.st_mode)) {
+                    small += st.st_size < (1 << 20);
+                    continue;
+                }
+                walk(src, [&](const QString &root, QStringList &, QStringList &files) {
+                    for (const QString &f : files) {
+                        struct stat fst;
+                        if (lstat_(join(root, f), fst) && fst.st_size < (1 << 20))
+                            ++small;
+                    }
+                    return small <= many;
+                });
+                if (small > many)
+                    break;
+            }
+            return QVariant(small);
+        },
+        [p, many](const QVariant &n) {
+            if (n.toInt() <= many) {
+                plan_next(p);
+                return;
+            }
+            ask_yes(p->parent, "Copy to Tape",
+                    QString("This copies more than %1 small files (under 1 MB) to the tape. A tape writes each file as "
+                            "slowly as a large one and uses extra space for it, so this will be slow. Putting them in an "
+                            "archive first (Compress…) and copying that is much faster.\n\nCopy them anyway?")
+                        .arg(many),
+                    [p]() { plan_next(p); });
+        },
+        true);
 }
 
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,

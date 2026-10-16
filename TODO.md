@@ -5,78 +5,7 @@ into.
 
 ## Bugs
 
-- [ ] **USB floppy drives freeze Kestrel while they read** (reported 2026-10-16). With a USB floppy drive, Kestrel
-  freezes while the drive is reading. The drive doesn't give the computer the floppy directly: it's a go-between that
-  reads the disk and passes the data on, slowly (seconds per request, worse on a first read or a bad sector), and
-  Kestrel waits for it on the UI thread.
-  - Not connected when this was recorded: check how it shows up next time (`lsblk -o NAME,SIZE,RM,TRAN,FSTYPE,MODEL`,
-    `findmnt`, `udisksctl info`): a USB block device with a 1.44 MB (or 720 KB) FAT file system, or something else
-    (a floppy emulator, a FUSE or GVFS mount).
-  - Same root cause as the tape freezes (Bugs → Deferred to LTFS support, and the LTFS support item): Kestrel does
-    file-system work on the UI thread assuming the drive answers at once (`stat`/`isdir` on navigation, free space,
-    folder previews and thumbnails, the info panel, reading a checksum or archive file to decide how to open it,
-    the drive list's refresh), and FAT listing on a floppy is slow too.
-  - Fix together with the LTFS work as one **slow drives** mode rather than two separate fixes: recognise slow media
-    (a floppy: removable, tiny capacity, the USB floppy (UFI) interface or the drive's model; a tape: LTFS; maybe any
-    drive whose first answers are slow), then for it: nothing on the UI thread may wait on it ("Reading the
-    floppy…" instead of a frozen window, with Cancel), no thumbnails / folder mosaics / metadata reads unless asked,
-    one job at a time on it, and a clear "drive is busy" state on its Overview card.
-  - Not deferred like the LTFS bugs (the user didn't ask for that), but best fixed with the same change; decide with
-    the user when the LTFS item is picked up.
-  - Test (`devices` or `fileops`): a folder whose file-system calls block (a FUSE test file system, or a FIFO / slow
-    seam) can be opened and browsed while a timer keeps firing; Cancel stops the wait.
-
-### Deferred to LTFS support
-
-These are left until the **LTFS tape support** item is implemented, and fixed with it: don't fix them, or check whether
-they still happen, before then.
-
-- [ ] **Copying to an LTFS tape fails with "no permission", also as administrator** (reported 2026-10-16). Tape mounted
-  with `sudo ltfs -o devname=/dev/sg0 -o allow_other -o uid=$(id -u) -o gid=$(id -g) -o umask=022 /mnt/ltfs`:
-  Kestrel says it doesn't have permission to copy files there, and Retry as Administrator fails the same way.
-  - Not real permissions: the mount point is the user's (`aiml:aiml`, 755; `access(W_OK)` says writable; mount
-    options `user_id=0,group_id=0,default_permissions,allow_other`).
-  - Likely cause (from the code, not yet confirmed on the tape): every copy is written to a hidden part file and then
-    put under its real name with `renameat2(RENAME_NOREPLACE)` (never replacing a file that appeared meanwhile).
-    Where the file system rejects that flag (EINVAL), both Kestrel (`Ops::claim_name` in `src/fileops.cpp`) and the
-    admin helper (`src/admin_helper.cpp`, the same fallback) fall back to `link()` the part to the name, then remove
-    the part. LTFS runs on FUSE 2 (no rename flags) and has no hard links, so `link()` fails, most likely with EPERM,
-    which Kestrel treats as "permission denied" (`OSError::permission()`: EACCES or EPERM) and offers the admin
-    session, where root hits the same EPERM.
-  - Confirm (needs a test write, ask the user first, e.g. on a scratch folder on the tape or on another FUSE file
-    system without hard links): `strace -f -e trace=renameat2,link,linkat` on a Kestrel copy, expecting
-    `renameat2(…, RENAME_NOREPLACE) = -1 EINVAL` then `linkat(…) = -1 EPERM`.
-  - Fix: when `link()` also fails for lack of support (EPERM, ENOTSUP/EOPNOTSUPP, ENOSYS, EMLINK on a file system that
-    doesn't do links), fall back to checking that the name is still free and then a plain `rename()` (the same
-    check-then-rename already used for folders): not atomic, a tiny window where another program's file could be
-    replaced, so say so in a comment (CLAUDE.md: the next best thing). Remember per file system that it has no
-    RENAME_NOREPLACE / link, so a big copy doesn't try and fail twice per file. Same change in the admin helper.
-  - Also: an EPERM from `link()` here isn't a permission problem, so don't offer **Retry as Administrator** for it;
-    the message should say what failed ("this drive doesn't support … ; file not copied").
-  - Test (`fileops` and `admin_helper`): a copy onto a file system where `renameat2` flags give EINVAL and `link()`
-    gives EPERM (simulated: a FUSE test file system, or a seam that makes those calls fail) succeeds, keeps an
-    existing file it mustn't replace, and leaves no part file; no admin retry is offered.
-  - **Deferred:** fix this as part of the LTFS support item (New features), not before. Don't fix it or check whether
-    it still happens until that work is done.
-
-- [ ] **Opening a checksum file on a tape freezes Kestrel until the tape gets there** (reported 2026-10-16).
-  Double-clicking a checksum file on an LTFS tape freezes the window while the tape seeks to it; once the file has
-  been read and the Verify Checksums window shows, everything is normal again (the hashing itself already runs on a
-  thread).
-  - Cause (found in the code): `MainWindow::open_paths` (`src/opening.cpp`) calls `hashcheck::open_dialog()`, which
-    reads and parses the whole checksum file on the UI thread (`hashcheck::parse()` → `read_file()`) to decide whether
-    it lists anything (a file that lists nothing opens as text instead). On a tape that read waits for the tape.
-    The same synchronous read is in Properties → Checksums → **Browse…** (`hashcheck::parse` in `src/dialogs.cpp`).
-  - Fix: read and parse on a worker thread (`fileops::run_task`), with the Verify window opening at once in a
-    "Reading the checksum file…" state (with Cancel), or a status-bar job; then fill it in, or, if it lists nothing,
-    open the file as text as now. The same for Browse…. Check the rest of the Verify window for other UI-thread file
-    access (does a row check a file's existence or size before hashing?).
-  - Part of the general LTFS item (nothing on the UI thread may wait on the tape): look for the other synchronous
-    reads that run on opening a file (checking an archive's type, image size, the info panel).
-  - Test (`fileops` or `theme`, whichever has the hash tests): opening a checksum file whose read blocks (a FIFO that
-    isn't written to yet, or a slow-read seam) keeps the event loop running: a timer fires while it's being read.
-  - **Deferred:** fix this as part of the LTFS support item (New features), not before. Don't fix it or check whether
-    it still happens until that work is done.
+(none open)
 
 ## New features
 
@@ -441,43 +370,27 @@ they still happen, before then.
     the session bus.
   - Mostly a debugging and curiosity tool; maybe only shown with a "Show developer tools" preference.
 
-- [ ] **LTFS tape support: no freezing, and tape-friendly behaviour.** LTFS (Linear Tape File System) mounts a tape
-  as a FUSE file system (here: `/mnt/ltfs`, source `ltfs:/dev/sg0`, the `ltfs` tools in `/usr/local/bin`). Listing a
-  folder is cheap (LTFS keeps the index in memory), but anything that reads a file's data makes the drive seek along
-  the tape, seconds to minutes per file. Kestrel treats the mount like a fast disk today, so the window can freeze
-  while the tape is winding.
-  - **Bugs to fix with this** (Bugs → Deferred to LTFS support): copying to a tape fails with "no permission", also
-    as administrator; opening a checksum file on a tape freezes Kestrel until the tape gets there.
-  - **Recognise a tape:** a mount whose source starts `ltfs:` (or whose FUSE subtype / process is ltfs), and remember
-    it per volume (its UUID from LTFS's virtual extended attributes, as with the friendly drive names item). Show it
-    with a tape icon and its volume name on the Overview and in the sidebar.
-  - **Never freeze the window:** nothing on the UI thread may wait on the tape. Check each place Kestrel touches files
-    synchronously in the UI thread (`stat`/`isdir` on navigation, `QStorageInfo` for free space, folder size in
-    Properties, the info panel, opening a file's type, the drive list refresh) and move them to threads with a
-    "Waiting for the tape…" state, so the window stays usable and Cancel works.
-  - **Don't read the tape behind the user's back:** on a tape, by default no thumbnails, folder preview mosaics, video
-    stills, GIF/WebM playback, metadata reading for grouping by Date Taken, content search or checksum-on-open; each
-    shown as a plain icon instead. A "Load previews from tape" button per folder for when the user wants them
-    (read in tape order, see below), and a per-volume setting to allow it.
-  - **Read in tape order:** copying many files off a tape, read them sorted by where they are on the tape (LTFS's
-    virtual extended attributes for a file's partition and start block, e.g. `ltfs.partition` / `ltfs.startblock`;
-    check the installed LTFS's names), not in name order, so the drive streams instead of shuttling back and forth.
-    The same for "Load previews" and checksums.
-  - **Writing:** one write job at a time to a tape (queue the others; two at once makes it seek between them),
-    large sequential writes, and a warning before copying many small files (slow and wasteful on tape). After a copy,
-    offer to **Sync the index** (LTFS writes its index on sync or unmount; `ltfs.sync` or the mount's sync option),
-    and warn before unmounting/ejecting while a sync or write is still running.
-  - **Tape status on the Overview card:** volume name, capacity used and remaining, whether a sync is pending, the
-    number of loads, any media warnings (from LTFS's virtual extended attributes); Eject (unmount, then unload) with
-    a clear "writing the index… don't remove the tape" while it runs.
-  - **Progress that explains waits:** a copy waiting on the tape says "Positioning tape…" rather than looking stuck;
-    the status bar's job shows the current file's position and the transfer speed.
-  - Later: mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (these need permissions on the drive device; check
-    how the user's setup grants them, and don't go beyond the admin-session scope), and a catalogue of tapes that
-    aren't loaded (their index saved when last mounted, to search what's on which tape).
+- [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
+  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
+  the Overview card and safer unmounting. Still to do:
+  - Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads (`user.ltfs.startblock`,
+    `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*` also tried): with the tape
+    mounted, `getfattr -d -m - /mnt/ltfs` and on a file. Fix the names where they differ.
+  - Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that browsing
+    it no longer freezes.
+  - One job at a time per drive is per Kestrel process for now; across Kestrels it comes with the unified job queue
+    (Jobs window item).
+  - Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
+    session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
+    what's on which tape).
 
 ## Done
 
+- [x] **LTFS tape support: no freezing, and tape-friendly behaviour** (0.3.1-alpha.11). `src/drives.cpp`: tapes (LTFS mounts) and floppies recognised from the mount table; sizes read in the background (sidebar, Overview, status bar, Properties); no previews/details/animations/dates read unless allowed per drive; one job at a time per drive; tape-order reads with "Positioning the tape"; index written after a copy and on demand; small-files warning; the Overview card; background unmount with a warning while a job runs. What's left: see "LTFS and slow drives: what's left". Test: `slow`.
+- [x] **Kestrel freezes while another program copies from the tape** (0.3.1-alpha.11). Cause as suspected: the sidebar's 4-second mount check asked every mount for its size on the UI thread. Mounts now come from `/proc/self/mountinfo`, sizes from a worker. Tests: `slow`, and `ui` (no `QStorageInfo` outside the Overview's background scan).
+- [x] **Copying to an LTFS tape fails with "no permission", also as administrator** (0.3.1-alpha.11). Fallback to check-then-rename when `link()` fails for lack of support (Kestrel's copy, `util::put_new`, the admin helper). Not yet confirmed on the tape itself (see what's left). Tests: `fileops`, `admin_helper` (`KESTREL_TEST_NO_LINK`).
+- [x] **Opening a checksum file on a tape freezes Kestrel until the tape gets there** (0.3.1-alpha.11). The checksum file is read on a worker (also Properties → Browse…). Test: `slow` (a FIFO).
+- [x] **USB floppy drives freeze Kestrel while they read** (0.3.1-alpha.11). Fixed with the same slow-drives mode as tapes; a floppy is a removable disk of at most 4 MB (or `/dev/fd*`); navigating into one no longer stats it on the UI thread. Not yet tried with the real drive (see what's left). Test: `slow`.
 - [x] **The file view jumps after a drag into a subfolder** (fixed in 0.3.1-alpha.10). Cause confirmed: the current item leaving the folder made Qt scroll to its neighbour (seen in the list view). `FileView` no longer scrolls when the current item is removed. Test: `ui`.
 - [x] **A folder's picture slides across the view when going back up** (fixed in 0.3.1-alpha.10). Cause: Qt starts a drag on a move with any button held; a move with the mouse's back button still down dragged the folder just left (selected again above), and the drag going nowhere slid back. Only the left button drags now, and a drag that outlives its folder doesn't fly back. Test: `ui`.
 - [x] **A rare single gap in the grid** (fixed in 0.3.1-alpha.10). Two causes found: a batched layout redone started each 400-item batch on a new row (now one pass: ~20 ms for 50,000 items), and cells adding up to exactly the width pushed the last column onto the next row (one pixel of slack). Test: `ui`.

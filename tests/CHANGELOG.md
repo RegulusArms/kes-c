@@ -4,6 +4,24 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.11
+
+Added:
+- **`slow`, a new test for tapes and floppies**: folders marked as a tape and a floppy (`KESTREL_TEST_SLOW`, read by
+  `src/drives.cpp`) with a statfs that waits like a busy tape's (`KESTREL_TEST_STATFS_DELAY_MS`). Checks: they're
+  recognised and listed (also that a snap's small loop device isn't taken for a floppy); asking their size doesn't
+  hold the window (sidebar, status bar, Properties, Overview) and the size comes later; a checksum file is read in the
+  background (a FIFO stands in for a seeking tape); no thumbnail, date taken, GIF playback or image details read
+  from a tape until previews are allowed, then they are; copies read a tape in tape order (from LTFS's start-block
+  attributes); a job waits while another holds the tape; the index is written after a copy; more than 1,000 small
+  files ask first; the Overview shows the tape by its volume name. Covers the LTFS and floppy fixes.
+- `fileops`: on a file system without RENAME_NOREPLACE or hard links (`KESTREL_TEST_NO_LINK`, acting as LTFS) a copy
+  to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name. Guards
+  against the "no permission" failure copying to a tape.
+- `admin_helper`: the same for the helper's copy, write and copyfile.
+- `ui`: no `QStorageInfo` outside the Overview's background scan (it asks drives for their size, which waits on a busy
+  tape or floppy). Guards against the window freezing on slow drives again.
+
 ## 0.3.1-alpha.10
 
 Added:

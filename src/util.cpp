@@ -615,25 +615,52 @@ void write_parts(const QString &path_in, const std::function<void(int)> &fill, b
     }
 }
 
+static bool test_no_link() { return qEnvironmentVariableIntValue("KESTREL_TEST_NO_LINK") == 1; }
+
+int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EINVAL;
+        return -1;
+    }
+    return ::renameat2(src_dir, src, dst_dir, dst, RENAME_NOREPLACE);
+}
+
+int link_at(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EPERM;
+        return -1;
+    }
+    return ::linkat(src_dir, src, dst_dir, dst, 0);
+}
+
+bool no_link_support(int err) { return err == EPERM || err == ENOTSUP || err == EOPNOTSUPP || err == ENOSYS || err == EMLINK; }
+
 void put_new(const QString &part, const QString &path)
 {
-    if (::renameat2(AT_FDCWD, enc(part).constData(), AT_FDCWD, enc(path).constData(), RENAME_NOREPLACE) == 0)
+    QByteArray p = enc(part), d = enc(path);
+    if (rename_noreplace(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0)
         return;
     if (errno != EINVAL)
         throw_errno(path);
-    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken; a folder can't be linked, so
-    // there it's check, then rename
+    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken
     struct stat st;
-    if (::lstat(enc(part).constData(), &st) == 0 && S_ISDIR(st.st_mode)) {
-        if (lexists(path))
-            throw OSError(EEXIST, errno_text(EEXIST, path));
-        if (::rename(enc(part).constData(), enc(path).constData()) != 0)
+    bool dir = ::lstat(p.constData(), &st) == 0 && S_ISDIR(st.st_mode);
+    if (!dir) {
+        if (link_at(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0) {
+            ::unlink(p.constData());
+            return;
+        }
+        if (!no_link_support(errno))
             throw_errno(path);
-        return;
     }
-    if (::link(enc(part).constData(), enc(path).constData()) != 0)
+    // a folder can't be linked, and some file systems link nothing (LTFS): check, then rename. Not atomic: a file
+    // another program makes under that name between the two could be replaced; the best these allow
+    if (lexists(path))
+        throw OSError(EEXIST, errno_text(EEXIST, path));
+    if (::rename(p.constData(), d.constData()) != 0)
         throw_errno(path);
-    ::unlink(enc(part).constData());
 }
 
 void write_atomic(const QString &path, const QByteArray &data)

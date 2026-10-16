@@ -475,6 +475,26 @@ int main(int argc, char **argv)
                                    (found.isEmpty() ? QString() : ":\n  " + found.join("\n  ")));
     }
 
+    // -- QStorageInfo asks drives for their size (statfs), which waits on a busy tape or a floppy: it's used only in the
+    // Overview's drive scan, which runs on a worker; everything else goes through drives::Sizes
+    {
+        QStringList found;
+        QDir src(QString(TESTS_DIR) + "/../src");
+        for (const QString &f : src.entryList({"*.cpp", "*.h"}, QDir::Files)) {
+            if (f == "overview.cpp")
+                continue;
+            int n = 0;
+            for (const QString &line : QString::fromUtf8(read_file(src.filePath(f))).split('\n')) {
+                ++n;
+                QString code = line.section("//", 0, 0);
+                if (code.contains("QStorageInfo"))
+                    found << QString("%1:%2: %3").arg(f).arg(n).arg(line.trimmed());
+            }
+        }
+        check(found.isEmpty(), "no drive is asked for its size on the UI thread (QStorageInfo only in the Overview's "
+                               "background scan)" + (found.isEmpty() ? QString() : ":\n  " + found.join("\n  ")));
+    }
+
     // -- the tab menu: Duplicate Tab puts a copy (same folder and history) beside the tab, Open in New Window moves the
     // tab to a new window, Close Tab closes it
     auto tab_action = [&](int i, const QString &text) {

@@ -42,7 +42,8 @@ public:
 
     void cancel() { cancelled = true; }
     void check();   // throws Cancelled
-    void report(double done, double total = 0, const QString &text = QString());
+    // at most ~12 a second; `now`: always (a state the user must see at once, such as waiting for a tape to wind)
+    void report(double done, double total = 0, const QString &text = QString(), bool now = false);
 
 Q_SIGNALS:
     void progress(double fraction, const QString &text);   // fraction 0..1 or -1 for busy

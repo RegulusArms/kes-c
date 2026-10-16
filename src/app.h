@@ -162,6 +162,8 @@ private:
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
     QLabel *status_label, *free_label, *build_label;
+    QString free_root;   // the mount point free_label is about
+    void update_free_label();
     QSlider *zoom_slider;
     QProgressBar *thumb_progress, *build_bar;
     RecursiveBuilder *builder = nullptr;
