@@ -62,6 +62,24 @@ into.
   - Test (`ui`): fill a folder while it's shown (rows arriving in several batches, some removed), wait, and check that
     the items' cells are packed: every row but the last full, no empty cell between items.
 
+- [ ] **The file chooser's Save button stays greyed out after changing folders** (reported 2026-10-16). Saving a
+  download from a browser into Kestrel's file chooser: sometimes, after going from one folder to another, Save is
+  disabled although a folder and a name are there. Closing the chooser and saving again works.
+  - Likely cause (found in the code): `ChooserBar::update_button()` (`src/chooser.cpp`) enables Save only when the
+    window is in a real folder (`MainWindow::cur_dir()` not empty) and the name box isn't empty, but it's only called
+    when the name changes (`textChanged`) or the selection changes (`selection_changed`, from `Pane::selection_changed`
+    in `MainWindow::new_tab`), never when the folder changes. Passing through a place that isn't a folder (the
+    Overview, Starred, Recent, Trash's list, search results) disables it there; on reaching a real folder the
+    selection is usually already empty, clearing it emits nothing, so the button is never re-checked and stays off.
+    The same in reverse could leave it enabled where saving isn't possible (`accept()` re-checks `isEnabled()`, so it
+    would just do nothing).
+  - Check while fixing: also the tab switch (`tab_changed`) and the search bar opening or closing (the model changes
+    under the view), for the Open and folder choosers too (their button depends on the folder or the selection).
+  - Fix: call `chooser->update_button()` from `MainWindow::pane_path_changed()` and `tab_changed()` (and whenever the
+    pane attaches another model), not only on name and selection changes.
+  - Test (`chooser`): a Save chooser with a name, go to the Overview (and Starred), check Save is disabled, go to a
+    folder without selecting anything, check Save is enabled again; and a click on it saves.
+
 ## New features
 
 - [ ] **Extract several archives at once.** Selecting more than one archive and right-clicking offers **Extract All
