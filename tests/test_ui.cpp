@@ -4,11 +4,14 @@
 // KESTREL_UI_DUMP=file writes the list there instead of comparing (to update ui_actions.txt after a deliberate change).
 #include "common.h"
 
+#include "groups.h"
+
 #include <QAbstractSlider>
 #include <QAccessible>
 #include <QComboBox>
 #include <QDir>
 #include <QDropEvent>
+#include <QScrollBar>
 #include <QFile>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -168,6 +171,173 @@ int main(int argc, char **argv)
     check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view, and the folder is highlighted "
                                   "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
+
+    // -- a drop into a subfolder doesn't move the view: the dragged items (the view's current item among them) leave the
+    // folder, and the view stays where it was instead of scrolling to where they were. Here the subfolder is at the top
+    // (folders first) and the dragged files near the bottom, with the view scrolled to the top.
+    auto view_stays = [&](const QString &mode, int group) {
+        QString dir = home_path("long-" + mode + QString::number(group));
+        makedirs(join(dir, "aa-target"), true);
+        for (int i = 0; i < 300; ++i)
+            write_text(join(dir, QString("f%1.txt").arg(i, 3, 10, QChar('0'))), "x");
+        Pane *own = w->new_tab(dir);   // a tab of its own (the tab menu checks below look at the first tab's history)
+        struct Closer {
+            MainWindow *w;
+            Pane *p;
+            ~Closer() { w->close_tab(w->tabs->indexOf(p)); }
+        } closer{w, own};
+        w->set_view(mode);
+        w->pane()->set_grouping(group, groups::MODIFIED);
+        QAbstractItemView *v = w->pane()->view();
+        if (!wait_for([&]() { return w->pane()->all_paths().size() == 301 && v->verticalScrollBar()->maximum() > 0; }))
+            return QString("folder not shown");
+        QStringList moving = {join(dir, "f297.txt"), join(dir, "f298.txt"), join(dir, "f299.txt")};
+        w->pane()->select_paths(moving);   // also makes the first one current
+        spin(100);
+        v->verticalScrollBar()->setValue(0);
+        spin(100);
+        QModelIndex target;
+        for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++) {
+            QModelIndex i = v->model()->index(r, 0, v->rootIndex());
+            if (i.data(PathRole).toString() == join(dir, "aa-target"))
+                target = i;
+        }
+        if (!target.isValid())
+            return QString("no target");
+        QWidget *dropw = v->viewport();
+        QPointF pos = v->visualRect(target).center();
+        QMimeData data;
+        QList<QUrl> urls;
+        for (const QString &m : moving)
+            urls << QUrl::fromLocalFile(m);
+        data.setUrls(urls);
+        QDragEnterEvent enter(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &enter);
+        QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &move);
+        QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &drop);
+        if (!wait_for([&]() { return w->pane()->all_paths().size() == 298 && exists(join(dir, "aa-target/f299.txt")); }))
+            return QString("not moved");
+        spin(1000);   // re-selection and late scrolls (they come at up to 700 ms)
+        int at = v->verticalScrollBar()->value();
+        return at == 0 ? QString() : QString("scrolled to %1 of %2").arg(at).arg(v->verticalScrollBar()->maximum());
+    };
+    QString grid_r = view_stays("grid", groups::NONE), list_r = view_stays("list", groups::NONE),
+            grouped_r = view_stays("grid", groups::PERIOD);
+    check(grid_r.isEmpty() && list_r.isEmpty() && grouped_r.isEmpty(),
+          "dropping items into a subfolder leaves the view where it was (grid: " + (grid_r.isEmpty() ? "ok" : grid_r) +
+              "; list: " + (list_r.isEmpty() ? "ok" : list_r) + "; grouped: " + (grouped_r.isEmpty() ? "ok" : grouped_r) + ")");
+
+    // -- going back with the mouse's back button: the hand moving a little while the button is still down mustn't drag
+    // anything. It used to drag the folder just left (selected again in the folder above), and the drag going nowhere
+    // showed its picture sliding back into place. A drag's picture moving in the view is a QLabel with an opacity effect.
+    {
+        QString parent = home_path("flyp"), child = join(parent, "child");
+        makedirs(child, true);
+        for (int i = 0; i < 6; ++i)
+            write_text(join(child, QString("c%1.txt").arg(i)), "x");
+        Pane *own = w->new_tab(parent);
+        w->set_view("grid");
+        QAbstractItemView *v = own->view();
+        QWidget *vp = v->viewport();
+        auto flying = [&]() {
+            int n = 0;
+            for (QLabel *l : vp->findChildren<QLabel *>())
+                if (l->graphicsEffect())
+                    ++n;
+            return n;
+        };
+        auto rect_of = [&](const QString &p) {
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++) {
+                QModelIndex i = v->model()->index(r, 0, v->rootIndex());
+                if (i.data(PathRole).toString() == p)
+                    return v->visualRect(i);
+            }
+            return QRect();
+        };
+        auto send = [&](QEvent::Type t, QPoint pos, Qt::MouseButton b, Qt::MouseButtons bs) {
+            QMouseEvent e(t, QPointF(pos), vp->mapToGlobal(QPointF(pos)), b, bs, Qt::NoModifier);
+            QApplication::sendEvent(vp, &e);
+        };
+        wait_for([&]() { return !rect_of(child).isEmpty(); });
+        QPoint c = rect_of(child).center();
+        send(QEvent::MouseButtonPress, c, Qt::LeftButton, Qt::LeftButton);   // double-click into the folder
+        send(QEvent::MouseButtonRelease, c, Qt::LeftButton, Qt::NoButton);
+        send(QEvent::MouseButtonDblClick, c, Qt::LeftButton, Qt::LeftButton);
+        send(QEvent::MouseButtonRelease, c, Qt::LeftButton, Qt::NoButton);
+        wait_for([&]() { return own->path == child && !rect_of(join(child, "c1.txt")).isEmpty(); });
+        QPoint f = rect_of(join(child, "c1.txt")).center();
+        send(QEvent::MouseButtonPress, f, Qt::LeftButton, Qt::LeftButton);   // select something there
+        send(QEvent::MouseButtonRelease, f, Qt::LeftButton, Qt::NoButton);
+        send(QEvent::MouseButtonPress, f, Qt::BackButton, Qt::BackButton);   // back, the button held...
+        wait_for([&]() { return own->path == parent; });
+        spin(100);
+        for (int i = 1; i < 10; ++i)   // ...while the hand moves a little
+            send(QEvent::MouseMove, f + QPoint(i * 2, i), Qt::NoButton, Qt::BackButton);
+        send(QEvent::MouseButtonRelease, f + QPoint(20, 10), Qt::BackButton, Qt::NoButton);
+        spin(50);
+        check(own->path == parent && flying() == 0,
+              "going back with the mouse's back button, moving the mouse while it's down drags nothing (no picture of "
+              "the folder just left slides into place)");
+        w->close_tab(w->tabs->indexOf(own));
+    }
+
+    // -- the grid packs its items: item n in the n-th cell, as many columns as fit, no empty cell between items. A
+    // folder of 850 (more than the 400 a batched layout used to lay out at a time, which started the next batch on a
+    // new row after a re-layout), re-laid out by zooming and by window widths one pixel apart (some make the cells add
+    // up to exactly the width, which used to push the last column onto the next row)
+    {
+        QString dir = home_path("packed");
+        makedirs(dir, true);
+        for (int i = 0; i < 850; ++i)
+            write_text(join(dir, QString("p%1.txt").arg(i, 4, 10, QChar('0'))), "x");
+        Pane *own = w->new_tab(dir);
+        w->set_view("grid");
+        QListView *g = own->grid;
+        wait_for([&]() { return own->all_paths().size() == 850; });
+        spin(300);
+        auto unpacked = [&]() {   // "" if packed, else where it isn't
+            QAbstractItemModel *m = g->model();
+            QSize cell = g->gridSize();
+            int n = m->rowCount(g->rootIndex());
+            if (!cell.isValid() || n != 850)
+                return QString("not shown");
+            // how many columns fit: unstretched cells (the delegate's) in the width, which an item may not end exactly at
+            auto *del = qobject_cast<GridDelegate *>(g->itemDelegate());
+            int sb = g->verticalScrollBar()->isVisible() ? 0 : g->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+            int cols = del ? std::max(1, (g->viewport()->width() - sb - 1) / del->cell_size().width()) : -1;
+            int off = g->verticalScrollBar()->value();
+            for (int r = 0; r < n; ++r) {
+                QRect vr = g->visualRect(m->index(r, 0, g->rootIndex()));
+                int col = vr.x() / cell.width(), row = (vr.y() + off) / cell.height();
+                if (row * cols + col != r)
+                    return QString("item %1 in column %2, row %3 of %4 columns (width %5, cell %6)")
+                        .arg(r).arg(col).arg(row).arg(cols).arg(g->viewport()->width()).arg(cell.width());
+            }
+            return QString();
+        };
+        QString bad;
+        for (int z : {60, 200, 128}) {
+            own->zoom(0, z);
+            spin(100);
+            if (bad.isEmpty() && !unpacked().isEmpty())
+                bad = QString("zoom %1: ").arg(z) + unpacked();
+        }
+        QSize old = w->size();
+        for (int width = 800; width < 870 && bad.isEmpty(); ++width) {
+            w->resize(width, 700);
+            QCoreApplication::processEvents();
+            own->update_grid_size();
+            QCoreApplication::processEvents();
+            if (!unpacked().isEmpty())
+                bad = QString("window %1 wide: ").arg(width) + unpacked();
+        }
+        w->resize(old);
+        check(bad.isEmpty(), "the grid packs its items (no empty cell, as many columns as fit), also after zooming and at "
+                             "every window width" + (bad.isEmpty() ? QString() : " (" + bad + ")"));
+        w->close_tab(w->tabs->indexOf(own));
+    }
 
     // -- Properties windows: each a free window of its own (not modal, not kept above or attached to Kestrel), several
     // at once, and the windows they open the same

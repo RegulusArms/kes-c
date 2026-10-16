@@ -4,6 +4,21 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.10
+
+Added:
+- **Dropping into a subfolder keeps the view where it was** (`ui`): a long folder scrolled to the top, its last files
+  (the view's current item among them) dropped onto a subfolder at the top; after the move the scroll position is
+  unchanged, in the grid, the list and the grouped grid. Guards against the list jumping to where the moved items were.
+- **The mouse's back button doesn't drag** (`ui`): double-click into a folder, click a file there, go back with the
+  back button and move the mouse while it's down: no drag picture appears in the folder above. Guards against the
+  folder just left being dragged and sliding back into place.
+- **The grid is packed** (`ui`): a folder of 850 items, re-laid out by zooming and at window widths one pixel apart:
+  every item in its own cell in order, with as many columns as fit. Guards against the gap a batched layout left at
+  the 400-item batch boundary, and the empty last column when the cells added up to exactly the width.
+- **Save follows the place shown** (`chooser`): a Save chooser's button is off on the Overview and Starred and on
+  again in a folder with nothing selected, and saves there. Guards against it staying greyed out after the Overview.
+
 ## 0.3.1-alpha.9
 
 Changed:
