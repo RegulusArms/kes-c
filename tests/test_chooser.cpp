@@ -182,6 +182,33 @@ int main(int argc, char **argv)
           "...and the file is saved there");
     check(settings().value("chooser_folder").toString() == join(dir, "sub"), "the next chooser starts where the last one saved");
 
+    // Save follows the place shown: off on the Overview and Starred (no folder to save in), on again in a folder,
+    // also when nothing is selected there (nothing else re-checks it then)
+    call("SaveFile", options({{"current_folder", folder(dir)}, {"current_name", g_variant_new_string("moved.png")}}), &r);
+    w = wait_window();
+    QPushButton *save = nullptr;
+    if (w)
+        for (QPushButton *b : w->chooser->findChildren<QPushButton *>())
+            if (b->text() == "Save")
+                save = b;
+    bool on_first = save && save->isEnabled();
+    bool off_overview = false, off_starred = false, on_again = false;
+    if (w && save) {
+        w->pane()->set_path(OVERVIEW);
+        off_overview = !save->isEnabled();
+        w->pane()->set_path(places::STARRED);
+        off_starred = !save->isEnabled();
+        w->pane()->set_path(join(dir, "sub"));
+        w->pane()->view()->clearSelection();
+        on_again = save->isEnabled();
+    }
+    check(on_first && off_overview && off_starred && on_again,
+          "Save is off on the Overview and Starred, and on again on going back to a folder with nothing selected");
+    if (save)
+        save->click();
+    check(wait_for([&]() { return r.got; }) && r.uris == QStringList{file_uri(join(dir, "sub/moved.png"))},
+          "...and clicking it saves there");
+
     // -- opening
     call("OpenFile", options({{"current_folder", folder(dir)}, {"filters", png_filter()}}), &r);
     w = wait_window();

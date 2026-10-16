@@ -650,6 +650,8 @@ void MainWindow::pane_path_changed(Pane *p)
         vol = QStorageInfo(d);
     free_label->setText(!d.isEmpty() && vol.isValid() ? human_size(vol.bytesAvailable()) + " free" : QString());
     update_status();
+    if (chooser)   // Save needs a folder: re-checked in each place, not only when the name or the selection changes
+        chooser->update_button();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }

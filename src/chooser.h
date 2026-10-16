@@ -72,10 +72,10 @@ public:
     void selection_changed();
     void finish(bool ok, const QStringList &paths = {});   // once; closes the window
     void accept();
+    void update_button();   // Save / Open enabled for the folder shown, the name and the selection
     QLineEdit *name = nullptr;
 
 private:
-    void update_button();
     MainWindow *win;
     chooser::Request req;
     std::function<void(const chooser::Result &)> done;

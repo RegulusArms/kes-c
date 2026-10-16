@@ -5,81 +5,6 @@ into.
 
 ## Bugs
 
-- [ ] **The file view jumps after a drag into a subfolder** (reported 2026-10-15). Select several files or folders,
-  drag them onto a subfolder in the same view: once the move is done, the view scrolls to another place in the folder
-  instead of staying where it was. The place looks random but seems to be the same each time in a given folder.
-  (The window itself doesn't move.)
-  - Likely cause: the item pressed to start the drag is the view's current item. When the move removes it from the
-    folder, the selection model makes a neighbouring item current, and Qt's view scrolls to the new current item
-    (`QAbstractItemView::currentChanged` → `scrollTo`, while `autoScroll` is on). So the view jumps to where the
-    dragged items were, which is somewhere else in the folder whenever the user scrolled to reach the subfolder.
-    Check this first: it explains "the same spot in each folder".
-  - Other suspects if not: the rows being removed and re-laid out without keeping the scroll position (the grid's
-    batched layout, or the grouped grid without fixed cells), the "shrinking into the folder" drop animation, or a
-    re-selection afterwards (`select_later` / `try_select` → `scrollTo` in `src/pane.cpp`).
-  - Fix idea: keep the scroll position across a move out of the folder (remember it before, put it back after the
-    rows go), or don't let a current item that vanished cause a scroll (clear the current index, or set a new one
-    with `QItemSelectionModel::NoUpdate` and no scroll). Keep edge auto-scrolling while dragging, which also uses
-    `autoScroll`.
-  - Test (`ui`): scroll down a long folder, drop several items from the top onto a subfolder further down, wait for
-    the move, and check the scroll position is unchanged, in the grid and the list (and grouped).
-
-- [ ] **A folder's picture slides across the view when going back up** (reported 2026-10-15). Going back up a level
-  (with the mouse's back button; forward/back used to move between the folders), a picture of the folder you were
-  just in (its preview mosaic) slides across the view into that folder's place in the parent, for a moment, as the
-  parent folder loads. Seems to happen after selecting things in the lower folder, then going back up.
-  - What it is: the only animation in the file views is the drag "fly" (`FileView::fly()` in `src/pane.cpp`), and a
-    picture sliding *into an item's own place* is its second form: a drag that ended with nothing (refused, Esc,
-    dropped where it can't go) shows the picture going back where the items are. So a drag of that folder, from the
-    parent view, ended as "nothing" and its slide-back was drawn after the parent was shown again. (Its first form,
-    shrinking into a drop target, isn't this.)
-  - Leads to check: (1) a click on the folder in the parent (on the way in) moving a few pixels starts a drag of it
-    (`startDrag`), and that drag only finishes later, e.g. ended by the mouse's back/forward buttons or by the
-    navigation, so `fly()` runs then, with the picture and positions saved when the drag began; (2) the mouse's
-    back/forward button press is taken by `Pane::eventFilter` (go back / forward) while a drag or a press on an item
-    is still in progress in the view, which then ends it as "nothing"; (3) `drag_pm` / `from` kept from an older drag
-    and used again. Adding a log line (or a breakpoint) in `fly()` and `startDrag()` with the time and the pane's path
-    will show which.
-  - Fix ideas: don't fly back when the pane has changed folder since the drag began (compare the path, or the
-    root index), or when the drag never got further than the start distance; cancel any running fly when the pane
-    navigates; ignore (or finish cleanly) a drag when a back/forward button is pressed during it.
-  - Test (`ui`): start a drag of a folder that goes nowhere, navigate (back/forward, also with the mouse buttons)
-    before or while it ends, and check no fly label appears in the view after the navigation.
-
-- [ ] **A rare single gap in the grid** (reported 2026-10-15). Now and then one empty space appears among the items in
-  the grid, usually at the end of a row; no file is missing, the items are just arranged around one gap. Rare, not a
-  repeating pattern; seen on opening a folder fresh, or perhaps after files were added or removed.
-  - Most likely a hole left by a change in the folder model during layout: QListView in IconMode lays the folder out
-    in batches (`setLayoutMode(Batched)`, 400 at a time) while the folder model is still adding rows and sorting
-    (QFileSystemModel inserts, then sorts later), and after rows are removed or moved it can keep a cell for an item
-    that's gone until the next full layout. A one-off gap that a resize or F5 clears points to this.
-  - Also possible: the grid's cell size changing (`update_grid_size`: the scrollbar appearing after the first batch,
-    a zoom, or the window resizing) between batches, so one row was laid out with the old width.
-  - To check when it shows up: does resizing the window, F5, or switching to the list view and back close it? Grouped
-    by date or not? (A screenshot, and whether the folder was still loading.)
-  - Fix ideas: a full `doItemsLayout()` when the folder has finished loading (`directoryLoaded`) and after rows are
-    removed or the model re-sorts, coalesced so a big folder isn't laid out over and over.
-  - Test (`ui`): fill a folder while it's shown (rows arriving in several batches, some removed), wait, and check that
-    the items' cells are packed: every row but the last full, no empty cell between items.
-
-- [ ] **The file chooser's Save button stays greyed out after changing folders** (reported 2026-10-16). Saving a
-  download from a browser into Kestrel's file chooser: sometimes, after going from one folder to another, Save is
-  disabled although a folder and a name are there. Closing the chooser and saving again works.
-  - Likely cause (found in the code): `ChooserBar::update_button()` (`src/chooser.cpp`) enables Save only when the
-    window is in a real folder (`MainWindow::cur_dir()` not empty) and the name box isn't empty, but it's only called
-    when the name changes (`textChanged`) or the selection changes (`selection_changed`, from `Pane::selection_changed`
-    in `MainWindow::new_tab`), never when the folder changes. Passing through a place that isn't a folder (the
-    Overview, Starred, Recent, Trash's list, search results) disables it there; on reaching a real folder the
-    selection is usually already empty, clearing it emits nothing, so the button is never re-checked and stays off.
-    The same in reverse could leave it enabled where saving isn't possible (`accept()` re-checks `isEnabled()`, so it
-    would just do nothing).
-  - Check while fixing: also the tab switch (`tab_changed`) and the search bar opening or closing (the model changes
-    under the view), for the Open and folder choosers too (their button depends on the folder or the selection).
-  - Fix: call `chooser->update_button()` from `MainWindow::pane_path_changed()` and `tab_changed()` (and whenever the
-    pane attaches another model), not only on name and selection changes.
-  - Test (`chooser`): a Save chooser with a name, go to the Overview (and Starred), check Save is disabled, go to a
-    folder without selecting anything, check Save is enabled again; and a click on it saves.
-
 - [ ] **USB floppy drives freeze Kestrel while they read** (reported 2026-10-16). With a USB floppy drive, Kestrel
   freezes while the drive is reading. The drive doesn't give the computer the floppy directly: it's a go-between that
   reads the disk and passes the data on, slowly (seconds per request, worse on a first read or a bad sector), and
@@ -553,4 +478,7 @@ they still happen, before then.
 
 ## Done
 
-(nothing yet)
+- [x] **The file view jumps after a drag into a subfolder** (fixed in 0.3.1-alpha.10). Cause confirmed: the current item leaving the folder made Qt scroll to its neighbour (seen in the list view). `FileView` no longer scrolls when the current item is removed. Test: `ui`.
+- [x] **A folder's picture slides across the view when going back up** (fixed in 0.3.1-alpha.10). Cause: Qt starts a drag on a move with any button held; a move with the mouse's back button still down dragged the folder just left (selected again above), and the drag going nowhere slid back. Only the left button drags now, and a drag that outlives its folder doesn't fly back. Test: `ui`.
+- [x] **A rare single gap in the grid** (fixed in 0.3.1-alpha.10). Two causes found: a batched layout redone started each 400-item batch on a new row (now one pass: ~20 ms for 50,000 items), and cells adding up to exactly the width pushed the last column onto the next row (one pixel of slack). Test: `ui`.
+- [x] **The file chooser's Save button stays greyed out after changing folders** (fixed in 0.3.1-alpha.10). Cause as found: the button was only re-checked on name and selection changes; now on every folder and tab change too. Test: `chooser`.

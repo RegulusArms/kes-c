@@ -2,7 +2,22 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.9
+## 0.3.1-alpha.10
+
+Bug fixes:
+- **The view no longer jumps after dropping files into a subfolder.** Moving items into a folder in the same view
+  scrolled the list to where the moved items had been (often far from where you were). It now stays put.
+- **No more folder picture sliding across the view when going back.** Going back with the mouse's back button while
+  the mouse moved a little started an accidental drag of the folder you had just left, and its picture slid back into
+  place. Only the left mouse button starts a drag now.
+- **No more gaps in the grid.** After zooming, resizing or changes in a folder of more than 400 items, the grid could
+  leave one empty space at the end of a row; and at some window widths every row ended with an empty space. Both are
+  fixed: the grid is always packed, with as many columns as fit.
+- **The file chooser's Save button no longer stays greyed out.** After passing through the Overview, Starred or
+  Recent while saving a download, Save could stay disabled in the next folder until the chooser was reopened. It now
+  follows the folder shown.
+
+## 0.3.1-alpha.9 (2026-10-15)
 
 - **No builds for documentation-only changes:** a push or pull request that only changes Markdown files (the README,
   the docs, the changelogs, the to-do list) no longer runs the build, the tests or the package jobs, and doesn't
