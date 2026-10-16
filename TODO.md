@@ -80,6 +80,58 @@ into.
   - Test (`chooser`): a Save chooser with a name, go to the Overview (and Starred), check Save is disabled, go to a
     folder without selecting anything, check Save is enabled again; and a click on it saves.
 
+### Deferred to LTFS support
+
+These are left until the **LTFS tape support** item is implemented, and fixed with it: don't fix them, or check whether
+they still happen, before then.
+
+- [ ] **Copying to an LTFS tape fails with "no permission", also as administrator** (reported 2026-10-16). Tape mounted
+  with `sudo ltfs -o devname=/dev/sg0 -o allow_other -o uid=$(id -u) -o gid=$(id -g) -o umask=022 /media/tape`:
+  Kestrel says it doesn't have permission to copy files there, and Retry as Administrator fails the same way.
+  - Not real permissions: the mount point is the user's (`user:user`, 755; `access(W_OK)` says writable; mount
+    options `user_id=0,group_id=0,default_permissions,allow_other`).
+  - Likely cause (from the code, not yet confirmed on the tape): every copy is written to a hidden part file and then
+    put under its real name with `renameat2(RENAME_NOREPLACE)` (never replacing a file that appeared meanwhile).
+    Where the file system rejects that flag (EINVAL), both Kestrel (`Ops::claim_name` in `src/fileops.cpp`) and the
+    admin helper (`src/admin_helper.cpp`, the same fallback) fall back to `link()` the part to the name, then remove
+    the part. LTFS runs on FUSE 2 (no rename flags) and has no hard links, so `link()` fails, most likely with EPERM,
+    which Kestrel treats as "permission denied" (`OSError::permission()`: EACCES or EPERM) and offers the admin
+    session, where root hits the same EPERM.
+  - Confirm (needs a test write, ask the user first, e.g. on a scratch folder on the tape or on another FUSE file
+    system without hard links): `strace -f -e trace=renameat2,link,linkat` on a Kestrel copy, expecting
+    `renameat2(…, RENAME_NOREPLACE) = -1 EINVAL` then `linkat(…) = -1 EPERM`.
+  - Fix: when `link()` also fails for lack of support (EPERM, ENOTSUP/EOPNOTSUPP, ENOSYS, EMLINK on a file system that
+    doesn't do links), fall back to checking that the name is still free and then a plain `rename()` (the same
+    check-then-rename already used for folders): not atomic, a tiny window where another program's file could be
+    replaced, so say so in a comment (CLAUDE.md: the next best thing). Remember per file system that it has no
+    RENAME_NOREPLACE / link, so a big copy doesn't try and fail twice per file. Same change in the admin helper.
+  - Also: an EPERM from `link()` here isn't a permission problem, so don't offer **Retry as Administrator** for it;
+    the message should say what failed ("this drive doesn't support … ; file not copied").
+  - Test (`fileops` and `admin_helper`): a copy onto a file system where `renameat2` flags give EINVAL and `link()`
+    gives EPERM (simulated: a FUSE test file system, or a seam that makes those calls fail) succeeds, keeps an
+    existing file it mustn't replace, and leaves no part file; no admin retry is offered.
+  - **Deferred:** fix this as part of the LTFS support item (New features), not before. Don't fix it or check whether
+    it still happens until that work is done.
+
+- [ ] **Opening a checksum file on a tape freezes Kestrel until the tape gets there** (reported 2026-10-16).
+  Double-clicking a checksum file on an LTFS tape freezes the window while the tape seeks to it; once the file has
+  been read and the Verify Checksums window shows, everything is normal again (the hashing itself already runs on a
+  thread).
+  - Cause (found in the code): `MainWindow::open_paths` (`src/opening.cpp`) calls `hashcheck::open_dialog()`, which
+    reads and parses the whole checksum file on the UI thread (`hashcheck::parse()` → `read_file()`) to decide whether
+    it lists anything (a file that lists nothing opens as text instead). On a tape that read waits for the tape.
+    The same synchronous read is in Properties → Checksums → **Browse…** (`hashcheck::parse` in `src/dialogs.cpp`).
+  - Fix: read and parse on a worker thread (`fileops::run_task`), with the Verify window opening at once in a
+    "Reading the checksum file…" state (with Cancel), or a status-bar job; then fill it in, or, if it lists nothing,
+    open the file as text as now. The same for Browse…. Check the rest of the Verify window for other UI-thread file
+    access (does a row check a file's existence or size before hashing?).
+  - Part of the general LTFS item (nothing on the UI thread may wait on the tape): look for the other synchronous
+    reads that run on opening a file (checking an archive's type, image size, the info panel).
+  - Test (`fileops` or `theme`, whichever has the hash tests): opening a checksum file whose read blocks (a FIFO that
+    isn't written to yet, or a slow-read seam) keeps the event loop running: a timer fires while it's being read.
+  - **Deferred:** fix this as part of the LTFS support item (New features), not before. Don't fix it or check whether
+    it still happens until that work is done.
+
 ## New features
 
 - [ ] **Extract several archives at once.** Selecting more than one archive and right-clicking offers **Extract All
@@ -402,6 +454,41 @@ into.
   - Refused messages (malformed, unknown type, another protocol) could be counted too, to spot a misbehaving program on
     the session bus.
   - Mostly a debugging and curiosity tool; maybe only shown with a "Show developer tools" preference.
+
+- [ ] **LTFS tape support: no freezing, and tape-friendly behaviour.** LTFS (Linear Tape File System) mounts a tape
+  as a FUSE file system (here: `/media/tape`, source `ltfs:/dev/sg0`, the `ltfs` tools in `/usr/local/bin`). Listing a
+  folder is cheap (LTFS keeps the index in memory), but anything that reads a file's data makes the drive seek along
+  the tape, seconds to minutes per file. Kestrel treats the mount like a fast disk today, so the window can freeze
+  while the tape is winding.
+  - **Bugs to fix with this** (Bugs → Deferred to LTFS support): copying to a tape fails with "no permission", also
+    as administrator; opening a checksum file on a tape freezes Kestrel until the tape gets there.
+  - **Recognise a tape:** a mount whose source starts `ltfs:` (or whose FUSE subtype / process is ltfs), and remember
+    it per volume (its UUID from LTFS's virtual extended attributes, as with the friendly drive names item). Show it
+    with a tape icon and its volume name on the Overview and in the sidebar.
+  - **Never freeze the window:** nothing on the UI thread may wait on the tape. Check each place Kestrel touches files
+    synchronously in the UI thread (`stat`/`isdir` on navigation, `QStorageInfo` for free space, folder size in
+    Properties, the info panel, opening a file's type, the drive list refresh) and move them to threads with a
+    "Waiting for the tape…" state, so the window stays usable and Cancel works.
+  - **Don't read the tape behind the user's back:** on a tape, by default no thumbnails, folder preview mosaics, video
+    stills, GIF/WebM playback, metadata reading for grouping by Date Taken, content search or checksum-on-open; each
+    shown as a plain icon instead. A "Load previews from tape" button per folder for when the user wants them
+    (read in tape order, see below), and a per-volume setting to allow it.
+  - **Read in tape order:** copying many files off a tape, read them sorted by where they are on the tape (LTFS's
+    virtual extended attributes for a file's partition and start block, e.g. `ltfs.partition` / `ltfs.startblock`;
+    check the installed LTFS's names), not in name order, so the drive streams instead of shuttling back and forth.
+    The same for "Load previews" and checksums.
+  - **Writing:** one write job at a time to a tape (queue the others; two at once makes it seek between them),
+    large sequential writes, and a warning before copying many small files (slow and wasteful on tape). After a copy,
+    offer to **Sync the index** (LTFS writes its index on sync or unmount; `ltfs.sync` or the mount's sync option),
+    and warn before unmounting/ejecting while a sync or write is still running.
+  - **Tape status on the Overview card:** volume name, capacity used and remaining, whether a sync is pending, the
+    number of loads, any media warnings (from LTFS's virtual extended attributes); Eject (unmount, then unload) with
+    a clear "writing the index… don't remove the tape" while it runs.
+  - **Progress that explains waits:** a copy waiting on the tape says "Positioning tape…" rather than looking stuck;
+    the status bar's job shows the current file's position and the transfer speed.
+  - Later: mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (these need permissions on the drive device; check
+    how the user's setup grants them, and don't go beyond the admin-session scope), and a catalogue of tapes that
+    aren't loaded (their index saved when last mounted, to search what's on which tape).
 
 ## Done
 
