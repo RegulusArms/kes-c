@@ -80,6 +80,27 @@ into.
   - Test (`chooser`): a Save chooser with a name, go to the Overview (and Starred), check Save is disabled, go to a
     folder without selecting anything, check Save is enabled again; and a click on it saves.
 
+- [ ] **USB floppy drives freeze Kestrel while they read** (reported 2026-10-16). With a USB floppy drive, Kestrel
+  freezes while the drive is reading. The drive doesn't give the computer the floppy directly: it's a go-between that
+  reads the disk and passes the data on, slowly (seconds per request, worse on a first read or a bad sector), and
+  Kestrel waits for it on the UI thread.
+  - Not connected when this was recorded: check how it shows up next time (`lsblk -o NAME,SIZE,RM,TRAN,FSTYPE,MODEL`,
+    `findmnt`, `udisksctl info`): a USB block device with a 1.44 MB (or 720 KB) FAT file system, or something else
+    (a floppy emulator, a FUSE or GVFS mount).
+  - Same root cause as the tape freezes (Bugs → Deferred to LTFS support, and the LTFS support item): Kestrel does
+    file-system work on the UI thread assuming the drive answers at once (`stat`/`isdir` on navigation, free space,
+    folder previews and thumbnails, the info panel, reading a checksum or archive file to decide how to open it,
+    the drive list's refresh), and FAT listing on a floppy is slow too.
+  - Fix together with the LTFS work as one **slow drives** mode rather than two separate fixes: recognise slow media
+    (a floppy: removable, tiny capacity, the USB floppy (UFI) interface or the drive's model; a tape: LTFS; maybe any
+    drive whose first answers are slow), then for it: nothing on the UI thread may wait on it ("Reading the
+    floppy…" instead of a frozen window, with Cancel), no thumbnails / folder mosaics / metadata reads unless asked,
+    one job at a time on it, and a clear "drive is busy" state on its Overview card.
+  - Not deferred like the LTFS bugs (the user didn't ask for that), but best fixed with the same change; decide with
+    the user when the LTFS item is picked up.
+  - Test (`devices` or `fileops`): a folder whose file-system calls block (a FUSE test file system, or a FIFO / slow
+    seam) can be opened and browsed while a timer keeps firing; Cancel stops the wait.
+
 ### Deferred to LTFS support
 
 These are left until the **LTFS tape support** item is implemented, and fixed with it: don't fix them, or check whether
