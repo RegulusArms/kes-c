@@ -5,6 +5,7 @@
 #include "animate.h"
 #include "app.h"
 #include "chooser.h"
+#include "drives.h"
 #include "fileops.h"
 #include "focus.h"
 #include "groups.h"
@@ -771,15 +772,18 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         return true;
     }
     QString p = abspath(expanduser(target));
-    if (isfile(p)) {
+    // on a tape or floppy, these checks wait on the drive: it's taken as a folder, and the folder model (which reads it
+    // on its own thread) shows what's there, or nothing
+    bool slow = drives::slow_kind(p) != drives::Slow::None;
+    if (!slow && isfile(p)) {
         select = p;
         p = dirname(p);
     }
-    if (!isdir(p)) {
+    if (!slow && !isdir(p)) {
         warn(this, "Not found", QString("“%1” does not exist.").arg(p));
         return false;
     }
-    if (!util::access(p, R_OK | X_OK)) {
+    if (!slow && !util::access(p, R_OK | X_OK)) {
         warn(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
         return false;
     }

@@ -154,6 +154,34 @@ private:
     int fd;
 };
 
+// Claiming a new name: RENAME_NOREPLACE, else link(); some file systems have neither (LTFS: no rename flags, and link()
+// fails with EPERM). Tests: KESTREL_TEST_NO_LINK=1 acts as such a file system (as Kestrel's own util does).
+static bool test_no_link()
+{
+    const char *v = getenv("KESTREL_TEST_NO_LINK");
+    return v && std::string(v) == "1";
+}
+
+static int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EINVAL;
+        return -1;
+    }
+    return renameat2(src_dir, src, dst_dir, dst, RENAME_NOREPLACE);
+}
+
+static int link_at(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EPERM;
+        return -1;
+    }
+    return linkat(src_dir, src, dst_dir, dst, 0);
+}
+
+static bool no_link_support(int e) { return e == EPERM || e == ENOTSUP || e == EOPNOTSUPP || e == ENOSYS || e == EMLINK; }
+
 static bool stat_at(int dirfd, const std::string &name, struct stat *st)   // lstat, relative to dirfd
 {
     return fstatat(dirfd, name.c_str(), st, AT_SYMLINK_NOFOLLOW) == 0;
@@ -551,23 +579,29 @@ public:
     // (RENAME_NOREPLACE; without it, link() for a file or link, check-then-rename for a folder)
     void claim_name(int dirfd, const std::string &part, const std::string &name)
     {
-        if (renameat2(dirfd, part.c_str(), dirfd, name.c_str(), RENAME_NOREPLACE) == 0)
+        if (rename_noreplace(dirfd, part.c_str(), dirfd, name.c_str()) == 0)
             return;
         int e = errno;
         if (e == EINVAL) {
             struct stat st, existing;
-            if (stat_at(dirfd, part, &st) && S_ISDIR(st.st_mode)) {
+            bool dir = stat_at(dirfd, part, &st) && S_ISDIR(st.st_mode), check_then_rename = dir;
+            if (!dir) {
+                if (link_at(dirfd, part.c_str(), dirfd, name.c_str()) == 0) {
+                    unlinkat(dirfd, part.c_str(), 0);
+                    return;
+                }
+                e = errno;
+                check_then_rename = no_link_support(e);
+            }
+            // a folder can't be linked, and some file systems link nothing (LTFS: link() fails with EPERM): check,
+            // then rename. Not atomic (a file appearing between the two could be replaced); the best they allow
+            if (check_then_rename) {
                 if (stat_at(dirfd, name, &existing))
                     e = EEXIST;
                 else if (renameat(dirfd, part.c_str(), dirfd, name.c_str()) == 0)
                     return;
                 else
                     e = errno;
-            } else if (linkat(dirfd, part.c_str(), dirfd, name.c_str(), 0) == 0) {
-                unlinkat(dirfd, part.c_str(), 0);
-                return;
-            } else {
-                e = errno;
             }
         }
         if (e == EEXIST)
@@ -710,16 +744,25 @@ static Fd open_new_file(const Walk &w)
 // a finished part file (in w's folder) given w's name, which must still be free: never replaces anything
 static void put_new(const Walk &w, const std::string &part)
 {
-    if (renameat2(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str(), RENAME_NOREPLACE) == 0)
+    if (rename_noreplace(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str()) == 0)
         return;
     if (errno == EEXIST)
         throw Failure(w.name + " already exists");
     if (errno != EINVAL)
         fail_errno();
     // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken
-    if (linkat(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str(), 0) != 0)
+    if (link_at(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str()) == 0) {
+        unlinkat(w.dir.get(), part.c_str(), 0);
+        return;
+    }
+    if (!no_link_support(errno))
         fail_errno();
-    unlinkat(w.dir.get(), part.c_str(), 0);
+    // nor hard links (LTFS): check, then rename (not atomic; the best such a file system allows)
+    struct stat st;
+    if (stat_at(w.dir.get(), w.name, &st))
+        throw Failure(w.name + " already exists");
+    if (renameat(w.dir.get(), part.c_str(), w.dir.get(), w.name.c_str()) != 0)
+        fail_errno();
 }
 
 static void handle(const QJsonObject &req)

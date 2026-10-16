@@ -65,6 +65,13 @@
     - The tag descriptions and "Accepts" types were written with the help of an AI tool while Kestrel was being made, and may not be completely accurate. They ship as fixed text: Kestrel itself runs no AI. Descriptions outside the common tags are built from exiftool's tag names and categories.
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum, or **Browse…** for a checksum file that lists the file (see [Checksum files](features.md#checksum-files)).
 
+**Tapes (LTFS) and floppy disks**
+- Recognised automatically (a tape by its LTFS mount, a floppy as a removable disk of a few MB), with their own icons in the sidebar and on the Overview, where a tape shows its volume name and LTFS's details.
+- Kestrel never waits for them in the window: their size is read in the background, and opening a folder or a checksum file on one doesn't freeze anything, even while another program is using the drive.
+- Thumbnails, folder previews, image details, GIF/WebM playback and dates taken aren't read from them (each would make a tape wind or a floppy read for a long time). Right-click the drive → **Show Previews on This Drive** to allow them.
+- One job at a time per drive: a second copy waits ("Waiting for the tape…"). Files are read off a tape in the order they lie on it, with "Positioning the tape" while it winds.
+- After a copy to a tape its index is written (also **Write Tape Index Now** on the drive's menu); copying more than 1,000 small files to a tape asks first, since an archive of them is much faster. Unmounting runs in the background, and asks first while a job still uses the drive.
+
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
 - **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong.

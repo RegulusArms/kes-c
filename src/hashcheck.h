@@ -84,8 +84,9 @@ private:
     QPushButton *again, *stop_btn;
 };
 
-// Opening a checksum file: the Verify Checksums dialog, or false if it lists nothing (open it as a text file).
-bool open_dialog(QWidget *parent, const QString &path);
+// Verify Checksums for path: the file is read and parsed on a worker (a checksum file on a tape or floppy can take long to
+// read), then the window opens; one that lists nothing calls not_listing() instead (it opens as an ordinary file).
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing);
 
 // ---- making checksum files
 

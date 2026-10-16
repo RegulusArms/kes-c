@@ -2,7 +2,29 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.10
+## 0.3.1-alpha.11
+
+**Tapes (LTFS) and floppy disks:**
+- **No more freezing.** Kestrel froze while a tape or a USB floppy drive was busy, even when the copy was running in a
+  terminal and no Kestrel window was on the drive: it asked every drive for its size every few seconds, and a busy
+  tape answers only when it's free. Drive sizes are now read in the background everywhere (sidebar, Overview, status
+  bar, Properties), and opening a folder or a checksum file on a slow drive no longer waits for it either.
+- **Copying to an LTFS tape works.** It failed with "no permission", also as administrator: a tape can't do the
+  special rename and hard links Kestrel used to put a finished copy under its name safely. Kestrel now falls back to
+  checking the name is free and renaming on such drives (also for renames, archives and the admin session).
+- **Tapes and floppies are recognised** and shown with their own icons; a tape appears on the Overview (it didn't
+  before) with its volume name and details from LTFS.
+- **No previews from them unless you ask:** thumbnails, folder previews, image details, GIF/WebM playback and dates
+  taken would make a tape wind or a floppy read for ages, so they're off there. Right-click the drive → **Show
+  Previews on This Drive** to allow them (they're then read in the background).
+- **One job at a time per tape or floppy:** a second copy waits ("Waiting for the tape…") instead of competing.
+- **Tape-friendly copies:** files are read off a tape in the order they lie on it, so the drive streams instead of
+  winding back and forth, and "Positioning the tape" shows while it winds. After a copy to a tape, its index is
+  written (or right-click it → **Write Tape Index Now**); copying more than 1,000 small files to a tape asks first.
+- Unmounting a drive no longer freezes the window (for a tape it writes the index first), and it asks first while a
+  job is still using the drive.
+
+## 0.3.1-alpha.10 (2026-10-16)
 
 Bug fixes:
 - **The view no longer jumps after dropping files into a subfolder.** Moving items into a folder in the same view

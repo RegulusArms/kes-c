@@ -3,6 +3,8 @@
 #include "animate.h"
 #include "atc.h"
 #include "dialogs.h"
+#include "drives.h"
+#include "fileops.h"
 #include "groups.h"
 #include "metadata.h"
 #include "overview.h"
@@ -28,7 +30,6 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
-#include <QStorageInfo>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -811,6 +812,7 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     on_palette_change(this, [this]() { refresh(); });   // the headers' colour is set per item
     timer.setInterval(4000);
     connect(&timer, &QTimer::timeout, this, &Sidebar::check_mounts);
+    connect(drives::Sizes::instance(), &drives::Sizes::changed, this, &Sidebar::check_mounts);   // a size or tape name came
     timer.start();
 }
 
@@ -907,27 +909,34 @@ QList<Sidebar::Entry> Sidebar::in_order(const QList<Entry> &entries, const QStri
     return out;
 }
 
+// From the mount table, which asks no drive anything; the sizes come from drives::Sizes (read on a worker). A tape or a
+// floppy busy with another program's copy would otherwise hold the window every time this runs (every 4 s).
 QList<Sidebar::Mount> Sidebar::mount_list() const
 {
     QList<Mount> out;
-    for (const QStorageInfo &v : QStorageInfo::mountedVolumes()) {
-        QString dev = QString::fromUtf8(v.device());
-        QString root = v.rootPath();
-        if (!v.isValid() || !v.isReady() || root == "/")
+    QSet<QString> seen;
+    for (const drives::Mount &mt : drives::mounts()) {
+        QString dev = mt.source, root = mt.root;
+        if (root == "/" || seen.contains(root))
             continue;
-        bool sys_root = false;
-        for (const char *pre : {"/boot", "/snap", "/var/snap", "/run/", "/sys"})
-            sys_root = sys_root || root.startsWith(pre);
-        if (!dev.startsWith("/dev/") || sys_root) {
-            if (!(root.startsWith("/media/") || root.startsWith("/run/media/") || root.startsWith("/mnt")))
+        drives::Slow slow = drives::slow_kind(root);
+        if (slow == drives::Slow::None) {
+            bool sys_root = false;
+            for (const char *pre : {"/boot", "/snap", "/var/snap", "/run/", "/sys", "/proc", "/dev"})
+                sys_root = sys_root || root.startsWith(pre);
+            if (!dev.startsWith("/dev/") || sys_root) {
+                if (!(root.startsWith("/media/") || root.startsWith("/run/media/") || root.startsWith("/mnt")))
+                    continue;
+            }
+            if (dev.startsWith("/dev/loop"))
                 continue;
         }
-        if (dev.startsWith("/dev/loop"))
-            continue;
-        QString name = v.displayName();
+        seen << root;
+        drives::Sizes::Info info = drives::Sizes::instance()->get(root);
+        QString name = slow == drives::Slow::Tape && !info.volume_name.isEmpty() ? info.volume_name : drives::device_label(dev);
         if (name.isEmpty())
             name = basename(root);
-        out << Mount{name, root, dev, v.bytesTotal()};
+        out << Mount{name, root, dev, info.total > 0 ? info.total : 0};
     }
     std::sort(out.begin(), out.end(), [](const Mount &a, const Mount &b) { return a.root < b.root; });
     return out;
@@ -975,8 +984,11 @@ void Sidebar::refresh()
     for (const Mount &m : mounts) {
         QString label = m.total ? QString("%1 (%2)").arg(m.name, human_size(m.total)) : m.name;
         bool removable = m.root.startsWith("/media/") || m.root.startsWith("/run/media/");
-        device_list << Entry{label, m.root, theme_icon({removable ? "drive-removable-media" : "drive-harddisk", "folder"}),
-                             "mount", m.dev};
+        drives::Slow slow = drives::slow_kind(m.root);
+        QIcon ic = slow == drives::Slow::Tape     ? theme_icon({"media-tape", "drive-removable-media", "folder"})
+                   : slow == drives::Slow::Floppy ? theme_icon({"media-floppy", "drive-removable-media", "folder"})
+                   : theme_icon({removable ? "drive-removable-media" : "drive-harddisk", "folder"});
+        device_list << Entry{label, m.root, ic, "mount", m.dev};
     }
     phones = overview::phone_infos(monitor);
     for (int i = 0; i < phones.size(); ++i) {
@@ -1199,7 +1211,8 @@ void Sidebar::menu(const QPoint &pos)
     QMenu m(this);
     m.addAction("Open", this, [this, path]() { Q_EMIT open_path(path, false); });
     m.addAction("Open in New Tab", this, [this, path]() { Q_EMIT open_path(path, true); });
-    if (kind != "phone" && isdir(path))   // a stat on a phone can wait behind its transfers
+    // a stat on a phone can wait behind its transfers, and a mount point is a folder anyway
+    if (kind == "mount" || (kind != "phone" && isdir(path)))
         m.addAction("Open in Terminal", this, [path]() { open_terminal(path); });
     if (kind == "bookmark") {
         int i = extra.toInt();
@@ -1214,6 +1227,15 @@ void Sidebar::menu(const QPoint &pos)
         if (which("bleachbit"))   // fileops::can_shred
             m.addAction("Empty Trash with BleachBit…", this, [this]() { Q_EMIT shred_trash_requested(); });
     } else if (kind == "mount") {
+        drives::Slow slow = drives::slow_kind(path);
+        if (slow != drives::Slow::None) {
+            m.addSeparator();
+            if (slow == drives::Slow::Tape)
+                m.addAction("Write Tape Index Now", this, [this, path]() { drives::sync_tape_job(this, path); });
+            QAction *pv = m.addAction("Show Previews on This Drive", this, [path](bool on) { drives::set_previews_allowed(path, on); });
+            pv->setCheckable(true);
+            pv->setChecked(drives::previews_allowed(path));
+        }
         m.addSeparator();
         m.addAction("Unmount", this, [this, path]() { unmount(path); });
     } else if (kind == "phone" && phones.value(extra.toInt()).mount) {
@@ -1225,16 +1247,39 @@ void Sidebar::menu(const QPoint &pos)
     m.exec(viewport()->mapToGlobal(pos));
 }
 
+// In the background: unmounting a tape writes its index first (it can take a while), and a floppy's unmount waits for
+// its last writes. Asks first while a Kestrel job still uses the drive.
 void Sidebar::unmount(const QString &path)
 {
-    auto r = proc::run({"gio", "mount", "-u", path});
-    if (r.rc != 0)
-        r = proc::run({"umount", path});
-    if (r.rc != 0) {
-        QString err = QString::fromUtf8(r.err);
-        warn(this, "Unmount", err.isEmpty() ? "Unmount failed" : err);
+    drives::Slow slow = drives::slow_kind(path);
+    QString what = slow == drives::Slow::None ? QString("drive") : drives::slow_name(slow);
+    QPointer<Sidebar> self(this);
+    auto go = [self, path, slow, what]() {
+        if (!self)
+            return;
+        QString title = slow == drives::Slow::Tape ? QString("Unmounting the tape: writing its index, don't remove it")
+                                                   : "Unmounting " + basename(path);
+        fileops::run_task(
+            self, title,
+            [path]() {
+                auto r = proc::run({"gio", "mount", "-u", path}, 600000);
+                if (r.rc != 0)
+                    r = proc::run({"umount", path}, 600000);
+                return QVariant(r.rc == 0 ? QString() : QString::fromUtf8(r.err).trimmed());
+            },
+            [self](const QVariant &err) {
+                if (!self)
+                    return;
+                if (!err.toString().isEmpty())
+                    warn(self, "Unmount", err.toString());
+                self->refresh();
+            });
+    };
+    if (drives::Lanes::busy(path)) {
+        ask_yes(this, "Unmount", QString("A job is still reading or writing this %1. Unmount it anyway?").arg(what), go);
+        return;
     }
-    refresh();
+    go();
 }
 
 void Sidebar::eject_phone(int i)
@@ -1502,6 +1547,65 @@ void InfoPanel::refresh()
     struct stat st;
     if (!stat_(path, st))
         lstat_(path, st);
+    // a tape or floppy: listing a folder and reading an image's details can wait on the drive, so they're read on a
+    // worker (and an image's details only if the user allowed previews for that drive)
+    drives::Slow slow = drives::slow_kind(path);
+    ++gen;
+    if (slow != drives::Slow::None) {
+        int my = gen;
+        QString p = path;
+        bool dir = isdir(path), details = is_image(path) && drives::previews_allowed(path);
+        if (dir)
+            row("Contents", "counting…");
+        else
+            row("Size", human_size(qint64(st.st_size)));
+        row("Modified", fmt_time(st.st_mtime, "%Y-%m-%d %H:%M"));
+        if (is_image(path) && !details)
+            row("Details", QString("not read from this %1 (right-click the drive: Show Previews on This Drive)")
+                               .arg(drives::slow_name(slow)));
+        QPointer<InfoPanel> self(this);
+        fileops::run_task(
+            this, "",
+            [p, dir, details]() {
+                QVariantMap r;
+                if (dir) {
+                    try {
+                        r["count"] = int(listdir(p).size());
+                    } catch (const OSError &) {
+                        r["count"] = -1;
+                    }
+                }
+                if (details) {
+                    QVariantList basic, ai;
+                    for (const auto &[k, v] : metadata::basic_info(p))
+                        basic << QVariant(QStringList{k, v});
+                    for (const auto &[k, v] : metadata::ai_info(p))
+                        ai << QVariant(QStringList{k, v});
+                    r["basic"] = basic;
+                    r["ai"] = ai;
+                }
+                return QVariant(r);
+            },
+            [self, my, dir](const QVariant &res) {
+                if (!self || self->gen != my)
+                    return;
+                QVariantMap r = res.toMap();
+                if (dir) {
+                    int n = r.value("count").toInt();
+                    QWidget *f = self->form->itemAt(0, QFormLayout::FieldRole) ? self->form->itemAt(0, QFormLayout::FieldRole)->widget() : nullptr;
+                    if (auto *lab = qobject_cast<QLabel *>(f))
+                        lab->setText(n < 0 ? QString("unreadable") : QString("%1 item%2").arg(n).arg(n != 1 ? "s" : ""));
+                }
+                QList<QPair<QString, QString>> basic, ai;
+                for (const QVariant &v : r.value("basic").toList())
+                    basic << qMakePair(v.toStringList().value(0), v.toStringList().value(1));
+                for (const QVariant &v : r.value("ai").toList())
+                    ai << qMakePair(v.toStringList().value(0), v.toStringList().value(1));
+                self->add_details(basic, ai);
+            },
+            true);
+        return;
+    }
     if (isdir(path)) {
         try {
             int n = listdir(path).size();
@@ -1520,27 +1624,31 @@ void InfoPanel::refresh()
         } catch (const OSError &) {
         }
     }
-    if (is_image(path)) {
-        for (const auto &[k, v] : metadata::basic_info(path))
-            row(k, v);
-        for (const auto &[k, v] : metadata::ai_info(path)) {
-            auto *lab = new QLabel("<b>" + k.toHtmlEscaped() + "</b>");
-            extra->addWidget(lab);
-            if (v.size() > 60 || v.contains('\n')) {
-                auto *ed = new QPlainTextEdit(v);
-                ed->setReadOnly(true);
-                ed->setMaximumHeight(120);
-                extra->addWidget(ed);
-                auto *btn = new QPushButton("Copy");
-                QString text = v;
-                connect(btn, &QPushButton::clicked, this, [text]() { QGuiApplication::clipboard()->setText(text); });
-                extra->addWidget(btn);
-            } else {
-                auto *tl = new QLabel(v);
-                tl->setWordWrap(true);
-                tl->setTextInteractionFlags(Qt::TextSelectableByMouse);
-                extra->addWidget(tl);
-            }
+    if (is_image(path))
+        add_details(metadata::basic_info(path), metadata::ai_info(path));
+}
+
+void InfoPanel::add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai)
+{
+    for (const auto &[k, v] : basic)
+        row(k, v);
+    for (const auto &[k, v] : ai) {
+        auto *lab = new QLabel("<b>" + k.toHtmlEscaped() + "</b>");
+        extra->addWidget(lab);
+        if (v.size() > 60 || v.contains('\n')) {
+            auto *ed = new QPlainTextEdit(v);
+            ed->setReadOnly(true);
+            ed->setMaximumHeight(120);
+            extra->addWidget(ed);
+            auto *btn = new QPushButton("Copy");
+            QString text = v;
+            connect(btn, &QPushButton::clicked, this, [text]() { QGuiApplication::clipboard()->setText(text); });
+            extra->addWidget(btn);
+        } else {
+            auto *tl = new QLabel(v);
+            tl->setWordWrap(true);
+            tl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            extra->addWidget(tl);
         }
     }
 }

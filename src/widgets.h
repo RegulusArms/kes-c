@@ -334,7 +334,9 @@ private:
     void clear();
     void row(const QString &k, const QString &v);
     void refresh();
+    void add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai);
     ThumbnailManager *thumbs;
+    int gen = 0;   // a slow drive's details, read on a worker, are for the path shown when they were asked
     QLabel *preview;
     QLabel *title;
     QFormLayout *form;
