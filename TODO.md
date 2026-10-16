@@ -425,6 +425,46 @@ they still happen, before then.
   - Another Kestrel's job: its progress is shared already; its output would need to go through the tower too (new
     message fields, so bump PROTOCOL) or be shown as "open it in that window".
   - Keyboard: Delete cancels the selected job; the window remembers its size and the split between the two sides.
+  - **A job queue with start, stop and pause.** Today every job starts at once on its own thread, so two copies to the
+    same drive compete and both go slower. Instead, jobs go into a queue:
+    - **Controls per job:** Pause / Resume, Stop (cancel, as ✕ now), Start now (skip the queue), move up / down (or
+      drag to reorder) while waiting. **For the whole queue:** Pause all / Resume all, and a "Start new jobs paused"
+      option for lining up work before running it.
+    - **Pausing:** Kestrel's own jobs pause between chunks (the copy loop waits instead of reading on: a pause takes
+      effect within one 4 MB chunk, and nothing is left half-written: the part file just stays open); jobs that run a
+      tool (7z, tar, ffmpeg…) are paused by stopping its process group (SIGSTOP / SIGCONT). The status bar and the
+      Jobs window show "Paused".
+    - **Two ways to run the queue** (a setting in the Jobs window and in Preferences):
+      - **One at a time, in order:** a single job runs; the next starts when it's done, even if it would use other
+        drives.
+      - **By drive ("lanes"):** each job uses a set of drives (where it reads from and where it writes to: a copy from
+        drive A to drive B uses A and B). Jobs whose drives don't overlap run at the same time, each in its own
+        lane: A → B and C → D together; A → B and A → C wait for each other, as do A → B and C → B. Within a lane,
+        jobs run in queue order.
+    - Drives are told apart by the device they're on (`st_dev`, mapped to the physical disk so two partitions of one
+      disk count as one drive); each network share, phone and tape is a drive of its own. A move within one drive (a
+      rename) needs no lane and runs at once.
+    - Fits the slow-drives / LTFS items: a tape or floppy gets one job at a time whatever the mode.
+    - Default: by drive (closest to today's behaviour, without the competing).
+  - **One queue for every Kestrel, kept by the tower.** The point is that no two jobs hit the same source or target
+    drive at once, whichever Kestrel window or process started them. So there's one queue, not one per Kestrel:
+    - Each job is still run by the Kestrel that started it (its threads, its tools, its errors and questions), but
+      before starting it asks the tower for a lane: it sends the job's id, title and the drives it uses. The tower
+      keeps the single queue in order (first asked, first served, unless reordered), and when the job's drives are
+      free (by-drive mode) or nothing else runs (one-at-a-time mode) it tells that Kestrel "your lane is open"; the
+      Kestrel starts the job and tells the tower when it's done, failed or cancelled, which frees the lane for the
+      next waiting job, in whichever Kestrel it is.
+    - Pause, resume, stop, start now and reordering from any Jobs window go through the tower to the Kestrel running
+      that job (as ✕ on another Kestrel's job does now), so every Jobs window shows and controls the same queue.
+    - Robustness: a Kestrel that closes or crashes drops out (the tower already notices flights leaving), and its
+      lanes are freed. If the tower goes down, the new tower rebuilds the queue as the Kestrels check in again with
+      their running and waiting jobs. With no tower at all (no session bus), each Kestrel queues its own jobs, as a
+      fallback.
+    - Drives must mean the same thing in every Kestrel: identify them by the physical disk (from `st_dev` through
+      `/sys/dev/block` to the whole disk), by mount source for network shares, phones and tapes.
+    - Admin-session jobs use lanes too (they read and write drives like any other job).
+    - New tower messages and methods (ask for a lane, lane open, job finished, queue order, pause/resume), so bump
+      PROTOCOL; the Tower window item can show the lanes and the queue.
 
 - [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
   all the way back up to its header to collapse it. Make it collapsible from the bottom too, and without scrolling:
