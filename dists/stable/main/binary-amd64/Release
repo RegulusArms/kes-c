@@ -1,0 +1,5 @@
+Component: main
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Architecture: amd64
+Description: Kestrel Explorer releases (merges to main)

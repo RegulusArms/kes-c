@@ -1,0 +1,19 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: dev
+Date: Sat, 17 Oct 2026 16:29:41 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer development builds (the DEV branch)
+MD5Sum:
+ e39b03a1f3d2bf157596c7a9a672f18e 1257 main/binary-amd64/Packages
+ 4fdae7977eb06df29dd4774f8117d014 725 main/binary-amd64/Packages.gz
+ da476341b9ecabc545244ab00b966731 151 main/binary-amd64/Release
+SHA1:
+ 257be27e707a0995fd9e81ccf697df47fde9aeda 1257 main/binary-amd64/Packages
+ 8871e11db6be5cf116c65d4f463bf4f4dba2ac3f 725 main/binary-amd64/Packages.gz
+ 7b46a07416eb821f79a003d15fa665c53ed261dd 151 main/binary-amd64/Release
+SHA256:
+ bc301a66728a4cb602985c437d465b1a5e3b0e85a34820cacd00059412581cec 1257 main/binary-amd64/Packages
+ aa8ff982e0b83ffe16ad98d8522a312758622aed17f47ef49c73b2e6af04e7fc 725 main/binary-amd64/Packages.gz
+ 5bf834a9daa365366c7b52dc9fb3f9f38e1e6d71437a40a91a192829a80f23ef 151 main/binary-amd64/Release

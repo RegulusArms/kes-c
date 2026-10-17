@@ -1,0 +1,15 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: stable
+Description: Kestrel Explorer releases (merges to main)
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: dev
+Description: Kestrel Explorer development builds (the DEV branch)
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
