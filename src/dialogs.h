@@ -186,7 +186,7 @@ private:
     QColor color;
     QPushButton *color_btn;
     QCheckBox *color_accent;
-    QCheckBox *single_click, *list_previews, *play_gifs, *play_webm, *shared_undo, *open_in_tabs;
+    QCheckBox *single_click, *list_previews, *play_gifs, *play_webm, *shared_undo, *open_in_tabs, *developer_tools;
 };
 
 namespace dialogs {

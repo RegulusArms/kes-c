@@ -769,7 +769,7 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         else if (w->pane() && w->pane()->dir() == dirname(out))
             w->pane()->select_later(out);
     };
-    fileops::run_job(win, "Extracting " + name, work, done);
+    fileops::queue_job(win, "Extracting " + name, {path, opts["dest"].toString()}, work, done);
 }
 
 void extract_here(MainWindow *win, const QString &path)
@@ -858,7 +858,7 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
         if (w->pane() && w->pane()->dir() == dirname(out))
             w->pane()->select_later(out);
     };
-    fileops::run_job(win, "Compressing " + name, work, done);
+    fileops::queue_job(win, "Compressing " + name, paths + QStringList{dirname(spec_in.out)}, work, done);
 }
 
 QString quick_compress_label(const QStringList &paths)

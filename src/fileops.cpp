@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "drives.h"
+#include "jobs.h"
 #include "atc.h"
 #include "proc.h"
 #include "undo.h"
@@ -15,6 +16,7 @@
 #include <QElapsedTimer>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QMouseEvent>
 #include <QLabel>
 #include <QMainWindow>
 #include <QRegularExpression>
@@ -58,10 +60,103 @@ Task::Task(const QString &title, Fn fn, bool cancellable) : title(title), cancel
     id = QString::number(++next_id);
 }
 
+static thread_local Task *running_task = nullptr;
+
+Task *Task::current() { return running_task; }
+
+qint64 Task::elapsed_ms() const { return started_ms ? monotonic_ms() - started_ms : 0; }
+
+void Task::cancel()
+{
+    cancelled = true;
+    if (pause_flag)   // a paused job (and its programs) carries on to its cancel
+        set_paused(false);
+    Q_EMIT cancel_asked();
+}
+
 void Task::check()
 {
     if (cancelled)
         throw Cancelled();
+    if (pause_flag) {
+        QMutexLocker l(&mtx);
+        while (pause_flag && !cancelled)
+            resumed.wait(&mtx, 200);
+    }
+    if (cancelled)
+        throw Cancelled();
+}
+
+void Task::set_paused(bool on)
+{
+    if (on && !pausable())
+        return;
+    QMutexLocker l(&mtx);
+    pause_flag = on;
+    for (pid_t pg : programs)
+        ::killpg(pg, on ? SIGSTOP : SIGCONT);
+    if (!on)
+        resumed.wakeAll();
+}
+
+void Task::started(pid_t pid)
+{
+    QMutexLocker l(&mtx);
+    programs.insert(pid);
+    if (pause_flag)   // started while paused (between two checks): stopped at once
+        ::killpg(pid, SIGSTOP);
+}
+
+void Task::ended(pid_t pid)
+{
+    QMutexLocker l(&mtx);
+    programs.remove(pid);
+}
+
+void Task::log(const QString &line)
+{
+    QMutexLocker l(&mtx);
+    if (head.size() < 300) {
+        head << line;
+        return;
+    }
+    tail << line;
+    if (tail.size() > 3000) {
+        tail.removeFirst();
+        ++skipped;
+    }
+}
+
+void Task::log_output(const QByteArray &chunk)
+{
+    QByteArray all;
+    {
+        QMutexLocker l(&mtx);
+        all = partial + chunk;
+        partial.clear();
+    }
+    // lines end with \n, or with \r for a tool redrawing its progress line (kept once, the last state of it)
+    QList<QByteArray> lines = all.split('\n');
+    QByteArray rest = lines.takeLast();
+    for (const QByteArray &line : lines) {
+        QByteArray shown = line.split('\r').last();
+        if (!shown.trimmed().isEmpty())
+            log(QString::fromUtf8(shown));
+    }
+    QMutexLocker l(&mtx);
+    partial = rest.size() > 4096 ? rest.right(4096) : rest;
+}
+
+QString Task::log_text() const
+{
+    QMutexLocker l(&mtx);
+    QStringList out = head;
+    if (skipped)
+        out << QString("… %1 lines not kept …").arg(skipped);
+    out << tail;
+    if (!partial.trimmed().isEmpty())
+        out << QString::fromUtf8(partial.split('\r').last());
+    return out.join('\n');
 }
 
 void Task::report(double done, double total, const QString &t, bool force)
@@ -77,15 +172,25 @@ void Task::report(double done, double total, const QString &t, bool force)
 void Task::run()
 {
     QVariant res;
+    running_task = this;
+    proc::set_watcher(this);
+    started_ms = monotonic_ms();
     try {
+        check();   // cancelled while it waited in the queue: it ends at once
         res = fn(this);
     } catch (const Cancelled &) {
         was_cancelled = true;
         res = QVariant();
     } catch (const std::exception &e) {
+        failed = true;
+        log("Error: " + QString::fromStdString(e.what()));
+        proc::set_watcher(nullptr);
+        running_task = nullptr;
         Q_EMIT error(QString::fromStdString(e.what()));
         return;
     }
+    proc::set_watcher(nullptr);
+    running_task = nullptr;
     Q_EMIT result(res);
 }
 
@@ -119,10 +224,25 @@ void TaskBoard::add(Task *task)
     });
     connect(task, &QThread::finished, this, [this, task]() {
         local.removeAll(task);
+        QString log = task->log_text();
+        QString state = task->was_cancelled ? "cancelled"
+                        : task->failed      ? "failed"
+                        : log.contains("  failed: ") ? "done with errors"
+                                                     : "done";
+        finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
+                                 task->admin};
+        while (finished.size() > 50)
+            finished.removeFirst();
         schedule(0);
         Q_EMIT changed();
     });
     schedule(0);
+    Q_EMIT changed();
+}
+
+void TaskBoard::clear_finished()
+{
+    finished.clear();
     Q_EMIT changed();
 }
 
@@ -137,10 +257,14 @@ void TaskBoard::publish()
 {
     QJsonArray list;
     for (Task *t : local)
-        list << QJsonObject{{"id", t->id},           {"title", t->title},
-                            {"text", t->text},       {"fraction", t->fraction},
-                            {"cancellable", t->cancellable}, {"cancelling", bool(t->cancelled)},
-                            {"admin", t->admin}};
+        list << QJsonObject{{"id", t->id},
+                            {"title", t->title},
+                            {"text", t->text},
+                            {"fraction", t->fraction},
+                            {"cancellable", t->cancellable},
+                            {"cancelling", bool(t->cancelled)},
+                            {"admin", t->admin},
+                            {"state", t->queued ? "waiting" : t->paused() ? "paused" : "running"}};
     atc::announce("tasks", {{"tasks", list}}, true);
 }
 
@@ -150,7 +274,8 @@ QList<TaskInfo> TaskBoard::others(const QList<Task *> &mine) const
     QString me = atc::radio()->flight();
     for (Task *t : local)
         if (!mine.contains(t))
-            out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t};
+            out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t,
+                            t->queued ? "waiting" : t->paused() ? "paused" : "running"};
     for (const QList<TaskInfo> &l : remote)
         out << l;
     return out;
@@ -189,7 +314,8 @@ void TaskBoard::on_heard(const QJsonObject &m)
                           o.value("cancellable").toBool(),
                           o.value("cancelling").toBool(),
                           o.value("admin").toBool(),
-                          nullptr};
+                          nullptr,
+                          o.value("state").toString("running")};
         }
         if (l.isEmpty())
             remote.remove(from);
@@ -273,6 +399,13 @@ TaskPanel::TaskPanel(QWidget *parent) : QWidget(parent)
     connect(TaskBoard::instance(), &TaskBoard::changed, this, &TaskPanel::refresh);
 }
 
+void TaskPanel::mousePressEvent(QMouseEvent *ev)
+{
+    if (ev->button() == Qt::LeftButton)
+        Q_EMIT clicked();
+    QWidget::mousePressEvent(ev);
+}
+
 void TaskPanel::add(Task *task)
 {
     tasks << task;
@@ -319,15 +452,24 @@ void TaskPanel::refresh()
     TaskInfo first;
     QString where;
     if (!tasks.isEmpty()) {
-        Task *t = tasks.first();
-        first = TaskInfo{QString(), t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), false, t};
+        Task *t = tasks.first();   // the first one running (a waiting one only when none is)
+        for (Task *x : tasks)
+            if (!x->queued) {
+                t = x;
+                break;
+            }
+        first = TaskInfo{QString(), t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), false, t,
+                         t->queued ? "waiting" : t->paused() ? "paused" : "running"};
     } else {
         first = others.takeFirst();
         where = " (in another window)";
     }
     QString shown = (first.admin && !first.local ? "🛡 " : "") + first.title;
     QString text = shown + where +
-                   (first.cancelling ? QString(" — cancelling…") : !first.text.isEmpty() ? ": " + first.text : QString());
+                   (first.cancelling           ? QString(" — cancelling…")
+                    : first.state == "paused"  ? QString(" — paused")
+                    : !first.text.isEmpty()    ? ": " + first.text
+                                               : QString());
     QStringList more;
     if (tasks.size() > 1)
         more << QString("+%1 more").arg(tasks.size() - 1);
@@ -346,6 +488,7 @@ void TaskPanel::refresh()
     bar->set_busy(first.fraction < 0);
     if (first.fraction >= 0)
         bar->setValue(int(first.fraction * 1000));
+    setToolTip(toolTip() + "\n\nClick for the Jobs window");
     stop->setVisible(first.cancellable);
     stop->setEnabled(!first.cancelling);
     stop->setToolTip("Cancel " + first.title.toLower() + where);
@@ -385,6 +528,26 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
     }
     QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
     t->start();
+    return t;
+}
+
+Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done,
+                bool cancellable, const QStringList &steps, bool quiet)
+{
+    auto *t = new Task(title, std::move(fn), cancellable);
+    t->paths = paths;
+    t->steps = steps;
+    QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
+    if (on_done)
+        QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
+    if (!quiet) {
+        QPointer<QWidget> p(parent);
+        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        if (TaskPanel *panel = panel_for(parent))
+            panel->add(t);
+    }
+    QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
+    jobs::Queue::instance()->submit(t);
     return t;
 }
 
@@ -494,6 +657,17 @@ static void copy_times_mode(int fd, const struct stat &st)   // on a descriptor:
     ::fchmod(fd, st.st_mode & 07777);
 }
 
+// a job as a step in the Jobs window: "Copy photo.jpg → /media/…/Backup"
+static QString step_text(const Job &j)
+{
+    static const QHash<QString, QString> verbs = {{"copy", "Copy"}, {"move", "Move"}, {"delete", "Delete"},
+                                                 {"merge_copy", "Copy (merge)"}, {"merge_move", "Move (merge)"}};
+    QString verb = verbs.value(j.op, j.op);
+    if (j.op == "delete")
+        return verb + " " + j.src;
+    return QString("%1 %2 → %3").arg(verb, basename(j.src), j.dst);
+}
+
 // Runs a list of jobs for a Task. Progress is in bytes, or in files when every job is a delete.
 class Ops {
 public:
@@ -522,22 +696,23 @@ public:
         qint64 started = stats::now_ms();
         // jobs reading a tape go in the order their files lie on the tape (by partition and block), so the drive
         // streams instead of winding back and forth; the others keep their order, after them
-        QList<QPair<QPair<qint64, qint64>, Job>> keyed;
-        for (const Job &j : jobs) {
+        QList<QPair<QPair<qint64, qint64>, int>> keyed;   // (tape position, the job's index: its step)
+        for (int i = 0; i < jobs.size(); ++i) {
+            const Job &j = jobs[i];
             QPair<qint64, qint64> at{LLONG_MAX, LLONG_MAX};
             if (drives::slow_kind(j.src) == drives::Slow::Tape) {
                 at = drives::tape_position(j.src);
                 if (at.first < 0)
                     at = {LLONG_MAX - 1, LLONG_MAX - 1};
             }
-            keyed << qMakePair(at, j);
+            keyed << qMakePair(at, i);
         }
         std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
-        for (const auto &[at, j] : keyed) {
+        for (const auto &[at, index] : keyed) {
+            const Job &j = jobs[index];
             task->check();
-            // one job at a time on a tape or floppy (another job of this Kestrel using it: wait, saying so)
-            drives::Lanes lane({j.src, j.dst}, task,
-                               [this](const QString &text) { task->report(double(done), double(total), text, true); });
+            task->step = index;
+            task->log(step_text(j));
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
             bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
@@ -554,13 +729,18 @@ public:
                     move(j.src, j.dst, j.op == "merge_move", claim);
                 else
                     copy(j.src, j.dst, j.op == "merge_copy", claim);
-                if (replacing)
+                if (replacing) {
                     ++replaced;
-                else if (j.op == "merge_copy" || j.op == "merge_move")
+                    task->log("  done (replaced what was there)");
+                } else if (j.op == "merge_copy" || j.op == "merge_move") {
                     ++merged;
-                else
+                    task->log("  done (merged into the folder there)");
+                } else {
                     completed << j;
+                    task->log("  done");
+                }
             } catch (const OSError &e) {
+                task->log("  failed: " + e.message());
                 if (e.permission()) {
                     // retried as administrator; a new folder already begun is finished by merging into it
                     Job retry = j;
@@ -572,9 +752,11 @@ public:
                     errors << basename(j.src) + ": " + e.message();
                 }
             } catch (const Error &e) {
+                task->log("  failed: " + e.message());
                 left_part_way();
                 errors << basename(j.src) + ": " + e.message();
             } catch (const Cancelled &) {
+                task->log("  cancelled");
                 left_part_way();
                 throw;
             }
@@ -865,8 +1047,7 @@ private:
         try {
             std::unique_ptr<char[]> buf(new char[CHUNK]);
             for (;;) {
-                if (task->cancelled)
-                    throw Cancelled();
+                task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
                 ssize_t n = ::read(in.fd, buf.get(), CHUNK);
                 if (n < 0 && errno == EINTR)
                     continue;
@@ -1055,10 +1236,17 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
         }
         return errors;
     };
-    admin::retry_as_admin(parent, title, message, work, [on_done](bool) {
-        if (on_done)
-            on_done();
-    });
+    QStringList paths;
+    for (const Job &j : denied)
+        paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
+    paths.removeAll(QString());
+    admin::retry_as_admin(
+        parent, title, message, work,
+        [on_done](bool) {
+            if (on_done)
+                on_done();
+        },
+        paths);
 }
 
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done,
@@ -1116,9 +1304,21 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
     };
     auto work = [ops, jobs](Task *task) {
         *ops = std::make_unique<Ops>(task, jobs);
-        return QVariant((*ops)->run());
+        QStringList errors = (*ops)->run();
+        task->log(errors.isEmpty() ? QString("Finished.") : QString("Finished, with %1 error(s).").arg(errors.size()));
+        return QVariant(errors);
     };
-    return run_job(parent, title, work, finished);
+    // the drives it reads and writes (its lanes in the job queue); a move within one drive is a rename: no lane
+    QStringList paths, steps;
+    for (const Job &j : jobs) {
+        steps << step_text(j);
+        struct stat a, b;
+        bool rename_only = j.op == "move" && lstat_(j.src, a) && stat_(dirname(j.dst), b) && a.st_dev == b.st_dev;
+        if (!rename_only)
+            paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
+    }
+    paths.removeAll(QString());
+    return queue_job(parent, title, paths, work, finished, true, steps);
 }
 
 namespace {
@@ -1413,7 +1613,7 @@ Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
         }
         return still_there(paths);
     };
-    return run_job(parent, title, fn, [on_done](const QVariant &r) {
+    return queue_job(parent, title, paths, fn, [on_done](const QVariant &r) {
         if (r.isValid() && on_done)
             on_done(r.toStringList());
     });
@@ -1546,7 +1746,7 @@ void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(c
         release();
         return out;
     };
-    run_job(parent, "Loading from device", fn, [on_done](const QVariant &res) {
+    queue_job(parent, "Loading from device", paths, fn, [on_done](const QVariant &res) {
         if (res.isValid())
             on_done(res.toStringList());
     });

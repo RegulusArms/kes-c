@@ -1008,8 +1008,8 @@ void PropertiesDialog::verify_against(const QString &hash_path)
     QPointer<QLabel> label(hash_result);
     QString file = path;
     // the checksum file is read on the job's thread too (it can be on a tape or floppy, which takes long to read)
-    fileops::run_job(
-        this, "Verifying " + basename(path),
+    fileops::queue_job(
+        this, "Verifying " + basename(path), {file, hash_path},
         [hash_path, file](Task *t) -> QVariant {
             QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
             const hashcheck::Entry *found = hashcheck::find(entries, file);
@@ -1437,6 +1437,9 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     open_in_tabs->setChecked(s.value("open_in_tabs", false).toBool());
     open_in_tabs->setToolTip("On: a folder opened from another app (or with “Show in folder”) becomes a tab in the "
                              "Kestrel window you used last.\nOff: it opens in a new window.");
+    developer_tools = new QCheckBox("Show developer tools (☰ → Tower…)");
+    developer_tools->setChecked(s.value("developer_tools", false).toBool());
+    developer_tools->setToolTip("The Tower window: what the tower that keeps Kestrel windows in sync is doing, live");
     form->addRow("Images in folder previews:", count);
     form->addRow("Folder preview picks:", order);
     form->addRow("Folder colour:", color_row);
@@ -1450,6 +1453,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow(play_webm);
     form->addRow(shared_undo);
     form->addRow(open_in_tabs);
+    form->addRow(developer_tools);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -1538,6 +1542,7 @@ void PreferencesDialog::save()
     s.setValue("play_webm", play_webm->isChecked());
     s.setValue("shared_undo", shared_undo->isChecked());
     s.setValue("open_in_tabs", open_in_tabs->isChecked());
+    s.setValue("developer_tools", developer_tools->isChecked());
     accept();
 }
 

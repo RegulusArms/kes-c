@@ -362,8 +362,8 @@ void VerifyDialog::step()
     // no parent: closing the dialog mustn't destroy a thread that is still reading. The result comes through
     // on_done, not a connection made afterwards, which a quick file could finish before.
     QPointer<VerifyDialog> self(this);
-    task = fileops::run_job(
-        nullptr, "Verifying " + e.name,
+    task = fileops::queue_job(
+        nullptr, "Verifying " + e.name, {e.path},
         [e](Task *t) -> QVariant {
             try {
                 Result r = verify(e, t);
@@ -378,7 +378,7 @@ void VerifyDialog::step()
             if (self && g == self->gen)
                 self->on_result(res);
         },
-        true, true);
+        true, {}, true);
     connect(task, &Task::progress, this, [this, g, i](double f, const QString &) {
         if (g != gen)
             return;
@@ -795,7 +795,7 @@ void run_create(MainWindow *win, const QStringList &paths, const QString &dir, c
             warn(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
         }
     };
-    fileops::run_job(win, "Creating checksums", work, done);
+    fileops::queue_job(win, "Creating checksums", paths + QStringList{dir}, work, done);
 }
 
 }   // namespace hashcheck

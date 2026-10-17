@@ -197,26 +197,26 @@ int main(int argc, char **argv)
         }
     }
 
-    // ---- one job at a time on a slow drive: a job waits while another holds the tape
+    // ---- one job at a time on a slow drive: a job waits in the queue while another uses the tape
     {
         write_text(home_path("one.txt"), "1");
         auto held = std::make_shared<std::atomic<bool>>(true);
-        std::thread holder([held, tape]() {   // another job using the tape
-            drives::Lanes lane({tape}, nullptr, nullptr);
-            while (*held)
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        Task *holder = fileops::queue_job(w, "Holding the tape", {tape}, [held](Task *t) {   // another job using it
+            while (*held) {
+                t->check();
+                QThread::msleep(20);
+            }
+            return QVariant();
         });
+        QPointer<Task> hp(holder);
         spin(100);
-        QStringList texts;
         Task *t = fileops::start_ops(w, {{"copy", home_path("one.txt"), join(tape, "one.txt")}}, "Test", []() {});
-        QObject::connect(t, &Task::progress, t, [&texts](double, const QString &text) { texts << text; }, Qt::DirectConnection);
         QPointer<Task> tp(t);
         spin(800);
-        bool waited = !exists(join(tape, "one.txt")) && texts.join("|").contains("Waiting for the tape") && tp;
+        bool waited = !exists(join(tape, "one.txt")) && tp && tp->queued && tp->text.contains("Waiting");
         *held = false;
-        holder.join();
-        check(waited && wait_for([&]() { return !tp && exists(join(tape, "one.txt")); }),
-              "a copy to a tape that another job is using waits, saying so, and runs when the tape is free");
+        check(waited && wait_for([&]() { return !tp && !hp && exists(join(tape, "one.txt")); }),
+              "a copy to a tape that another job is using waits in the queue, saying so, and runs when the tape is free");
     }
 
     // ---- a tape's index is written after a job changes it

@@ -65,11 +65,17 @@
     - The tag descriptions and "Accepts" types were written with the help of an AI tool while Kestrel was being made, and may not be completely accurate. They ship as fixed text: Kestrel itself runs no AI. Descriptions outside the common tags are built from exiftool's tag names and categories.
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum, or **Browse…** for a checksum file that lists the file (see [Checksum files](features.md#checksum-files)).
 
+**Jobs: one queue, and the Jobs window**
+- Jobs that read or write drives (copy, move, delete, extract, compress, checksums, shredding) wait for their turn on the drives they use, across every Kestrel window and process, so two jobs never fight over one drive. By drive (the default): jobs on different drives run side by side, jobs on the same drive one after the other, in order. Or one at a time. A rename within a drive doesn't wait.
+- Click the job progress in the status bar (or ☰ → **Jobs…**, Ctrl+Shift+J) for the **Jobs window**: every job of every Kestrel window, running, waiting and finished, with progress and time left. Select one for its steps and its log (the archive tools' live output, passwords masked), with Copy and Save Log…. Pause, Resume, Stop (Delete), Start Now, move a waiting job up or down; Pause All / Resume All; start new jobs paused; choose by drive or one at a time.
+- A paused copy stops within a few megabytes (its part file kept aside); a paused extraction or compression pauses its program. Administrator jobs can't be paused.
+- Preferences → **Show developer tools** adds ☰ → **Tower…**: the tower's status, the Kestrels checked in, every message it passes on, the queue and the drives in use, and the shared undo list (also `kes --tower-monitor`).
+
 **Tapes (LTFS) and floppy disks**
 - Recognised automatically (a tape by its LTFS mount, a floppy as a removable disk of a few MB), with their own icons in the sidebar and on the Overview, where a tape shows its volume name and LTFS's details.
 - Kestrel never waits for them in the window: their size is read in the background, and opening a folder or a checksum file on one doesn't freeze anything, even while another program is using the drive.
 - Thumbnails, folder previews, image details, GIF/WebM playback and dates taken aren't read from them (each would make a tape wind or a floppy read for a long time). Right-click the drive → **Show Previews on This Drive** to allow them.
-- One job at a time per drive: a second copy waits ("Waiting for the tape…"). Files are read off a tape in the order they lie on it, with "Positioning the tape" while it winds.
+- One job at a time per drive (the job queue above): a second copy waits for its turn. Files are read off a tape in the order they lie on it, with "Positioning the tape" while it winds.
 - After a copy to a tape its index is written (also **Write Tape Index Now** on the drive's menu); copying more than 1,000 small files to a tape asks first, since an archive of them is much faster. Unmounting runs in the background, and asks first while a job still uses the drive.
 
 **Archives** (details in [Archives](archives.md))

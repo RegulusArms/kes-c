@@ -350,6 +350,36 @@ static void write_all(int fd, const char *data, qsizetype n)
     }
 }
 
+// A tool's command, as the Jobs window shows it: arguments quoted, passwords masked (7-Zip's and rar's -p<password>,
+// zpaq's -key <password>)
+static QString shown_command(const QStringList &argv)
+{
+    QStringList out;
+    bool secret = false;
+    for (const QString &a : argv) {
+        if (secret) {
+            out << "••••";
+            secret = false;
+        } else if (a == "-key" || a == "--password") {
+            out << a;
+            secret = true;
+        } else if (a.startsWith("-p") && a.size() > 2 && a != "-p-") {
+            out << "-p••••";
+        } else {
+            out << (a.contains(QRegularExpression("[^\\w@%+=:,./-]")) ? "'" + QString(a).replace("'", "'\\''") + "'" : a);
+        }
+    }
+    return out.join(' ');
+}
+
+// proc::spawn, with the command in the running job's log (the Jobs window)
+static std::unique_ptr<proc::Process> spawn_logged(const QStringList &argv, const proc::Options &o = proc::Options())
+{
+    if (Task *t = Task::current())
+        t->log("$ " + shown_command(argv));
+    return proc::spawn(argv, o);
+}
+
 // Run a tool, turning its output into progress. Returns (exit code, output text).
 //
 // progress: "percent" for tools printing an overall "NN%" (7z, rar, unrar, zpaq); "zipcount" for zip -dc's
@@ -373,7 +403,7 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
         argv = QStringList{stdbuf, "-o0", "-e0"} + argv;
     proc::Options o = tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL);
     o.env = env;
-    auto p = proc::spawn(argv, o);
+    auto p = spawn_logged(argv, o);
     QByteArray out;
     QElapsedTimer start;
     start.start();
@@ -404,6 +434,7 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
                 if (n <= 0)
                     break;
                 QByteArray chunk(buf, n);
+                task->log_output(chunk);   // the Jobs window shows it live
                 out += chunk;
                 if (out.size() > 2000000)
                     out.remove(0, 1000000);
@@ -648,7 +679,7 @@ static QStringList volume_files(const QString &out)
 static void compress_tar_plain(Task *task, const QStringList &argv, const QString &cwd, const QString &out,
                                qint64 total, const QString &label)
 {
-    auto p = proc::spawn(argv, tool_opts(cwd));
+    auto p = spawn_logged(argv, tool_opts(cwd));
     try {
         int fo = ::open(enc(out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
         if (fo < 0)
@@ -697,7 +728,7 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
     co.c_utf8 = true;
     std::unique_ptr<proc::Process> comp, src;
     try {
-        comp = proc::spawn(comp_argv, co);
+        comp = spawn_logged(comp_argv, co);
     } catch (...) {
         ::close(fo);
         throw;
@@ -717,7 +748,7 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
             }
             ::close(fi);
         } else {
-            src = proc::spawn(QStringList{tool("tar"), "-cf", "-", "--"} + safe_rels(spec.rels), tool_opts(spec.base));
+            src = spawn_logged(QStringList{tool("tar"), "-cf", "-", "--"} + safe_rels(spec.rels), tool_opts(spec.base));
             relay(task, src->out, comp->in, spec.total, label);
             src->wait();
         }
@@ -947,7 +978,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         o.c_utf8 = true;
         std::unique_ptr<proc::Process> dec;
         try {
-            dec = proc::spawn(dec_argv, o);
+            dec = spawn_logged(dec_argv, o);
         } catch (...) {
             ::close(fo);
             ::unlink(enc(part).constData());
@@ -1009,9 +1040,9 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         o.out = proc::PIPE;
         o.err = proc::PIPE;
         o.c_utf8 = true;
-        dec = proc::spawn(dec_argv, o);
+        dec = spawn_logged(dec_argv, o);
         try {
-            tar = proc::spawn(tar_argv, tool_opts(QString(), dec->out));
+            tar = spawn_logged(tar_argv, tool_opts(QString(), dec->out));
         } catch (...) {
             dec->kill_group();
             throw;
@@ -1019,7 +1050,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         dec->close_out();
         feed = dec->in;
     } else {
-        tar = proc::spawn(tar_argv, tool_opts(QString(), proc::PIPE));
+        tar = spawn_logged(tar_argv, tool_opts(QString(), proc::PIPE));
         feed = tar->in;
     }
     QString out;

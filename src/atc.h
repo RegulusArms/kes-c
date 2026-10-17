@@ -24,7 +24,7 @@ extern const char *NAME;   // the tower's bus name
 // names none predates the version and speaks 1). Messages from other programs on the session bus are checked by the
 // tower and again by each radio: a JSON object of at most MAX_MESSAGE bytes, a known "type", each known field of the
 // right type, absolute paths. Unknown fields are allowed (and ignored), so a newer Kestrel can add some.
-constexpr int PROTOCOL = 2;
+constexpr int PROTOCOL = 3;
 constexpr int MAX_MESSAGE = 1 << 20;
 bool valid_message(const QJsonObject &msg);   // a Report / Broadcast message
 bool valid_undo(const QJsonObject &op);       // a shared undo entry: {"kind", "label", "items": [[a, b], …]}
@@ -50,11 +50,14 @@ public:
     // Call a tower method and wait for the answer (its string result, "" if it has none); a null QString if the
     // tower isn't up or didn't answer.
     QString request(const QString &method, const QString &arg = QString());
+    void call(const QString &method, const QString &arg);   // the same without waiting (no answer); nothing if it's down
 
 Q_SIGNALS:
     // a change from another flight ("from": its name), or our own ("own": true); {"type": "left"} when a flight has gone
     void heard(const QJsonObject &msg);
     void reset();   // checked in with a (new) tower: forget the others' kept state, it's sent again next
+    // every message the tower passes on, as it came (the Tower window's log); valid or not
+    void broadcast(const QString &flight, const QString &message);
 };
 
 Radio *radio();

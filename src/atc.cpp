@@ -1,5 +1,6 @@
 #include "atc.h"
 
+#include "jobs.h"
 #include "stats.h"
 #include "util.h"
 
@@ -29,6 +30,10 @@ static const char *XML = R"(
     <method name="UndoPush"><arg type="s" name="Op" direction="in"/></method>
     <method name="UndoPop"><arg type="s" name="Op" direction="out"/></method>
     <method name="Handoff"><arg type="s" name="Request" direction="in"/><arg type="s" name="Flight" direction="out"/></method>
+    <method name="JobAsk"><arg type="s" name="Job" direction="in"/></method>
+    <method name="JobDone"><arg type="s" name="Job" direction="in"/></method>
+    <method name="Status"><arg type="s" name="Status" direction="out"/></method>
+    <method name="UndoList"><arg type="s" name="Ops" direction="out"/></method>
     <signal name="Broadcast"><arg type="s" name="Flight"/><arg type="s" name="Message"/></signal>
   </interface>
 </node>
@@ -42,7 +47,7 @@ static QByteArray compact(const QJsonObject &o) { return QJsonDocument(o).toJson
 
 // Each message type and its fields. A field that's missing is fine (the receiver uses a default); one that's there
 // must have this type. PATHS: a list of absolute paths; STRS: a list of strings; TASKS: a list of tasks (fields below).
-enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS };
+enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS, JOBS };
 static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"settings", {}},        // Preferences were saved
     {"sidebar", {}},         // the sidebar's order or collapsed sections changed
@@ -57,10 +62,16 @@ static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"windows", {{"count", NUM}, {"active", NUM}}},   // keep: how many windows, when one was last used
     {"undo_changed", {{"label", STR}}},   // keep (the tower's): what Ctrl+Z would undo now
     {"open", {{"flight", STR}, {"folders", PATHS}, {"select", STRS}, {"token", STR}}},   // (the tower's) a hand-off
+    {"queue", {{"jobs", JOBS}, {"mode", STR}}},   // keep (the tower's): the job queue of every Kestrel, in order
+    {"lane_open", {{"flight", STR}, {"task", STR}}},   // (the tower's) that flight's job may start
+    {"job_control", {{"flight", STR}, {"task", STR}, {"action", STR}}},   // pause, resume, start_now, up, down, cancel
+    {"queue_mode", {{"mode", STR}}},   // "drive" or "one" (jobs.h)
 };
+static const QList<QPair<QString, Field>> JOB_FIELDS = {{"flight", STR}, {"id", STR},      {"title", STR}, {"state", STR},
+                                                        {"drives", STRS}, {"paused", BOOL}, {"admin", BOOL}};
 static const QList<QPair<QString, Field>> TASK_FIELDS = {{"id", STR},          {"title", STR},      {"text", STR},
                                                          {"fraction", NUM},    {"cancellable", BOOL},
-                                                         {"cancelling", BOOL}, {"admin", BOOL}};
+                                                         {"cancelling", BOOL}, {"admin", BOOL}, {"state", STR}};
 static const QStringList UNDO_KINDS = {"move", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
 
 static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
@@ -77,11 +88,12 @@ static bool valid_field(const QJsonValue &v, Field f)
     case PATHS:
     case STRS:
     case TASKS:
+    case JOBS:
         if (!v.isArray())
             return false;
         for (const QJsonValue &e : v.toArray()) {
-            if (f == TASKS ? !e.isObject() || !valid_fields(e.toObject(), TASK_FIELDS)
-                           : !e.isString() || (f == PATHS && !e.toString().startsWith('/')))
+            if (f == TASKS || f == JOBS ? !e.isObject() || !valid_fields(e.toObject(), f == TASKS ? TASK_FIELDS : JOB_FIELDS)
+                                        : !e.isString() || (f == PATHS && !e.toString().startsWith('/')))
                 return false;
         }
         return true;
@@ -133,14 +145,53 @@ static bool speaks_our_protocol(const QJsonObject &info)
 
 // ---------------------------------------------------------------- the tower
 
+// a job in the one queue (jobs.h): asked for by a flight, which runs it when told its lane is open
+struct QueuedJob {
+    QString flight, id, title;
+    QStringList drives;
+    bool running = false, paused = false, forced = false, admin = false;
+};
+
 struct Tower {
     GDBusNodeInfo *node = nullptr;
     QHash<QString, QJsonObject> flights;   // unique bus name -> what it said when checking in
     QHash<QString, QHash<QString, QJsonObject>> kept;   // flight -> type -> its latest "keep" message
     QList<QJsonObject> undo;   // the shared undo history (Preferences → Share undo…), newest last
+    QList<QueuedJob> queue;    // every flight's jobs, in order
+    QString mode = "drive";
+    qint64 started_ms = 0;
+    int refused = 0;           // messages not passed on (malformed, unknown, another protocol)
     QTimer land;
 };
 static Tower *tower = nullptr;
+
+static void emit_broadcast(GDBusConnection *conn, const QJsonObject &msg)
+{
+    g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast",
+                                  g_variant_new("(ss)", g_dbus_connection_get_unique_name(conn), compact(msg).constData()),
+                                  nullptr);
+}
+
+// Start what the queue allows (each told "lane_open"), then tell everyone the queue (kept, for flights checking in)
+static void run_queue(GDBusConnection *conn)
+{
+    QList<jobs::Entry> entries;
+    for (const QueuedJob &j : tower->queue)
+        entries << jobs::Entry{j.flight + "/" + j.id, j.drives, j.running, j.paused, j.forced};
+    for (const QString &key : jobs::to_start(entries, tower->mode))
+        for (QueuedJob &j : tower->queue)
+            if (j.flight + "/" + j.id == key) {
+                j.running = true;
+                emit_broadcast(conn, QJsonObject{{"type", "lane_open"}, {"flight", j.flight}, {"task", j.id}});
+            }
+    QJsonArray list;
+    for (const QueuedJob &j : tower->queue)
+        list << QJsonObject{{"flight", j.flight}, {"id", j.id},     {"title", j.title}, {"state", j.running ? "running" : "waiting"},
+                            {"drives", QJsonArray::fromStringList(j.drives)}, {"paused", j.paused}, {"admin", j.admin}};
+    QJsonObject msg{{"type", "queue"}, {"jobs", list}, {"mode", tower->mode}, {"keep", true}};
+    tower->kept[QString::fromUtf8(g_dbus_connection_get_unique_name(conn))]["queue"] = msg;
+    emit_broadcast(conn, msg);
+}
 
 static void undo_changed(GDBusConnection *conn)
 {
@@ -202,6 +253,26 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
         g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", best.toUtf8().constData()));
         return;
     }
+    if (m == "Status") {   // the Tower window's
+        QJsonObject st{{"pid", qint64(getpid())},
+                       {"started", double(tower->started_ms)},
+                       {"protocol", PROTOCOL},
+                       {"flights", int(tower->flights.size())},
+                       {"landing_in", tower->land.isActive() ? tower->land.remainingTime() : -1},
+                       {"refused", tower->refused},
+                       {"queued", int(tower->queue.size())},
+                       {"mode", tower->mode}};
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", compact(st).constData()));
+        return;
+    }
+    if (m == "UndoList") {   // read only, newest last (UndoPop takes the newest off)
+        QJsonArray list;
+        for (const QJsonObject &op : tower->undo)
+            list << op;
+        QByteArray out = QJsonDocument(list).toJson(QJsonDocument::Compact);
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", out.constData()));
+        return;
+    }
     if (m == "Flights") {
         QJsonArray list;
         for (auto it = tower->flights.begin(); it != tower->flights.end(); ++it) {
@@ -217,6 +288,29 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
     g_variant_get(params, "(&s)", &arg);
     if (m == "CheckIn") {
         tower->flights[who] = parse(arg);
+    } else if (m == "JobAsk" || m == "JobDone") {
+        QJsonObject j = parse(arg);
+        QString id = j.value("id").toString();
+        if (!id.isEmpty() && speaks_our_protocol(tower->flights.value(who))) {
+            int at = -1;
+            for (int i = 0; i < tower->queue.size(); ++i)
+                if (tower->queue[i].flight == who && tower->queue[i].id == id)
+                    at = i;
+            if (m == "JobDone") {
+                if (at >= 0)
+                    tower->queue.removeAt(at);
+            } else {
+                QueuedJob q{who, id, j.value("title").toString(), {}, j.value("running").toBool(),
+                            j.value("paused").toBool(), false, j.value("admin").toBool()};
+                for (const QJsonValue &d : j.value("drives").toArray())
+                    q.drives << d.toString();
+                if (at >= 0)
+                    tower->queue[at] = q;
+                else
+                    tower->queue << q;
+            }
+            run_queue(conn);
+        }
     } else if (m == "UndoPush") {
         QJsonObject op = parse(arg);
         if (valid_undo(op) && speaks_our_protocol(tower->flights.value(who))) {
@@ -230,13 +324,38 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
             tower->flights[who] = QJsonObject();
         QJsonObject msg = parse(arg);
         // only a flight's own news: "left", "open" and "undo_changed" are the tower's
-        static const QStringList TOWER_ONLY = {"left", "open", "undo_changed"};
+        static const QStringList TOWER_ONLY = {"left", "open", "undo_changed", "queue", "lane_open"};
         if (valid_message(msg) && !TOWER_ONLY.contains(msg.value("type").toString()) &&
             speaks_our_protocol(tower->flights.value(who))) {
             if (msg.value("keep").toBool())   // state, not an event: remembered for flights that check in later
                 tower->kept[who][msg.value("type").toString()] = msg;
             g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast", g_variant_new("(ss)", sender, arg),
                                           nullptr);
+            QString type = msg.value("type").toString();
+            if (type == "queue_mode") {
+                tower->mode = msg.value("mode").toString() == "one" ? "one" : "drive";
+                run_queue(conn);
+            } else if (type == "job_control") {   // the queue's part of it (the flight running the job does the rest)
+                QString flight = msg.value("flight").toString(), id = msg.value("task").toString(),
+                        action = msg.value("action").toString();
+                for (int i = 0; i < tower->queue.size(); ++i) {
+                    QueuedJob &j = tower->queue[i];
+                    if (j.flight != flight || j.id != id)
+                        continue;
+                    if (action == "pause" || action == "resume")
+                        j.paused = action == "pause";
+                    else if (action == "start_now")
+                        j.forced = true;
+                    else if (action == "up" && i > 0)
+                        tower->queue.swapItemsAt(i, i - 1);
+                    else if (action == "down" && i + 1 < tower->queue.size())
+                        tower->queue.swapItemsAt(i, i + 1);
+                    break;
+                }
+                run_queue(conn);
+            }
+        } else {
+            ++tower->refused;
         }
     }
     tower->land.stop();
@@ -255,6 +374,15 @@ static void owner_changed(GDBusConnection *conn, const gchar *, const gchar *, c
     if (*new_owner || !tower->flights.remove(who))
         return;
     tower->kept.remove(who);
+    // its jobs leave the queue, freeing their lanes for the others' waiting jobs
+    bool had = false;
+    for (int i = 0; i < tower->queue.size(); ++i)
+        if (tower->queue[i].flight == who) {
+            tower->queue.removeAt(i--);
+            had = true;
+        }
+    if (had)
+        run_queue(conn);
     g_dbus_connection_emit_signal(conn, nullptr, PATH, IFACE, "Broadcast", g_variant_new("(ss)", name, R"({"type":"left"})"),
                                   nullptr);
     if (tower->flights.isEmpty())
@@ -265,6 +393,7 @@ int run_tower(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     tower = new Tower;
+    tower->started_ms = QDateTime::currentMSecsSinceEpoch();
     tower->node = g_dbus_node_info_new_for_xml(XML, nullptr);
     tower->land.setSingleShot(true);
     tower->land.setInterval(LAND_MS);
@@ -311,6 +440,7 @@ static void on_broadcast(GDBusConnection *conn, const gchar *sender, const gchar
         return;   // only the tower speaks on this channel
     const gchar *flight, *msg;
     g_variant_get(params, "(&s&s)", &flight, &msg);
+    Q_EMIT radio()->broadcast(QString::fromUtf8(flight), QString::fromUtf8(msg));
     if (g_strcmp0(flight, g_dbus_connection_get_unique_name(conn)) == 0)
         return;   // our own report: already delivered here by announce()
     QJsonObject o = parse(msg);
@@ -432,6 +562,14 @@ QString Radio::request(const QString &method, const QString &arg)
     }
     g_variant_unref(r);
     return out;
+}
+
+void Radio::call(const QString &method, const QString &arg)
+{
+    if (!tower_up())
+        return;
+    g_dbus_connection_call(rs.conn, NAME, PATH, IFACE, method.toUtf8().constData(), g_variant_new("(s)", arg.toUtf8().constData()),
+                           nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
 }
 
 QString Radio::flight() const

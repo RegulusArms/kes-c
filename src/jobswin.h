@@ -1,0 +1,55 @@
+// The Jobs window: every job of every Kestrel (the queue, jobs.h, and the shared task list), what each is doing and
+// going to do, its log or its program's live output, and the queue's controls. Opened by clicking the status bar's
+// job panel, or ☰ → Jobs.
+#pragma once
+
+#include <QDialog>
+#include <QHash>
+#include <QTimer>
+
+class QCheckBox;
+class QComboBox;
+class QLabel;
+class QListWidget;
+class QPlainTextEdit;
+class QPushButton;
+class QSplitter;
+class QTreeWidget;
+class QTreeWidgetItem;
+
+class JobsWindow : public QDialog {
+    Q_OBJECT
+public:
+    explicit JobsWindow(QWidget *parent = nullptr);
+    static JobsWindow *open(QWidget *parent);   // shows this Kestrel's Jobs window (made if there's none)
+    void refresh();
+    QTreeWidget *list;   // one row per job: its key in Qt::UserRole ("flight/id", or "done:<n>" for a finished one)
+
+protected:
+    void keyPressEvent(QKeyEvent *ev) override;
+    void closeEvent(QCloseEvent *ev) override;
+
+private:
+    struct Row {
+        QString key, flight, id, title, state, text;
+        double fraction = -1;
+        qint64 elapsed = 0;
+        bool admin = false, local = false, finished = false;
+        int finished_index = -1;
+    };
+    QList<Row> rows() const;
+    const Row *selected_row() const;
+    void show_details();
+    void act(const QString &action);
+    void save_log();
+    QTimer timer;
+    QComboBox *mode;
+    QCheckBox *start_paused;
+    QPushButton *pause_btn, *stop_btn, *now_btn, *up_btn, *down_btn;
+    QLabel *head;
+    QListWidget *steps;
+    QPlainTextEdit *log;
+    QSplitter *split;
+    QList<Row> shown;
+    QString log_key;   // whose log the right side shows
+};

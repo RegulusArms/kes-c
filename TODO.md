@@ -260,66 +260,6 @@ into.
   - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
   - **Remembered:** window size and position, fullscreen, filmstrip and info panel state.
 
-- [ ] **A Jobs window.** Clicking the job progress bar in the status bar opens a **Jobs** window (a free window, as
-  every Kestrel window is). Today the status bar shows the oldest job with "+N more" and a hover list (TaskPanel in
-  `src/fileops.cpp`).
-  - **Left: the jobs,** in a scrolling list: every running and queued job of this window, then those of Kestrel's other
-    windows and other Kestrels (from the shared task list, `TaskBoard`), then recently finished ones (done, failed,
-    cancelled) until cleared. Each row: title, what it's on now, its own progress bar, elapsed time and time left,
-    a 🛡 for admin-session jobs, and ✕ to cancel (another Kestrel's job is asked to cancel, as now).
-  - **What a job is going to do:** a job made of several steps (a copy of 20 items, a batch of conversions or
-    extractions, a sync) lists its steps under it, done / in progress / waiting, so the user can see what's coming.
-  - **Right: the selected job's details.** For jobs that run a command-line tool (7z, tar, zpaq, rar/unrar, exiftool,
-    BleachBit, ffmpeg and the planned tools): the exact command and its **live output** as it runs, scrolling, with a
-    copy button; for Kestrel's own jobs (copy, move, delete, trash), a log of what it did: each item, conflicts and
-    how they were answered, errors, and the summary.
-  - Output is kept per job, capped in size (the start and the end of a very long output), for as long as the job is
-    in the list; nothing is written to disk unless a "Save log…" button is used. Passwords never appear (they're
-    already passed to the tools out of the command line where the tool allows; mask them in the shown command).
-  - Another Kestrel's job: its progress is shared already; its output would need to go through the tower too (new
-    message fields, so bump PROTOCOL) or be shown as "open it in that window".
-  - Keyboard: Delete cancels the selected job; the window remembers its size and the split between the two sides.
-  - **A job queue with start, stop and pause.** Today every job starts at once on its own thread, so two copies to the
-    same drive compete and both go slower. Instead, jobs go into a queue:
-    - **Controls per job:** Pause / Resume, Stop (cancel, as ✕ now), Start now (skip the queue), move up / down (or
-      drag to reorder) while waiting. **For the whole queue:** Pause all / Resume all, and a "Start new jobs paused"
-      option for lining up work before running it.
-    - **Pausing:** Kestrel's own jobs pause between chunks (the copy loop waits instead of reading on: a pause takes
-      effect within one 4 MB chunk, and nothing is left half-written: the part file just stays open); jobs that run a
-      tool (7z, tar, ffmpeg…) are paused by stopping its process group (SIGSTOP / SIGCONT). The status bar and the
-      Jobs window show "Paused".
-    - **Two ways to run the queue** (a setting in the Jobs window and in Preferences):
-      - **One at a time, in order:** a single job runs; the next starts when it's done, even if it would use other
-        drives.
-      - **By drive ("lanes"):** each job uses a set of drives (where it reads from and where it writes to: a copy from
-        drive A to drive B uses A and B). Jobs whose drives don't overlap run at the same time, each in its own
-        lane: A → B and C → D together; A → B and A → C wait for each other, as do A → B and C → B. Within a lane,
-        jobs run in queue order.
-    - Drives are told apart by the device they're on (`st_dev`, mapped to the physical disk so two partitions of one
-      disk count as one drive); each network share, phone and tape is a drive of its own. A move within one drive (a
-      rename) needs no lane and runs at once.
-    - Fits the slow-drives / LTFS items: a tape or floppy gets one job at a time whatever the mode.
-    - Default: by drive (closest to today's behaviour, without the competing).
-  - **One queue for every Kestrel, kept by the tower.** The point is that no two jobs hit the same source or target
-    drive at once, whichever Kestrel window or process started them. So there's one queue, not one per Kestrel:
-    - Each job is still run by the Kestrel that started it (its threads, its tools, its errors and questions), but
-      before starting it asks the tower for a lane: it sends the job's id, title and the drives it uses. The tower
-      keeps the single queue in order (first asked, first served, unless reordered), and when the job's drives are
-      free (by-drive mode) or nothing else runs (one-at-a-time mode) it tells that Kestrel "your lane is open"; the
-      Kestrel starts the job and tells the tower when it's done, failed or cancelled, which frees the lane for the
-      next waiting job, in whichever Kestrel it is.
-    - Pause, resume, stop, start now and reordering from any Jobs window go through the tower to the Kestrel running
-      that job (as ✕ on another Kestrel's job does now), so every Jobs window shows and controls the same queue.
-    - Robustness: a Kestrel that closes or crashes drops out (the tower already notices flights leaving), and its
-      lanes are freed. If the tower goes down, the new tower rebuilds the queue as the Kestrels check in again with
-      their running and waiting jobs. With no tower at all (no session bus), each Kestrel queues its own jobs, as a
-      fallback.
-    - Drives must mean the same thing in every Kestrel: identify them by the physical disk (from `st_dev` through
-      `/sys/dev/block` to the whole disk), by mount source for network shares, phones and tapes.
-    - Admin-session jobs use lanes too (they read and write drives like any other job).
-    - New tower messages and methods (ask for a lane, lane open, job finished, queue order, pause/resume), so bump
-      PROTOCOL; the Tower window item can show the lanes and the queue.
-
 - [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
   all the way back up to its header to collapse it. Make it collapsible from the bottom too, and without scrolling:
   - **A footer at the end of each group:** a slim row ("▴ Collapse Today (1,240)") after the group's last item that
@@ -351,24 +291,19 @@ into.
   - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
     folder pastes a copy of the file.
 
-- [ ] **A Tower window: see what the tower is doing.** ☰ → **Tower…** (and `kes --tower-monitor` from a terminal) opens a
-  window showing the tower (`kes --atc`, which keeps several Kestrels in sync) live.
-  - The tower itself stays windowless (it must keep running between Kestrel windows and outlive any of them): the
-    window is an ordinary Kestrel window that watches it over D-Bus, like any other client, read-only.
-  - **Status:** whether the tower is running, its process id, how long it has been up, its protocol version, and when
-    it will land (about 10 s after the last Kestrel leaves). A "Restart Tower" button for when it's stuck (the next
-    Kestrel to notice starts a new one, as now).
-  - **Flights:** every Kestrel checked in (from the existing `Flights` method): pid, version, protocol, how many
-    windows and which one was used last, its running jobs (from `Kept`: tasks, windows).
-  - **Live message log:** every message the tower passes on (listening to its `Broadcast` signal): time, from which
-    Kestrel, type (starred, sorts, folders, tasks, cancel, open…) and the fields, newest at the bottom, with a filter by
-    type and a pause button. With `KESTREL_STATS`-style delay figures (how long each took through the tower).
-  - **Shared undo list** when sharing undo is on: what Ctrl+Z would undo, in order. Needs a new read-only method
-    (`UndoPop` takes the entry off), and a `Status` method for the uptime and landing time: tower changes, so bump
-    PROTOCOL.
-  - Refused messages (malformed, unknown type, another protocol) could be counted too, to spot a misbehaving program on
-    the session bus.
-  - Mostly a debugging and curiosity tool; maybe only shown with a "Show developer tools" preference.
+- [ ] **Split sizes to pick from when compressing.** In Compress…, when the chosen program can split an archive into
+  volumes (7z, rar, zip with 7-Zip; the **Split into volumes** box, shown only then), the size becomes a dropdown of
+  standard sizes plus **Custom…** with a box for any size. Today it's a number box and an MB / GB unit
+  (`src/archive_ui.cpp`).
+  - Standard sizes, named by what they fit: 25 MB (email), 100 MB, 650 MB (CD), 700 MB (CD), 1 GB, 2 GB, 4 GB (just under
+    4 GiB: a FAT32 USB stick's largest file, 4095 MB), 4.7 GB (DVD), 8.5 GB (dual-layer DVD), 25 GB (Blu-ray),
+    50 GB (dual-layer Blu-ray). Exact byte sizes for the discs (a "4.7 GB" DVD holds 4,700,372,992 bytes, not
+    4.7 GiB), so a volume really fits; to settle when it's built.
+  - **Custom…** shows the number box with a unit (KB, MB, GB) again; the last custom size is remembered, and the
+    choice (standard or custom) is remembered per format as now.
+  - The Command preview shows the exact size passed to the program (`-v` for 7z and rar).
+  - The size is passed around in whole megabytes today (`volume_mb`): exact disc sizes and a KB unit need it in bytes
+    (or KB) all the way to the command.
 
 - [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
   floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
@@ -378,14 +313,14 @@ into.
     mounted, `getfattr -d -m - /mnt/ltfs` and on a file. Fix the names where they differ.
   - Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that browsing
     it no longer freezes.
-  - One job at a time per drive is per Kestrel process for now; across Kestrels it comes with the unified job queue
-    (Jobs window item).
   - Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
     what's on which tape).
 
 ## Done
 
+- [x] **A Jobs window, and one job queue for every Kestrel** (0.3.1-alpha.12). `src/jobs.cpp` (the queue: kept by the tower across Kestrels, each Kestrel's own without one; by drive or one at a time; drives by physical disk), `src/jobswin.cpp` (every job, steps, logs and live tool output, Pause/Resume/Stop/Start Now/Up/Down, Pause All, start paused). Not done: another Kestrel's job log isn't sent through the tower (the window says it's in that Kestrel's Jobs window); only copy/move/delete jobs list steps; administrator jobs can't be paused (the helper runs as root). Test: `jobs`.
+- [x] **A Tower window: see what the tower is doing** (0.3.1-alpha.12). `src/towerwin.cpp`, ☰ → Tower… with Preferences → Show developer tools, or `kes --tower-monitor`: status (pid, uptime, protocol, landing, refused messages) with Restart Tower, the Kestrels checked in, the live message log with a filter and pause, the queue and drives in use, the shared undo list. Test: `jobs`.
 - [x] **LTFS tape support: no freezing, and tape-friendly behaviour** (0.3.1-alpha.11). `src/drives.cpp`: tapes (LTFS mounts) and floppies recognised from the mount table; sizes read in the background (sidebar, Overview, status bar, Properties); no previews/details/animations/dates read unless allowed per drive; one job at a time per drive; tape-order reads with "Positioning the tape"; index written after a copy and on demand; small-files warning; the Overview card; background unmount with a warning while a job runs. What's left: see "LTFS and slow drives: what's left". Test: `slow`.
 - [x] **Kestrel freezes while another program copies from the tape** (0.3.1-alpha.11). Cause as suspected: the sidebar's 4-second mount check asked every mount for its size on the UI thread. Mounts now come from `/proc/self/mountinfo`, sizes from a worker. Tests: `slow`, and `ui` (no `QStorageInfo` outside the Overview's background scan).
 - [x] **Copying to an LTFS tape fails with "no permission", also as administrator** (0.3.1-alpha.11). Fallback to check-then-rename when `link()` fails for lack of support (Kestrel's copy, `util::put_new`, the admin helper). Not yet confirmed on the tape itself (see what's left). Tests: `fileops`, `admin_helper` (`KESTREL_TEST_NO_LINK`).

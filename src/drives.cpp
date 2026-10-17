@@ -122,6 +122,46 @@ QString mount_root(const QString &path)
     return mt ? mt->root : QString("/");
 }
 
+// the whole disks under a block device: a partition's disk, the disks under a device-mapper or md device (its slaves)
+static QStringList disks_of(const QString &name, int depth = 0)
+{
+    QString sys = "/sys/class/block/" + name;
+    QStringList out;
+    QStringList slaves = depth < 8 ? QDir(sys + "/slaves").entryList(QDir::Dirs | QDir::NoDotAndDotDot) : QStringList();
+    for (const QString &s : slaves)
+        for (const QString &d : disks_of(s, depth + 1))
+            if (!out.contains(d))
+                out << d;
+    if (!out.isEmpty())
+        return out;
+    if (exists(sys + "/partition"))
+        return {basename(dirname(realpath(sys)))};   // the link first: abspath() would drop "/.." before it
+    return {name};
+}
+
+QStringList drive_ids(const QString &path)
+{
+    if (path.isEmpty() || !path.startsWith('/'))
+        return {};
+    QList<Mount> all = mounts();
+    const Mount *mt = mount_of(all, path);
+    if (!mt)
+        return {};
+    if (mt->fstype == "fuse.gvfsd-fuse") {   // one FUSE mount for every GVFS share and phone: each is its own drive
+        QString first = path.mid(mt->root.size() + 1).section('/', 0, 0);
+        return {first.isEmpty() ? QString("gvfs") : "gvfs:" + first};
+    }
+    if (mt->source.startsWith("/dev/")) {
+        QStringList out;
+        for (const QString &d : disks_of(basename(realpath(mt->source))))
+            out << "disk:" + d;
+        return out;
+    }
+    if (mt->fstype == "zfs")
+        return {"zfs:" + mt->source.section('/', 0, 0)};
+    return {"mount:" + mt->fstype + ":" + mt->source};
+}
+
 // a floppy: the old /dev/fd*, or a removable disk (a USB floppy drive is an sd device) holding at most 4 MB (a 2.88 MB
 // disk, with room). Not loop, RAM or device-mapper devices, which can be as small (snap's squashfs images are)
 static bool is_floppy_device(const QString &source)
@@ -142,7 +182,7 @@ static bool is_floppy_device(const QString &source)
     if (name.startsWith("sd") || name.startsWith("fd")) {
         bool ok = false;
         qint64 sectors = read_file(sys + "/size", &ok).trimmed().toLongLong();
-        QString disk = exists(sys + "/partition") ? realpath(sys + "/..") : sys;   // a partition: its disk says
+        QString disk = exists(sys + "/partition") ? dirname(realpath(sys)) : sys;   // a partition: its disk says
         bool removable = read_file(disk + "/removable").trimmed() == "1";
         floppy = ok && removable && sectors > 0 && sectors * 512 <= (qint64(4) << 20);
     }
@@ -312,63 +352,6 @@ void Sizes::forget(const QString &root)
     auto it = cache.find(root);
     if (it != cache.end() && !it->running)
         cache.erase(it);
-}
-
-// ---------------------------------------------------------------- lanes
-
-QMutex Lanes::lock;
-QWaitCondition Lanes::freed;
-QSet<QString> Lanes::taken;
-
-Lanes::Lanes(const QStringList &paths, Task *task, const std::function<void(const QString &)> &waiting)
-{
-    QSet<QString> want;
-    Slow kind = Slow::None;
-    for (const QString &p : paths) {
-        QString r = slow_root(p);
-        if (!r.isEmpty()) {
-            want << r;
-            kind = slow_kind(r);
-        }
-    }
-    if (want.isEmpty())
-        return;
-    bool said = false;
-    for (;;) {
-        {
-            QMutexLocker l(&lock);
-            bool free = true;
-            for (const QString &r : want)
-                free = free && !taken.contains(r);
-            if (free) {
-                taken.unite(want);
-                held = want;
-                return;
-            }
-            freed.wait(&lock, 250);
-        }
-        if (!said && waiting) {
-            waiting(QString("Waiting for the %1 (another job is using it)…").arg(slow_name(kind)));
-            said = true;
-        }
-        if (task)
-            task->check();   // a cancel while waiting
-    }
-}
-
-Lanes::~Lanes()
-{
-    if (held.isEmpty())
-        return;
-    QMutexLocker l(&lock);
-    taken.subtract(held);
-    freed.wakeAll();
-}
-
-bool Lanes::busy(const QString &root)
-{
-    QMutexLocker l(&lock);
-    return taken.contains(root);
 }
 
 }  // namespace drives
