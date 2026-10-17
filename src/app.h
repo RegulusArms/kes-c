@@ -19,6 +19,7 @@ class InfoPanel;
 class OverviewPage;
 class PathBar;
 class RecursiveBuilder;
+class Task;
 class SearchModel;
 class SearchThread;
 class Sidebar;
@@ -70,9 +71,10 @@ public:
     void toggle_view();
     void sync_zoom_slider();
     void set_folder_previews(bool on);
-    // folders_only: only folder previews, not every file's thumbnail; depth: as RecursiveBuilder's (-1: the whole tree)
-    void build_previews(const QString &root, bool folders_only = false, int depth = -1);
-    void stop_build();
+    // Generate / Regenerate Previews, as a job (returned). folders_only: only folder previews, not every file's
+    // thumbnail; depth, fresh: as RecursiveBuilder's (-1: the whole tree; fresh: made again, the caches' replaced)
+    Task *build_previews(const QString &root, bool folders_only = false, int depth = -1, bool fresh = false);
+    void add_preview_menu(QMenu *menu, const QString &folder);   // the Previews submenu for a folder
     void toggle_hidden(bool on);
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
@@ -141,8 +143,6 @@ private:
     void pane_path_changed(Pane *pane);
     void remember_server(const QString &uri);
     void sync_view_btn();
-    void build_progress(int done, int total, bool scanning, const QString &current);
-    void build_finished(int done, int total, bool cancelled);
     void on_thumb_progress(int done, int total);
     void toggle_panel(QWidget *w, const QString &key, bool on);
     void open_videos(const QStringList &videos);
@@ -162,15 +162,12 @@ private:
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
-    QLabel *status_label, *free_label, *build_label;
+    QLabel *status_label, *free_label;
     QString free_root;   // the mount point free_label is about
     void update_free_label();
     QSlider *zoom_slider;
-    QProgressBar *thumb_progress, *build_bar;
-    RecursiveBuilder *builder = nullptr;
-    QString build_root;
-    QWidget *build_box;
-    QToolButton *build_stop, *view_btn, *sort_btn, *menu_btn;
+    QProgressBar *thumb_progress;
+    QToolButton *view_btn, *sort_btn, *menu_btn;
     QMenu *sort_menu;
     QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info, *a_undo;
     bool closing = false;

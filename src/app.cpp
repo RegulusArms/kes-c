@@ -134,24 +134,6 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     thumb_progress->setSizePolicy(keep);
     thumb_progress->hide();
     connect(thumbs, &ThumbnailManager::progress, this, &MainWindow::on_thumb_progress);
-    build_box = new QWidget;
-    auto *bl = new QHBoxLayout(build_box);
-    bl->setContentsMargins(0, 0, 0, 0);
-    bl->setSpacing(4);
-    build_label = new QLabel;
-    build_label->setMaximumWidth(260);
-    build_bar = new QProgressBar;
-    build_bar->setFixedWidth(200);
-    build_bar->setMaximumHeight(16);
-    build_stop = new QToolButton;
-    build_stop->setText("✕");
-    build_stop->setAutoRaise(true);
-    build_stop->setToolTip("Stop building previews");
-    connect(build_stop, &QToolButton::clicked, this, &MainWindow::stop_build);
-    bl->addWidget(build_label);
-    bl->addWidget(build_bar);
-    bl->addWidget(build_stop);
-    build_box->hide();
     task_panel = new TaskPanel;   // file operations running in the background
     connect(task_panel, &TaskPanel::clicked, this, [this]() { JobsWindow::open(this); });
     setProperty("task_panel", QVariant::fromValue<QObject *>(task_panel));
@@ -159,7 +141,6 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     statusBar()->addWidget(status_label, 1);
     statusBar()->addPermanentWidget(admin_indicator);
     statusBar()->addPermanentWidget(task_panel);
-    statusBar()->addPermanentWidget(build_box);
     statusBar()->addPermanentWidget(thumb_progress);
     statusBar()->addPermanentWidget(free_label);
     statusBar()->addPermanentWidget(zoom_slider);
@@ -797,64 +778,61 @@ void MainWindow::set_folder_previews(bool on)
 
 // -- recursive preview build
 
-void MainWindow::build_previews(const QString &root, bool folders_only, int depth)
+void MainWindow::add_preview_menu(QMenu *menu, const QString &folder)
 {
-    if (builder) {
-        inform(this, "Generate Previews",
-               "A preview build is already running. Stop it first (✕ in the status bar).");
-        return;
-    }
+    // Generate: only what isn't made yet. Regenerate: everything made again, the cached copies replaced (for previews
+    // that look wrong or old). "Folder previews": just the folders' mosaics (and the few images each shows); without
+    // "Recursively", this folder and the folders directly in it (and this folder's files).
+    QMenu *pm = menu->addMenu(icon({"view-refresh"}), "Previews");
+    pm->addAction("Generate Previews Recursively", this, [this, folder]() { build_previews(folder); });
+    pm->addAction("Generate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1); });
+    pm->addAction("Generate Folder Previews Recursively", this, [this, folder]() { build_previews(folder, true); });
+    pm->addSeparator();
+    pm->addAction("Regenerate Previews", this, [this, folder]() { build_previews(folder, false, 1, true); });
+    pm->addAction("Regenerate Previews Recursively", this, [this, folder]() { build_previews(folder, false, -1, true); });
+    pm->addAction("Regenerate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1, true); });
+    pm->addAction("Regenerate Folder Previews Recursively", this,
+                  [this, folder]() { build_previews(folder, true, -1, true); });
+}
+
+Task *MainWindow::build_previews(const QString &root, bool folders_only, int depth, bool fresh)
+{
+    // each build is a job of its own: it waits for its turn on the drive (job queue), shows in the status bar and the
+    // Jobs window, and can be paused or stopped like any other
     int size = pane() ? pane()->grid_size : 160;
-    auto *b = new RecursiveBuilder(root, size, thumbs, nullptr, 3, folders_only, depth);
-    connect(b, &RecursiveBuilder::progress, this, &MainWindow::build_progress);
-    connect(b, &RecursiveBuilder::finished_build, this, &MainWindow::build_finished);
-    connect(b, &QThread::finished, b, &QObject::deleteLater);
-    builder = b;
-    build_root = root;
+    auto b = std::make_shared<RecursiveBuilder>(root, size, thumbs, nullptr, 3, folders_only, depth, fresh);
     QString name = basename(rstrip(root, '/'));
-    build_label->setText((folders_only ? "Folder previews: " : "Previews: ") + (name.isEmpty() ? root : name));
-    build_label->setToolTip(root);
-    build_bar->setRange(0, 0);   // busy while scanning
-    build_bar->setFormat("Scanning…");
-    build_box->show();
-    b->start();
-}
-
-void MainWindow::build_progress(int done, int total, bool scanning, const QString &current)
-{
-    if (total == 0) {
-        build_bar->setRange(0, 0);
-    } else {
-        build_bar->setRange(0, total);
-        build_bar->setValue(done);
-        // total keeps growing while the folder tree is still being walked
-        build_bar->setFormat(scanning ? QString("%1 / %2+ scanning…").arg(group_digits(done), group_digits(total))
-                                      : QString("%v / %m  (%p%)"));
-    }
-    build_bar->setToolTip(current);
-}
-
-void MainWindow::stop_build()
-{
-    if (builder) {
-        builder->cancel();
-        build_label->setText("Stopping…");
-        build_stop->setEnabled(false);
-    }
-}
-
-void MainWindow::build_finished(int done, int total, bool cancelled)
-{
-    builder = nullptr;
-    build_box->hide();
-    build_stop->setEnabled(true);
-    thumbs->failed.clear();   // items that failed earlier may exist on disk now
-    for (MainWindow *w : WINDOWS)
-        for (Pane *p : w->panes())
-            p->view()->viewport()->update();
-    statusBar()->showMessage(QString("%1 building previews: %2 of %3 items")
-                                 .arg(cancelled ? "Stopped" : "Finished", group_digits(done), group_digits(total)),
-                             8000);
+    if (name.isEmpty())
+        name = root;
+    QString what = QString(fresh ? "Regenerating " : "Generating ") + (folders_only ? "folder previews" : "previews") +
+                   (depth < 0 ? " recursively" : "");
+    auto work = [b](Task *task) -> QVariant {
+        bool stopped = b->run(task);
+        if (stopped)
+            task->was_cancelled = true;
+        return QVariantMap{{"done", b->done_count()}, {"total", b->total_count()}, {"stopped", stopped}};
+    };
+    QPointer<MainWindow> w(this);
+    auto done = [w, what, name, fresh](const QVariant &r) {
+        QVariantMap m = r.toMap();
+        if (fresh) {   // the old pictures are still in memory, here and in the other Kestrels
+            g_thumbs->clear_memory();
+            for (MainWindow *x : WINDOWS)
+                for (Pane *p : x->panes())
+                    p->animator->clear();
+            atc::announce("thumbs_cleared");
+        }
+        g_thumbs->failed.clear();   // items that failed earlier may exist on disk now
+        repaint_all();
+        if (!w)
+            return;
+        QString text = !r.isValid() || m["stopped"].toBool() ? "Stopped " + what.left(1).toLower() + what.mid(1)
+                                                             : "Finished " + what.left(1).toLower() + what.mid(1);
+        w->statusBar()->showMessage(QString("%1 in %2: %3 of %4 items")
+                                        .arg(text, name, group_digits(m["done"].toInt()), group_digits(m["total"].toInt())),
+                                    8000);
+    };
+    return fileops::queue_job(this, what + ": " + name, {root}, work, done);
 }
 
 void MainWindow::on_thumb_progress(int done, int total)
@@ -990,11 +968,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addSeparator();
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); });
         m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); });
-        m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this, [this, cur]() { build_previews(cur); });
-        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
-                     [this, cur]() { build_previews(cur, true, 1); });
-        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
-                     [this, cur]() { build_previews(cur, true); });
+        add_preview_menu(m, cur);
         if (in_trash(join(cur, "x"))) {
             m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
             if (fileops::can_shred())
@@ -1121,17 +1095,35 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     }
 
     m->addSeparator();
-    if (!single.isEmpty() && !is_dir && archive::can_extract(single)) {
-        QString missing = archive::missing_extract_tool(single);
+    // archives: one, or a split set selected whole (x.part1.rar … x.part3.rar), gets Extract; several get Extract All
+    QStringList arcs = std::all_of(paths.begin(), paths.end(),
+                                   [](const QString &x) { return archive::can_extract(x) && !isdir(x); })
+                           ? archive_ui::archives_of(paths)
+                           : QStringList();
+    if (arcs.size() == 1) {
+        QString one = arcs[0];
+        QString missing = archive::missing_extract_tool(one);
         if (!missing.isEmpty()) {
             QAction *a = m->addAction(icon({"archive-extract", "package-x-generic"}), QString("Extract (install %1)").arg(missing));
             a->setEnabled(false);
         } else {
             m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract Here", this,
-                         [this, single]() { archive_ui::extract_here(this, single); });
+                         [this, one]() { archive_ui::extract_here(this, one); });
             m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract To…", this,
-                         [this, single]() { archive_ui::extract_dialog(this, single); });
+                         [this, one]() { archive_ui::extract_dialog(this, one); });
+            if (archive::can_browse(one))
+                m->addAction(icon({"document-open", "package-x-generic"}), "Open as Archive", this,
+                             [this, one]() { archive_ui::browse(this, one); });
+            m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archive", this,
+                         [this, one]() { archive_ui::test_archives(this, {one}); });
         }
+    } else if (arcs.size() > 1) {
+        m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All Here", this,
+                     [this, arcs]() { archive_ui::extract_all_here(this, arcs); });
+        m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All To…", this,
+                     [this, arcs]() { archive_ui::extract_all_dialog(this, arcs); });
+        m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archives", this,
+                     [this, arcs]() { archive_ui::test_archives(this, arcs); });
     }
     QString quick = archive_ui::quick_compress_label(paths);
     if (!quick.isEmpty())
@@ -1171,12 +1163,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
             thumbs->invalidate(single);
             atc::announce("folders", {{"paths", QJsonArray{single}}});
         });
-        m->addAction(icon({"view-refresh"}), "Generate Previews Recursively", this,
-                     [this, single]() { build_previews(single); });
-        m->addAction(icon({"view-refresh"}), "Generate Folder Previews", this,
-                     [this, single]() { build_previews(single, true, 1); });
-        m->addAction(icon({"view-refresh"}), "Generate Folder Previews Recursively", this,
-                     [this, single]() { build_previews(single, true); });
+        add_preview_menu(m, single);
         m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
     }
     m->addSeparator();
@@ -1398,10 +1385,6 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         chooser->finish(false);   // closed without choosing: cancelled
     for (Pane *p : panes())
         p->stop_search();
-    if (builder) {
-        builder->cancel();
-        builder->wait(5000);
-    }
     for (const auto &v : viewers)
         if (v)
             v->close();

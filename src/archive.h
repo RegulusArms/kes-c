@@ -7,12 +7,13 @@
 // sit waiting on a password prompt), progress is read from their "NN%" output or counted from the bytes Kestrel
 // pipes through them, Cancel kills the whole process group, and partial output is removed.
 //
-// Passwords go to 7z on stdin. unrar, rar and zpaq only accept them as a command-line switch, which other local
-// users could read from the process list while the job runs.
+// Passwords go to 7z, rar and unrar on stdin, and to zip and unzip in an environment variable. zpaq only accepts
+// them as a command-line switch, which other local users could read from the process list while the job runs.
 #pragma once
 
 #include "util.h"
 
+#include <QDateTime>
 #include <QMap>
 #include <QString>
 #include <QStringList>
@@ -89,6 +90,9 @@ struct ProbeResult {
     QString error;
 };
 ProbeResult probe(const QString &path);   // look inside an archive without a password
+// Whether `password` opens the encrypted archive: a quick check (its listing, or a test of its smallest encrypted
+// file), not an extraction. True also when the check can't tell (a damaged archive): extracting will say.
+bool password_opens(Task *task, const QString &path, const QString &password);
 
 // A symlink an extraction left out for leading outside the folder: its path in the folder, its target, and why it's
 // still there (empty: it was removed).
@@ -106,9 +110,35 @@ struct Damaged {
 // damaged: when given (and can_keep_damaged()), files that fail their checksum are kept as far as they could be
 // extracted and listed in it, and only those failing doesn't fail the job. Without it unrar deletes them, and any
 // damage fails the job.
+// members: only these (paths in the archive as list() gives them, a folder's ending in "/": it brings what's inside),
+// each under its path in the archive.
 QString extract(Task *task, const QString &path, const QString &dest, const QString &password = QString(),
                 const QString &overwrite = "rename", int threads = 0, QList<DroppedLink> *dropped_links = nullptr,
-                Damaged *damaged = nullptr);
+                Damaged *damaged = nullptr, const QStringList &members = QStringList());
+// What's inside an archive (Open as Archive): each item's path in the archive (a folder's ends in "/"), its size
+// and packed size (-1: unknown), time and whether it's encrypted
+struct Entry {
+    QString path;
+    bool dir = false;
+    qint64 size = -1, packed = -1;
+    QDateTime modified;
+    bool encrypted = false;
+};
+bool can_browse(const QString &path);   // its tool can list it and extract single items (not a single .gz/.xz… file)
+// Raises WrongPassword (names encrypted, or a wrong password), Error or Cancelled
+QList<Entry> list(Task *task, const QString &path, const QString &password = QString());
+// Only `members` (as list() gives them), each put right in `dest` under its own name (a taken name gets a number;
+// nothing is replaced). Returns the paths made. Symlinks that would lead out of dest are left out (dropped_links).
+QStringList extract_members(Task *task, const QString &path, const QString &dest, const QString &password,
+                            const QStringList &members, QList<DroppedLink> *dropped_links = nullptr);
+// Test Archive: every file decompressed and checked against its checksum, nothing written
+struct TestResult {
+    bool ok = false;
+    QStringList damaged;   // the files that failed, where the tool names them
+    QString details;       // the tool's error lines
+};
+bool can_test(const QString &path);
+TestResult test(Task *task, const QString &path, const QString &password = QString());   // WrongPassword, Error, Cancelled
 bool can_keep_damaged(const QString &path);   // its tool tells which files are damaged (unrar, 7z, unzip)
 // A symlink target that leads out of the folder an archive is extracted into: an absolute one, or one whose ".."s
 // climb above it. depth: how many folders below that folder the link is.
