@@ -4,6 +4,46 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.11
+
+Added:
+- **`slow`, a new test for tapes and floppies**: folders marked as a tape and a floppy (`KESTREL_TEST_SLOW`, read by
+  `src/drives.cpp`) with a statfs that waits like a busy tape's (`KESTREL_TEST_STATFS_DELAY_MS`). Checks: they're
+  recognised and listed (also that a snap's small loop device isn't taken for a floppy); asking their size doesn't
+  hold the window (sidebar, status bar, Properties, Overview) and the size comes later; a checksum file is read in the
+  background (a FIFO stands in for a seeking tape); no thumbnail, date taken, GIF playback or image details read
+  from a tape until previews are allowed, then they are; copies read a tape in tape order (from LTFS's start-block
+  attributes); a job waits while another holds the tape; the index is written after a copy; more than 1,000 small
+  files ask first; the Overview shows the tape by its volume name. Covers the LTFS and floppy fixes.
+- `fileops`: on a file system without RENAME_NOREPLACE or hard links (`KESTREL_TEST_NO_LINK`, acting as LTFS) a copy
+  to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name. Guards
+  against the "no permission" failure copying to a tape.
+- `admin_helper`: the same for the helper's copy, write and copyfile.
+- `ui`: no `QStorageInfo` outside the Overview's background scan (it asks drives for their size, which waits on a busy
+  tape or floppy). Guards against the window freezing on slow drives again.
+
+## 0.3.1-alpha.10
+
+Added:
+- **Dropping into a subfolder keeps the view where it was** (`ui`): a long folder scrolled to the top, its last files
+  (the view's current item among them) dropped onto a subfolder at the top; after the move the scroll position is
+  unchanged, in the grid, the list and the grouped grid. Guards against the list jumping to where the moved items were.
+- **The mouse's back button doesn't drag** (`ui`): double-click into a folder, click a file there, go back with the
+  back button and move the mouse while it's down: no drag picture appears in the folder above. Guards against the
+  folder just left being dragged and sliding back into place.
+- **The grid is packed** (`ui`): a folder of 850 items, re-laid out by zooming and at window widths one pixel apart:
+  every item in its own cell in order, with as many columns as fit. Guards against the gap a batched layout left at
+  the 400-item batch boundary, and the empty last column when the cells added up to exactly the width.
+- **Save follows the place shown** (`chooser`): a Save chooser's button is off on the Overview and Starred and on
+  again in a folder with nothing selected, and saves there. Guards against it staying greyed out after the Overview.
+
+## 0.3.1-alpha.9
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes Markdown files (`*.md`: the docs, changelogs, README, TODO)
+  no longer starts the workflow, so the tests, sanitizers and package jobs don't run for it, and no package is built
+  or published. A change to anything else, in the same push or later, runs everything as before.
+
 ## 0.3.1-alpha.8
 
 Added:

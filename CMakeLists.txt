@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.1-alpha.8")
+set(KES_VERSION "0.3.1-alpha.11")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -41,6 +41,7 @@ add_executable(kes
     src/viewer.cpp
     src/widgets.cpp
     src/groups.cpp
+    src/drives.cpp
     src/overview.cpp
     src/dialogs.cpp
     src/archive.cpp

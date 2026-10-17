@@ -7,6 +7,7 @@
 #include "atc.h"
 #include "chooser.h"
 #include "dialogs.h"
+#include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
 #include "fm1.h"
@@ -43,7 +44,6 @@
 #include <QTabBar>
 #include <QSplitter>
 #include <QStatusBar>
-#include <QStorageInfo>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
@@ -110,6 +110,10 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
 
     status_label = new QLabel;
     free_label = new QLabel;
+    connect(drives::Sizes::instance(), &drives::Sizes::changed, this, [this](const QString &root) {
+        if (root == free_root)
+            update_free_label();
+    });
     zoom_slider = new QSlider(Qt::Horizontal);
     zoom_slider->setFixedWidth(140);
     zoom_slider->setToolTip("Zoom (Ctrl+scroll)");
@@ -627,6 +631,17 @@ void MainWindow::tab_changed(int)
     }
 }
 
+// The free space of the drive shown, from drives::Sizes: statfs can wait on the drive (a phone behind its transfers, a
+// tape behind another program's reads), so it's read on a worker and shown when it comes.
+void MainWindow::update_free_label()
+{
+    QString d = pane() ? pane()->dir() : QString();
+    QString root = d.isEmpty() || is_device_path(d) ? QString() : drives::mount_root(d);
+    drives::Sizes::Info info = root.isEmpty() ? drives::Sizes::Info() : drives::Sizes::instance()->get(root);
+    free_label->setText(info.free >= 0 ? human_size(info.free) + " free" : QString());
+    free_root = root;
+}
+
 void MainWindow::pane_path_changed(Pane *p)
 {
     int i = tabs->indexOf(p);
@@ -644,12 +659,10 @@ void MainWindow::pane_path_changed(Pane *p)
     a_up->setEnabled(!p->is_overview() && !p->is_virtual() && p->path != "/");
     sync_view_btn();
     sync_zoom_slider();
-    QString d = p->dir();
-    QStorageInfo vol;
-    if (!d.isEmpty() && !is_device_path(d))   // statfs on a phone waits behind its file transfers
-        vol = QStorageInfo(d);
-    free_label->setText(!d.isEmpty() && vol.isValid() ? human_size(vol.bytesAvailable()) + " free" : QString());
+    update_free_label();
     update_status();
+    if (chooser)   // Save needs a folder: re-checked in each place, not only when the name or the selection changes
+        chooser->update_button();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }

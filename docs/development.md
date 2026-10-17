@@ -9,7 +9,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 487 checks in 15 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, pinned items and folder sorts, grouping by date, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
+There are 519 checks in 16 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push that changes more than Markdown files, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
 
 ## Architecture
 
@@ -119,6 +119,7 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
 | `src/incoming.cpp` | Requests from outside this Kestrel: changes other Kestrels report through the tower, folders handed over to open as tabs, and other apps' "Show in folder" (FileManager1) |
 | `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection, each folder's sort and grouping |
+| `src/drives.cpp` | Slow drives (LTFS tapes, floppy disks): recognising them from the mount table, their sizes read in the background, tape attributes and index sync, one job at a time per drive |
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |

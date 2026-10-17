@@ -1,6 +1,7 @@
 #include "dialogs.h"
 
 #include "admin.h"
+#include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
 #include "undo.h"
@@ -34,7 +35,6 @@
 #include <QRegularExpression>
 #include <QSpinBox>
 #include <QStandardItemModel>
-#include <QStorageInfo>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTimer>
@@ -480,11 +480,28 @@ QWidget *PropertiesDialog::general_tab()
             },
             [this](const QVariant &r) { show_dir_size(r); });
     }
-    QStorageInfo vol(path);
-    if (vol.isValid())
-        form->addRow("Volume:", sel_label(QString("%1 (%2) — %3 free of %4")
-                                              .arg(vol.rootPath(), QString::fromUtf8(vol.fileSystemType()),
-                                                   human_size(vol.bytesAvailable()), human_size(vol.bytesTotal()))));
+    // the drive's size from drives::Sizes (statfs can wait on a slow drive): filled in when it comes
+    QString root = drives::mount_root(path);
+    QString fstype;
+    for (const drives::Mount &mt : drives::mounts())
+        if (mt.root == root)
+            fstype = mt.fstype;
+    QLabel *vol = sel_label(root);
+    form->addRow("Volume:", vol);
+    QPointer<QLabel> vp(vol);
+    auto show_vol = [vp, root, fstype]() {
+        if (!vp)
+            return;
+        drives::Sizes::Info info = drives::Sizes::instance()->get(root);
+        QString head = fstype.isEmpty() ? root : QString("%1 (%2)").arg(root, fstype);
+        vp->setText(info.total >= 0 ? QString("%1 — %2 free of %3").arg(head, human_size(info.free), human_size(info.total))
+                                    : head + " — reading the size…");
+    };
+    show_vol();
+    connect(drives::Sizes::instance(), &drives::Sizes::changed, vol, [show_vol, root](const QString &r) {
+        if (r == root)
+            show_vol();
+    });
     return w;
 }
 
@@ -986,34 +1003,39 @@ void PropertiesDialog::verify_against(const QString &hash_path)
         hash_result->setText(text);
         hash_result->setStyleSheet(QString("color: %1").arg((good ? ok_color() : error_color()).name()));
     };
-    QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
-    const hashcheck::Entry *found = hashcheck::find(entries, path);
-    if (entries.isEmpty())
-        return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
-    if (!found)
-        return said(QString("✘ “%1” isn't listed in it.").arg(basename(path)), false);
-    hashcheck::Entry e = *found;
-    QString algo = hashcheck::algo_label(e.algo);
     hash_result->setStyleSheet(QString());
-    hash_result->setText(QString("Checking (%1)…").arg(algo));
+    hash_result->setText("Checking…");
     QPointer<QLabel> label(hash_result);
+    QString file = path;
+    // the checksum file is read on the job's thread too (it can be on a tape or floppy, which takes long to read)
     fileops::run_job(
         this, "Verifying " + basename(path),
-        [e](Task *t) -> QVariant {
+        [hash_path, file](Task *t) -> QVariant {
+            QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
+            const hashcheck::Entry *found = hashcheck::find(entries, file);
+            if (entries.isEmpty())
+                return QVariantList{"not_checksums"};
+            if (!found)
+                return QVariantList{"not_listed"};
+            hashcheck::Entry e = *found;
             hashcheck::Result r = hashcheck::verify(e, t);
-            return QVariantList{r.status, r.actual, r.error};
+            return QVariantList{r.status, r.actual, r.error, e.expected, hashcheck::algo_label(e.algo)};
         },
-        [label, said, e, algo](const QVariant &res) {
+        [label, said, hash_path, file](const QVariant &res) {
             if (!label)
                 return;
             QVariantList r = res.toList();
-            QString status = r.value(0).toString();
+            QString status = r.value(0).toString(), algo = r.value(4).toString();
             if (!res.isValid())
                 return said("Stopped.", false);
+            if (status == "not_checksums")
+                return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
+            if (status == "not_listed")
+                return said(QString("✘ “%1” isn't listed in it.").arg(basename(file)), false);
             if (status == "ok")
                 return said(QString("✔ Matches (%1).").arg(algo), true);
             if (status == "failed") {
-                label->setToolTip(QString("Expected: %1\nActual: %2").arg(e.expected, r.value(1).toString()));
+                label->setToolTip(QString("Expected: %1\nActual: %2").arg(r.value(3).toString(), r.value(1).toString()));
                 return said(QString("✘ Doesn't match (%1).").arg(algo), false);
             }
             said("✘ " + (status == "missing" ? QString("Not found.") : r.value(2).toString()), false);

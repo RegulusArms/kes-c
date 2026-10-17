@@ -471,13 +471,30 @@ void VerifyDialog::summary()
                                 : QString());
 }
 
-bool open_dialog(QWidget *parent, const QString &path)
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing)
 {
-    QList<Entry> entries = parse(path);
-    if (entries.isEmpty())
-        return false;
-    show_free(new VerifyDialog(parent, path, entries));
-    return true;
+    QPointer<QWidget> p(parent);
+    fileops::run_task(
+        parent, "Reading " + basename(path),
+        [path]() {
+            QVariantList out;
+            for (const Entry &e : parse(path))
+                out << QVariant(QStringList{e.path, e.name, e.expected, e.algo});
+            return QVariant(out);
+        },
+        [p, path, not_listing](const QVariant &res) {
+            QList<Entry> entries;
+            for (const QVariant &v : res.toList()) {
+                QStringList f = v.toStringList();
+                entries << Entry{f.value(0), f.value(1), f.value(2), f.value(3)};
+            }
+            if (entries.isEmpty()) {
+                if (res.isValid() && not_listing)
+                    not_listing();
+                return;
+            }
+            show_free(new VerifyDialog(p, path, entries));
+        });
 }
 
 }   // namespace hashcheck

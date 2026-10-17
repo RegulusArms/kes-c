@@ -1,5 +1,6 @@
 #include "thumbs.h"
 
+#include "drives.h"
 #include "proc.h"
 #include "atc.h"
 #include "stats.h"
@@ -825,6 +826,10 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
         return QPixmap();
     if (!pending.contains(k)) {
         bool device = is_device_path(path);
+        // a tape or floppy: no thumbnails or folder mosaics unless the user allowed them for that drive (each one
+        // makes a tape seek, a floppy read for seconds). Not remembered as failed, so allowing them takes effect
+        if (!drives::reads_allowed(path))
+            return QPixmap();
         if (!is_dir && fsize > qint64(max_file_mb) * 1000000 && !is_video(path)) {
             failed << k;
             return QPixmap();

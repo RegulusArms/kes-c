@@ -5,6 +5,7 @@
 #include "animate.h"
 #include "app.h"
 #include "chooser.h"
+#include "drives.h"
 #include "fileops.h"
 #include "focus.h"
 #include "groups.h"
@@ -111,10 +112,49 @@ private:
 template <class View>
 class FileView : public View {
 protected:
+    // The current item leaving the folder (moved into a subfolder, deleted, renamed away): the selection model makes a
+    // neighbour current, and Qt's view would scroll to it, jumping to where the items were. It stays put instead.
+    void rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end) override
+    {
+        QModelIndex cur = this->currentIndex();
+        if (cur.isValid() && cur.parent() == parent && cur.row() >= start && cur.row() <= end) {
+            current_leaving = true;
+            QTimer::singleShot(0, this, [this]() { current_leaving = false; });   // if no new current comes
+        }
+        View::rowsAboutToBeRemoved(parent, start, end);
+    }
+
+    void currentChanged(const QModelIndex &current, const QModelIndex &previous) override
+    {
+        if (!current_leaving) {
+            View::currentChanged(current, previous);
+            return;
+        }
+        current_leaving = false;
+        bool scroll = this->hasAutoScroll();   // autoScroll also scrolls at the edges during a drag: only off for this
+        this->setAutoScroll(false);
+        View::currentChanged(current, previous);
+        this->setAutoScroll(scroll);
+    }
+
     void mousePressEvent(QMouseEvent *ev) override
     {
         press_pos = ev->position().toPoint();   // where a drag starts (on Wayland, QCursor::pos() isn't reliable)
         View::mousePressEvent(ev);
+    }
+
+    // Only the left button drags. Qt starts a drag on a move with any button held once an item was pressed: with the
+    // mouse's back button still down as the hand moves (going back to the folder above), it dragged the folder just
+    // left (selected there again) and, the drag going nowhere, showed its picture sliding back. Other buttons' moves
+    // reach the view as plain moves (hover still works).
+    void mouseMoveEvent(QMouseEvent *ev) override
+    {
+        if (ev->buttons() == Qt::NoButton || (ev->buttons() & Qt::LeftButton)) {
+            View::mouseMoveEvent(ev);
+            return;
+        }
+        QMouseEvent plain(ev->type(), ev->position(), ev->globalPosition(), Qt::NoButton, Qt::NoButton, ev->modifiers());
+        View::mouseMoveEvent(&plain);
     }
 
     void dragMoveEvent(QDragMoveEvent *ev) override
@@ -188,6 +228,7 @@ protected:
         QMimeData *data = indexes.isEmpty() ? nullptr : this->model()->mimeData(indexes);
         if (!data)
             return;
+        QPersistentModelIndex root = this->rootIndex();   // the folder shown (a drag that outlives it doesn't fly back)
         auto *drag = new QDrag(this);
         drag->setMimeData(data);
         QRect from;
@@ -211,7 +252,7 @@ protected:
         ghost.reset();
         if (!self)
             return;
-        if (done == Qt::IgnoreAction) {   // went nowhere: back to where the items are (the view may have scrolled)
+        if (done == Qt::IgnoreAction && this->rootIndex() == root) {   // went nowhere: back to where the items are
             QPoint scrolled = QPoint(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value()) - start_scroll;
             fly(QRect(last_drag_pos - drag_hot, drag_pm.deviceIndependentSize().toSize()), from.translated(-scrolled),
                 false);
@@ -221,6 +262,7 @@ protected:
     }
 
 private:
+    bool current_leaving = false;        // the current item is being removed (rowsAboutToBeRemoved)
     QPersistentModelIndex drop_target;   // the folder highlighted under a drag
     QPoint press_pos, last_drag_pos, drag_hot;   // viewport coordinates; drag_hot: on the drag's picture
     QPixmap drag_pm;
@@ -439,8 +481,10 @@ void Pane::setup_grid()
     g->setResizeMode(QListView::Adjust);
     g->setWrapping(true);
     g->setUniformItemSizes(true);
-    g->setLayoutMode(QListView::Batched);
-    g->setBatchSize(400);
+    // One pass, not in batches: a batched layout redone (after a zoom, a resize, a change in the folder) started each
+    // batch on a new row, leaving an empty cell at the end of the row before it. A pass over 50,000 items takes about
+    // 20 ms (45 ms grouped by date, where each item is asked its size).
+    g->setLayoutMode(QListView::SinglePass);
     g->setMouseTracking(true);
     g->setFrameShape(QFrame::NoFrame);
     MainWindow *w = win;
@@ -670,7 +714,9 @@ void Pane::update_grid_size()
     // Width as if the scrollbar were always shown: otherwise the scrollbar appearing/disappearing changes the
     // column width and the grid re-flows.
     int sb = grid->verticalScrollBar()->isVisible() ? 0 : grid->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
-    int avail = grid->viewport()->width() - sb;
+    // less 1: QListView wraps an item that would end past the last pixel column (width - 1), so cells adding up to
+    // exactly the width would push the last column onto the next row and leave a gap at the end of every row
+    int avail = grid->viewport()->width() - sb - 1;
     int cols = std::max(1, avail / cell.width());
     int extra = cols > 1 ? (avail - cols * cell.width()) / cols : 0;
     QSize size(cell.width() + std::max(0, extra), cell.height());
@@ -726,15 +772,18 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         return true;
     }
     QString p = abspath(expanduser(target));
-    if (isfile(p)) {
+    // on a tape or floppy, these checks wait on the drive: it's taken as a folder, and the folder model (which reads it
+    // on its own thread) shows what's there, or nothing
+    bool slow = drives::slow_kind(p) != drives::Slow::None;
+    if (!slow && isfile(p)) {
         select = p;
         p = dirname(p);
     }
-    if (!isdir(p)) {
+    if (!slow && !isdir(p)) {
         warn(this, "Not found", QString("“%1” does not exist.").arg(p));
         return false;
     }
-    if (!util::access(p, R_OK | X_OK)) {
+    if (!slow && !util::access(p, R_OK | X_OK)) {
         warn(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
         return false;
     }
@@ -920,7 +969,8 @@ void Pane::select_paths(const QStringList &paths)
     if (first.isValid()) {
         sm->setCurrentIndex(first, QItemSelectionModel::NoUpdate);
         view()->scrollTo(first);
-        // large folders are laid out in batches, so the item may not have its final position yet: scroll again once
+        // a folder still loading is laid out again as rows arrive, so the item may not have its final position yet:
+        // scroll again once
         // layout has caught up (unless the user has moved on to another item)
         QString target = first.siblingAtColumn(0).data(PathRole).toString();
         for (int ms : {50, 250, 700})

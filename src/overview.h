@@ -170,6 +170,7 @@ private:
     QHash<QString, BookmarkCard *> bookmark_cards;
     bool fs_running = false;
     bool have_fs = false;
+    QHash<QString, QString> shown_slow;   // tape / floppy root -> what its card showed (redrawn when it changes)
     QVariantList fs;
     QTimer refresh_timer, usage_timer;
     GVolumeMonitor *monitor = nullptr;

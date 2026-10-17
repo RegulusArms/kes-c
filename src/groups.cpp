@@ -1,5 +1,6 @@
 #include "groups.h"
 
+#include "drives.h"
 #include "metadata.h"
 #include "util.h"
 
@@ -125,7 +126,7 @@ QDate Dates::taken(const QString &path, qint64 mtime, bool *pending)
 {
     if (pending)
         *pending = false;
-    if (!metadata::may_have_taken(path))
+    if (!metadata::may_have_taken(path) || !drives::reads_allowed(path))   // a tape or floppy: not read
         return created(path, mtime);
     auto it = shot.constFind(path);
     if (it != shot.constEnd() && it->mtime == mtime)

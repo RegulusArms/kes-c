@@ -172,6 +172,29 @@ int main(int argc, char **argv)
     Helper h;
     check(h.start(), "the helper starts and says hello");
 
+    // -- a file system without RENAME_NOREPLACE or hard links (an LTFS tape: link() fails with EPERM): the helper still
+    // claims new names, checking they're free and renaming (copy, write and copyfile used to fail there, as root too)
+    {
+        qputenv("KESTREL_TEST_NO_LINK", "1");
+        Helper nl;
+        bool started = nl.start();
+        qunsetenv("KESTREL_TEST_NO_LINK");
+        QString d = join(W, "nolink");
+        makedirs(d, true);
+        write_text(join(d, "src.txt"), "source");
+        bool works = started && ok(nl.call({{"op", "copy"}, {"src", join(d, "src.txt")}, {"dst", join(d, "copied.txt")}})) &&
+                     ok(nl.call({{"op", "write"}, {"path", join(d, "written.txt")}, {"text", "w"}})) &&
+                     ok(nl.call({{"op", "copyfile"}, {"src", join(d, "src.txt")}, {"dst", join(d, "cf.txt")}}));
+        bool refuses = !ok(nl.call({{"op", "write"}, {"path", join(d, "copied.txt")}, {"text", "other"}}));
+        bool parts = false;
+        for (const QString &n : QDir(d).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot))
+            parts = parts || n.startsWith(".kes-");
+        check(works && refuses && read_file(join(d, "copied.txt")) == "source" && read_file(join(d, "written.txt")) == "w" &&
+                  read_file(join(d, "cf.txt")) == "source" && !parts,
+              "on a file system without hard links or RENAME_NOREPLACE (as LTFS), copy, write and copyfile make new "
+              "files, a taken name is still refused, and no part file is left");
+    }
+
     // -- the operations
     check(ok(h.call({{"op", "mkdir"}, {"path", join(W, "a/b/c")}})) && isdir(join(W, "a/b/c")),
           "mkdir makes a folder and its missing parents");
