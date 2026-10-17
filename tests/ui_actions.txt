@@ -141,9 +141,15 @@ context menu, empty space > Show Hidden Files (toggle)
 context menu, empty space > ---
 context menu, empty space > Open in Terminal
 context menu, empty space > Bookmark This Folder
-context menu, empty space > Generate Previews Recursively
-context menu, empty space > Generate Folder Previews
-context menu, empty space > Generate Folder Previews Recursively
+context menu, empty space > Previews
+context menu, empty space > Previews > Generate Previews Recursively
+context menu, empty space > Previews > Generate Folder Previews
+context menu, empty space > Previews > Generate Folder Previews Recursively
+context menu, empty space > Previews > ---
+context menu, empty space > Previews > Regenerate Previews
+context menu, empty space > Previews > Regenerate Previews Recursively
+context menu, empty space > Previews > Regenerate Folder Previews
+context menu, empty space > Previews > Regenerate Folder Previews Recursively
 context menu, empty space > ---
 context menu, empty space > Properties
 context menu, a file > Open
@@ -224,9 +230,15 @@ context menu, a folder > Folder Colour > ---
 context menu, a folder > Folder Colour > Default (toggle)
 context menu, a folder > Show Image Previews (toggle)
 context menu, a folder > Regenerate Preview
-context menu, a folder > Generate Previews Recursively
-context menu, a folder > Generate Folder Previews
-context menu, a folder > Generate Folder Previews Recursively
+context menu, a folder > Previews
+context menu, a folder > Previews > Generate Previews Recursively
+context menu, a folder > Previews > Generate Folder Previews
+context menu, a folder > Previews > Generate Folder Previews Recursively
+context menu, a folder > Previews > ---
+context menu, a folder > Previews > Regenerate Previews
+context menu, a folder > Previews > Regenerate Previews Recursively
+context menu, a folder > Previews > Regenerate Folder Previews
+context menu, a folder > Previews > Regenerate Folder Previews Recursively
 context menu, a folder > Open in Terminal
 context menu, a folder > ---
 context menu, a folder > Move to Trash

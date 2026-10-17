@@ -882,6 +882,94 @@ ProbeResult probe(const QString &path_in)
     return {};
 }
 
+// The smallest encrypted file in a `7z l -slt` or `unrar lt` listing (the quickest one to test), or empty
+static QString smallest_encrypted(const QString &listing, bool rar)
+{
+    QString best;
+    qint64 best_size = -1;
+    QString name;
+    qint64 size = 0;
+    bool enc = false, dir = false;
+    auto flush = [&]() {
+        if (!name.isEmpty() && enc && !dir && (best_size < 0 || size < best_size)) {
+            best = name;
+            best_size = size;
+        }
+        name.clear();
+        size = 0;
+        enc = dir = false;
+    };
+    bool started = rar;   // 7z: the archive's own block comes before the "----------" line
+    for (const QString &raw : listing.split('\n')) {
+        QString line = raw.trimmed();
+        if (!started) {
+            started = line.startsWith("----------");
+            continue;
+        }
+        if (line.isEmpty()) {
+            flush();
+        } else if (rar ? line.startsWith("Name: ") : line.startsWith("Path = ")) {
+            flush();
+            name = raw.mid(raw.indexOf(rar ? ": " : "= ") + 2);
+        } else if (rar ? line.startsWith("Size: ") : line.startsWith("Size = ")) {
+            size = line.mid(6).trimmed().toLongLong();
+        } else if (rar ? line.startsWith("Flags:") && line.contains("encrypted") : line == "Encrypted = +") {
+            enc = true;
+        } else if (rar ? line == "Type: Directory" : line == "Folder = +") {
+            dir = true;
+        }
+    }
+    flush();
+    return best;
+}
+
+bool password_opens(Task *task, const QString &path_in, const QString &password)
+{
+    QString path = first_volume(path_in);
+    QString t = extract_tool(path);
+    QString label = "Trying a password on " + basename(path);
+    QString in = password + "\n";
+    auto wrong_text = [](const QString &text) {
+        QString l = text.toLower();
+        return l.contains("wrong password") || l.contains("password incorrect") || l.contains("incorrect password");
+    };
+    if (t == "7z") {
+        // encrypted names: the listing itself needs the password; otherwise test the smallest encrypted file (with -spd
+        // its name isn't a wildcard). Only a solid block's files before it are unpacked along with it.
+        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "");
+        if (wrong_text(text) || text.contains("Cannot open encrypted archive"))
+            return false;
+        QString one = smallest_encrypted(text, false);
+        if (one.isEmpty())
+            return true;
+        auto [rc2, text2] = run_reporting(task, {tool("7z"), "t", "-spd", "--", path, one}, label, QString(), &in, QString(),
+                                          "percent");
+        return !(wrong_text(text2) || (rc2 == 2 && text2.contains("encrypted")));
+    }
+    if (t == "unrar") {   // -p without a value: the password comes from stdin; rc 11 is "incorrect password"
+        auto [rc, text] = run_reporting(task, {tool("unrar"), "lt", "-p", "--", path}, label, QString(), &in, QString(), "");
+        if (rc == 11 || wrong_text(text))
+            return false;
+        QString one = smallest_encrypted(text, true);
+        if (one.isEmpty())
+            return true;
+        auto [rc2, text2] = run_reporting(task, {tool("unrar"), "t", "-p", "-idq", "--", path, one}, label, QString(), &in,
+                                          QString(), "percent");
+        return !(rc2 == 11 || wrong_text(text2));   // RAR4: "Corrupt file or wrong password"
+    }
+    if (t == "zpaq") {   // the whole archive is encrypted: listing it checks the key
+        auto [rc, text] = run_reporting(task, {tool("zpaq"), "l", path, "-key", password}, label, QString(), nullptr,
+                                        QString(), "");
+        return !wrong_text(text);
+    }
+    if (t == "unzip") {   // (only without 7z) unzip can't tell which files are encrypted: test them all
+        auto [rc, text] = run_reporting(task, {tool("unzip"), "-tqq", "--", path}, label, QString(), nullptr, QString(), "",
+                                        {env_password("UNZIP", password)});
+        return !(rc == 82 || wrong_text(text));
+    }
+    return true;   // tar and single-file formats have no passwords
+}
+
 struct ExtractCommand {
     QString tool;
     QStringList argv;
@@ -889,8 +977,30 @@ struct ExtractCommand {
     QStringList env;
 };
 
+// unzip takes names as wildcards: a member's [ ] * ? escaped, and a folder ("name/") as its contents, "name/*"
+static QString unzip_pattern(const QString &m)
+{
+    QString e;
+    for (QChar c : m) {
+        if (c == '[' || c == ']' || c == '*' || c == '?' || c == '\\')
+            e += '\\';
+        e += c;
+    }
+    return e.endsWith('/') ? e + "*" : e;
+}
+
+// members as the tools other than unzip take them: a folder without its "/"
+static QStringList plain_members(const QStringList &members)
+{
+    QStringList out;
+    for (const QString &m : members)
+        out << rstrip(m, '/');
+    return out;
+}
+
 static ExtractCommand extract_command(const QString &path, const QString &dest, const QString &password,
-                                      const QString &overwrite, int threads, bool keep_damaged)
+                                      const QString &overwrite, int threads, bool keep_damaged,
+                                      const QStringList &members = QStringList())
 {
     ExtractCommand c;
     c.tool = extract_tool(path);
@@ -900,13 +1010,18 @@ static ExtractCommand extract_command(const QString &path, const QString &dest, 
         c.argv = QStringList{tool("7z"), "x", "-y", "-bso0", "-bsp1", "-bse1", "-o" + dest, policy};
         if (threads)
             c.argv << QString("-mmt=%1").arg(threads);
-        c.argv << "--" << path;
+        if (!members.isEmpty())
+            c.argv << "-spd";   // the names as they are, not wildcards
+        c.argv << "--" << path << plain_members(members);
         c.stdin_text = password + "\n";   // no -p switch: on extract a bare -p means "empty password"
     } else if (t == "unzip") {
         c.argv = QStringList{tool("unzip"), overwrite == "overwrite" ? "-o" : "-n"};
         if (!password.isEmpty())
             c.env << env_password("UNZIP", password);
-        c.argv << "--" << path << "-d" << dest;
+        c.argv << "--" << path;
+        for (const QString &m : members)
+            c.argv << unzip_pattern(m);
+        c.argv << "-d" << dest;
     } else if (t == "unrar") {
         QString policy = overwrite == "overwrite" ? "-o+" : overwrite == "skip" ? "-o-" : "-or";
         // -p without a value: unrar reads the password from stdin; -p-: there's none, don't ask
@@ -917,9 +1032,16 @@ static ExtractCommand extract_command(const QString &path, const QString &dest, 
             c.argv << QString("-mt%1").arg(threads);
         if (keep_damaged)
             c.argv << "-kb";   // keep a file that fails its checksum (unrar deletes it otherwise; 7z and unzip keep it)
-        c.argv << "--" << path << rstrip(dest, '/') + "/";
+        c.argv << "--" << path << plain_members(members) << rstrip(dest, '/') + "/";   // a folder brings its contents
     } else if (t == "zpaq") {
-        c.argv = QStringList{tool("zpaq"), "x", path, "-to", dest};
+        c.argv = QStringList{tool("zpaq"), "x", path};
+        if (members.isEmpty()) {
+            c.argv << "-to" << dest;
+        } else {   // each member, renamed to the same path under dest
+            c.argv << plain_members(members) << "-to";
+            for (const QString &m : plain_members(members))
+                c.argv << join(dest, m);
+        }
         if (overwrite == "overwrite")
             c.argv << "-force";
         if (threads)
@@ -932,22 +1054,103 @@ static ExtractCommand extract_command(const QString &path, const QString &dest, 
     return c;
 }
 
-static QString extract_stream(Task *task, const QString &path, const QString &dest, const QString &k,
-                              const QString &suf, const QString &overwrite, const QString &label)
+// The decompressor for a stream suffix (gz, xz…), writing to stdout; empty for none
+static QStringList decompressor(const QString &suf)
+{
+    if (suf.isEmpty())
+        return {};
+    QString name;
+    for (const QString &t : stream_tools(suf))
+        if (!tool(t).isEmpty()) {
+            name = t;
+            break;
+        }
+    QStringList argv{tool(name), "-dc"};
+    if (name == "xz" || name == "zstd")
+        argv << "-T0";
+    return argv;
+}
+
+// Feed the (decompressed) tar archive at `path` to tar with tar_args (reading it from "-"), with progress. Returns
+// tar's output; throws Error when the decompressor or tar fails.
+static QString tar_pipe(Task *task, const QString &path, const QString &suf, const QStringList &tar_args,
+                        const QString &label)
 {
     qint64 total = std::max<qint64>(getsize(path), 1);
-    QStringList dec_argv;
+    QStringList dec_argv = decompressor(suf);
+    QStringList tar_argv = QStringList{tool("tar")} + tar_args;
+    int fi = ::open(enc(path).constData(), O_RDONLY | O_CLOEXEC);
+    if (fi < 0)
+        throw_errno(path);
+    struct CloseFd {
+        int fd;
+        ~CloseFd() { ::close(fd); }
+    } close_fi{fi};
+    std::unique_ptr<proc::Process> dec, tar;
+    int feed;
     if (!suf.isEmpty()) {
-        QString name;
-        for (const QString &t : stream_tools(suf))
-            if (!tool(t).isEmpty()) {
-                name = t;
-                break;
-            }
-        dec_argv = QStringList{tool(name), "-dc"};
-        if (name == "xz" || name == "zstd")
-            dec_argv << "-T0";
+        proc::Options o;
+        o.in = proc::PIPE;
+        o.out = proc::PIPE;
+        o.err = proc::PIPE;
+        o.c_utf8 = true;
+        dec = spawn_logged(dec_argv, o);
+        try {
+            tar = spawn_logged(tar_argv, tool_opts(QString(), dec->out));
+        } catch (...) {
+            dec->kill_group();
+            throw;
+        }
+        dec->close_out();
+        feed = dec->in;
+    } else {
+        tar = spawn_logged(tar_argv, tool_opts(QString(), proc::PIPE));
+        feed = tar->in;
     }
+    QString out;
+    try {
+        try {
+            relay(task, fi, feed, total, label);
+            if (dec)
+                dec->close_in();
+            else
+                tar->close_in();
+            if (dec)
+                dec->wait();
+            out = QString::fromUtf8(tar->read_all_out());
+            tar->wait();
+        } catch (const BrokenPipe &) {
+            if (dec)
+                dec->kill_group();
+            if (dec)
+                dec->close_in();
+            else
+                tar->close_in();
+            out = QString::fromUtf8(tar->read_all_out());
+            tar->wait();
+        }
+    } catch (...) {
+        kill_all({dec.get(), tar.get()});
+        throw;
+    }
+    if (dec && dec->returncode != 0) {
+        QString t = tail(QString::fromUtf8(dec->read_all_err()));
+        throw Error(t.isEmpty() ? QString("decompression failed") : t);
+    }
+    if (tar->returncode != 0 && tar->returncode != 1) {
+        QString t = tail(out);
+        throw Error(t.isEmpty() ? QString("tar failed (exit code %1)").arg(tar->returncode) : t);
+    }
+    return out;
+}
+
+
+static QString extract_stream(Task *task, const QString &path, const QString &dest, const QString &k,
+                              const QString &suf, const QString &overwrite, const QString &label,
+                              const QStringList &members = QStringList())
+{
+    qint64 total = std::max<qint64>(getsize(path), 1);
+    QStringList dec_argv = decompressor(suf);
     int fi = ::open(enc(path).constData(), O_RDONLY | O_CLOEXEC);
     if (fi < 0)
         throw_errno(path);
@@ -1031,62 +1234,11 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
         return dest;
     }
     QString policy = overwrite == "overwrite" ? "--overwrite" : overwrite == "skip" ? "--skip-old-files" : "--backup=numbered";
-    QStringList tar_argv{tool("tar"), "-xf", "-", "-C", dest, "--no-same-owner", policy};
-    std::unique_ptr<proc::Process> dec, tar;
-    int feed;
-    if (!suf.isEmpty()) {
-        proc::Options o;
-        o.in = proc::PIPE;
-        o.out = proc::PIPE;
-        o.err = proc::PIPE;
-        o.c_utf8 = true;
-        dec = spawn_logged(dec_argv, o);
-        try {
-            tar = spawn_logged(tar_argv, tool_opts(QString(), dec->out));
-        } catch (...) {
-            dec->kill_group();
-            throw;
-        }
-        dec->close_out();
-        feed = dec->in;
-    } else {
-        tar = spawn_logged(tar_argv, tool_opts(QString(), proc::PIPE));
-        feed = tar->in;
-    }
-    QString out;
-    try {
-        try {
-            relay(task, fi, feed, total, label);
-            if (dec)
-                dec->close_in();
-            else
-                tar->close_in();
-            if (dec)
-                dec->wait();
-            out = QString::fromUtf8(tar->read_all_out());
-            tar->wait();
-        } catch (const BrokenPipe &) {
-            if (dec)
-                dec->kill_group();
-            if (dec)
-                dec->close_in();
-            else
-                tar->close_in();
-            out = QString::fromUtf8(tar->read_all_out());
-            tar->wait();
-        }
-    } catch (...) {
-        kill_all({dec.get(), tar.get()});
-        throw;
-    }
-    if (dec && dec->returncode != 0) {
-        QString t = tail(QString::fromUtf8(dec->read_all_err()));
-        throw Error(t.isEmpty() ? QString("decompression failed") : t);
-    }
-    if (tar->returncode != 0 && tar->returncode != 1) {
-        QString t = tail(out);
-        throw Error(t.isEmpty() ? QString("tar failed (exit code %1)").arg(tar->returncode) : t);
-    }
+    QStringList args{"-xf", "-", "-C", dest, "--no-same-owner", policy};
+    if (!members.isEmpty())
+        args << "--" << members;   // literal names (GNU tar matches extracted members without wildcards); a folder brings
+                                   // what's inside
+    tar_pipe(task, path, suf, args, label);
     return dest;
 }
 
@@ -1250,7 +1402,7 @@ static QStringList damaged_files(const QString &t, const QString &text, const QS
                                              "file (.+?)\\. Corrupt file or wrong password",
                                              QRegularExpression::MultilineOption);
     static const QRegularExpression sevenz_re("ERROR: (?:CRC Failed|Data Error|Unexpected end of data)[^:\\n]* : ([^\\n]+)");
-    static const QRegularExpression unzip_re("(?:extracting|inflating): +(.+?) +bad CRC");
+    static const QRegularExpression unzip_re("(?:extracting|inflating|testing): +(.+?) +bad CRC");
     const QRegularExpression &re = t == "unrar" ? unrar_re : t == "7z" ? sevenz_re : unzip_re;
     QStringList files;
     auto it = re.globalMatch(QString(text).remove('\b').replace('\r', '\n'));
@@ -1266,7 +1418,8 @@ static QStringList damaged_files(const QString &t, const QString &text, const QS
 }
 
 QString extract(Task *task, const QString &path_in, const QString &dest, const QString &password,
-                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links, Damaged *damaged)
+                const QString &overwrite, int threads, QList<DroppedLink> *dropped_links, Damaged *damaged,
+                const QStringList &members)
 {
     QList<DroppedLink> unused;
     QList<DroppedLink> &report = dropped_links ? *dropped_links : unused;
@@ -1276,12 +1429,12 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
     QString label = "Extracting " + basename(path);
     if (k == "tar") {
         EscapingLinkSweep sweep(dest, "tar", report);
-        return extract_stream(task, path, dest, k, suf, overwrite, label);
+        return extract_stream(task, path, dest, k, suf, overwrite, label, plain_members(members));
     }
     if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
     bool keep_damaged = damaged && can_keep_damaged(path);
-    ExtractCommand c = extract_command(path, dest, password, overwrite, threads, keep_damaged);
+    ExtractCommand c = extract_command(path, dest, password, overwrite, threads, keep_damaged, members);
     EscapingLinkSweep sweep(dest, c.tool, report);
     auto [rc, text] = run_reporting(task, c.argv, label, QString(), c.stdin_text ? &*c.stdin_text : nullptr,
                                     QString(), c.tool == "unzip" ? QString() : "percent", c.env);   // unzip's % are ratios
@@ -1309,6 +1462,340 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
         throw Error(msg);
     }
     return dest;
+}
+
+// ---------------------------------------------------------------- looking inside, testing
+
+bool can_browse(const QString &path)
+{
+    QString t = extract_tool(first_volume(path));
+    return !t.isEmpty() && kind(path).first != "single";
+}
+
+bool can_test(const QString &path) { return !extract_tool(first_volume(path)).isEmpty(); }
+
+static bool says_wrong_password(const QString &text)
+{
+    QString l = text.toLower();
+    return l.contains("cannot open encrypted archive") || l.contains("password incorrect") ||
+           l.contains("incorrect password") || l.contains("wrong password :") || l.contains("specified password is incorrect");
+}
+
+static QDateTime parse_time(const QString &text, const QString &format, bool utc = false)
+{
+    QDateTime t = QDateTime::fromString(text, format);
+    if (utc && t.isValid()) {
+        t.setTimeSpec(Qt::UTC);
+        t = t.toLocalTime();
+    }
+    return t;
+}
+
+QList<Entry> list(Task *task, const QString &path_in, const QString &password)
+{
+    QString path = first_volume(path_in);
+    auto [k, suf] = kind(path);
+    QString t = extract_tool(path);
+    QString label = "Reading " + basename(path);
+    QString in = password + "\n";
+    QList<Entry> out;
+    auto failed = [](int rc, const QString &text, const QString &t) {
+        QString tl = tail(text);
+        return Error(tl.isEmpty() ? QString("%1 failed (exit code %2)").arg(t, QString::number(rc)) : tl);
+    };
+    if (t == "7z") {
+        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "");
+        if (says_wrong_password(text))
+            throw WrongPassword();
+        if (rc != 0 && !text.contains("----------"))
+            throw failed(rc, text, t);
+        Entry e;
+        bool started = false;
+        auto flush = [&]() {
+            if (!e.path.isEmpty())
+                out << e;
+            e = Entry{};
+        };
+        for (const QString &raw : text.split('\n')) {
+            QString line = raw;
+            if (line.endsWith('\r'))
+                line.chop(1);
+            if (!started) {
+                started = line.startsWith("----------");
+                continue;
+            }
+            int eq = line.indexOf(" = ");
+            if (line.isEmpty()) {
+                flush();
+                continue;
+            }
+            if (eq < 0)
+                continue;
+            QString key = line.left(eq), value = line.mid(eq + 3);
+            if (key == "Path")
+                e.path = value;
+            else if (key == "Folder")
+                e.dir = value == "+";
+            else if (key == "Attributes" && value.startsWith('D'))
+                e.dir = true;
+            else if (key == "Size")
+                e.size = value.toLongLong();
+            else if (key == "Packed Size")
+                e.packed = value.isEmpty() ? -1 : value.toLongLong();
+            else if (key == "Modified")
+                e.modified = parse_time(value.left(19), "yyyy-MM-dd HH:mm:ss");
+            else if (key == "Encrypted")
+                e.encrypted = value == "+";
+        }
+        flush();
+    } else if (t == "unrar") {
+        QStringList argv{tool("unrar"), "lt", password.isEmpty() ? "-p-" : "-p", "--", path};
+        auto [rc, text] = run_reporting(task, argv, label, QString(), password.isEmpty() ? nullptr : &in, QString(), "");
+        if (rc == 11 || says_wrong_password(text))
+            throw WrongPassword();
+        if (rc != 0 && !text.contains("Name: "))
+            throw failed(rc, text, t);
+        Entry e;
+        auto flush = [&]() {
+            if (!e.path.isEmpty())
+                out << e;
+            e = Entry{};
+        };
+        for (const QString &raw : text.split('\n')) {
+            QString line = raw.trimmed();
+            if (line.isEmpty()) {
+                flush();
+            } else if (line.startsWith("Name: ")) {
+                flush();
+                e.path = raw.mid(raw.indexOf("Name: ") + 6);
+            } else if (line.startsWith("Type: ")) {
+                e.dir = line == "Type: Directory";
+            } else if (line.startsWith("Size: ")) {
+                e.size = line.mid(6).toLongLong();
+            } else if (line.startsWith("Packed size: ")) {
+                e.packed = line.mid(13).toLongLong();
+            } else if (line.startsWith("mtime: ")) {
+                e.modified = parse_time(line.mid(7, 19), "yyyy-MM-dd HH:mm:ss");
+            } else if (line.startsWith("Flags:") && line.contains("encrypted")) {
+                e.encrypted = true;
+            }
+        }
+        flush();
+        if (password.isEmpty() && text.contains("encrypted headers"))
+            throw WrongPassword();
+    } else if (t == "zpaq") {
+        QStringList argv{tool("zpaq"), "l", path};
+        if (!password.isEmpty())
+            argv << "-key" << password;
+        auto [rc, text] = run_reporting(task, argv, label, QString(), nullptr, QString(), "");
+        if (says_wrong_password(text))
+            throw WrongPassword();
+        if (rc != 0)
+            throw failed(rc, text, t);
+        // "- 2026-10-17 17:25:48            6  0664 dir/name" (UTC; a folder's name ends in "/")
+        static const QRegularExpression re("^- (\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d) +(\\d+) +\\S+ (.+)$");
+        for (const QString &line : text.split('\n')) {
+            auto m = re.match(line);
+            if (!m.hasMatch())
+                continue;
+            Entry e;
+            e.path = m.captured(3);
+            e.dir = e.path.endsWith('/');
+            e.size = e.dir ? -1 : m.captured(2).toLongLong();
+            e.modified = parse_time(m.captured(1), "yyyy-MM-dd HH:mm:ss", true);
+            e.encrypted = !password.isEmpty();
+            out << e;
+        }
+    } else if (t == "unzip") {
+        // zipinfo: "-rw-rw-r--  6.3 unx  6 Bx  18 stor 20261017.132550 dir/name" (an uppercase T/B: encrypted)
+        auto [rc, text] = run_reporting(task, {tool("unzip"), "-Z", "-l", "-T", path}, label, QString(), nullptr, QString(), "");
+        if (rc != 0)
+            throw failed(rc, text, t);
+        static const QRegularExpression re("^(\\S)\\S* +\\S+ +\\S+ +(\\d+) +(\\S)\\S +(\\d+|-) +\\S+ +(\\d{8}\\.\\d{6}) (.+)$");
+        for (const QString &line : text.split('\n')) {
+            auto m = re.match(line);
+            if (!m.hasMatch())
+                continue;
+            Entry e;
+            e.path = m.captured(6);
+            e.dir = m.captured(1) == "d" || e.path.endsWith('/');
+            e.size = e.dir ? -1 : m.captured(2).toLongLong();
+            e.packed = m.captured(4) == "-" ? -1 : m.captured(4).toLongLong();
+            e.encrypted = m.captured(3) == "T" || m.captured(3) == "B";
+            e.modified = parse_time(m.captured(5), "yyyyMMdd.HHmmss");
+            out << e;
+        }
+    } else if (k == "tar") {
+        // "drwxr-xr-x user/group  0 2026-10-17 13:25:48 dir/" (a link: "name -> target")
+        QString text = tar_pipe(task, path, suf, {"-tv", "--full-time", "--quoting-style=literal", "-f", "-"}, label);
+        static const QRegularExpression re("^(\\S)\\S* +\\S+ +(\\d+|\\d+, *\\d+) +(\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d) (.+)$");
+        for (const QString &line : text.split('\n')) {
+            auto m = re.match(line);
+            if (!m.hasMatch())
+                continue;
+            Entry e;
+            e.path = m.captured(4);
+            if (m.captured(1) == "l" && e.path.contains(" -> "))
+                e.path = e.path.left(e.path.indexOf(" -> "));
+            else if (m.captured(1) == "h" && e.path.contains(" link to "))
+                e.path = e.path.left(e.path.indexOf(" link to "));
+            e.dir = m.captured(1) == "d";
+            e.size = e.dir ? -1 : m.captured(2).toLongLong();
+            e.modified = parse_time(m.captured(3), "yyyy-MM-dd HH:mm:ss");
+            out << e;
+        }
+    } else {
+        throw Error(QString("%1 can't list what's inside “%2”.").arg(t.isEmpty() ? QString("No program") : t, basename(path)));
+    }
+    for (Entry &e : out) {   // one form: no "./" in front, a folder's name ends in "/"
+        while (e.path.startsWith("./"))
+            e.path = e.path.mid(2);
+        if (e.dir && !e.path.endsWith('/'))
+            e.path += '/';
+    }
+    out.erase(std::remove_if(out.begin(), out.end(), [](const Entry &e) { return e.path.isEmpty() || e.path == "/"; }),
+              out.end());
+    return out;
+}
+
+TestResult test(Task *task, const QString &path_in, const QString &password)
+{
+    QString path = first_volume(path_in);
+    auto [k, suf] = kind(path);
+    QString t = extract_tool(path);
+    QString label = "Testing " + basename(path);
+    QString in = password + "\n";
+    TestResult r;
+    int rc = 0;
+    QString text;
+    if (t == "7z") {
+        std::tie(rc, text) = run_reporting(task, {tool("7z"), "t", "-bso0", "-bsp1", "-bse1", "--", path}, label, QString(),
+                                           &in, QString(), "percent");
+        if (says_wrong_password(text))
+            throw WrongPassword();
+    } else if (t == "unrar") {
+        QStringList argv{tool("unrar"), "t", "-idc", "-idd", password.isEmpty() ? "-p-" : "-p", "--", path};
+        std::tie(rc, text) = run_reporting(task, argv, label, QString(), password.isEmpty() ? nullptr : &in, QString(),
+                                           "percent");
+        if (rc == 11)
+            throw WrongPassword();
+    } else if (t == "unzip") {
+        QStringList env;
+        if (!password.isEmpty())
+            env << env_password("UNZIP", password);
+        std::tie(rc, text) = run_reporting(task, {tool("unzip"), "-t", "--", path}, label, QString(), nullptr, QString(), "", env);
+        if (says_wrong_password(text) && rc == 82)
+            throw WrongPassword();
+    } else if (t == "zpaq") {   // -test: everything is decompressed and its checksum checked, nothing written
+        QStringList argv{tool("zpaq"), "x", path, "-test"};
+        if (!password.isEmpty())
+            argv << "-key" << password;
+        std::tie(rc, text) = run_reporting(task, argv, label, QString(), nullptr, QString(), "percent");
+        if (says_wrong_password(text))
+            throw WrongPassword();
+    } else if (k == "tar" || k == "single") {
+        try {
+            if (k == "tar")   // the compression's checksums and tar's own structure: read through to the end
+                tar_pipe(task, path, suf, {"-tf", "-"}, label);
+            else
+                std::tie(rc, text) = run_reporting(task, {decompressor(suf).value(0), "-t", path}, label, QString(),
+                                                   nullptr, QString(), "");
+        } catch (const Error &e) {
+            rc = 2;
+            text = QString::fromStdString(e.what());
+        }
+    } else {
+        throw Error(QString("No program to test “%1” is installed.").arg(basename(path)));
+    }
+    r.ok = rc == 0;
+    if (!r.ok) {
+        if (t == "7z" || t == "unrar" || t == "unzip")
+            r.damaged = damaged_files(t, text, QString());
+        r.details = tail(text, 20);
+        if (r.details.isEmpty())
+            r.details = QString("%1 reported a problem (exit code %2)").arg(t, QString::number(rc));
+    }
+    return r;
+}
+
+// The symlinks inside `top` (a member about to be moved up to sit right in the destination folder) that would lead
+// out of that folder from there, removed. top: at depth 0, so what's in it is at depth 1.
+static void drop_links_leaving(const QString &top, const QString &shown, const struct timespec &since,
+                               QList<DroppedLink> &report)
+{
+    struct stat st;
+    if (::lstat(enc(top).constData(), &st) != 0)
+        return;
+    if (S_ISLNK(st.st_mode)) {
+        QByteArray target(PATH_MAX, '\0');
+        ssize_t n = ::readlink(enc(top).constData(), target.data(), target.size());
+        if (n >= 0 && link_escapes(0, target.left(n))) {
+            report << DroppedLink{shown, QString::fromUtf8(target.left(n)), QString()};
+            ::unlink(enc(top).constData());
+        }
+        return;
+    }
+    if (!S_ISDIR(st.st_mode))
+        return;
+    int mode;
+    int fd = open_for_sweep(AT_FDCWD, enc(top).constData(), true, &mode);
+    if (fd >= 0) {
+        drop_escaping_links(fd, shown, 1, since, report, mode);
+        ::close(fd);
+    }
+}
+
+QStringList extract_members(Task *task, const QString &path, const QString &dest, const QString &password,
+                            const QStringList &members, QList<DroppedLink> *dropped_links)
+{
+    QList<DroppedLink> unused;
+    QList<DroppedLink> &report = dropped_links ? *dropped_links : unused;
+    // only the outermost: a member inside a chosen folder comes with it
+    QStringList tops;
+    for (const QString &m : members) {
+        bool inside = std::any_of(members.begin(), members.end(), [&](const QString &o) {
+            return o != m && o.endsWith('/') && m.startsWith(o);
+        });
+        if (!inside && !tops.contains(m))
+            tops << m;
+    }
+    struct timespec since;
+    ::clock_gettime(CLOCK_REALTIME, &since);
+    since.tv_sec -= 1;
+    // Built in a hidden part folder in dest, then each member moved into place whole, under a name that's free (a
+    // taken one gets a number; nothing is replaced). A failure or cancel leaves only the part folder, which is removed;
+    // members already moved stay (each one whole).
+    QString part = join(dest, part_name());
+    if (::mkdir(enc(part).constData(), 0700) != 0)
+        throw_errno(part);
+    QStringList made;
+    try {
+        extract(task, path, part, password, "overwrite", 0, &report, nullptr, tops);
+        for (const QString &m : tops) {
+            task->check();
+            QString rel = rstrip(m, '/');
+            QString from = join(part, rel);
+            if (!lexists(from))
+                continue;   // the tool didn't make it (it said why)
+            drop_links_leaving(from, basename(rel), since, report);
+            for (int tries = 0;; ++tries) {
+                QString to = unique_path(dest, basename(rel), "num");
+                try {
+                    put_new(from, to);
+                    made << to;
+                    break;
+                } catch (const OSError &e) {
+                    if (e.code != EEXIST || tries > 100)
+                        throw;
+                }
+            }
+        }
+    } catch (...) {
+        rmtree(part);
+        throw;
+    }
+    rmtree(part);
+    return made;
 }
 
 }  // namespace archive

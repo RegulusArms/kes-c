@@ -14,8 +14,9 @@ Package names below are Ubuntu's; Linux Mint uses the same ones.
 | `qt6-base-dev` | The whole user interface (Qt 6 Widgets), image decoding, settings |
 | `libglib2.0-dev` | GIO: default and "Open With" apps, file type detection, trash, drive and network mounting, D-Bus for UWP |
 | `libxcb1-dev` | Giving the focus to the app files are dropped into, on X11 |
+| `libsecret-1-dev` | Remembering archive passwords in the desktop's keyring (GNOME Keyring, KWallet) |
 
-At run time these become the ordinary `libqt6widgets6`, `libglib2.0` and `libxcb1` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed. The system's `python3` (with `python3-gi`) is used only to read the GTK theme's colours: always on Qt 6.4 (see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)), and on newer Qt when the desktop wants the dark style but Qt's own colours are light. Without it, Kestrel uses its built-in dark colours there.
+At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` and `libsecret-1-0` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed. The system's `python3` (with `python3-gi`) is used only to read the GTK theme's colours: always on Qt 6.4 (see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)), and on newer Qt when the desktop wants the dark style but Qt's own colours are light. Without it, Kestrel uses its built-in dark colours there.
 
 **Recommended**: run `./install.sh --install-recommended` to install any of these you're missing. Ubuntu already includes most of them. The ones you'll usually need to add are `kimageformat6-plugins` (RAW and HEIC previews) and some of the archive tools, such as `unrar`, `pigz`, `zpaq` and `lzip`.
 

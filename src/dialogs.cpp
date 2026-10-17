@@ -4,6 +4,7 @@
 #include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "keyring.h"
 #include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
@@ -1454,6 +1455,32 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     form->addRow(shared_undo);
     form->addRow(open_in_tabs);
     form->addRow(developer_tools);
+    // archive passwords saved with "Remember this password" (keyring.h); also deletable one by one in Passwords and Keys
+    auto *forget = new QPushButton("Forget Saved Archive Passwords…");
+    forget->setObjectName("forget_passwords");
+    forget->setToolTip("Delete every archive password Kestrel saved in your login keyring");
+    connect(forget, &QPushButton::clicked, this, [this]() {
+        QPointer<QWidget> owner(parentWidget() ? parentWidget() : this);   // stays open after Preferences closes
+        ask_yes(this, "Forget Saved Archive Passwords",
+                "Delete every archive password Kestrel saved in your login keyring? Encrypted archives will ask for "
+                "theirs again.",
+                [owner]() {
+                    if (!owner)
+                        return;
+                    fileops::run_task(owner, "Forgetting saved archive passwords", []() { return QVariant(keyring::forget_all()); },
+                                      [owner](const QVariant &r) {
+                                          if (!owner || !r.isValid())
+                                              return;
+                                          int n = r.toInt();
+                                          inform(owner, "Forget Saved Archive Passwords",
+                                                 n < 0 ? QString("No keyring answered, so there was nothing to forget.")
+                                                 : n == 0 ? QString("There were no saved archive passwords.")
+                                                          : QString("Forgot %1 saved archive password%2.")
+                                                                .arg(QString::number(n), n > 1 ? "s" : ""));
+                                      });
+                });
+    });
+    form->addRow("Archive passwords:", forget);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);

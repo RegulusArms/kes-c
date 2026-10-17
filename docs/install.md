@@ -74,7 +74,7 @@ The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files ar
 To build by hand:
 
 ```bash
-sudo apt install g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev
+sudo apt install g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ```

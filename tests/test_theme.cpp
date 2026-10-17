@@ -3,6 +3,8 @@
 #include "common.h"
 
 #include <QLabel>
+#include <QMenu>
+#include <QStatusBar>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -293,8 +295,7 @@ int main(int argc, char **argv)
         auto large = []() { return isdir(join(THUMB_DIR(), "large")) ? listdir(join(THUMB_DIR(), "large")).size() : 0; };
         auto build = [&](bool folders_only, int depth) {
             RecursiveBuilder b(root, 256, g_thumbs, nullptr, 3, folders_only, depth);
-            b.start();
-            b.wait();
+            b.run();
         };
         build(true, 1);
         check(preview(root) && preview(s1) && !preview(s2) && large() == 0,
@@ -325,12 +326,106 @@ int main(int argc, char **argv)
             if (!scanning && done_at_scan_end < 0)
                 done_at_scan_end = done, total_at_scan_end = total;
         }, Qt::DirectConnection);
-        b.start();
-        b.wait();
+        b.run();
         check(total_at_scan_end == 321 && done_at_scan_end >= 0 && done_at_scan_end < total_at_scan_end / 2,
               QString("a preview build finishes scanning the tree before most previews are made (%1 of %2 done then)")
                   .arg(done_at_scan_end).arg(total_at_scan_end));
     }
 
+
+    // -- each Generate / Regenerate is a job of its own; Regenerate makes previews again where Generate keeps them
+    {
+        QString root = home_path("regen"), s1 = join(root, "s1"), s2 = join(s1, "s2");
+        makedirs(s2, true);
+        int n = 0;
+        for (const QString &d : {root, s1, s2})
+            for (int i = 0; i < 2; ++i) {
+                QImage im(600, 400, QImage::Format_RGB32);
+                im.fill(QColor::fromHsv(n * 40, 200, 200));
+                im.save(join(d, QString("q%1.png").arg(n++)), "PNG");
+            }
+        int size = w->pane() ? w->pane()->grid_size : 160;
+        int b = thumbs::bucket_for(size);
+        auto folder_cache = [&](const QString &d) { return join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(d)).arg(b)); };
+        QString flavor = b <= 128 ? "normal" : b <= 256 ? "large" : b <= 512 ? "x-large" : "xx-large";
+        auto file_cache = [&](const QString &f) { return join(join(THUMB_DIR(), flavor), md5(file_uri(f)) + ".png"); };
+        // stands in for an old or wrong preview: a grey picture with the same tags, so only remaking it replaces it
+        auto tamper = [](const QString &cache) {
+            QImage old(cache);
+            if (old.isNull())
+                return false;
+            QImage fake(old.size(), QImage::Format_ARGB32);
+            fake.fill(Qt::gray);
+            for (const QString &k : old.textKeys())
+                fake.setText(k, old.text(k));
+            return fake.save(cache, "PNG");
+        };
+        auto tampered = [](const QString &cache) {
+            QImage im(cache);
+            return !im.isNull() && im.pixelColor(im.width() / 2, im.height() / 2) == QColor(Qt::gray);
+        };
+        // a job's Task is deleted once it ends
+        auto run = [&](QPointer<Task> t) { return wait_for([&]() { return !t || t->isFinished(); }, 60000); };
+
+        // two builds at once: both queued as jobs (the second isn't refused), both in the status bar's task list
+        QPointer<Task> t1 = w->build_previews(root, false, -1);
+        QPointer<Task> t2 = w->build_previews(home_path("gen"), true, -1);
+        bool both = t1 && t2 && t1 != t2 && w->task_panel->tasks.contains(t1.data()) &&
+                    w->task_panel->tasks.contains(t2.data()) && t1->title == "Generating previews recursively: regen";
+        check(both && run(t1) && run(t2), "each preview build is a job of its own: two at once are both queued, shown "
+                                          "in the status bar, and run");
+        QString f_root = join(root, "q0.png"), f_s1 = join(s1, "q2.png");
+        bool made = exists(folder_cache(root)) && exists(folder_cache(s1)) && exists(file_cache(f_root)) &&
+                    exists(file_cache(f_s1));
+        bool marked = made && tamper(folder_cache(root)) && tamper(folder_cache(s1)) && tamper(folder_cache(s2)) &&
+                      tamper(file_cache(f_root)) && tamper(file_cache(f_s1));
+        run(w->build_previews(root, false, -1));
+        check(marked && tampered(folder_cache(root)) && tampered(file_cache(f_root)),
+              "Generate Previews keeps the previews already made");
+        run(w->build_previews(root, false, 1, true));
+        check(!tampered(folder_cache(root)) && !tampered(folder_cache(s1)) && !tampered(file_cache(f_root)) &&
+                  tampered(file_cache(f_s1)) && tampered(folder_cache(s2)),
+              "Regenerate Previews makes this folder's file previews and its and its folders' previews again, and "
+              "nothing deeper");
+        run(w->build_previews(root, true, -1, true));
+        check(!tampered(folder_cache(s2)) && tampered(file_cache(f_s1)),
+              "Regenerate Folder Previews Recursively makes every folder's preview below again, not every file's");
+        tamper(folder_cache(root));
+        tamper(file_cache(f_root));
+        run(w->build_previews(root, true, 1, true));
+        check(!tampered(folder_cache(root)) && (b == 128 || tampered(file_cache(f_root))),
+              "Regenerate Folder Previews makes this folder's preview again, not its files' (only the few its preview "
+              "shows, at their small size)");
+        run(w->build_previews(root, false, -1, true));
+        check(!tampered(file_cache(f_s1)), "Regenerate Previews Recursively makes every file's preview again");
+
+        // ✕: the job stops
+        QString big = home_path("gen-big");
+        w->statusBar()->clearMessage();
+        QPointer<Task> t3 = w->build_previews(big, false, -1, true);
+        // after the walk (the previews still being made): the workers stop too, not just the walk
+        bool started = wait_for([&]() { return t3 && t3->isRunning() && t3->text.contains(" of ") && !t3->text.contains("scanning"); }, 30000);
+        if (t3)
+            t3->cancel();
+        bool ended = run(t3);
+        QString said = w->statusBar()->currentMessage();
+        check(started && ended && said.startsWith("Stopped regenerating previews recursively in gen-big"),
+              "✕ on a preview job stops it, also once its folders are all found (" + said + ")");
+
+        // the menu
+        QMenu *m = w->build_menu(w->pane(), {root});
+        QStringList entries;
+        for (QAction *a : m->actions())
+            if (a->menu() && a->text() == "Previews")
+                for (QAction *x : a->menu()->actions())
+                    if (!x->isSeparator())
+                        entries << x->text();
+        delete m;
+        check(entries == QStringList({"Generate Previews Recursively", "Generate Folder Previews",
+                                      "Generate Folder Previews Recursively", "Regenerate Previews",
+                                      "Regenerate Previews Recursively", "Regenerate Folder Previews",
+                                      "Regenerate Folder Previews Recursively"}),
+              "a folder's menu has a Previews submenu to generate and regenerate them, here or recursively");
+    }
     finish();
 }

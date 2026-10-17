@@ -9,30 +9,12 @@ into.
 
 ## New features
 
-- [ ] **Extract several archives at once.** Selecting more than one archive and right-clicking offers **Extract All
-  Here** and **Extract All To…** (today Extract only appears for a single archive).
-  - Each archive is extracted the way Extract Here / Extract To… does it on its own (its own folder, the same conflict
-    handling), one after another, in the status bar with one ✕ to stop them all.
-  - Passwords: the first password typed is tried on every encrypted archive that follows. Only when it doesn't open
-    one is the password asked again for that archive, and the new password is then the one tried on the rest.
-  - At the end, one summary of what was extracted and what failed (a wrong password cancelled, a missing tool, a
-    damaged archive), not a message per archive.
-  - A split set (`x.part1.rar` … `x.part3.rar`) selected whole counts as one archive, not three.
-
-- [ ] **Remember archive passwords in the keyring.** Save archive passwords in the desktop's keyring (the Secret
-  Service: GNOME Keyring on Ubuntu and Mint, KWallet on KDE) through `libsecret`, so a password used before doesn't
-  have to be typed again.
-  - Stored in the login keyring as Kestrel's own entries (a Kestrel schema, e.g. "Kestrel Explorer: archive password
-    for photos.7z" in Passwords and Keys), not a separate keyring, which would need its own password and unlocking.
-  - Opt-in: a **Remember this password** box in the password prompt, off by default. Any app running as the user can
-    read the login keyring, so nothing is saved without asking.
-  - Finding one: first the password saved for this archive (recognised by its contents, e.g. size plus a hash of its
-    start, so renaming or moving it still works), then the other saved passwords (each a quick test with the archive
-    tool, not an extraction), and only if none opens it, ask. Works with Extract All (the item above).
-  - Forgetting: a Preferences button to forget all saved archive passwords (they can also be deleted in Seahorse).
-  - No keyring running, or none that speaks the Secret Service: everything works as today, just without saving.
-  - New dependency: `libsecret-1-dev` to build, `libsecret-1-0` in the .deb's Depends (install.sh's build deps,
-    docs/dependencies.md).
+- [ ] **Better archive window QoL.** Follow-ups to Open as Archive (`src/archivewin.cpp`):
+  - Open a file from inside the archive (double-click): extract it to a temporary copy and open that with its app.
+    The temporary copies need a cache folder, cleaned up afterwards and added to the BleachBit cleaner.
+  - Drag items out of the window into a Kestrel folder, the desktop or another app, extracted as they're dropped.
+  - A test for the unzip path (used only when 7-Zip isn't installed), which the test environment never takes because
+    7-Zip is always there: listing, extracting single items (names with `[ ] * ?` escaped) and testing.
 
 - [ ] **Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
   **Rename in Kestrel…** to give it a name of your own, such as "Camera SD card" or "Backup HDD". Kestrel only shows
@@ -72,6 +54,17 @@ into.
   - A search box that filters every tab's settings, and "Reset this tab" / "Reset all" to the defaults.
   - Settings changed in Preferences apply at once to every open window (and other Kestrels, as saving Preferences does
     now); settings changed in a window show up in an open Preferences window.
+
+- [ ] **Customise the right-click menu.** To be done after "A better Preferences window that shows every setting"
+  (above): it would be a tab of that window.
+  - Users set up how the right-click menu looks, separately for a folder, a file and an archive (and perhaps for
+    several selected items and for the empty background).
+  - Add or remove any of the available entries, and reorder them.
+  - Change the layout: separators, which entries sit at the top level and which go into submenus (such as Links &
+    Shortcuts), and creating submenus of their own.
+  - Entries that only apply sometimes (Extract only for archives, admin entries, tools that aren't installed) keep
+    appearing only when they apply, wherever the user put them.
+  - "Reset to default" for each menu. New entries added in later versions show up in their default place.
 
 - [ ] **A sidebar section (dropdown) for mounts.** A collapsible **Mounts** section in the sidebar, like Places,
   Bookmarks and Devices (moved and collapsed the same way), listing the mounts GNOME Files shows that Kestrel's
@@ -319,6 +312,9 @@ into.
 
 ## Done
 
+- [x] **Open as Archive and Test Archive** (0.3.1-alpha.12). `src/archivewin.cpp` (a window listing an archive's contents, extracting the selected items: `archive::list`, `archive::extract_members`) and Test Archive(s) (`archive::test`, `archive_ui::test_archives`). Follow-ups: "Better archive window QoL" under New features. Test: `archives`.
+- [x] **Extract several archives at once** (0.3.1-alpha.12). Extract All Here / Extract All To… for two or more selected archives (a split set selected whole is one, and now gets Extract Here / Extract To…): one queued job with each archive as a step, the first typed password tried on the rest (asked again only when it doesn't open one), one summary at the end (`src/archive_ui.cpp` extract_all; the quick password test is `archive::password_opens`). Extract Here / Extract To… on one archive run through the same job. Test: `archives`.
+- [x] **Remember archive passwords in the keyring** (0.3.1-alpha.12). `src/keyring.cpp` (libsecret, schema org.kestrel_explorer.ArchivePassword in the login keyring, labelled "Kestrel Explorer: archive password for …"; fingerprint: size + SHA-256 of the first 64 KB). Opt-in Remember box in the password window and Extract To…; order: the password typed last, the one saved for the archive, the other saved ones, then ask. Preferences → Forget Saved Archive Passwords…. New dependency libsecret-1 (build: libsecret-1-dev; .deb: libsecret-1-0). Test: `archives` (with a real gnome-keyring-daemon).
 - [x] **A Jobs window, and one job queue for every Kestrel** (0.3.1-alpha.12). `src/jobs.cpp` (the queue: kept by the tower across Kestrels, each Kestrel's own without one; by drive or one at a time; drives by physical disk), `src/jobswin.cpp` (every job, steps, logs and live tool output, Pause/Resume/Stop/Start Now/Up/Down, Pause All, start paused). Not done: another Kestrel's job log isn't sent through the tower (the window says it's in that Kestrel's Jobs window); only copy/move/delete jobs list steps; administrator jobs can't be paused (the helper runs as root). Test: `jobs`.
 - [x] **A Tower window: see what the tower is doing** (0.3.1-alpha.12). `src/towerwin.cpp`, ☰ → Tower… with Preferences → Show developer tools, or `kes --tower-monitor`: status (pid, uptime, protocol, landing, refused messages) with Restart Tower, the Kestrels checked in, the live message log with a filter and pause, the queue and drives in use, the shared undo list. Test: `jobs`.
 - [x] **LTFS tape support: no freezing, and tape-friendly behaviour** (0.3.1-alpha.11). `src/drives.cpp`: tapes (LTFS mounts) and floppies recognised from the mount table; sizes read in the background (sidebar, Overview, status bar, Properties); no previews/details/animations/dates read unless allowed per drive; one job at a time per drive; tape-order reads with "Positioning the tape"; index written after a copy and on demand; small-files warning; the Overview card; background unmount with a warning while a job runs. What's left: see "LTFS and slow drives: what's left". Test: `slow`.

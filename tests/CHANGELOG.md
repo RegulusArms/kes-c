@@ -20,10 +20,47 @@ Added:
   messages) and UndoList; the Tower window shows the status and the messages live. Covers the unified job queue and the
   two windows.
 
+- **`archives`, a new test for extracting through the window and remembered passwords.** Which archives a selection
+  holds (a split set once, no other files) and the menu it gets (Extract All for several, Extract for a split set
+  selected whole, nothing with other files mixed in); the quick password test for 7z (also with encrypted names), zip,
+  rar and zpaq; Extract All asking once, again only for an archive the typed password doesn't open and after a wrong
+  one, extracting each into its own folder and ending with one summary (a damaged archive among them leaves no
+  folder); no keyring seen and no Remember box while the test holds the Secret Service's name (so the bus can't
+  start gnome-keyring by itself, as it would on a clean Ubuntu); a cancelled password window skipping just that archive; ✕ while it waits for a password closing the window
+  and stopping the job with a summary; the password window a job's thread asks with being a free window; Extract
+  Here on one archive as before. With a real gnome-keyring-daemon on the
+  test's private bus (skipped where it isn't installed): fingerprints follow the contents, nothing is saved without
+  Remember, a ticked one is saved, found again after a rename and move, other saved passwords are tried, and
+  Preferences forgets them. Covers Extract All and remembered archive passwords.
+  Also, for Open as Archive and Test Archive: 7z, zip, tar.gz, rar and zpaq archives are listed (paths, sizes) and a
+  single file or a folder extracted from each into a folder (a taken name gets a number, nothing replaced, nothing else
+  extracted, no part folder left; rar and zpaq skipped where not installed); extracting single items that fails
+  part-way (a file-size limit standing for a full disk) leaves nothing; a folder taken out on its own leaves out a
+  symlink that would then lead out of the destination; Test tells sound 7z, zip and tar.gz archives from damaged
+  ones, names the damaged file, and tells a wrong password apart; the menu offers Open as Archive / Test Archive(s)
+  (not Open as Archive for a single .gz); Test Archives asks for an encrypted one's password and tells all results
+  in one message; the archive window asks for the password of an archive with encrypted names, shows its tree in a
+  free window (raised, not doubled, when opened again) and extracts the selected files without asking again; with
+  encrypted files but visible names it opens without asking and asks once when one is extracted.
+  The keyring checks wait for the test's own gnome-keyring-daemon to own the Secret Service's name (asked with
+  NameHasOwner) before using it: asking libsecret earlier could make the bus start a second, locked keyring that took
+  the name first (seen on a clean Ubuntu 24.04).
+- CI's test and sanitizer jobs install `gnome-keyring` and `p7zip-full` (so these checks run there) and `libsecret-1-dev`.
+
 Changed:
+- `theme`: the preview-build checks run the builder directly (it's no longer a thread of its own but runs in a job).
+  Added: each Generate is a job of its own (two at once are both queued and shown in the status bar); Generate keeps
+  previews already made while Regenerate Previews makes them again (a cached preview replaced by a grey stand-in
+  with the same tags must be gone), for the folder's own files and its and its subfolders' previews but nothing
+  deeper; Regenerate Folder Previews (here and recursively) and Regenerate Previews Recursively; ✕ stops a preview job
+  also after its folders are all found (the workers stop, not just the walk); the Previews submenu's entries. Covers
+  preview builds as jobs and the Regenerate options.
+- `ui_actions.txt`: Generate Previews… moved into a Previews submenu (folder and empty space), with the four
+  Regenerate entries.
 - `slow`: "a copy to a tape that another job is using waits" now holds the tape with a queued job (the per-Kestrel
   lanes it used are replaced by the job queue).
 - `ui_actions.txt`: ☰ → Jobs… (Ctrl+Shift+J) and Tower….
+
 
 ## 0.3.1-alpha.11
 

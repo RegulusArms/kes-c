@@ -20,6 +20,30 @@ What changed in each version of Kestrel Explorer, newest first.
   what the background helper that keeps Kestrel windows in sync is doing, live: its status, the Kestrels checked in,
   every message it passes on, the job queue and the drives in use, and the shared undo list, with a Restart Tower
   button.
+- **Extract several archives at once:** select more than one archive and right-click → **Extract All Here** or
+  **Extract All To…**. Each is extracted as Extract Here / Extract To… would on its own, one after another as one job
+  with one ✕, and one summary at the end says what was extracted and what wasn't, instead of a message per archive. A
+  split set selected whole counts as one archive (it now also gets Extract Here / Extract To…, which only a single
+  part got before). The first password you type is tried on every encrypted archive after it; you're asked again only
+  for one it doesn't open.
+- **Remember archive passwords:** a **Remember this password** box in the password window (off by default) saves it
+  in your desktop's login keyring (GNOME Keyring, KWallet), as "Kestrel Explorer: archive password for …" in Passwords
+  and Keys. The next time, Kestrel finds it by itself, even if the archive was renamed or moved, and also tries your
+  other saved passwords (a quick test each) before asking. **Preferences → Forget Saved Archive Passwords…** deletes
+  them. Without a keyring nothing changes. Kestrel now needs libsecret (`libsecret-1-0`, on every desktop already).
+- **Open as Archive:** right-click an archive to see what's inside it in a window of its own (folders, files, sizes,
+  times, which ones are encrypted, a filter) and extract just the files or folders you pick, each put right in the
+  folder you choose (a taken name gets a number; nothing is replaced). Works for 7z, zip, rar, zpaq, tar and what
+  7-Zip opens (iso, deb…).
+- **Test Archive:** right-click one or several archives → **Test Archive(s)** checks every file in them against its
+  checksum without extracting anything, and says which files are damaged.
+- **Preview builds are jobs:** each Generate Previews / Generate Folder Previews is now a job like a copy: it waits
+  for its turn on the drive, shows in the Jobs window, and can be paused or stopped. Several can be started at once
+  (before, a second one was refused until the first finished).
+- **Regenerate previews:** right-click a folder → **Previews** → **Regenerate Previews**, **Regenerate Folder
+  Previews**, and their **Recursively** forms make previews again even where they were already made, for ones that
+  look wrong or out of date. The generate options moved into the same **Previews** submenu.
+- Extract To… no longer insists on a password for an encrypted archive: leave it empty to use a saved one or be asked.
 - Kestrels of this version don't share jobs, stars or undo with running Kestrels of earlier versions (the messages
   between them changed); close the old windows after updating.
 
