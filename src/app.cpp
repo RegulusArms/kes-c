@@ -13,12 +13,14 @@
 #include "fm1.h"
 #include "groups.h"
 #include "incoming.h"
+#include "jobswin.h"
 #include "overview.h"
 #include "places.h"
 #include "sharing.h"
 #include "undo.h"
 #include "proc.h"
 #include "thumbs.h"
+#include "towerwin.h"
 #include "stats.h"
 #include "util.h"
 #include "uwp.h"
@@ -151,6 +153,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     bl->addWidget(build_stop);
     build_box->hide();
     task_panel = new TaskPanel;   // file operations running in the background
+    connect(task_panel, &TaskPanel::clicked, this, [this]() { JobsWindow::open(this); });
     setProperty("task_panel", QVariant::fromValue<QObject *>(task_panel));
     auto *admin_indicator = new admin::Indicator;   // 🛡 while an admin session is open
     statusBar()->addWidget(status_label, 1);
@@ -521,6 +524,9 @@ void MainWindow::build_actions()
 
     menu->addSeparator();
     A("Preferences…", {"Ctrl+,"}, [this]() { preferences(); }, menu, {"preferences-system"});
+    A("Jobs…", {"Ctrl+Shift+J"}, [this]() { JobsWindow::open(this); }, menu);
+    a_tower = A("Tower…", {}, [this]() { TowerWindow::open(this); }, menu);
+    a_tower->setVisible(settings().value("developer_tools", false).toBool());
     A("Start Admin Session…", {}, [this]() { admin::start_session(this); }, menu, {"security-high", "dialog-password"});
     A("Clear Folder Preview Cache", {}, [this]() { clear_cache(); }, menu);
     A("Delete All Thumbnails…", {}, [this]() { purge_thumbnails(); }, menu, {"edit-clear-all", "edit-delete"});
@@ -1261,6 +1267,9 @@ void apply_preferences()
             p->view()->viewport()->update();
         }
     Q_EMIT undo::signals_()->changed();   // "Share undo…" may have changed what Ctrl+Z undoes
+    for (MainWindow *w : WINDOWS)
+        if (w->a_tower)
+            w->a_tower->setVisible(settings().value("developer_tools", false).toBool());
 }
 
 void MainWindow::preferences_saved()
@@ -1547,6 +1556,12 @@ int kes_main(int argc, char **argv)
                         w->close();
                 });
             });
+            return app.exec();
+        }
+    for (int i = 1; i < argc; ++i)
+        if (QByteArray(argv[i]) == "--tower-monitor") {   // only the Tower window (towerwin.h)
+            atc::radio()->start();
+            show_free(new TowerWindow);
             return app.exec();
         }
     QStringList paths;

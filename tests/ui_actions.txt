@@ -57,6 +57,8 @@ button "Menu" > Go > Next Tab [Ctrl+PgDown, Ctrl+Tab]
 button "Menu" > Go > Previous Tab [Ctrl+PgUp, Ctrl+Shift+Tab]
 button "Menu" > ---
 button "Menu" > Preferences… [Ctrl+,]
+button "Menu" > Jobs… [Ctrl+Shift+J]
+button "Menu" > Tower…
 button "Menu" > Start Admin Session…
 button "Menu" > Clear Folder Preview Cache
 button "Menu" > Delete All Thumbnails…
@@ -78,6 +80,7 @@ shortcut > Grid View [Ctrl+1]
 shortcut > Homepage [Alt+Home]
 shortcut > Info Panel [F3]
 shortcut > Invert Selection [Ctrl+Shift+I]
+shortcut > Jobs… [Ctrl+Shift+J]
 shortcut > Keyboard Shortcuts [F1]
 shortcut > List View [Ctrl+2]
 shortcut > Move to Trash [Del]

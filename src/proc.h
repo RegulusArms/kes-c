@@ -47,6 +47,15 @@ private:
     void set_status(int status);
 };
 
+// Told (on the thread that runs them) when a program starts and when it's reaped: a job (Task) watches the programs it
+// runs, so pausing it can pause them (SIGSTOP / SIGCONT to their process group). One per thread; nullptr: none.
+struct Watcher {
+    virtual ~Watcher() = default;
+    virtual void started(pid_t pid) = 0;
+    virtual void ended(pid_t pid) = 0;
+};
+void set_watcher(Watcher *w);   // for the calling thread
+
 // write() to a program's input pipe that can't raise SIGPIPE (which would kill Kestrel, unless it's ignored): if the
 // program has closed its end, it fails with EPIPE instead. Works whatever the process does with SIGPIPE.
 ssize_t write_pipe(int fd, const void *data, size_t n);

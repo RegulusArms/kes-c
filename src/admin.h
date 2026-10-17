@@ -88,8 +88,10 @@ void start_session(QWidget *parent);
 
 // After a permission error: run work(task) as administrator. With a session open it just runs; otherwise the
 // user is asked first (and then enters their password once). work() uses session().call(); it may return a list
-// of per-item error strings. on_done(ok) runs afterwards.
+// of per-item error strings. on_done(ok) runs afterwards. paths: what it reads and writes, for its lanes in the job queue
+// (jobs.h); empty: it starts at once.
 void retry_as_admin(QWidget *parent, const QString &title, const QString &message,
-                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done = nullptr);
+                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done = nullptr,
+                    const QStringList &paths = QStringList());
 
 }  // namespace admin

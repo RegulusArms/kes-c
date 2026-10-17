@@ -15,11 +15,9 @@
 #include <QSet>
 #include <QStringList>
 #include <QThreadPool>
-#include <QWaitCondition>
 
 #include <functional>
 
-class Task;
 class QWidget;
 
 namespace drives {
@@ -30,6 +28,11 @@ struct Mount {
 QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a second); safe on any thread
 QString device_label(const QString &device);   // a file system's label (/dev/disk/by-label), without asking the drive
 QString mount_root(const QString &path);       // the mount point path is on
+// The physical drives a path is on, the same in every Kestrel (the job queue's lanes, jobs.h), from the mount table and
+// /sys only (no drive is asked): "disk:sda" for a partition of sda (an encrypted or LVM volume: the disks under it),
+// "zfs:tank" for a ZFS dataset (its pool), "gvfs:<share>" for each network share or phone, otherwise the mount's
+// source ("mount:fuse:ltfs:/dev/sg0" for a tape, "mount:nfs:server:/export"…). Empty if it can't be told.
+QStringList drive_ids(const QString &path);
 
 enum class Slow { None, Tape, Floppy };
 Slow slow_kind(const QString &path);   // of the drive path is on
@@ -76,21 +79,6 @@ private:
     };
     QHash<QString, Entry> cache;
     QThreadPool pool;
-};
-
-// One job at a time per slow drive: a job takes the lanes of the slow drives it reads or writes, waiting (and saying
-// so through `waiting`) while another job of this Kestrel holds one. Cancel (task->check()) stops the wait.
-class Lanes {
-public:
-    Lanes(const QStringList &paths, Task *task, const std::function<void(const QString &)> &waiting);
-    ~Lanes();
-    static bool busy(const QString &root);
-
-private:
-    QSet<QString> held;
-    static QMutex lock;
-    static QWaitCondition freed;
-    static QSet<QString> taken;
 };
 
 }  // namespace drives

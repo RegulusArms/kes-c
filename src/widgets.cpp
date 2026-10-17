@@ -5,6 +5,7 @@
 #include "dialogs.h"
 #include "drives.h"
 #include "fileops.h"
+#include "jobs.h"
 #include "groups.h"
 #include "metadata.h"
 #include "overview.h"
@@ -1275,7 +1276,7 @@ void Sidebar::unmount(const QString &path)
                 self->refresh();
             });
     };
-    if (drives::Lanes::busy(path)) {
+    if (jobs::Queue::instance()->busy(path)) {
         ask_yes(this, "Unmount", QString("A job is still reading or writing this %1. Unmount it anyway?").arg(what), go);
         return;
     }

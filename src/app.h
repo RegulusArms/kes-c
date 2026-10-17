@@ -117,6 +117,7 @@ public:
     QCheckBox *preview_box;
     ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
     bool chooser_mode = false;       // a chooser window: has its own view settings (view_value)
+    QAction *a_tower = nullptr;      // ☰ → Tower…, with Preferences → Show developer tools
     // the window's and its tabs' view settings (size, zoom, view, sort, panels, hidden files, folder previews, search
     // options); a chooser window keeps its own (see view_value in app.cpp)
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;

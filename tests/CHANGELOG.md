@@ -4,6 +4,27 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.12
+
+Added:
+- **`jobs`, a new test for the job queue, the Jobs window and the Tower window.** The scheduler's rules (by drive: a job
+  waits for a running one on its drives, keeps its order within a lane, isn't overtaken; a paused waiting job doesn't
+  hold others up; Start Now; one at a time). Drive ids: paths on one drive share one, a tape is its own, a partition
+  counts as its whole disk. In one Kestrel: a job waits for another on its drive (saying so) while one on another
+  drive runs; one at a time; cancelling a waiting job, Start Now, moving a job up, Start New Jobs Paused; pausing a copy
+  (its part file stops growing, then it finishes) and a program a job runs (stopped and continued, then ended on
+  cancel); a copy's steps and its log kept after it ends. The Jobs window opens from the job panel, lists running,
+  waiting and finished jobs, and Delete cancels the selected one without moving the main window's selection to the
+  trash. Through the tower: another Kestrel's job holds a lane our job waits for, a Kestrel that leaves frees its lanes,
+  another Kestrel pauses and resumes our job, everyone hears the queue; the tower's Status (pid, protocol, refused
+  messages) and UndoList; the Tower window shows the status and the messages live. Covers the unified job queue and the
+  two windows.
+
+Changed:
+- `slow`: "a copy to a tape that another job is using waits" now holds the tape with a queued job (the per-Kestrel
+  lanes it used are replaced by the job queue).
+- `ui_actions.txt`: ☰ → Jobs… (Ctrl+Shift+J) and Tower….
+
 ## 0.3.1-alpha.11
 
 Added:

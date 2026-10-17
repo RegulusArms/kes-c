@@ -2,7 +2,28 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.11
+## 0.3.1-alpha.12
+
+- **One job queue for every Kestrel window:** copies, moves, extractions, compressions, checksum jobs and the like
+  no longer all start at once and fight over the same drive. Each waits for its turn on the drives it uses, across
+  every Kestrel window and process: jobs on different drives still run side by side, but two jobs on the same drive run
+  one after the other, in order. A rename within one drive doesn't wait. Prefer one job at a time? Choose it in the
+  Jobs window.
+- **The Jobs window:** click the job progress in the status bar (or ☰ → Jobs…, Ctrl+Shift+J) to see every job of
+  every Kestrel window: running, waiting and finished, with progress and the time left. Select one to see its steps
+  (each item of a copy, done / in progress / waiting) and its log, including the live output of the archive tools, with
+  passwords masked; copy it or save it. Pause, resume, stop, start a waiting job now, or move it up or down the queue;
+  pause or resume everything at once, or start new jobs paused to line up work first. Delete stops the selected job.
+- **Pausing jobs:** a paused copy stops within a few megabytes, its half-copied file kept aside until it goes on; a
+  paused extraction or compression pauses the program doing it. (Administrator jobs can't be paused.)
+- **The Tower window** for the curious (Preferences → Show developer tools, then ☰ → Tower…, or `kes --tower-monitor`):
+  what the background helper that keeps Kestrel windows in sync is doing, live: its status, the Kestrels checked in,
+  every message it passes on, the job queue and the drives in use, and the shared undo list, with a Restart Tower
+  button.
+- Kestrels of this version don't share jobs, stars or undo with running Kestrels of earlier versions (the messages
+  between them changed); close the old windows after updating.
+
+## 0.3.1-alpha.11 (2026-10-16)
 
 **Tapes (LTFS) and floppy disks:**
 - **No more freezing.** Kestrel froze while a tape or a USB floppy drive was busy, even when the copy was running in a
