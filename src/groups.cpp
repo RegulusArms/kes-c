@@ -482,6 +482,29 @@ void DateGroupProxy::sort(int column, Qt::SortOrder order)
         src->sort(column, order);
 }
 
+QStringList DateGroupProxy::mimeTypes() const { return src ? src->mimeTypes() : QStringList(); }
+
+QMimeData *DateGroupProxy::mimeData(const QModelIndexList &indexes) const
+{
+    if (!src)
+        return nullptr;
+    QModelIndexList items;   // the headers aren't dragged
+    for (const QModelIndex &i : indexes)
+        if (i.isValid() && !is_header(i))
+            items << mapToSource(i);
+    return items.isEmpty() ? nullptr : src->mimeData(items);
+}
+
+Qt::DropActions DateGroupProxy::supportedDropActions() const
+{
+    return src ? src->supportedDropActions() : Qt::IgnoreAction;
+}
+
+Qt::DropActions DateGroupProxy::supportedDragActions() const
+{
+    return src ? src->supportedDragActions() : Qt::IgnoreAction;
+}
+
 bool DateGroupProxy::canDropMimeData(const QMimeData *data, Qt::DropAction action, int, int,
                                      const QModelIndex &parent) const
 {

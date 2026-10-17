@@ -172,6 +172,63 @@ int main(int argc, char **argv)
                                   "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
 
+    // -- a drag that starts in the view itself, grouped by period or by day: what it carries is what the view's own
+    // model gives for the selected items (as startDrag asks it), with the drag actions it offers. Grouped, that model
+    // gave no files (the drop onto a folder did nothing) and offered no move.
+    auto own_drag = [&](const QString &mode, int group) {
+        QString dir = home_path(QString("own-%1-%2").arg(mode).arg(group));
+        makedirs(join(dir, "into"), true);
+        write_text(join(dir, "moving.txt"), "m");
+        Pane *own = w->new_tab(dir);
+        struct Closer {
+            MainWindow *w;
+            Pane *p;
+            ~Closer() { w->close_tab(w->tabs->indexOf(p)); }
+        } closer{w, own};
+        w->set_view(mode);
+        w->pane()->set_grouping(group, groups::MODIFIED);
+        QAbstractItemView *v = w->pane()->view();
+        QModelIndex file, folder;
+        wait_for([&]() {
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++) {
+                QModelIndex i = v->model()->index(r, 0, v->rootIndex());
+                if (i.data(PathRole).toString() == join(dir, "moving.txt"))
+                    file = i;
+                if (i.data(PathRole).toString() == join(dir, "into"))
+                    folder = i;
+            }
+            return file.isValid() && folder.isValid() && !v->visualRect(folder).isEmpty();
+        });
+        if (!file.isValid() || !folder.isValid())
+            return QString("not shown");
+        std::unique_ptr<QMimeData> data(v->model()->mimeData({file}));
+        if (!data || data->urls() != QList<QUrl>{QUrl::fromLocalFile(join(dir, "moving.txt"))})
+            return QString("the drag carries no file");
+        if (!(v->model()->supportedDragActions() & Qt::MoveAction))
+            return QString("the drag offers no move");
+        QPointF pos = v->visualRect(folder).center();
+        QWidget *dropw = v->viewport();
+        QDragEnterEvent enter(pos.toPoint(), Qt::MoveAction, data.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &enter);
+        QDragMoveEvent move(pos.toPoint(), Qt::MoveAction, data.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &move);
+        QDropEvent drop(pos, Qt::MoveAction, data.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(dropw, &drop);
+        if (!wait_for([&]() { return exists(join(dir, "into/moving.txt")) && !exists(join(dir, "moving.txt")); }))
+            return QString("not moved");
+        return QString();
+    };
+    QStringList own_results;
+    for (const QString &mode : {QString("grid"), QString("list")})
+        for (int group : {int(groups::PERIOD), int(groups::DAY)}) {
+            QString r = own_drag(mode, group);
+            if (!r.isEmpty())
+                own_results << QString("%1, %2: %3").arg(mode, group == groups::PERIOD ? "by period" : "by day", r);
+        }
+    check(own_results.isEmpty(), "files dragged from a view grouped by period or by day onto a folder in it move into "
+                                 "that folder, in the grid and the list" +
+                                     (own_results.isEmpty() ? QString() : " (" + own_results.join("; ") + ")"));
+
     // -- a drop into a subfolder doesn't move the view: the dragged items (the view's current item among them) leave the
     // folder, and the view stays where it was instead of scrolling to where they were. Here the subfolder is at the top
     // (folders first) and the dragged files near the bottom, with the view scrolled to the top.

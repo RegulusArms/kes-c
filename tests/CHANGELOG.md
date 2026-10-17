@@ -47,6 +47,11 @@ Added:
   the name first (seen on a clean Ubuntu 24.04).
 - CI's test and sanitizer jobs install `gnome-keyring` and `p7zip-full` (so these checks run there) and `libsecret-1-dev`.
 
+- `ui`: files dragged from a view grouped by period or by day onto a folder in it move into that folder, in the grid
+  and the list. The drag is what the view's own model gives for the selected items, with the actions it offers (as
+  the view's startDrag asks): the earlier drop checks used files from outside the view, so they missed that a grouped
+  view's drag carried no files and offered no move.
+
 Changed:
 - `theme`: the preview-build checks run the builder directly (it's no longer a thread of its own but runs in a job).
   Added: each Generate is a job of its own (two at once are both queued and shown in the status bar); Generate keeps

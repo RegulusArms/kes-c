@@ -43,6 +43,8 @@ What changed in each version of Kestrel Explorer, newest first.
 - **Regenerate previews:** right-click a folder → **Previews** → **Regenerate Previews**, **Regenerate Folder
   Previews**, and their **Recursively** forms make previews again even where they were already made, for ones that
   look wrong or out of date. The generate options moved into the same **Previews** submenu.
+- **Fixed:** with Group by Period or Group by Day on, files dragged onto a folder in the same window did nothing
+  (they should move into it). The grouped view's drag carried no files.
 - Extract To… no longer insists on a password for an encrypted archive: leave it empty to use a saved one or be asked.
 - Kestrels of this version don't share jobs, stars or undo with running Kestrels of earlier versions (the messages
   between them changed); close the old windows after updating.
