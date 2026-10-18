@@ -9,6 +9,22 @@ into.
 
 ## New features
 
+- [ ] **Jobs run in the background, apart from the Kestrel windows.** Jobs (copies, moves, extractions, checksums,
+  preview builds…) run in a background process of their own, like the tower, instead of inside the window that
+  started them. The Jobs window is a view onto that process: it can be opened at any time and closed without
+  stopping anything.
+  - All Kestrel windows can be closed while jobs keep running.
+  - Closing the last Kestrel window while jobs are running asks something like "Exit and open the Jobs window, or
+    stop all jobs?"
+    - **Exit and open the Jobs window:** the Jobs window opens, the Kestrel windows close, and the jobs go on.
+    - **Stop all jobs:** they're stopped (each one leaving things as a cancel does today) and Kestrel exits.
+  - If the Jobs window is already open, the last Kestrel window just closes, without asking: the jobs carry on and
+    can still be watched there.
+  - Today closing a window that runs jobs asks whether to stop them or keep going, and they live in that window's
+    process. With this, a job no longer depends on the window that started it.
+  - Messages a job needs to show when it ends or needs an answer (a conflict, a password, a summary) would then come
+    from the Jobs window, or a window opened for them, since the window that started it may be gone.
+
 - [ ] **Better archive window QoL.** Follow-ups to Open as Archive (`src/archivewin.cpp`):
   - Open a file from inside the archive (double-click): extract it to a temporary copy and open that with its app.
     The temporary copies need a cache folder, cleaned up afterwards and added to the BleachBit cleaner.
