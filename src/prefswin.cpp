@@ -8,6 +8,7 @@
 #include "keyring.h"
 #include "menus.h"
 #include "prefs.h"
+#include "tapebuf.h"
 #include "thumbs.h"
 #include "util.h"
 #include "widgets.h"
@@ -406,6 +407,17 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         };
         return box;
     }
+    if (key == "tape_buffer_now") {   // what the buffer would get now, from the memory figures
+        auto *l = new QLabel;
+        l->setObjectName("tape_buffer_now_label");
+        l->setWordWrap(true);
+        loaders[key] = [l]() {
+            tapebuf::Memory m = tapebuf::memory();
+            l->setText(QString("Up to %1 (memory %2, %3 available now)")
+                           .arg(human_size(tapebuf::budget(m)), human_size(m.total), human_size(m.available)));
+        };
+        return l;
+    }
     if (key == "archive/format") {
         auto *cb = new QComboBox;
         for (const archive::Format &f : archive::formats())
@@ -615,6 +627,8 @@ void PreferencesDialog::load(const QString &key)
         select_data(cb, v);
     else if (loaders.contains(key))
         loaders[key]();
+    if (key.startsWith("tape_buffer_") && loaders.contains("tape_buffer_now") && key != "tape_buffer_now")
+        loaders["tape_buffer_now"]();   // follows the two settings
     if (key == "play_webm" && !which("ffmpeg")) {
         ed->setEnabled(false);
         ed->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
@@ -688,6 +702,8 @@ QStringList PreferencesDialog::keys_of(const QString &tab) const
     QStringList out;
     for (const prefs::Pref &p : prefs::all()) {
         if (p.tab != tab)
+            continue;
+        if (p.key == "tape_buffer_now")
             continue;
         if (p.key == "sidebar_sections")
             out << "sidebar_sections" << "sidebar_collapsed";

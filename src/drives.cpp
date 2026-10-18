@@ -281,6 +281,52 @@ QPair<qint64, qint64> tape_position(const QString &path)
     return {partition, block.toLongLong()};
 }
 
+QString ltfs_sync(const QString &root)
+{
+    QString proc = qEnvironmentVariable("KESTREL_TEST_PROC", "/proc");
+    QString mount = rstrip(root, '/');
+    QStringList pids;
+    try {
+        pids = listdir(proc);
+    } catch (const OSError &) {
+    }
+    for (const QString &pid : pids) {
+        bool num = false;
+        pid.toLongLong(&num);
+        if (!num)
+            continue;
+        QByteArray cmd = read_file(join(join(proc, pid), "cmdline"));   // (readable for root's processes too)
+        QList<QByteArray> args = cmd.split('\0');
+        while (!args.isEmpty() && args.last().isEmpty())
+            args.removeLast();
+        if (args.isEmpty() || basename(QString::fromLocal8Bit(args[0])) != "ltfs")
+            continue;
+        bool ours = false;
+        for (const QByteArray &a : args)
+            ours = ours || rstrip(dec(a), '/') == mount;
+        if (!ours)
+            continue;
+        QString sync = "time@5";   // LTFS's default
+        for (int i = 1; i < args.size(); ++i) {
+            QString opts;
+            if (args[i] == "-o" && i + 1 < args.size())
+                opts = QString::fromLocal8Bit(args[++i]);
+            else if (args[i].startsWith("-o"))
+                opts = QString::fromLocal8Bit(args[i].mid(2));
+            for (const QString &o : opts.split(','))
+                if (o.startsWith("sync_type="))
+                    sync = o.mid(10);
+        }
+        return sync;
+    }
+    return QString();
+}
+
+int ltfs_sync_minutes(const QString &sync)
+{
+    return sync.startsWith("time@") ? std::max(1, sync.mid(5).toInt()) : 0;
+}
+
 QString sync_tape(const QString &root)
 {
     QByteArray p = enc(root);
@@ -332,6 +378,7 @@ Sizes::Info Sizes::get(const QString &root)
                 info.volume_name = tape_attr(root, "volumeName");
                 info.loads = tape_attr(root, "mediaLoads");
                 info.alert = tape_attr(root, "mediaStorageAlert");
+                info.sync = ltfs_sync(root);
             }
             QMetaObject::invokeMethod(
                 this,

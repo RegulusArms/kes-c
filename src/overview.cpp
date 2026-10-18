@@ -70,7 +70,7 @@ static QString gstr(char *s)
 // what a slow drive's card shows from drives::Sizes, to redraw it only when that changes
 static QString slow_sig(const drives::Sizes::Info &i)
 {
-    return QStringList{i.volume_name, QString::number(i.total), QString::number(i.free), i.loads, i.alert,
+    return QStringList{i.volume_name, QString::number(i.total), QString::number(i.free), i.loads, i.alert, i.sync,
                        i.busy ? "busy" : ""}
         .join('|');
 }
@@ -955,6 +955,8 @@ DriveLists OverviewPage::drive_infos()
                 st << QString("%1 loads").arg(sz.loads);
             if (!sz.alert.isEmpty() && sz.alert != "0" && sz.alert.toLower() != "none")
                 st << "⚠ " + sz.alert;
+            if (int every = drives::ltfs_sync_minutes(sz.sync))   // each index write stops the drive mid-copy
+                st << QString("index written every %1 min (stops the drive; mount with -o sync_type=unmount)").arg(every);
             info.status = st.join("  ·  ");
             shown_slow[root] = slow_sig(sz);
         }

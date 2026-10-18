@@ -22,6 +22,17 @@ Added:
   default place; the editor hides, moves up, into and out of a submenu, and its changes are told to the other
   Kestrels. Covers the new Preferences and customised right-click menus.
 
+- `slow`: the tape write buffer. Its size follows the memory figures (a stand-in /proc/meminfo,
+  `KESTREL_TEST_MEMINFO`): available less 10% of the total, the share kept free, the largest size, at least 64 MB. The
+  buffer gives every file whole and in order (also ones larger than it), drops skipped files, and leaves files not
+  planned or changed since to be read directly. With a slow source (`KESTREL_TEST_TAPEBUF_DELAY_MS`): writing starts
+  only once it's full and, below the drive's lowest streaming speed, waits for a full buffer again after running dry;
+  within the speed-matching range it carries on without refilling. A copy onto the tape folder fills first, writes
+  nothing meanwhile, then every file whole and in order, and its log gives the buffer's figures; pausing pauses the
+  reading (/proc/self/io); ✕ while filling leaves nothing, not even a part file; a file that doesn't fit isn't started
+  (`KESTREL_TEST_TAPE_FREE`). LTFS's index sync is read from a stand-in ltfs command line (`KESTREL_TEST_PROC`). Properties
+  doesn't read a tape file to name its type. Covers preventing shoe-shining on tapes.
+
 Changed:
 - `atc_sync`: "Saved Preferences are reported" is now "a change made in Preferences is reported, with the setting
   that changed": Preferences has no OK any more (changes apply as they're made), and the message names the keys.

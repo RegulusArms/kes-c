@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "undo.h"
 #include "stats.h"
+#include "tapebuf.h"
 #include "util.h"
 #include "windows.h"
 
@@ -27,6 +28,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <sys/statvfs.h>
 
 #include <cerrno>
 #include <climits>
@@ -708,6 +711,17 @@ public:
             keyed << qMakePair(at, i);
         }
         std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+        start_tape_buffer(keyed);
+        struct EndBuffer {   // its figures in the log, and its memory given back, however the run ends
+            Ops *ops;
+            ~EndBuffer()
+            {
+                if (ops->buffer) {
+                    ops->task->log(ops->buffer->summary());
+                    ops->buffer.reset();
+                }
+            }
+        } end_buffer{this};
         for (const auto &[at, index] : keyed) {
             const Job &j = jobs[index];
             task->check();
@@ -772,12 +786,69 @@ private:
     QList<Job> jobs;
     bool by_count;
     qint64 done = 0, total = 0;
+    std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
+    bool told_slow = false;                    // said the source is too slow for the tape to stream
 
     void report_progress(const QString &name)
     {
-        QString text = by_count ? QString("%1 of %2 — %3").arg(group_digits(done), group_digits(total), name)
-                                : QString("%1 of %2 — %3").arg(human_size(done), human_size(total), name);
+        QString text = by_count ? QString("%1 of %2 — ").arg(group_digits(done), group_digits(total)) + name
+                                : QString("%1 of %2 — ").arg(human_size(done), human_size(total)) + name;
+        if (buffer)
+            text += " · " + buffer->status();
         task->report(double(done), double(total), text);
+    }
+
+    // The regular files under src, in the order copy_at writes them (names_in's order, as it reads them)
+    static void plan_files(const QString &src, QStringList &out, Task *task)
+    {
+        task->check();
+        struct stat st;
+        if (!lstat_(src, st))
+            return;
+        if (S_ISREG(st.st_mode)) {
+            out << src;
+        } else if (S_ISDIR(st.st_mode)) {
+            int fd = ::open(enc(src).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (fd < 0)
+                return;
+            QStringList names;
+            try {
+                names = names_in(fd, src);
+            } catch (const OSError &) {
+            }
+            ::close(fd);
+            for (const QString &e : names)
+                plan_files(join(src, e), out, task);
+        }
+    }
+
+    // Copies onto a tape go through a RAM buffer read ahead by a thread (tapebuf.h), so the drive keeps streaming:
+    // the files of every job writing to a tape from another drive, in the order they'll be written
+    void start_tape_buffer(const QList<QPair<QPair<qint64, qint64>, int>> &order)
+    {
+        QStringList files;
+        QString tape;
+        for (const auto &entry : order) {
+            const Job &j = jobs[entry.second];
+            if (j.op == "delete" || (j.op == "move" && same_dev(j.src, j.dst)))
+                continue;
+            if (drives::slow_kind(j.dst) != drives::Slow::Tape || drives::slow_kind(j.src) == drives::Slow::Tape)
+                continue;
+            tape = drives::slow_root(j.dst);
+            plan_files(j.src, files, task);
+        }
+        if (files.isEmpty())
+            return;
+        tapebuf::Memory mem = tapebuf::memory();
+        buffer = std::make_unique<tapebuf::Buffer>(task, files);
+        buffer->waiting = [this](const QString &text) { task->report(double(done), double(total), text, true); };
+        task->log(QString("Tape buffer: up to %1 (memory %2, %3 available)")
+                      .arg(human_size(buffer->capacity()), human_size(mem.total), human_size(mem.available)));
+        if (int every = drives::ltfs_sync_minutes(drives::ltfs_sync(tape)))
+            task->log(QString("Note: LTFS writes this tape's index every %1 minutes while it's mounted (sync_type=%2), and "
+                              "the drive stops each time. Mounting it with -o sync_type=unmount avoids that (the index is "
+                              "then written when it's unmounted, or with Write Tape Index Now).")
+                          .arg(QString::number(every), drives::ltfs_sync(tape)));
     }
 
     // bytes under path, or the file count when counting deletes
@@ -1044,31 +1115,65 @@ private:
         Fd out(part_fd);
         if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
             task->report(double(done), double(total), "Positioning the tape — " + name, true);
+        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
+        qint64 written = 0;
         try {
-            std::unique_ptr<char[]> buf(new char[CHUNK]);
+            if (to_tape) {   // room for it first: a write that runs out of tape wastes what it wrote (LTFS never reuses it)
+                struct statvfs sv;
+                qint64 free = ::fstatvfs(ddir, &sv) == 0 ? qint64(sv.f_bavail) * qint64(sv.f_frsize) : -1;
+                if (qEnvironmentVariableIsSet("KESTREL_TEST_TAPE_FREE"))
+                    free = qEnvironmentVariable("KESTREL_TEST_TAPE_FREE").toLongLong();
+                if (free >= 0 && now.st_size > free)
+                    throw Error(QString("Not enough space on the tape for “%1”: it needs %2, the tape has %3 left")
+                                    .arg(name, human_size(qint64(now.st_size)), human_size(free)));
+            }
+            // from the tape buffer when it has it (read ahead by its thread), else straight from the file
+            bool buffered = to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
+            std::unique_ptr<char[]> buf(buffered ? nullptr : new char[CHUNK]);
             for (;;) {
                 task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
-                ssize_t n = ::read(in.fd, buf.get(), CHUNK);
-                if (n < 0 && errno == EINTR)
-                    continue;
-                if (n < 0)
-                    throw_errno(src);
+                const char *data = buf.get();
+                ssize_t n;
+                if (buffered) {
+                    n = ssize_t(buffer->next(&data));
+                } else {
+                    n = ::read(in.fd, buf.get(), CHUNK);
+                    if (n < 0 && errno == EINTR)
+                        continue;
+                    if (n < 0)
+                        throw_errno(src);
+                }
                 if (n == 0)
                     break;
+                QElapsedTimer writing;
+                writing.start();
                 for (ssize_t off = 0; off < n;) {
-                    ssize_t w = ::write(out.fd, buf.get() + off, size_t(n - off));
+                    ssize_t w = ::write(out.fd, data + off, size_t(n - off));
                     if (w < 0 && errno == EINTR)
                         continue;
                     if (w < 0)
                         throw_errno(dst);
                     off += w;
                 }
+                if (buffered)
+                    buffer->wrote(n, writing.nsecsElapsed());
                 done += n;
+                written += n;
+                if (buffer && !told_slow && buffer->source_too_slow()) {
+                    told_slow = true;
+                    task->log(QString("The source reads at %1/s, slower than the tape's lowest streaming speed: the tape "
+                                      "writes in bursts from the buffer, stopping in between. Copying from a faster "
+                                      "drive, or making an archive on a fast disk first, would keep it streaming.")
+                                  .arg(human_size(qint64(buffer->source_rate()))));
+                }
                 report_progress(name);
             }
             copy_times_mode(out.fd, st);
-            struct stat old;   // replacing something: on disk before the rename (a crash leaves the old or the new)
-            if (stat_at(ddir, dname, old) && ::fsync(out.fd) != 0)
+            // replacing something: on disk before the rename (a crash leaves the old or the new). Not on a tape: an fsync
+            // there writes LTFS's index (the drive stops), and LTFS never overwrites data anyway: until the rename is in
+            // the index, the old file is what the tape has
+            struct stat old;
+            if (!to_tape && stat_at(ddir, dname, old) && ::fsync(out.fd) != 0)
                 throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
@@ -1076,6 +1181,10 @@ private:
         } catch (...) {
             out.reset();
             ::unlinkat(ddir, enc(part).constData(), 0);
+            if (to_tape && written >= 1024LL * 1024 * 1024)
+                task->log(QString("  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the "
+                                  "tape is reformatted.")
+                              .arg(human_size(written), name));
             throw;
         }
     }
