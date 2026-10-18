@@ -57,6 +57,8 @@ public:
     void apply_folder_previews();
     void zoom(int step, int absolute = -1);
     int zoom_value() const;
+    void set_sizes(int grid, int list);   // both zooms (Preferences); saved by whoever changed them
+    void set_search_options(bool subfolders, bool contents);   // the search bar's switches (Preferences)
     void update_grid_size();
     bool set_path(const QString &path, bool record = true, const QString &select = QString());
     void show_trash();

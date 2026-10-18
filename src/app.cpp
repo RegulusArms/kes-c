@@ -13,9 +13,13 @@
 #include "fm1.h"
 #include "groups.h"
 #include "incoming.h"
+#include "jobs.h"
 #include "jobswin.h"
 #include "overview.h"
+#include "menus.h"
 #include "places.h"
+#include "prefswin.h"
+#include "prefs.h"
 #include "sharing.h"
 #include "undo.h"
 #include "proc.h"
@@ -197,7 +201,9 @@ QVariant MainWindow::view_value(const QString &key, const QVariant &def) const
 
 void MainWindow::set_view_value(const QString &key, const QVariant &value)
 {
-    settings().setValue(chooser_mode ? "chooser/" + key : key, value);
+    QString k = chooser_mode ? "chooser/" + key : key;
+    settings().setValue(k, value);
+    prefs::notify({k});   // an open Preferences window shows it
 }
 
 int MainWindow::default_zoom(bool grid) const
@@ -226,7 +232,7 @@ void MainWindow::build_toolbar()
     preview_box->setToolTip("Show image mosaics on folder icons (Ctrl+Shift+P).\n"
                             "Turn off in large or slow folders to speed things up.");
     preview_box->setChecked(folder_previews);
-    connect(preview_box, &QCheckBox::toggled, this, &MainWindow::set_folder_previews);
+    connect(preview_box, &QCheckBox::toggled, this, [this](bool on) { set_folder_previews(on); });
     tb->addWidget(preview_box);
     a_search = tb->addAction(icon({"system-search-symbolic", "edit-find"}), "Search (Ctrl+F)", this,
                              [this]() { pane()->start_search(); });
@@ -752,7 +758,7 @@ void MainWindow::sync_zoom_slider()
     zoom_slider->blockSignals(false);
 }
 
-void MainWindow::set_folder_previews(bool on)
+void MainWindow::set_folder_previews(bool on, bool save)
 {
     // global switch for folder mosaics; off means no directory scanning at all (a chooser's is its own)
     QList<MainWindow *> wins = chooser_mode ? QList<MainWindow *>() : WINDOWS;
@@ -771,7 +777,8 @@ void MainWindow::set_folder_previews(bool on)
             p->view()->viewport()->update();
         }
     }
-    set_view_value("folder_previews", on);
+    if (save)
+        set_view_value("folder_previews", on);
     if (!on)
         thumbs->cancel_pending();
 }
@@ -784,15 +791,24 @@ void MainWindow::add_preview_menu(QMenu *menu, const QString &folder)
     // that look wrong or old). "Folder previews": just the folders' mosaics (and the few images each shows); without
     // "Recursively", this folder and the folders directly in it (and this folder's files).
     QMenu *pm = menu->addMenu(icon({"view-refresh"}), "Previews");
-    pm->addAction("Generate Previews Recursively", this, [this, folder]() { build_previews(folder); });
-    pm->addAction("Generate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1); });
-    pm->addAction("Generate Folder Previews Recursively", this, [this, folder]() { build_previews(folder, true); });
+    menus::tag(pm->menuAction(), "previews");
+    menus::tag(pm->addAction("Generate Previews Recursively", this, [this, folder]() { build_previews(folder); }),
+               "gen_previews_rec");
+    menus::tag(pm->addAction("Generate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1); }),
+               "gen_folder_previews");
+    menus::tag(pm->addAction("Generate Folder Previews Recursively", this, [this, folder]() { build_previews(folder, true); }),
+               "gen_folder_previews_rec");
     pm->addSeparator();
-    pm->addAction("Regenerate Previews", this, [this, folder]() { build_previews(folder, false, 1, true); });
-    pm->addAction("Regenerate Previews Recursively", this, [this, folder]() { build_previews(folder, false, -1, true); });
-    pm->addAction("Regenerate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1, true); });
-    pm->addAction("Regenerate Folder Previews Recursively", this,
-                  [this, folder]() { build_previews(folder, true, -1, true); });
+    menus::tag(pm->addAction("Regenerate Previews", this, [this, folder]() { build_previews(folder, false, 1, true); }),
+               "regen_previews");
+    menus::tag(pm->addAction("Regenerate Previews Recursively", this,
+                             [this, folder]() { build_previews(folder, false, -1, true); }),
+               "regen_previews_rec");
+    menus::tag(pm->addAction("Regenerate Folder Previews", this, [this, folder]() { build_previews(folder, true, 1, true); }),
+               "regen_folder_previews");
+    menus::tag(pm->addAction("Regenerate Folder Previews Recursively", this,
+                             [this, folder]() { build_previews(folder, true, -1, true); }),
+               "regen_folder_previews_rec");
 }
 
 Task *MainWindow::build_previews(const QString &root, bool folders_only, int depth, bool fresh)
@@ -931,13 +947,27 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 {
     auto *m = new QMenu(this);
     QString cur = p->path;
+    // every entry gets its id (menus.h), so the menu can be laid out as the user chose (Preferences → Menus)
+    auto T = [](QAction *a, const char *id) {
+        menus::tag(a, id);
+        return a;
+    };
+    auto group = [m](const char *id, const std::function<void()> &add) {   // what a helper adds, under one id
+        int n = int(m->actions().size());
+        add();
+        QList<QAction *> acts = m->actions();
+        for (int i = n; i < acts.size(); ++i)
+            if (!acts[i]->isSeparator())
+                menus::tag(acts[i], id);
+    };
     if (paths.isEmpty() && p->is_virtual()) {
         m->addAction("Select All", this, [p]() { p->view()->selectAll(); });
         return m;
     }
     if (paths.isEmpty()) {
-        m->addAction(icon({"folder-new"}), "New Folder…", this, [this]() { new_folder(); });
+        T(m->addAction(icon({"folder-new"}), "New Folder…", this, [this]() { new_folder(); }), "new_folder");
         QMenu *nd = m->addMenu(icon({"document-new"}), "New Document");
+        T(nd->menuAction(), "new_document");
         nd->addAction("Empty File…", this, [this]() { new_file(); });
         QString tdir = xdg_user_dir("TEMPLATES");
         if (isdir(tdir)) {
@@ -955,29 +985,35 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         m->addSeparator();
         bool have_files = !read_clipboard().second.isEmpty();
         const QMimeData *md = QGuiApplication::clipboard()->mimeData();
-        QAction *pa = m->addAction(icon({"edit-paste"}), "Paste", this, [this]() { paste(); });
+        QAction *pa = T(m->addAction(icon({"edit-paste"}), "Paste", this, [this]() { paste(); }), "paste");
         pa->setEnabled(have_files || (md && md->hasImage()));
-        QAction *pl = m->addAction("Paste as Link", this, [this]() { paste(QString(), true); });
+        QAction *pl = T(m->addAction("Paste as Link", this, [this]() { paste(QString(), true); }), "paste_link");
         pl->setEnabled(have_files);
-        m->addAction("Select All", this, [p]() { p->view()->selectAll(); });
+        T(m->addAction("Select All", this, [p]() { p->view()->selectAll(); }), "select_all");
         m->addSeparator();
-        add_sort_items(m->addMenu("Sort By"), p);
-        QAction *a = m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); });
+        QMenu *sm = m->addMenu("Sort By");
+        T(sm->menuAction(), "sort_by");
+        add_sort_items(sm, p);
+        QAction *a = T(m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); }), "show_hidden");
         a->setCheckable(true);
         a->setChecked(show_hidden);
         m->addSeparator();
-        m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); });
-        m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); });
+        T(m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); }),
+          "open_terminal");
+        T(m->addAction(icon({"bookmark-new"}), "Bookmark This Folder", this, [this, cur]() { sidebar->add_bookmark(cur); }),
+          "bookmark_folder");
         add_preview_menu(m, cur);
         if (in_trash(join(cur, "x"))) {
-            m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); });
+            T(m->addAction(icon({"user-trash"}), "Empty Trash", this, [this]() { empty_trash(); }), "empty_trash");
             if (fileops::can_shred())
-                m->addAction(icon({"edit-shred", "edit-delete"}), "Empty Trash with BleachBit…", this,
-                             [this]() { empty_trash_with_bleachbit(); });
+                T(m->addAction(icon({"edit-shred", "edit-delete"}), "Empty Trash with BleachBit…", this,
+                               [this]() { empty_trash_with_bleachbit(); }),
+                  "empty_trash_bleachbit");
         }
-        sharing::add_scripts_menu(m, {}, cur, [this](const QString &d) { navigate(d); });
+        group("scripts", [&]() { sharing::add_scripts_menu(m, {}, cur, [this](const QString &d) { navigate(d); }); });
         m->addSeparator();
-        m->addAction(icon({"document-properties"}), "Properties", this, [this, cur]() { properties({cur}); });
+        T(m->addAction(icon({"document-properties"}), "Properties", this, [this, cur]() { properties({cur}); }), "properties");
+        menus::arrange(m, menus::BACKGROUND);
         return m;
     }
 
@@ -996,29 +1032,43 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         return m;
     }
 
-    m->addAction(icon({"document-open"}), "Open", this, [this, p, paths]() { open_paths(p, paths); });
+    // which right-click menu this is (Preferences → Menus): a split set selected whole is several items
+    QStringList arcs = std::all_of(paths.begin(), paths.end(),
+                                   [](const QString &x) { return archive::can_extract(x) && !isdir(x); })
+                           ? archive_ui::archives_of(paths)
+                           : QStringList();
+    menus::Kind kind = paths.size() > 1 ? menus::SEVERAL : is_dir ? menus::FOLDER : arcs.size() == 1 ? menus::ARCHIVE
+                                                                                                     : menus::FILE;
+    T(m->addAction(icon({"document-open"}), "Open", this, [this, p, paths]() { open_paths(p, paths); }), "open");
     bool all_dirs = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); });
     if (is_dir || all_dirs) {
-        m->addAction(icon({"tab-new"}), "Open in New Tab", this, [this, paths]() {
+        T(m->addAction(icon({"tab-new"}), "Open in New Tab", this, [this, paths]() {
             for (const QString &x : paths)
                 new_tab(x, false);
-        });
-        m->addAction("Open in New Window", this, [paths]() { open_window(paths); });
+        }), "open_new_tab");
+        T(m->addAction("Open in New Window", this, [paths]() { open_window(paths); }), "open_new_window");
     }
     if (is_dir) {
+        int n = int(m->actions().size());
         sharing::add_open_folder_menu(m, single, [this, paths]() { show_free(new OpenWithDialog(this, paths)); });
+        QList<QAction *> acts = m->actions();
+        for (int i = n; i < acts.size(); ++i)   // the code editors' "Open in …", then the Open With submenu
+            menus::tag(acts[i], acts[i]->menu() ? "open_with" : "open_in_editor");
     }
     QStringList imgs;
     for (const QString &x : paths)
         if (is_image(x))
             imgs << x;
     if (!imgs.isEmpty())
-        m->addAction(icon({"image-x-generic"}), imgs.size() > 1 ? "View Images" : "View Image", this,
-                     [this, p, imgs]() { quick_view(p, imgs); });
+        T(m->addAction(icon({"image-x-generic"}), imgs.size() > 1 ? "View Images" : "View Image", this,
+                       [this, p, imgs]() { quick_view(p, imgs); }),
+          "view_image");
     if (p->in_search)
-        m->addAction(icon({"folder-open"}), "Show in Folder", this, [this, paths]() { reveal(paths.first()); });
+        T(m->addAction(icon({"folder-open"}), "Show in Folder", this, [this, paths]() { reveal(paths.first()); }),
+          "show_in_folder");
     if (!is_dir && !single.isEmpty()) {
         QMenu *ow = m->addMenu("Open With");
+        T(ow->menuAction(), "open_with");
         QList<AppRef> rec = apps_for(single).first;
         for (int i = 0; i < std::min<qsizetype>(8, rec.size()); ++i) {
             AppRef app = rec[i];
@@ -1034,146 +1084,182 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         ow->addAction("Other Application…", this, [this, paths]() { show_free(new OpenWithDialog(this, paths)); });
     }
     m->addSeparator();
-    m->addAction(icon({"edit-cut"}), "Cut", this, [this, paths]() { clip(true, paths); });
-    m->addAction(icon({"edit-copy"}), "Copy", this, [this, paths]() { clip(false, paths); });
+    T(m->addAction(icon({"edit-cut"}), "Cut", this, [this, paths]() { clip(true, paths); }), "cut");
+    T(m->addAction(icon({"edit-copy"}), "Copy", this, [this, paths]() { clip(false, paths); }), "copy");
     if (is_dir) {
-        QAction *pa = m->addAction(icon({"edit-paste"}), "Paste Into Folder", this, [this, single]() { paste(single); });
+        QAction *pa = T(m->addAction(icon({"edit-paste"}), "Paste Into Folder", this, [this, single]() { paste(single); }),
+                        "paste_into");
         pa->setEnabled(!read_clipboard().second.isEmpty());
     }
-    m->addAction("Move To…", this, [this, paths]() { transfer_to(paths, "move"); });
-    m->addAction("Copy To…", this, [this, paths]() { transfer_to(paths, "copy"); });
-    m->addAction("Duplicate", this, [this, paths]() { duplicate(paths); });
-    m->addAction(icon({"edit-rename"}), !single.isEmpty() ? QString("Rename…") : QString("Rename %1 Items…").arg(paths.size()),
-                 this, [this, paths]() { rename(paths); });
+    T(m->addAction("Move To…", this, [this, paths]() { transfer_to(paths, "move"); }), "move_to");
+    T(m->addAction("Copy To…", this, [this, paths]() { transfer_to(paths, "copy"); }), "copy_to");
+    T(m->addAction("Duplicate", this, [this, paths]() { duplicate(paths); }), "duplicate");
+    T(m->addAction(icon({"edit-rename"}), !single.isEmpty() ? QString("Rename…") : QString("Rename %1 Items…").arg(paths.size()),
+                   this, [this, paths]() { rename(paths); }),
+      "rename");
     QMenu *cp = m->addMenu(icon({"edit-copy"}), "Copy Path / Name");
-    cp->addAction("Copy Full Path", this, [this, paths]() { copy_text(paths); });
-    cp->addAction("Copy Name", this, [this, paths]() {
+    T(cp->menuAction(), "copy_path");
+    T(cp->addAction("Copy Full Path", this, [this, paths]() { copy_text(paths); }), "copy_full_path");
+    T(cp->addAction("Copy Name", this, [this, paths]() {
         QStringList names;
         for (const QString &x : paths)
             names << basename(x);
         copy_text(names);
-    });
-    cp->addAction("Copy URI", this, [this, paths]() {
+    }), "copy_name");
+    T(cp->addAction("Copy URI", this, [this, paths]() {
         QStringList uris;
         for (const QString &x : paths)
             uris << file_uri(x);
         copy_text(uris);
-    });
+    }), "copy_uri");
 
     bool starred = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_starred(x); });
-    m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
-                 starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); });
+    T(m->addAction(starred ? icon({"non-starred-symbolic", "non-starred"}) : icon({"starred-symbolic", "starred"}),
+                   starred ? "Unstar" : "Star", this, [paths, starred]() { places::set_starred(paths, !starred); }),
+      "star");
     // pinned in its own folder: sorted to the top there by Pinned & Starred First
     bool pinned = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return places::is_pinned(x); });
-    m->addAction(icon({"view-pin-symbolic", "view-pin", "pin"}), pinned ? "Unpin" : "Pin", this,
-                 [paths, pinned]() { places::set_pinned(paths, !pinned); });
+    T(m->addAction(icon({"view-pin-symbolic", "view-pin", "pin"}), pinned ? "Unpin" : "Pin", this,
+                   [paths, pinned]() { places::set_pinned(paths, !pinned); }),
+      "pin");
 
     QString here = p->dir();   // empty in Starred / Recent: no "… Here" there
     QMenu *lm = m->addMenu(icon({"emblem-symbolic-link", "insert-link"}), "Links && Shortcuts");
+    T(lm->menuAction(), "links");
     if (!here.isEmpty()) {
-        lm->addAction("Create Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "sym"); });
-        lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "rel"); });
+        T(lm->addAction("Create Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "sym"); }),
+          "link_sym_here");
+        T(lm->addAction("Create Relative Symbolic Link Here", this, [this, paths, here]() { make_links(paths, here, "rel"); }),
+          "link_rel_here");
     }
     if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
-        lm->addAction("Create Hard Link Here", this, [this, paths, here]() { make_links(paths, here, "hard"); });
-    lm->addAction("Create Symbolic Link In…", this, [this, paths]() { make_links(paths, QString(), "sym"); });
+        T(lm->addAction("Create Hard Link Here", this, [this, paths, here]() { make_links(paths, here, "hard"); }),
+          "link_hard_here");
+    T(lm->addAction("Create Symbolic Link In…", this, [this, paths]() { make_links(paths, QString(), "sym"); }), "link_sym_in");
     lm->addSeparator();
     QString desktop = xdg_user_dir("DESKTOP");
-    lm->addAction("Send Link to Desktop", this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); });
+    T(lm->addAction("Send Link to Desktop", this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); }),
+      "link_desktop");
     if (!here.isEmpty())
-        lm->addAction("Create Desktop Shortcut (.desktop) Here", this,
-                      [this, paths, here]() { make_links(paths, here, "desktop"); });
-    lm->addAction("Send Shortcut (.desktop) to Desktop", this,
-                  [this, paths, desktop]() { make_links(paths, desktop, "desktop"); });
+        T(lm->addAction("Create Desktop Shortcut (.desktop) Here", this,
+                        [this, paths, here]() { make_links(paths, here, "desktop"); }),
+          "desktop_shortcut_here");
+    T(lm->addAction("Send Shortcut (.desktop) to Desktop", this,
+                    [this, paths, desktop]() { make_links(paths, desktop, "desktop"); }),
+      "desktop_shortcut_desktop");
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); })) {
         lm->addSeparator();
-        lm->addAction("Open Link Target Location", this, [this, paths]() { reveal(realpath(paths.first())); });
+        T(lm->addAction("Open Link Target Location", this, [this, paths]() { reveal(realpath(paths.first())); }),
+          "link_target");
     }
     if (is_dir) {
         lm->addSeparator();
-        lm->addAction(icon({"bookmark-new"}), "Add to Bookmarks", this, [this, single]() { sidebar->add_bookmark(single); });
+        T(lm->addAction(icon({"bookmark-new"}), "Add to Bookmarks", this, [this, single]() { sidebar->add_bookmark(single); }),
+          "add_bookmark");
     }
 
     m->addSeparator();
     // archives: one, or a split set selected whole (x.part1.rar … x.part3.rar), gets Extract; several get Extract All
-    QStringList arcs = std::all_of(paths.begin(), paths.end(),
-                                   [](const QString &x) { return archive::can_extract(x) && !isdir(x); })
-                           ? archive_ui::archives_of(paths)
-                           : QStringList();
     if (arcs.size() == 1) {
         QString one = arcs[0];
         QString missing = archive::missing_extract_tool(one);
         if (!missing.isEmpty()) {
-            QAction *a = m->addAction(icon({"archive-extract", "package-x-generic"}), QString("Extract (install %1)").arg(missing));
+            QAction *a = T(m->addAction(icon({"archive-extract", "package-x-generic"}),
+                                        QString("Extract (install %1)").arg(missing)),
+                           "extract_here");   // (where Extract Here would be)
             a->setEnabled(false);
         } else {
-            m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract Here", this,
-                         [this, one]() { archive_ui::extract_here(this, one); });
-            m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract To…", this,
-                         [this, one]() { archive_ui::extract_dialog(this, one); });
+            T(m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract Here", this,
+                           [this, one]() { archive_ui::extract_here(this, one); }),
+              "extract_here");
+            T(m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract To…", this,
+                           [this, one]() { archive_ui::extract_dialog(this, one); }),
+              "extract_to");
             if (archive::can_browse(one))
-                m->addAction(icon({"document-open", "package-x-generic"}), "Open as Archive", this,
-                             [this, one]() { archive_ui::browse(this, one); });
-            m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archive", this,
-                         [this, one]() { archive_ui::test_archives(this, {one}); });
+                T(m->addAction(icon({"document-open", "package-x-generic"}), "Open as Archive", this,
+                               [this, one]() { archive_ui::browse(this, one); }),
+                  "open_as_archive");
+            T(m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archive", this,
+                           [this, one]() { archive_ui::test_archives(this, {one}); }),
+              "test_archive");
         }
     } else if (arcs.size() > 1) {
-        m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All Here", this,
-                     [this, arcs]() { archive_ui::extract_all_here(this, arcs); });
-        m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All To…", this,
-                     [this, arcs]() { archive_ui::extract_all_dialog(this, arcs); });
-        m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archives", this,
-                     [this, arcs]() { archive_ui::test_archives(this, arcs); });
+        T(m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All Here", this,
+                       [this, arcs]() { archive_ui::extract_all_here(this, arcs); }),
+          "extract_all_here");
+        T(m->addAction(icon({"archive-extract", "package-x-generic"}), "Extract All To…", this,
+                       [this, arcs]() { archive_ui::extract_all_dialog(this, arcs); }),
+          "extract_all_to");
+        T(m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), "Test Archives", this,
+                       [this, arcs]() { archive_ui::test_archives(this, arcs); }),
+          "test_archives");
     }
     QString quick = archive_ui::quick_compress_label(paths);
     if (!quick.isEmpty())
-        m->addAction(icon({"package-x-generic", "archive-insert"}), quick, this,
-                     [this, paths]() { archive_ui::quick_compress(this, paths); });
-    m->addAction(icon({"package-x-generic", "archive-insert"}), "Compress…", this,
-                 [this, paths]() { archive_ui::compress_dialog(this, paths); });
-    m->addAction(icon({"security-high", "document-properties"}), "Create Checksum File…", this,
-                 [this, paths]() { hashcheck::create_dialog(this, paths); });
+        T(m->addAction(icon({"package-x-generic", "archive-insert"}), quick, this,
+                       [this, paths]() { archive_ui::quick_compress(this, paths); }),
+          "compress_quick");
+    T(m->addAction(icon({"package-x-generic", "archive-insert"}), "Compress…", this,
+                   [this, paths]() { archive_ui::compress_dialog(this, paths); }),
+      "compress");
+    T(m->addAction(icon({"security-high", "document-properties"}), "Create Checksum File…", this,
+                   [this, paths]() { hashcheck::create_dialog(this, paths); }),
+      "checksum_create");
     if (!single.isEmpty() && (is_image(single) || is_video(single)) && uwp::editor_open())
-        m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), "Add to Selected UWP Monitor", this,
-                     [this, single]() { uwp_add(single); });
+        T(m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), "Add to Selected UWP Monitor", this,
+                       [this, single]() { uwp_add(single); }),
+          "uwp_add");
     if (!single.isEmpty() && is_video(single) && uwp::available())
-        m->addAction(icon({"preferences-desktop-wallpaper"}), uwp::wallpaper_label(), this,
-                     [single]() { set_wallpaper(single); });
+        T(m->addAction(icon({"preferences-desktop-wallpaper"}), uwp::wallpaper_label(), this,
+                       [single]() { set_wallpaper(single); }),
+          "wallpaper");
     if (!single.isEmpty() && is_image(single)) {
         QMenu *im = m->addMenu(icon({"image-x-generic"}), "Image");
-        im->addAction(uwp::wallpaper_label(), this, [single]() { set_wallpaper(single); });
-        im->addAction("Use as Folder Cover", this, [this, single]() { thumbs->set_cover(dirname(single), single); });
-        im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); });
+        T(im->menuAction(), "image");
+        T(im->addAction(uwp::wallpaper_label(), this, [single]() { set_wallpaper(single); }), "image_wallpaper");
+        T(im->addAction("Use as Folder Cover", this, [this, single]() { thumbs->set_cover(dirname(single), single); }),
+          "image_cover");
+        T(im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
+          "image_copy");
     }
     QStringList folders;
     for (const QString &x : paths)
         if (isdir(x))
             folders << x;
-    if (!folders.isEmpty() && folders.size() == paths.size())
+    if (!folders.isEmpty() && folders.size() == paths.size()) {
+        int n = int(m->actions().size());
         folder_style_menu(m, folders);
+        QList<QAction *> acts = m->actions();
+        for (int i = n; i < acts.size(); ++i)
+            menus::tag(acts[i], acts[i]->menu() ? "folder_colour" : "show_image_previews");
+    }
     if (is_dir && thumbs->covers.contains(single))
-        m->addAction("Reset Folder Cover", this, [this, single]() { thumbs->set_cover(single, QString()); });
-    sharing::add_send_to_menu(m, paths);
+        T(m->addAction("Reset Folder Cover", this, [this, single]() { thumbs->set_cover(single, QString()); }), "reset_cover");
+    group("send_to", [&]() { sharing::add_send_to_menu(m, paths); });
     if (is_dir && sharing::can_share())
-        m->addAction(icon({"folder-remote", "network-workgroup"}), "Network Sharing…", this,
-                     [this, single]() { sharing::share_dialog(this, single); });
-    sharing::add_scripts_menu(m, paths, here, [this](const QString &d) { navigate(d); });
+        T(m->addAction(icon({"folder-remote", "network-workgroup"}), "Network Sharing…", this,
+                       [this, single]() { sharing::share_dialog(this, single); }),
+          "network_sharing");
+    group("scripts", [&]() { sharing::add_scripts_menu(m, paths, here, [this](const QString &d) { navigate(d); }); });
     if (is_dir) {
-        m->addAction("Regenerate Preview", this, [this, single]() {
+        T(m->addAction("Regenerate Preview", this, [this, single]() {
             thumbs->invalidate(single);
             atc::announce("folders", {{"paths", QJsonArray{single}}});
-        });
+        }), "regen_preview");
         add_preview_menu(m, single);
-        m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); });
+        T(m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [single]() { open_terminal(single); }),
+          "open_terminal");
     }
     m->addSeparator();
-    m->addAction(icon({"user-trash"}), "Move to Trash", this, [this, paths]() { trash_paths(paths); });
-    m->addAction(icon({"edit-delete"}), "Delete Permanently…", this, [this, paths]() { delete_paths(paths); });
+    T(m->addAction(icon({"user-trash"}), "Move to Trash", this, [this, paths]() { trash_paths(paths); }), "trash");
+    T(m->addAction(icon({"edit-delete"}), "Delete Permanently…", this, [this, paths]() { delete_paths(paths); }), "delete");
     if (fileops::can_shred())
-        m->addAction(icon({"edit-shred", "edit-delete"}), "Shred with BleachBit…", this,
-                     [this, paths]() { shred_paths(paths); });
+        T(m->addAction(icon({"edit-shred", "edit-delete"}), "Shred with BleachBit…", this,
+                       [this, paths]() { shred_paths(paths); }),
+          "shred");
     m->addSeparator();
-    m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); });
+    T(m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); }), "properties");
+    menus::arrange(m, kind);
     return m;
 }
 
@@ -1231,8 +1317,7 @@ void MainWindow::preferences()
         prefs->activateWindow();
         return;
     }
-    prefs = new PreferencesDialog(this);
-    connect(prefs, &QDialog::accepted, this, &MainWindow::preferences_saved);
+    prefs = new PreferencesDialog(this);   // (changes apply as they're made: prefs.h)
     show_free(prefs);
 }
 
@@ -1241,6 +1326,81 @@ void repaint_all()
     for (MainWindow *w : WINDOWS)
         for (Pane *p : w->panes())
             p->view()->viewport()->update();
+}
+
+// The main windows' view settings take effect in every main window (a chooser window has its own, "chooser/…")
+void apply_settings(const QStringList &keys);
+static const bool settings_hooked = (prefs::apply_hook = apply_settings, true);   // prefs::set applies through it
+
+void apply_settings(const QStringList &keys)
+{
+    bool prefs_wide = false;
+    for (const QString &raw : keys) {
+        bool chooser = raw.startsWith("chooser/");
+        QString key = chooser ? raw.mid(8) : raw;
+        QList<MainWindow *> wins;
+        for (MainWindow *w : WINDOWS)
+            if (w->chooser_mode == chooser)
+                wins << w;
+        QVariant v = prefs::get(raw);
+        if (key == "view_mode") {
+            for (MainWindow *w : wins) {
+                for (Pane *p : w->panes())
+                    p->set_view_mode(v.toString());
+                w->sync_view_btn();
+                w->sync_zoom_slider();
+            }
+        } else if (key == "grid_size" || key == "list_size") {
+            for (MainWindow *w : wins) {
+                for (Pane *p : w->panes())
+                    p->set_sizes(w->view_value("grid_size").toInt(), w->view_value("list_size").toInt());
+                w->sync_zoom_slider();
+            }
+        } else if (key == "show_hidden") {   // (applied, not saved again: a reset leaves it unset)
+            for (MainWindow *w : wins) {
+                QSignalBlocker quiet(w->a_hidden);
+                w->a_hidden->setChecked(v.toBool());
+                w->show_hidden = v.toBool();
+                for (Pane *p : w->panes())
+                    p->apply_hidden();
+            }
+        } else if (key == "sidebar" || key == "info_panel") {
+            for (MainWindow *w : wins) {
+                QAction *a = key == "sidebar" ? w->a_sidebar : w->a_info;
+                QSignalBlocker quiet(a);
+                a->setChecked(v.toBool());
+                (key == "sidebar" ? static_cast<QWidget *>(w->sidebar) : w->info)->setVisible(v.toBool());
+                if (key == "info_panel" && v.toBool())
+                    w->update_status();
+            }
+        } else if (key == "folder_previews") {
+            if (!wins.isEmpty())
+                wins.first()->set_folder_previews(v.toBool(), false);   // (every main window)
+        } else if (key == "pinned_first") {
+            for (MainWindow *w : wins)
+                for (Pane *p : w->panes())
+                    p->set_pinned_first(v.toBool());
+        } else if (key.startsWith("sort_")) {
+            for (MainWindow *w : WINDOWS)
+                for (Pane *p : w->panes())
+                    p->apply_folder_sort();
+        } else if (key == "search_recursive" || key == "search_contents") {
+            for (MainWindow *w : wins)
+                for (Pane *p : w->panes())
+                    p->set_search_options(prefs::get("search_recursive").toBool(), prefs::get("search_contents").toBool());
+        } else if (key == "sidebar_sections" || key == "sidebar_collapsed") {
+            for (MainWindow *w : WINDOWS)
+                w->sidebar->refresh();
+        } else if (raw.startsWith("menus/")) {
+            // read each time a menu is built
+        } else if (key == "jobs_mode" || key == "jobs_start_paused") {
+            // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
+        } else {
+            prefs_wide = true;   // thumbnails, previews, undo, developer tools…: apply_preferences
+        }
+    }
+    if (prefs_wide)
+        apply_preferences();
 }
 
 void apply_preferences()
@@ -1257,13 +1417,6 @@ void apply_preferences()
     for (MainWindow *w : WINDOWS)
         if (w->a_tower)
             w->a_tower->setVisible(settings().value("developer_tools", false).toBool());
-}
-
-void MainWindow::preferences_saved()
-{
-    apply_preferences();
-    settings().sync();   // other Kestrels read the file as soon as they hear the report
-    atc::announce("settings");
 }
 
 void MainWindow::clear_cache()

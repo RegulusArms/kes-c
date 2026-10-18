@@ -4,6 +4,28 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.13
+
+Added:
+- **`prefs`, a new test for the Preferences window and the right-click menus' layouts.** Every setting the code reads
+  is in the list Preferences is built from (or is kept state, like window sizes): it scans `src/` for the keys read,
+  so a new setting can't be left out. The window: a free window with its tabs and a control for every setting. A
+  change applies at once to every open window (hidden files, list view, icon size, Pinned & Starred First, the default
+  sort, the sidebar, folder preview settings) and is told to the other Kestrels with its key; a change made in a
+  window (Ctrl+H, the zoom) shows in the open window; the search box filters rows and greys out tabs; a homepage that
+  isn't a folder is refused; the file chooser's view follows the main windows' until set; a format's level and Extract
+  To…'s choices set there are what those windows start with; Reset This Tab and Reset All. The menus: every entry has
+  an id and the default layouts list them all in the menu's order (for a folder, a file, an image, an archive,
+  several items and the empty space); a saved layout hides, reorders, takes an entry out of its submenu and puts two
+  in a submenu of the user's own, with no stray separators; an entry that doesn't apply doesn't appear, and appears
+  where it was put when it does; a layout is for its kind only; an entry added in a later version appears in its
+  default place; the editor hides, moves up, into and out of a submenu, and its changes are told to the other
+  Kestrels. Covers the new Preferences and customised right-click menus.
+
+Changed:
+- `atc_sync`: "Saved Preferences are reported" is now "a change made in Preferences is reported, with the setting
+  that changed": Preferences has no OK any more (changes apply as they're made), and the message names the keys.
+
 ## 0.3.1-alpha.12
 
 Added:

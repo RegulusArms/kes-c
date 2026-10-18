@@ -6,7 +6,7 @@
 
 #include "archive_ui.h"
 #include "archivewin.h"
-#include "dialogs.h"
+#include "prefswin.h"
 #include "keyring.h"
 
 #include <QCheckBox>

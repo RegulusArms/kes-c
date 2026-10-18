@@ -708,6 +708,26 @@ void Pane::zoom(int step, int absolute)
 
 int Pane::zoom_value() const { return is_grid() ? grid_size : list_size; }
 
+void Pane::set_sizes(int grid, int list)
+{
+    grid_size = std::clamp(grid, GRID_MIN, GRID_MAX);
+    list_size = std::clamp(list, LIST_MIN, LIST_MAX);
+    delegate->icon_size = grid_size;
+    update_grid_size();
+    tree->setIconSize(QSize(list_size, list_size));
+    apply_folder_previews();
+    view()->viewport()->update();
+}
+
+void Pane::set_search_options(bool subfolders, bool contents)
+{
+    for (auto [box, on] : {std::pair{search_sub, subfolders}, std::pair{search_contents, contents}}) {
+        QSignalBlocker quiet(box);   // (their handlers save them; they're saved already)
+        if (box->isEnabled())
+            box->setChecked(on);
+    }
+}
+
 void Pane::update_grid_size()
 {
     QSize cell = delegate->cell_size();

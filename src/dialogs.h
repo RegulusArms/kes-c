@@ -167,27 +167,6 @@ private:
     QPushButton *ok_btn;
 };
 
-class PreferencesDialog : public QDialog {
-    Q_OBJECT
-public:
-    explicit PreferencesDialog(QWidget *parent);
-
-private:
-    QComboBox *opener_combo(const QString &ct, const QString &current, bool builtin = false);
-    void browse_home();
-    void paint_color();
-    void pick_color();
-    void save();
-    QComboBox *hp_mode;
-    QLineEdit *hp_edit;
-    QWidget *hp_custom;
-    QSpinBox *count, *max_mb, *slide;
-    QComboBox *order, *img_opener, *vid_opener;
-    QColor color;
-    QPushButton *color_btn;
-    QCheckBox *color_accent;
-    QCheckBox *single_click, *list_previews, *play_gifs, *play_webm, *shared_undo, *open_in_tabs, *developer_tools;
-};
 
 namespace dialogs {
 
