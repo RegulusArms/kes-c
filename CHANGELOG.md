@@ -2,7 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.14
+## 0.3.1-alpha.15
+
+- **Window diagnostics** (developer tools: Preferences → Show developer tools, then ☰ → Tower… → Windows): each of
+  this Kestrel's windows as Qt sees it (its size and position, the minimum and maximum it asks the desktop for, its
+  state and screen, the border's margins, children wanting more room than it has) and its recent size, position and
+  state changes, with Copy and Save to Home Folder. For a window that misbehaves (one that can't be resized, as
+  reported): open a new one with Ctrl+N and compare the two.
+
+## 0.3.1-alpha.14 (2026-10-18)
 
 - **Fixed:** opening a checksum file on a tape still froze Kestrel while the drive sought to it (alpha.11 moved the
   reading itself to the background, but not everything around it). On a real LTFS mount, anything asked of the tape
