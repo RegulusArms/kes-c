@@ -4,6 +4,14 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.14
+
+Added:
+- `slow`: while the tape is busy seeking (`util::set_test_busy`: every stat under it waits 1.5 s, as LTFS's do),
+  selecting files there and opening a checksum file there don't hold the window, the info panel fills in later and
+  Verify Checksums opens. The alpha.11 check only made the checksum file's read wait (a FIFO), so it missed the window
+  asking the tape for other things meanwhile (reported on alpha.12: it still froze). Covers that fix.
+
 ## 0.3.1-alpha.13
 
 Added:

@@ -2,6 +2,8 @@
 // hash), hashing with progress, and the Verify Checksums dialog.
 #include "hashcheck.h"
 
+#include "drives.h"
+
 #include "app.h"
 #include "fileops.h"
 #include "pane.h"
@@ -331,9 +333,12 @@ void VerifyDialog::start()
     results = QList<Result>(entries.size());
     sizes.clear();
     total = before = 0;
-    for (const Entry &e : entries) {
+    for (const Entry &e : entries) {   // read in the background with the checksum file (a busy tape answers late)
         struct stat st;
-        sizes << (stat_(e.path, st) ? qint64(st.st_size) : 0);
+        sizes << (e.size >= 0                                         ? e.size
+                  : drives::slow_kind(e.path) != drives::Slow::None   ? 0
+                  : stat_(e.path, st)                                 ? qint64(st.st_size)
+                                                                      : 0);
         total += sizes.last();
     }
     for (int i = 0; i < entries.size(); i++)
@@ -478,15 +483,18 @@ void open_dialog(QWidget *parent, const QString &path, std::function<void()> not
         parent, "Reading " + basename(path),
         [path]() {
             QVariantList out;
-            for (const Entry &e : parse(path))
-                out << QVariant(QStringList{e.path, e.name, e.expected, e.algo});
+            for (const Entry &e : parse(path)) {   // and the files' sizes (for the progress), here too
+                struct stat st;
+                out << QVariant(QStringList{e.path, e.name, e.expected, e.algo,
+                                            QString::number(stat_(e.path, st) ? qint64(st.st_size) : 0)});
+            }
             return QVariant(out);
         },
         [p, path, not_listing](const QVariant &res) {
             QList<Entry> entries;
             for (const QVariant &v : res.toList()) {
                 QStringList f = v.toStringList();
-                entries << Entry{f.value(0), f.value(1), f.value(2), f.value(3)};
+                entries << Entry{f.value(0), f.value(1), f.value(2), f.value(3), f.value(4).toLongLong()};
             }
             if (entries.isEmpty()) {
                 if (res.isValid() && not_listing)

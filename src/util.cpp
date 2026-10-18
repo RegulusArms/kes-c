@@ -5,6 +5,7 @@
 #include "proc.h"
 #include "uwp.h"
 
+#include <QThread>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -26,6 +27,7 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
+#include <atomic>
 #include <gio/gdesktopappinfo.h>
 #include <gio/gio.h>
 
@@ -295,8 +297,35 @@ QString ext_of(const QString &p) { return splitext_ext(p).toLower(); }
 
 // ---------------------------------------------------------------- file system
 
-bool stat_(const QString &p, struct stat &st) { return ::stat(enc(p).constData(), &st) == 0; }
-bool lstat_(const QString &p, struct stat &st) { return ::lstat(enc(p).constData(), &st) == 0; }
+// the tests: a drive busy seeking (set_test_busy), every stat under it waits as LTFS's do
+static std::atomic<bool> busy_on{false};
+static QString busy_prefix;
+static int busy_ms = 0;
+
+void set_test_busy(const QString &prefix, int ms)
+{
+    busy_prefix = rstrip(prefix, '/') + "/";
+    busy_ms = ms;
+    busy_on = !prefix.isEmpty() && ms > 0;
+}
+
+static void busy_wait(const QString &p)
+{
+    if (busy_on.load(std::memory_order_relaxed) && (p + "/").startsWith(busy_prefix))
+        QThread::msleep(busy_ms);
+}
+
+bool stat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::stat(enc(p).constData(), &st) == 0;
+}
+
+bool lstat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::lstat(enc(p).constData(), &st) == 0;
+}
 
 bool exists(const QString &p)
 {

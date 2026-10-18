@@ -25,6 +25,7 @@ namespace hashcheck {
 // (lowercase hex) and the algorithm: "crc32", "md5", "sha1", "sha224", "sha256", "sha384", "sha512" or "blake2b".
 struct Entry {
     QString path, name, expected, algo;
+    qint64 size = -1;   // read with the checksum file, in the background (-1: not known)
 };
 
 bool is_hash_file(const QString &path);   // by its name: .sfv, .md5, .sha256, …, SHA256SUMS, …-CHECKSUM

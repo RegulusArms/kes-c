@@ -110,6 +110,8 @@ QVariant FSModel::data(const QModelIndex &index, int role) const
             QFileInfo fi = fileInfo(index);
             return (fi.isDir() ? KIND_DIR : 0) | (fi.isSymLink() ? KIND_LINK : 0);
         }
+        if (role == SizeRole)
+            return QFileSystemModel::size(index);   // (from the model's cache)
     }
     return QFileSystemModel::data(index, role);
 }
@@ -1497,18 +1499,25 @@ void InfoPanel::show_path(const QString &p)
 
 void InfoPanel::set_preview()
 {
-    if (path.isEmpty() || !exists(path)) {
+    bool slow = !path.isEmpty() && drives::slow_kind(path) != drives::Slow::None;
+    if (path.isEmpty() || (slow ? !cached : !exists(path))) {
         preview->clear();
         return;
     }
-    QFileInfo fi(path);
-    bool is_dir = fi.isDir();
+    bool is_dir;
+    qint64 mtime, fsize;
+    if (slow) {   // what the worker read (refresh)
+        is_dir = cached_dir, mtime = cached_mtime, fsize = cached_size;
+    } else {
+        QFileInfo fi(path);
+        is_dir = fi.isDir(), mtime = fi.lastModified().toSecsSinceEpoch(), fsize = fi.size();
+    }
     int size = std::max(160, std::min(viewport()->width() - 24, 512));
     QPixmap pm;
     if (is_dir)
-        pm = thumbs->folder_pixmap(path, fi.lastModified().toSecsSinceEpoch(), 512, folder_previews);
+        pm = thumbs->folder_pixmap(path, mtime, 512, folder_previews);
     else if (thumbs::can_thumbnail(path))
-        pm = thumbs->get(path, fi.lastModified().toSecsSinceEpoch(), false, 512, fi.size());
+        pm = thumbs->get(path, mtime, false, 512, fsize);
     if (!pm.isNull())
         preview->setPixmap(thumbs->scaled(pm, size));
     else
@@ -1537,38 +1546,39 @@ void InfoPanel::row(const QString &k, const QString &v)
 void InfoPanel::refresh()
 {
     clear();
-    if (path.isEmpty() || !lexists(path)) {
-        title->setText("");
-        preview->clear();
-        return;
-    }
-    QString t = basename(rstrip(path, '/'));
-    title->setText(t.isEmpty() ? path : t);
-    set_preview();
-    struct stat st;
-    if (!stat_(path, st))
-        lstat_(path, st);
-    // a tape or floppy: listing a folder and reading an image's details can wait on the drive, so they're read on a
-    // worker (and an image's details only if the user allowed previews for that drive)
-    drives::Slow slow = drives::slow_kind(path);
+    cached = false;
+    // a tape or floppy: everything is read on a worker, even whether the item exists (a tape seeking for another read
+    // answers nothing until it gets there), and an image's details only if the user allowed previews for that drive
+    drives::Slow slow = path.isEmpty() ? drives::Slow::None : drives::slow_kind(path);
     ++gen;
     if (slow != drives::Slow::None) {
         int my = gen;
         QString p = path;
-        bool dir = isdir(path), details = is_image(path) && drives::previews_allowed(path);
-        if (dir)
-            row("Contents", "counting…");
-        else
-            row("Size", human_size(qint64(st.st_size)));
-        row("Modified", fmt_time(st.st_mtime, "%Y-%m-%d %H:%M"));
-        if (is_image(path) && !details)
-            row("Details", QString("not read from this %1 (right-click the drive: Show Previews on This Drive)")
-                               .arg(drives::slow_name(slow)));
+        QString t = basename(rstrip(path, '/'));
+        title->setText(t.isEmpty() ? path : t);
+        preview->clear();
+        row("Details", QString("reading from the %1…").arg(drives::slow_name(slow)));
+        bool details = is_image(path) && drives::previews_allowed(path);
         QPointer<InfoPanel> self(this);
         fileops::run_task(
             this, "",
-            [p, dir, details]() {
+            [p, details]() {
                 QVariantMap r;
+                struct stat st;
+                bool there = stat_(p, st) || lstat_(p, st);
+                r["exists"] = there;
+                if (!there)
+                    return QVariant(r);
+                bool dir = S_ISDIR(st.st_mode);
+                r["dir"] = dir;
+                r["size"] = qint64(st.st_size);
+                r["mtime"] = qint64(st.st_mtime);
+                if (islink(p)) {
+                    try {
+                        r["link"] = util::readlink(p);
+                    } catch (const OSError &) {
+                    }
+                }
                 if (dir) {
                     try {
                         r["count"] = int(listdir(p).size());
@@ -1587,16 +1597,34 @@ void InfoPanel::refresh()
                 }
                 return QVariant(r);
             },
-            [self, my, dir](const QVariant &res) {
+            [self, my, slow, details](const QVariant &res) {
                 if (!self || self->gen != my)
                     return;
                 QVariantMap r = res.toMap();
+                self->clear();
+                if (!r.value("exists").toBool()) {
+                    self->title->setText("");
+                    return;
+                }
+                bool dir = r.value("dir").toBool();
+                self->cached = true;
+                self->cached_dir = dir;
+                self->cached_size = r.value("size").toLongLong();
+                self->cached_mtime = r.value("mtime").toLongLong();
+                self->set_preview();
                 if (dir) {
                     int n = r.value("count").toInt();
-                    QWidget *f = self->form->itemAt(0, QFormLayout::FieldRole) ? self->form->itemAt(0, QFormLayout::FieldRole)->widget() : nullptr;
-                    if (auto *lab = qobject_cast<QLabel *>(f))
-                        lab->setText(n < 0 ? QString("unreadable") : QString("%1 item%2").arg(n).arg(n != 1 ? "s" : ""));
+                    self->row("Contents", n < 0 ? QString("unreadable") : QString("%1 item%2").arg(n).arg(n != 1 ? "s" : ""));
+                } else {
+                    self->row("Size", human_size(self->cached_size));
+                    self->row("Type", mime_for(self->path, 0).comment());   // by its name: its contents aren't read
                 }
+                self->row("Modified", fmt_time(self->cached_mtime, "%Y-%m-%d %H:%M"));
+                if (r.contains("link"))
+                    self->row("Link to", r.value("link").toString());
+                if (is_image(self->path) && !details)
+                    self->row("Details", QString("not read from this %1 (right-click the drive: Show Previews on This Drive)")
+                                             .arg(drives::slow_name(slow)));
                 QList<QPair<QString, QString>> basic, ai;
                 for (const QVariant &v : r.value("basic").toList())
                     basic << qMakePair(v.toStringList().value(0), v.toStringList().value(1));
@@ -1607,6 +1635,17 @@ void InfoPanel::refresh()
             true);
         return;
     }
+    if (path.isEmpty() || !lexists(path)) {
+        title->setText("");
+        preview->clear();
+        return;
+    }
+    QString t = basename(rstrip(path, '/'));
+    title->setText(t.isEmpty() ? path : t);
+    set_preview();
+    struct stat st;
+    if (!stat_(path, st))
+        lstat_(path, st);
     if (isdir(path)) {
         try {
             int n = listdir(path).size();

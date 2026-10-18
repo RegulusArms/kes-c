@@ -266,6 +266,48 @@ int main(int argc, char **argv)
           "the Overview shows the tape, by its volume name, as a tape");
 
 
+    // ---- while the tape is busy seeking (every stat on it waits, as LTFS's do), the window asks it nothing: selecting
+    // files there (the status bar, the info panel) and opening a checksum file, which is then read in the background
+    {
+        QString busy = join(tape, "busy");
+        makedirs(busy, true);
+        write_text(join(busy, "a.bin"), "hello");
+        write_text(join(busy, "b.bin"), "world");
+        write_text(join(busy, "sums.sha256"),
+                   "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03  a.bin\n");
+        w->pane()->set_path(busy);
+        wait_for([&]() { return w->pane()->all_paths().size() == 3; });
+        for (QAction *a : w->findChildren<QAction *>())
+            if (a->text() == "Info Panel" && !a->isChecked())
+                a->trigger();
+        w->pane()->select_paths({join(busy, "a.bin")});
+        spin(500);   // (the info panel has read it, the tape idle)
+        util::set_test_busy(tape, 1500);
+        qint64 selecting = longest_pause([&]() { w->pane()->select_paths({join(busy, "b.bin")}); }, 800);
+        w->pane()->select_paths({join(busy, "sums.sha256")});
+        // (long enough to cover the Verify window opening, once the background read has waited on the tape too)
+        qint64 opening = longest_pause([&]() { w->open_paths(w->pane(), {join(busy, "sums.sha256")}); }, 4500);
+        bool info_later = wait_for([&]() { return labels_in(w->info).join("|").contains("Size:"); }, 8000);
+        util::set_test_busy(QString(), 0);
+        QWidget *verify = nullptr;
+        wait_for([&]() {
+            for (QWidget *x : QApplication::topLevelWidgets())
+                if (x->isVisible() && x->windowTitle().contains("sums.sha256"))
+                    verify = x;
+            return verify != nullptr;
+        }, 10000);
+        if (verify)
+            verify->close();
+        for (QAction *a : w->findChildren<QAction *>())
+            if (a->text() == "Info Panel" && a->isChecked())
+                a->trigger();
+        check(selecting < 600 && opening < 600 && info_later && verify,
+              QString("while the tape is busy seeking, selecting files on it (%1 ms) and opening a checksum file there "
+                      "(%2 ms) don't hold the window: the info panel fills in when the tape answers, and Verify Checksums "
+                      "opens once the file is read")
+                  .arg(selecting).arg(opening));
+    }
+
     // ---- copies onto a tape go through a RAM buffer (tapebuf.h), so the drive keeps streaming
     {
         QString mi = home_path("meminfo");

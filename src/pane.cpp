@@ -1290,6 +1290,42 @@ void Pane::do_search()
 
 // -- selection helpers
 
+QList<Pane::Known> Pane::selected_known() const
+{
+    QList<Known> out;
+    if (is_overview())
+        return out;
+    QItemSelectionModel *sm = view()->selectionModel();
+    if (!sm)
+        return out;
+    QAbstractItemModel *m = view()->model();
+    QSet<QPair<int, QModelIndex>> seen;
+    for (const QModelIndex &i : sm->selectedIndexes()) {
+        if (seen.contains({i.row(), i.parent()}))
+            continue;
+        seen.insert({i.row(), i.parent()});
+        QModelIndex c = m->index(i.row(), 0, i.parent());
+        Known k;
+        k.path = c.data(PathRole).toString();
+        if (k.path.isEmpty())
+            continue;
+        QVariant kind = c.data(KindRole), size = c.data(SizeRole), st = c.data(StatRole);
+        if (kind.isValid())
+            k.kind = kind.toInt();
+        if (size.isValid())
+            k.size = size.toLongLong();
+        if (st.isValid()) {   // search results: (is_dir, mtime, size)
+            QVariantList l = st.toList();
+            if (l.size() >= 3) {
+                k.kind = l[0].toBool() ? KIND_DIR : 0;
+                k.size = l[2].toLongLong();
+            }
+        }
+        out << k;
+    }
+    return out;
+}
+
 QStringList Pane::selected_paths() const
 {
     if (is_overview())

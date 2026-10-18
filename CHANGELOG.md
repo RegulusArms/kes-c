@@ -2,7 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.13
+## 0.3.1-alpha.14
+
+- **Fixed:** opening a checksum file on a tape still froze Kestrel while the drive sought to it (alpha.11 moved the
+  reading itself to the background, but not everything around it). On a real LTFS mount, anything asked of the tape
+  waits while the drive seeks, and the window still asked it things: the status bar's size of the selection, the info
+  panel, sorting the opened items into files and folders, Recent, and the Verify Checksums window looking up each
+  file's size. They now use what the file view already knows, or ask in the background.
+
+## 0.3.1-alpha.13 (2026-10-18)
 
 - **A new Preferences window with every setting.** ☰ → Preferences now has tabs (General, Views, Sidebar, Images &
   Videos, Files, Archives, Windows, Menus) and shows every setting Kestrel keeps, also the ones only reachable where
