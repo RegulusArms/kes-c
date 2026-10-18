@@ -105,6 +105,8 @@ QString ext_of(const QString &p);        // lower-cased extension with the dot
 
 // ---------------------------------------------------------------- file system (raise OSError)
 
+// tests: every stat_/lstat_ under prefix waits ms, as on a tape busy seeking (empty prefix: off)
+void set_test_busy(const QString &prefix, int ms);
 bool stat_(const QString &p, struct stat &st);    // follows links; false on error
 bool lstat_(const QString &p, struct stat &st);
 bool exists(const QString &p);

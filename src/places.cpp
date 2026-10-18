@@ -1,6 +1,7 @@
 #include "places.h"
 
 #include "atc.h"
+#include "drives.h"
 #include "util.h"
 
 #include <QBuffer>
@@ -322,8 +323,8 @@ static void write_new_bookmark(QXmlStreamWriter &w, const QString &href, const Q
 void add_recent(const QStringList &paths_in)
 {
     QHash<QString, QString> wanted;   // href -> path
-    for (const QString &p : paths_in)
-        if (isfile(p))
+    for (const QString &p : paths_in)   // (files already; a tape's aren't asked again: it may be busy seeking)
+        if (drives::slow_kind(p) != drives::Slow::None || isfile(p))
             wanted.insert(file_uri(p), p);
     if (wanted.isEmpty() || !remember_recent())
         return;

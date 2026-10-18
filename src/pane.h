@@ -75,6 +75,14 @@ public:
     void close_search(bool refocus = true, bool navigating = false);
     void stop_search();
     QStringList selected_paths() const;
+    // the selected items as the view knows them (kind: KindRole's bits, -1 if it doesn't know; size: -1 likewise),
+    // without asking the file system: on a busy tape, a stat waits until the drive gets there
+    struct Known {
+        QString path;
+        int kind = -1;
+        qint64 size = -1;
+    };
+    QList<Known> selected_known() const;
     QStringList all_paths() const;
     QString current_path() const;
     void invert_selection();

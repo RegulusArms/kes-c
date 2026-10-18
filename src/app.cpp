@@ -896,10 +896,23 @@ void MainWindow::update_status()
     if (!sel.isEmpty()) {
         qint64 size = 0;
         int dirs = 0;
+        // what the view knows first: on a tape busy seeking, a stat would hold the window until the drive gets there
+        QHash<QString, Pane::Known> known;
+        for (const Pane::Known &k : p->selected_known())
+            known.insert(k.path, k);
         for (const QString &s : sel) {
-            if (isdir(s)) {
+            Pane::Known k = known.value(s);
+            bool slow = drives::slow_kind(s) != drives::Slow::None;
+            bool dir;
+            if (k.kind >= 0 && (!(k.kind & KIND_LINK) || slow))   // (a link elsewhere: followed, as before)
+                dir = k.kind & KIND_DIR;
+            else
+                dir = !slow && isdir(s);
+            if (dir) {
                 dirs += 1;
-            } else {
+            } else if (k.size >= 0) {
+                size += k.size;
+            } else if (!slow) {
                 struct stat st;
                 if (lstat_(s, st))
                     size += st.st_size;

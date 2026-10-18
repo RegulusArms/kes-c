@@ -29,9 +29,17 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
             paths << x;
     if (paths.isEmpty())
         return;
+    // folder or file: as the view knows it where it can (on a tape busy seeking, a stat would hold the window until the
+    // drive gets there); a link is followed
+    QHash<QString, int> kinds;
+    for (const Pane::Known &k : p->selected_known())
+        kinds.insert(k.path, k.kind);
     QStringList dirs, files;
-    for (const QString &x : paths)
-        (isdir(x) ? dirs : files) << x;
+    for (const QString &x : paths) {
+        int kind = kinds.value(x, -1);
+        bool dir = kind >= 0 && !(kind & KIND_LINK) ? bool(kind & KIND_DIR) : isdir(x);
+        (dir ? dirs : files) << x;
+    }
     if (chooser) {   // a file chooser: folders open as usual, files are the choice
         if (!dirs.isEmpty())
             p->set_path(dirs.first());
