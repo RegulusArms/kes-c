@@ -7,6 +7,7 @@
 #include "animate.h"
 #include "atc.h"
 #include "places.h"
+#include "prefs.h"
 #include "thumbs.h"
 #include "util.h"
 #include "widgets.h"
@@ -157,6 +158,7 @@ void on_atc(const QJsonObject &m)
             settings().sync();
         for (MainWindow *w : WINDOWS)
             w->sidebar->refresh();
+        prefs::notify({"sidebar_sections", "sidebar_collapsed"});
     }
     if (type == "bookmarks") {   // also refreshes this process's other windows
         for (MainWindow *w : WINDOWS) {
@@ -188,7 +190,14 @@ void on_atc(const QJsonObject &m)
         }
     } else if (type == "settings") {
         settings().sync();
-        apply_preferences();
+        QStringList keys;
+        for (const QJsonValue &k : m.value("keys").toArray())
+            keys << k.toString();
+        if (keys.isEmpty())
+            apply_preferences();
+        else
+            apply_settings(keys);
+        prefs::notify(keys);   // an open Preferences window shows them
     } else if (type == "starred") {
         places::reload_starred();
     } else if (type == "sorts") {

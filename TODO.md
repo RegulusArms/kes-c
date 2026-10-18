@@ -126,34 +126,6 @@ into.
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
     what's on which tape).
 
-### Preferences and customising
-
-- [ ] **A better Preferences window that shows every setting.** Every setting Kestrel keeps, also the ones set from
-  elsewhere in the windows (menus, toolbar, dialogs), in one place, in tabs.
-  - Today Preferences is one long form without tabs, and many settings are only reachable where they're used: grid or
-    list view, zoom, hidden files, folder previews, the default sort and grouping, Pinned & Starred First, sidebar
-    sections, search options (subfolders, file contents), checksum file choices, archive options per format, Extract
-    To… choices. Preferences should show and change all of them, as well as where they are now.
-  - Tabs, for example: General (homepage, single click, opening apps) · Views (view, zoom, hidden files, previews,
-    folder colours, default sort and grouping) · Sidebar & Overview (sections, order, the Overview item above) ·
-    Images & Videos (viewer, slideshow, GIF/WebM, preview picks, thumbnail size limit) · Files (undo sharing, conflict
-    and trash choices, checksum defaults) · Archives (per-format defaults, Extract To… choices) · Windows (tabs from
-    other apps, the file chooser's own view settings).
-  - A search box that filters every tab's settings, and "Reset this tab" / "Reset all" to the defaults.
-  - Settings changed in Preferences apply at once to every open window (and other Kestrels, as saving Preferences does
-    now); settings changed in a window show up in an open Preferences window.
-
-- [ ] **Customise the right-click menu.** To be done after "A better Preferences window that shows every setting"
-  (above): it would be a tab of that window.
-  - Users set up how the right-click menu looks, separately for a folder, a file and an archive (and perhaps for
-    several selected items and for the empty background).
-  - Add or remove any of the available entries, and reorder them.
-  - Change the layout: separators, which entries sit at the top level and which go into submenus (such as Links &
-    Shortcuts), and creating submenus of their own.
-  - Entries that only apply sometimes (Extract only for archives, admin entries, tools that aren't installed) keep
-    appearing only when they apply, wherever the user put them.
-  - "Reset to default" for each menu. New entries added in later versions show up in their default place.
-
 ### Views and search
 
 - [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
@@ -355,6 +327,8 @@ into.
 
 ## Done
 
+- [x] **A better Preferences window that shows every setting** (0.3.1-alpha.13). `src/prefs.cpp` (every setting: tab, label, default, where else it's changed; set() applies it to every window and tells the other Kestrels, "settings" with its keys, PROTOCOL 4), `src/prefswin.cpp` (tabs General, Views, Sidebar, Images & Videos, Files, Archives, Windows, Menus; live changes, search, Reset This Tab / Reset All). Not done: the Overview's contents ("Overview page improvements"); conflict and trash choices (Kestrel keeps none). Test: `prefs`.
+- [x] **Customise the right-click menu** (0.3.1-alpha.13). `src/menus.cpp`: ids on every entry (build_menu), default layouts for a folder, a file, an archive, several items and the empty space, `arrange()` from the saved layout (hidden, reordered, submenus, new entries in their default places), and the editor in Preferences → Menus. The Trash's own menu isn't customisable. Test: `prefs`.
 - [x] **Bug: drag and drop onto a folder did nothing when grouped by period or by day** (0.3.1-alpha.12). The grouping model (`DateGroupProxy`, src/groups.cpp) didn't pass the drag's data and actions on to the folder model, so a drag from a grouped view carried no files and offered no move. Test: `ui`.
 - [x] **Open as Archive and Test Archive** (0.3.1-alpha.12). `src/archivewin.cpp` (a window listing an archive's contents, extracting the selected items: `archive::list`, `archive::extract_members`) and Test Archive(s) (`archive::test`, `archive_ui::test_archives`). Follow-ups: "Better archive window QoL" under New features. Test: `archives`.
 - [x] **Extract several archives at once** (0.3.1-alpha.12). Extract All Here / Extract All To… for two or more selected archives (a split set selected whole is one, and now gets Extract Here / Extract To…): one queued job with each archive as a step, the first typed password tried on the rest (asked again only when it doesn't open one), one summary at the end (`src/archive_ui.cpp` extract_all; the quick password test is `archive::password_opens`). Extract Here / Extract To… on one archive run through the same job. Test: `archives`.

@@ -2,7 +2,23 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.12
+## 0.3.1-alpha.13
+
+- **A new Preferences window with every setting.** ☰ → Preferences now has tabs (General, Views, Sidebar, Images &
+  Videos, Files, Archives, Windows, Menus) and shows every setting Kestrel keeps, also the ones only reachable where
+  they're used until now: the view, icon sizes, hidden files, the panels, the default sort and grouping, the search
+  bar's options, the sidebar's sections, checksum and job queue defaults, each archive format's options and Extract
+  To…'s choices, and the file chooser's own view. Each says where else it's changed. Changes apply at once to every
+  open window (and the other Kestrels), there's no OK to press, and a change made in a window shows there as it
+  happens. A search box filters every tab; Reset This Tab and Reset All go back to the defaults. "Open the image
+  viewer full screen", which no window could set before, is there too.
+- **Customise the right-click menus.** Preferences → Menus: for a folder, a file, an archive, several items and the
+  empty space, hide entries, reorder them, move them into or out of submenus, and add separators and submenus of your
+  own. Entries still appear only when they apply, wherever you put them; Reset to Default puts a menu back.
+- Kestrels of this version don't share settings changes with running Kestrels of earlier versions (the message
+  between them changed); close the old windows after updating.
+
+## 0.3.1-alpha.12 (2026-10-17)
 
 - **One job queue for every Kestrel window:** copies, moves, extractions, compressions, checksum jobs and the like
   no longer all start at once and fight over the same drive. Each waits for its turn on the drives it uses, across

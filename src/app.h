@@ -51,6 +51,8 @@ class MainWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+    friend void apply_settings(const QStringList &keys);
+
 public:
     MainWindow(const QStringList &paths, ThumbnailManager *thumbs, bool chooser_mode = false);
     void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
@@ -70,7 +72,7 @@ public:
     void set_view(const QString &mode);
     void toggle_view();
     void sync_zoom_slider();
-    void set_folder_previews(bool on);
+    void set_folder_previews(bool on, bool save = true);   // save: as the window's setting (not when applying one)
     // Generate / Regenerate Previews, as a job (returned). folders_only: only folder previews, not every file's
     // thumbnail; depth, fresh: as RecursiveBuilder's (-1: the whole tree; fresh: made again, the caches' replaced)
     Task *build_previews(const QString &root, bool folders_only = false, int depth = -1, bool fresh = false);
@@ -151,7 +153,6 @@ private:
     void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
     void sync_undo();
-    void preferences_saved();
     void run_shred(const QStringList &targets, const QString &title);
     void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
     void make_folder(const QString &dir, const QString &name);   // New Folder / New File, once the name is given
@@ -180,6 +181,8 @@ extern QList<MainWindow *> WINDOWS;   // this process's windows (file choosers a
 extern ThumbnailManager *g_thumbs;
 void repaint_all();
 void apply_preferences();   // after Preferences change, here or in another Kestrel
+// Settings changed (Preferences, prefs.h; or another Kestrel's): applied at once to every open window here
+void apply_settings(const QStringList &keys);
 MainWindow *open_window(const QStringList &paths);
 MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 void apply_thumb_settings(ThumbnailManager *t);

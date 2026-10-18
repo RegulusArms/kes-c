@@ -49,7 +49,7 @@ static QByteArray compact(const QJsonObject &o) { return QJsonDocument(o).toJson
 // must have this type. PATHS: a list of absolute paths; STRS: a list of strings; TASKS: a list of tasks (fields below).
 enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS, JOBS };
 static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
-    {"settings", {}},        // Preferences were saved
+    {"settings", {{"keys", STRS}}},   // settings changed (keys: which; missing: any of Preferences')
     {"sidebar", {}},         // the sidebar's order or collapsed sections changed
     {"bookmarks", {}},       // the GTK bookmarks changed
     {"starred", {}},         // starred.json changed
