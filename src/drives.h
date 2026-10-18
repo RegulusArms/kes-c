@@ -49,6 +49,11 @@ bool statfs_(const QString &path, qint64 *total, qint64 *free);
 // What a tape's LTFS index says (its virtual extended attributes); empty where it has none. On a worker only.
 QString tape_attr(const QString &path, const QString &name);
 QPair<qint64, qint64> tape_position(const QString &path);   // (partition, start block); (-1, -1) if unknown
+// How LTFS writes the index of the tape mounted at root, from its ltfs process's command line (sync_type): "time@5"
+// (every 5 minutes, LTFS's default, each time stopping the drive), "unmount", "close"; empty if no ltfs process for it
+// is found (KESTREL_TEST_PROC: a folder in /proc's layout, for the tests)
+QString ltfs_sync(const QString &root);
+int ltfs_sync_minutes(const QString &sync);   // "time@5" -> 5; 0 when the index isn't written on a timer
 QString sync_tape(const QString &root);   // write the tape's index now (LTFS's sync attribute); an error, or empty
 void sync_tape_job(QWidget *parent, const QString &root);   // the same as a status-bar job, a message if it fails
 
@@ -60,7 +65,7 @@ class Sizes : public QObject {
 public:
     struct Info {
         qint64 total = -1, free = -1;   // -1: not known (yet)
-        QString volume_name, loads, alert;   // tapes only
+        QString volume_name, loads, alert, sync;   // tapes only (sync: ltfs_sync)
         bool busy = false;   // asked, no answer yet
     };
     static Sizes *instance();

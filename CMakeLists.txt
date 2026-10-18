@@ -49,6 +49,7 @@ add_executable(kes
     src/prefs.cpp
     src/prefswin.cpp
     src/menus.cpp
+    src/tapebuf.cpp
     src/jobswin.cpp
     src/towerwin.cpp
     src/overview.cpp

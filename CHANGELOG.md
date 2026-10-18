@@ -15,6 +15,17 @@ What changed in each version of Kestrel Explorer, newest first.
 - **Customise the right-click menus.** Preferences → Menus: for a folder, a file, an archive, several items and the
   empty space, hide entries, reorder them, move them into or out of submenus, and add separators and submenus of your
   own. Entries still appear only when they apply, wherever you put them; Reset to Default puts a menu back.
+- **No more shoe-shining on tapes.** Copies onto an LTFS tape go through a buffer in memory: a thread reads ahead
+  from the source as fast as it can, writing to the tape starts once the buffer is full, and the drive then keeps
+  streaming instead of stopping and rewinding every time the source slows down. The buffer uses the memory available
+  less 10% of the total kept free (Preferences → Files → Tapes), gives memory back when other programs need it, and
+  1 TB tarballs stream through it. Tell Kestrel your drive's generation there, and a source fast enough for the drive
+  to slow down and match is written at its pace; a slower one is written in full-speed bursts. The status bar shows
+  the buffer and both speeds; the job's log says how it went.
+- Copying onto a tape checks the file fits first (LTFS never gives back space a failed write used), doesn't force
+  LTFS to write its index mid-copy, and nothing in the windows reads files from the tape while it writes (Properties
+  named a file's type by reading it). LTFS's timed index writes, which stop the drive every 5 minutes by default, are
+  pointed out on the tape's Overview card and in the copy's log, with the mount option that avoids them.
 - Kestrels of this version don't share settings changes with running Kestrels of earlier versions (the message
   between them changed); close the old windows after updating.
 

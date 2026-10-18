@@ -77,6 +77,8 @@
 - Thumbnails, folder previews, image details, GIF/WebM playback and dates taken aren't read from them (each would make a tape wind or a floppy read for a long time). Right-click the drive → **Show Previews on This Drive** to allow them.
 - One job at a time per drive (the job queue above): a second copy waits for its turn. Files are read off a tape in the order they lie on it, with "Positioning the tape" while it winds.
 - After a copy to a tape its index is written (also **Write Tape Index Now** on the drive's menu); copying more than 1,000 small files to a tape asks first, since an archive of them is much faster. Unmounting runs in the background, and asks first while a job still uses the drive.
+- **No shoe-shining:** copies onto a tape go through a buffer in memory, so the drive keeps streaming instead of stopping and rewinding whenever the source slows down (a seek, many small files, the next file being opened). The buffer uses the memory available less 10% of the total kept free (set in Preferences → Files → Tapes, with the size it would get now), gives memory back when other programs need it, and streams files far larger than itself (1 TB tarballs). Writing starts once the buffer is full; when the source can keep the drive at its lowest streaming speed or above (set the drive's generation in Preferences), the tape writes at the source's pace, otherwise it waits for the buffer to fill and writes in full-speed runs. The status bar and the Jobs window show "Filling the buffer", how full it is and both speeds; the job's log says afterwards how fast it went and how often the tape had to wait, and says so when the source is too slow for the tape to stream.
+- Before writing a file to a tape, Kestrel checks it fits (a write that runs out of tape wastes what it wrote: LTFS never reuses it), and nothing Kestrel shows while it writes (Properties, the info panel, previews) reads files from the tape. LTFS writes a tape's index every 5 minutes by default, stopping the drive each time: the tape's Overview card and the copy's log say so when that's how it's mounted, with the option to use (`-o sync_type=unmount`).
 
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
@@ -141,7 +143,7 @@ Press F1 in the app for all keyboard shortcuts.
 - **Views:** grid or list, icon sizes, hidden files, the sidebar and info panel, the default sort and grouping for folders without their own, Pinned & Starred First, folder previews (how many images, which ones, the colour), and the search bar's options.
 - **Sidebar:** the order of its sections and which are collapsed.
 - **Images & Videos:** slideshow speed, playing GIFs and WebM videos, the preview size limit, and the tapes and floppies you allowed previews on.
-- **Files:** checksum file defaults, and how the job queue runs.
+- **Files:** checksum file defaults, how the job queue runs, and the tape buffer.
 - **Archives:** the default format and each format's options for Compress…, Extract To…'s choices, and forgetting saved archive passwords.
 - **Windows:** opening folders from other apps as tabs, and the file chooser's own view (it follows the main windows' until you set it).
 - **Menus:** the right-click menus (below).

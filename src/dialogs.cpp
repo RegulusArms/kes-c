@@ -412,7 +412,8 @@ QWidget *PropertiesDialog::general_tab()
         bool is_dir = isdir(path);
         name_edit = new QLineEdit(basename(rstrip(path, '/')));
         form->addRow("Name:", name_edit);
-        QMimeType mime = isfile(path) ? mime_for_content(path) : mime_for(path);
+        // its type from its contents, but not on a tape or floppy (reading it makes the drive seek: by its name there)
+        QMimeType mime = isfile(path) && drives::reads_allowed(path) ? mime_for_content(path) : mime_for(path);
         form->addRow("Type:", sel_label(QString("%1 (%2)").arg(mime.comment(), mime.name())));
         form->addRow("Location:", sel_label(dirname(abspath(path))));
         if (S_ISLNK(st.st_mode)) {

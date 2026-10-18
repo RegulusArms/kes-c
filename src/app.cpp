@@ -1391,8 +1391,8 @@ void apply_settings(const QStringList &keys)
         } else if (key == "sidebar_sections" || key == "sidebar_collapsed") {
             for (MainWindow *w : WINDOWS)
                 w->sidebar->refresh();
-        } else if (raw.startsWith("menus/")) {
-            // read each time a menu is built
+        } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
+            // read each time a menu is built, or a copy onto a tape starts
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
         } else {

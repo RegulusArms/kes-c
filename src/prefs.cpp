@@ -100,6 +100,25 @@ static QList<Pref> build()
         .choices = {{"By drive (jobs on different drives side by side)", "drive"}, {"One at a time", "one"}};
     add("Files", "Jobs", "jobs_start_paused", "Start new jobs paused", BOOL, false, "the Jobs window (Ctrl+Shift+J)");
 
+    const QString tapes = "Tapes (copying onto an LTFS tape)";
+    range(add("Files", tapes, "tape_buffer_keep", "Memory kept free for other programs", INT, 10, QString(),
+              "Copies onto a tape go through a buffer in memory, so the drive keeps streaming instead of stopping and "
+              "rewinding whenever the source slows down. It uses the memory available, less this share of the total."),
+          0, 90, " %");
+    range(add("Files", tapes, "tape_buffer_gb", "Largest buffer (0: as much as the memory allows)", INT, 0), 0, 4096,
+          " GB");
+    add("Files", tapes, "tape_buffer_now", "The buffer now", CUSTOM, QVariant());
+    add("Files", tapes, "tape_min_speed", "The drive's lowest streaming speed", CHOICE, 1000000, QString(),
+        "When the source reads at least this fast, the tape writes at the source's pace (the drive slows down to match "
+        "it); slower, it waits for the buffer to fill and writes in full-speed runs. The speeds are approximate: check "
+        "your drive's specifications.")
+        .choices = {{"Not sure: always refill the buffer before writing again", 1000000},
+                    {"LTO-4 (about 40 MB/s)", 40},
+                    {"LTO-5 (about 47 MB/s)", 47},
+                    {"LTO-6 (about 54 MB/s)", 54},
+                    {"LTO-7 (about 80 MB/s)", 80},
+                    {"LTO-8 or LTO-9 (about 112 MB/s)", 112}};
+
     // -- Archives
     add("Archives", "Compressing", "archive/format", "Format", CUSTOM, QString(),
         "Compress… (the last one used), Compress to “name.ext”");
