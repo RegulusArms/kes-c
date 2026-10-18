@@ -5,7 +5,18 @@ into.
 
 ## Bugs
 
-(none open)
+- [ ] **Resizing a window by its edge can send it flying off the screen.** In one long-running Kestrel window,
+  pressing and dragging any edge (the resize cursor showing) sent the window off into empty space instead of resizing
+  it; Alt+F7 brought it back. Reopening Kestrel fixed it, and it hasn't been reproduced since.
+  - That window had done two very large copies, a checksum of a 1 TB zpaq archive, and drags into Brave. It still did
+    it after the jobs ended; its console showed nothing relevant.
+  - Ruled out: Kestrel's own code (it never moves or resizes windows; on GNOME Wayland Qt's Adwaita border plugin
+    asks GNOME to resize on the press), its minimum size (stays small, also in deep folders and with long status
+    text), the drop-focus extension, the drag picture, single drags out of the window (to the desktop, Brave, a
+    folder), Tiling Assistant, and Qt or GNOME in general (a bare Qt window, Kestrel with
+    `QT_WAYLAND_DECORATION=bradient` or `QT_QPA_PLATFORM=xcb`, and fresh Kestrel windows all resize fine).
+  - So something during a long session breaks that window's state. Still to find out: does the window follow the
+    mouse until the next click, or jump away at once?
 
 ## New features
 
