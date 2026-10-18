@@ -114,6 +114,70 @@ into.
   - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
   - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
 
+- [ ] **Prevent shoe-shining on tapes as much as possible: a RAM write buffer, and more.** The goal: a copy to a tape
+  keeps the drive streaming, stopping as rarely as Kestrel can manage. Copying to an LTFS tape, the drive stops and
+  rewinds ("shoe-shines") about every 12 GB. Today a copy reads 4 MB from the source and writes it to the tape in turn,
+  on one thread, one file after another (`copy_file_at`, src/fileops.cpp): whenever the source slows down (a seek, a
+  small file, opening the next file, renaming a finished one), the tape has nothing to write and stops.
+  - **The buffer:** for a copy or move onto a tape, Kestrel checks the computer's memory (`MemTotal` and `MemAvailable`
+    in /proc/meminfo) and uses what's available as a buffer, keeping the last 10% of the system's RAM free (so with
+    32 GB total and 20 GB available: up to 20 − 3.2 = 16.8 GB). It's re-checked as the copy runs: if other programs
+    need memory, the buffer gives some back rather than push the computer into swap. A setting in Preferences
+    (Files → Tapes) for the share kept free, or a fixed size, with the computed size shown.
+  - **Fill first:** a reader thread fills the buffer from the source as fast as the source allows, and keeps filling it
+    the whole time. Writing to the tape starts only once the buffer is full (or holds everything left to copy), then
+    writes at the tape's full speed. If the source can't keep up and the buffer runs dry, the writer waits until it's
+    full again rather than trickling: the tape then writes in long full-speed runs instead of stopping and starting.
+  - Files are queued in the buffer whole or in pieces (one larger than the buffer streams through it), in order, so many
+    small files from the source become one steady stream to the tape. Each file is still written to a part file and
+    renamed into place when complete (failure-atomic writes); ✕ or a failure drops what's in the buffer, and files
+    already on the tape stay, whole.
+  - **Very large files (1 TB tarballs):** the buffer is a ring, so a file far larger than it streams through it: the
+    first 16 GB (say) fill it, then the reader keeps refilling what the writer empties. If the source reads at least
+    as fast as the tape writes, the buffer stays full and the tape never stops. If it's slower (an HDD at 150 MB/s
+    feeding an LTO-8 at 360 MB/s), each burst writes buffer × tape ÷ (tape − source): 16 GB × 360 ÷ 210 ≈ 27 GB, so
+    about 37 deliberate stops per TB instead of hundreds. Better still, when the source is within the drive's
+    speed-matching range (LTO drives slow down to a minimum, e.g. about a third of full speed on many models; to be
+    looked up per generation), keep writing at the source's pace and only refill-and-burst below it.
+  - The buffer is allocated in blocks (64 MB, say), not one huge allocation, and the source is read with
+    `posix_fadvise` (SEQUENTIAL, and DONTNEED behind the reads) so the kernel's page cache doesn't fill the rest of
+    the memory with a second copy of the same terabyte.
+  - Before writing a file to the tape, check the tape's free space (LTFS reports it) is enough for it: a 1 TB write
+    that fails near the end wastes that space, since LTFS never reclaims it until the tape is reformatted. Say so
+    when a copy is cancelled part-way through a large file.
+  - Pause stops the reader and the writer (what's buffered is kept in memory until it goes on). The Jobs window and the
+    status bar show the buffer: how full it is, the source's and the tape's speed, and "Filling the buffer" before
+    writing starts.
+  - Also from a tape to a disk? Not needed for shoe-shining (reading in tape order already streams), so tape-bound
+    copies only, unless measurements say otherwise.
+  - **Worth checking first:** LTFS writes its index to the tape every 5 minutes by default (`sync_type=time@5`), and
+    each time the tape stops to do it. At about 40 MB/s, 5 minutes is 12 GB, the period seen. Mounting with
+    `-o sync_type=unmount` (index written only when unmounting; Kestrel's Write Tape Index Now still works) would show
+    whether that's the cause, or part of it. Measure the copy's real speed to the tape too: below the drive's
+    lowest streaming speed (around 40–50 MB/s for LTO-5 and later, depending on the drive) it can't stream however
+    it's fed, which the buffer fixes by writing in bursts.
+  - **Everything else that keeps the tape streaming:**
+    - Nothing else uses the tape while it writes: one job at a time per tape and no previews or reads from it (both
+      done in 0.3.1-alpha.11); also nothing Kestrel does in the windows meanwhile (Properties, folder sizes, search
+      on the tape) may make it read from the tape mid-write: check they only use LTFS's index in memory.
+    - No index writes during the copy from Kestrel's side: no fsync, no sync of the tape until the copy has finished
+      (then one, as now). LTFS's own timed index writes (`sync_type=time@5`, the default) can't be changed on a
+      tape that's already mounted: when Kestrel mounts tapes itself (see "what's left"), it uses
+      `sync_type=unmount`; for a tape mounted by hand, find out whether the setting can be read, and if it's
+      time-based say so on the tape's Overview card with the option to use.
+    - Large writes into LTFS (a few MB each, as now) so FUSE doesn't cut the stream into small pieces.
+    - Speed matching: measure the tape's real write speed and the source's, and choose between writing continuously
+      at the source's pace (when it's within the drive's speed-matching range) and filling the buffer and writing
+      in full-speed bursts (when it's below it).
+    - When the source can't feed the tape even at the drive's lowest speed, say so before or while copying, with
+      what would help: copying from a faster drive, or making an archive on a fast disk first (many small files
+      already get a warning).
+    - Afterwards, say how well it went: in the job's log, the average speed to the tape and how many times the
+      writer had to wait for the buffer (each a stop of the tape), so a slow source or a too-small buffer shows.
+  - Tests: a copy to a folder marked as a tape (`KESTREL_TEST_SLOW`) with a slow source (a FIFO or a throttled
+    reader) writes only once the buffer is full, keeps the files whole and in order, honours ✕ and pause, and the
+    buffer size follows the memory figures (a test hook for /proc/meminfo).
+
 - [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
   floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
   the Overview card and safer unmounting. Still to do:
