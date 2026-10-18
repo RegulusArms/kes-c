@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.15
+
+Added:
+- `jobs`: the Tower's Windows tab shows each window's size, the minimum it asks for, its border and screen, its
+  recent resizes (a resize made by the test) and a child wanting more room than the window has, and saves it all to
+  a file in the home folder. Covers the window diagnostics.
+
 ## 0.3.1-alpha.14
 
 Added:

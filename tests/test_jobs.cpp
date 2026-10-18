@@ -6,9 +6,13 @@
 #include "jobs.h"
 #include "jobswin.h"
 #include "towerwin.h"
+#include "windiag.h"
 
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
 #include <QMouseEvent>
 #include <QTreeWidget>
 
@@ -43,6 +47,7 @@ int main(int argc, char **argv)
     if (is_tower(argc, argv, &rc))
         return rc;
     QApplication app(argc, argv);
+    windiag::start();   // as kes_main does
 
     // ---- the scheduler
     using jobs::Entry;
@@ -333,6 +338,33 @@ int main(int argc, char **argv)
         return false;
     });
     check(status_ok && logged, "the Tower window shows the tower's status and the messages it passes on, live");
+
+    // its Windows tab: this Kestrel's windows as Qt sees them, and their recent changes (for a window that misbehaves)
+    w->resize(1011, 707);
+    spin(100);
+    auto *wide = new QLabel("x", w);   // a child asking for more room than the window has
+    wide->setObjectName("too_wide");
+    wide->setMinimumSize(5000, 10);
+    wide->show();
+    tw->show_windows();
+    QString rep = tw->windows->toPlainText();
+    delete wide;
+    check(rep.contains("== MainWindow") && rep.contains("resize 1011×707") && rep.contains("asks for minimum") &&
+              rep.contains("border margins") && rep.contains("Screen ") && rep.contains("too_wide"),
+          "the Tower's Windows tab shows each window's size, the minimum it asks for, its border and screen, its recent "
+          "resizes, and children wanting more room than it has");
+    QStringList before_saved = listdir(HOME());
+    if (auto *save = tw->findChild<QPushButton *>("save_windows"))
+        save->click();
+    QString saved;
+    for (const QString &n : listdir(HOME()))
+        if (n.startsWith("kestrel-windows-") && !before_saved.contains(n))
+            saved = join(HOME(), n);
+    check(!saved.isEmpty() && QString::fromUtf8(read_file(saved)).contains("== MainWindow"),
+          "...and saves it to a file in the home folder, to send");
+    for (QWidget *x : QApplication::topLevelWidgets())
+        if (auto *b = qobject_cast<QMessageBox *>(x); b && b->isVisible())
+            b->close();
     tw->close();
 
     finish();

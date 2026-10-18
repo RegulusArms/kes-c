@@ -15,6 +15,18 @@ into.
     text), the drop-focus extension, the drag picture, single drags out of the window (to the desktop, Brave, a
     folder), Tiling Assistant, and Qt or GNOME in general (a bare Qt window, Kestrel with
     `QT_WAYLAND_DECORATION=bradient` or `QT_QPA_PLATFORM=xcb`, and fresh Kestrel windows all resize fine).
+  - Seen again (2026-10-18), in a window that had been open a long time: Ctrl+N's new window of the same Kestrel
+    resizes fine, the old one doesn't. So it's that window's state, not the process's. A suspect: the window having
+    been snapped to a screen edge or corner (Tiling Assistant, Super+arrows), which marks edges as tiled; Qt's border
+    changes its resize zones and margins for tiled edges. To try on a stuck window: un-snap it (Super+Down, or drag it
+    off by the title bar), then maximize and restore it, and see which makes resizing work again.
+    Tried on the stuck window: it had been snapped to a screen before, but un-snapping it and maximizing/restoring it
+    didn't help; the new window kept resizing fine. Snapping a fresh window (to a side, a quarter, on the portrait
+    monitor, then un-snapping) doesn't make it happen either: not snapping.
+  - Diagnostic added in 0.3.1-alpha.15: ☰ → Tower… → Windows (with developer tools on) shows each window's size, the
+    minimum and maximum it asks for, Qt's idea of its state and screen, the border's margins, children wanting more room
+    than it has, and its recent resizes and moves. Next time a window is stuck: Save to Home Folder from that window's
+    Tower (and try resizing it first, so its attempts are in the list), compared with a fresh Ctrl+N window.
   - So something during a long session breaks that window's state. Still to find out: does the window follow the
     mouse until the next click, or jump away at once?
 

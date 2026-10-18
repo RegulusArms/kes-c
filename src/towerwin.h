@@ -12,6 +12,7 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QPlainTextEdit;
 class QPushButton;
 class QTreeWidget;
 
@@ -23,6 +24,8 @@ public:
     void refresh();
     QLabel *status;              // (also read by the tests)
     QTreeWidget *flights, *messages, *queue, *undo;
+    QPlainTextEdit *windows;   // the Windows tab: windiag::report()
+    void show_windows();       // fill it now
 
 private:
     void heard(const QString &flight, const QString &message);

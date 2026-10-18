@@ -2,9 +2,15 @@
 
 #include "atc.h"
 #include "util.h"
+#include "windiag.h"
 #include "windows.h"
 
 #include <QCheckBox>
+#include <QClipboard>
+#include <QFontDatabase>
+#include <QGuiApplication>
+#include <QPlainTextEdit>
+#include <QScrollBar>
 #include <QComboBox>
 #include <QDateTime>
 #include <QHBoxLayout>
@@ -112,6 +118,51 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
     tabs->addTab(queue, "Queue && Lanes");
     undo = table({"Undo", "What", "Items"}, "Shared undo");
     tabs->addTab(undo, "Shared Undo");
+
+    // this Kestrel's windows as Qt sees them (windiag.h): for a window that misbehaves, compared with a fresh one
+    auto *ww = new QWidget;
+    auto *wl = new QVBoxLayout(ww);
+    auto *wnote = new QLabel("This Kestrel's windows (another Kestrel's show in the Tower opened from one of them): their "
+                             "size, the minimum and maximum they ask for, their state and screen, and their recent "
+                             "changes. When a window misbehaves, open a new one (Ctrl+N) and compare the two.");
+    wnote->setWordWrap(true);
+    wl->addWidget(wnote);
+    windows = new QPlainTextEdit;
+    windows->setObjectName("windows_report");
+    windows->setReadOnly(true);
+    windows->setLineWrapMode(QPlainTextEdit::NoWrap);
+    windows->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    wl->addWidget(windows, 1);
+    auto *wb = new QHBoxLayout;
+    auto *wrefresh = new QPushButton("Refresh");
+    auto *wcopy = new QPushButton("Copy");
+    auto *wsave = new QPushButton("Save to Home Folder");
+    wsave->setObjectName("save_windows");
+    wb->addWidget(wrefresh);
+    wb->addWidget(wcopy);
+    wb->addWidget(wsave);
+    wb->addStretch(1);
+    wl->addLayout(wb);
+    connect(wrefresh, &QPushButton::clicked, this, &TowerWindow::show_windows);
+    connect(wcopy, &QPushButton::clicked, this, [this]() {
+        show_windows();
+        QGuiApplication::clipboard()->setText(windows->toPlainText());
+    });
+    connect(wsave, &QPushButton::clicked, this, [this]() {
+        show_windows();
+        QString path = join(HOME(), "kestrel-windows-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".txt");
+        try {
+            write_text(path, windows->toPlainText().toUtf8());
+            inform(this, "Windows", "Saved as " + path);
+        } catch (const OSError &e) {
+            warn(this, "Windows", e.message());
+        }
+    });
+    int windows_tab = tabs->addTab(ww, "Windows");
+    connect(tabs, &QTabWidget::currentChanged, this, [this, windows_tab](int i) {
+        if (i == windows_tab)
+            show_windows();
+    });
     lay->addWidget(tabs);
 
     connect(atc::radio(), &atc::Radio::broadcast, this, &TowerWindow::heard);
@@ -119,6 +170,13 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
     connect(&timer, &QTimer::timeout, this, &TowerWindow::refresh);
     timer.start();
     refresh();
+}
+
+void TowerWindow::show_windows()
+{
+    int at = windows->verticalScrollBar()->value();
+    windows->setPlainText(windiag::report());
+    windows->verticalScrollBar()->setValue(at);
 }
 
 void TowerWindow::refresh()

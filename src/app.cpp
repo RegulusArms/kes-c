@@ -29,6 +29,7 @@
 #include "util.h"
 #include "uwp.h"
 #include "viewer.h"
+#include "windiag.h"
 #include "widgets.h"
 #include "windows.h"
 
@@ -1683,6 +1684,7 @@ int kes_main(int argc, char **argv)
     QApplication::setApplicationDisplayName(APP_NAME);
     QApplication::setDesktopFileName(APP_ID);
     QApplication app(argc, argv);
+    windiag::start();   // each window's size and state changes, for developer tools (☰ → Tower… → Windows)
     stats::print_at_quit();   // KESTREL_STATS=1
     qRegisterMetaType<fileops::DirStats>();
     setup_icon_theme();
