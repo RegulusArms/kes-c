@@ -5,6 +5,18 @@ into.
 
 ## Bugs
 
+- [ ] **Double-clicking a checksum file on a tape still freezes Kestrel while the drive seeks** (seen 2026-10-18 on
+  0.3.1~alpha.14+dev81, which has the alpha.14 fix that keeps the window from asking a busy tape about the selection,
+  the info panel, Recent and the Verify window's sizes).
+  - It froze in a Kestrel that was also running a compression job (zpaq, writing on another drive); a fresh Kestrel
+    from the local build, with no job running, didn't freeze. So the running job may be part of it: check what the
+    window's thread waits on while a job runs (the job queue's lock, the task list, the job's progress reports).
+  - To catch it: before reproducing, watch the window's thread (the process id is the window's): its state and wchan
+    (/proc/<pid>/task/<pid>/stat, wchan), and when it's stuck, the system call and the file it names
+    (/proc/<pid>/task/<pid>/syscall, the path read from /proc/<pid>/mem), the kernel stack, and gdb's backtrace (Qt's
+    frames have names even in the stripped package; a local build has Kestrel's too).
+  - Not reproduced since.
+
 - [ ] **Resizing a window by its edge can send it flying off the screen.** In one long-running Kestrel window,
   pressing and dragging any edge (the resize cursor showing) sent the window off into empty space instead of resizing
   it; Alt+F7 brought it back. Reopening Kestrel fixed it, and it hasn't been reproduced since.
