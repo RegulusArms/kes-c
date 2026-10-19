@@ -1,6 +1,7 @@
 #include "util.h"
 
 #include "atc.h"
+#include "drives.h"
 
 #include "proc.h"
 #include "uwp.h"
@@ -1576,7 +1577,22 @@ static QString take_gerror(GError *err)
 bool open_default(const QString &path)
 {
     GError *err = nullptr;
-    if (g_app_info_launch_default_for_uri(file_uri(path).toUtf8().constData(), nullptr, &err))
+    QByteArray uri = file_uri(path).toUtf8();
+    if (drives::slow_kind(path) != drives::Slow::None) {
+        // a tape or floppy: GIO's own launch would read the file here to tell its type (the window waits while a tape
+        // seeks); the app for its type by name is started instead, and reads the file itself
+        if (AppRef app = default_app_for_type(content_type(path))) {
+            GList *uris = g_list_append(nullptr, uri.data());
+            bool ok = g_app_info_launch_uris(app.get(), uris, nullptr, &err);
+            g_list_free(uris);
+            if (ok)
+                return true;
+            if (err)
+                g_clear_error(&err);
+        }
+        return proc::start_detached({"xdg-open", path});
+    }
+    if (g_app_info_launch_default_for_uri(uri.constData(), nullptr, &err))
         return true;
     if (err)
         g_error_free(err);
@@ -1585,6 +1601,10 @@ bool open_default(const QString &path)
 
 QString content_type(const QString &path)
 {
+    // on a tape or floppy, by its name only: GIO reads a file's start to tell its type, and on a tape that read waits
+    // until the drive gets there (Recent, Open With and opening it all ask, on the window's thread)
+    if (drives::slow_kind(path) != drives::Slow::None)
+        return mime_for(path, 0).name();
     GFile *f = g_file_new_for_path(enc(path).constData());
     GFileInfo *info = g_file_query_info(f, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE, G_FILE_QUERY_INFO_NONE,
                                         nullptr, nullptr);

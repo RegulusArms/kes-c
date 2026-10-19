@@ -2,7 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.15
+## 0.3.1-alpha.16
+
+- **Fixed: double-clicking a checksum file on a tape still froze Kestrel** while the drive sought to it (most
+  noticeably right after writing to the tape, when the drive has to wind back from the index). Adding the file to
+  Recent asked GLib for its type, which reads the start of the file, on the window's thread. On a tape or floppy the
+  type now comes from the file's name, for Recent, Open With in the right-click menu (which froze the same way) and
+  opening a file with its default app.
+
+## 0.3.1-alpha.15 (2026-10-18)
 
 - **Window diagnostics** (developer tools: Preferences → Show developer tools, then ☰ → Tower… → Windows): each of
   this Kestrel's windows as Qt sees it (its size and position, the minimum and maximum it asks the desktop for, its
