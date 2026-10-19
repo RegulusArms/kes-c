@@ -335,7 +335,7 @@ void start_session(QWidget *parent)
 }
 
 void retry_as_admin(QWidget *parent, const QString &title, const QString &message,
-                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done)
+                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done, const QStringList &paths)
 {
     AdminSession &s = session();
     if (!s.available()) {
@@ -345,7 +345,7 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
         return;
     }
     QPointer<QWidget> p(parent);
-    auto run = [p, has_parent = parent != nullptr, title, work, on_done]() {
+    auto run = [p, has_parent = parent != nullptr, title, work, on_done, paths]() {
         if (has_parent && !p) {   // its window was closed meanwhile
             if (on_done)
                 on_done(false);
@@ -367,7 +367,7 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
             if (on_done)
                 on_done(res.isValid() && errors.isEmpty());
         };
-        fileops::run_job(p, title + " (as administrator)", job, done)->admin = true;
+        fileops::queue_job(p, title + " (as administrator)", paths, job, done)->admin = true;
     };
     if (s.active()) {
         run();

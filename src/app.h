@@ -19,6 +19,7 @@ class InfoPanel;
 class OverviewPage;
 class PathBar;
 class RecursiveBuilder;
+class Task;
 class SearchModel;
 class SearchThread;
 class Sidebar;
@@ -50,6 +51,8 @@ class MainWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+    friend void apply_settings(const QStringList &keys);
+
 public:
     MainWindow(const QStringList &paths, ThumbnailManager *thumbs, bool chooser_mode = false);
     void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
@@ -69,10 +72,11 @@ public:
     void set_view(const QString &mode);
     void toggle_view();
     void sync_zoom_slider();
-    void set_folder_previews(bool on);
-    // folders_only: only folder previews, not every file's thumbnail; depth: as RecursiveBuilder's (-1: the whole tree)
-    void build_previews(const QString &root, bool folders_only = false, int depth = -1);
-    void stop_build();
+    void set_folder_previews(bool on, bool save = true);   // save: as the window's setting (not when applying one)
+    // Generate / Regenerate Previews, as a job (returned). folders_only: only folder previews, not every file's
+    // thumbnail; depth, fresh: as RecursiveBuilder's (-1: the whole tree; fresh: made again, the caches' replaced)
+    Task *build_previews(const QString &root, bool folders_only = false, int depth = -1, bool fresh = false);
+    void add_preview_menu(QMenu *menu, const QString &folder);   // the Previews submenu for a folder
     void toggle_hidden(bool on);
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
@@ -117,6 +121,7 @@ public:
     QCheckBox *preview_box;
     ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
     bool chooser_mode = false;       // a chooser window: has its own view settings (view_value)
+    QAction *a_tower = nullptr;      // ☰ → Tower…, with Preferences → Show developer tools
     // the window's and its tabs' view settings (size, zoom, view, sort, panels, hidden files, folder previews, search
     // options); a chooser window keeps its own (see view_value in app.cpp)
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
@@ -140,8 +145,6 @@ private:
     void pane_path_changed(Pane *pane);
     void remember_server(const QString &uri);
     void sync_view_btn();
-    void build_progress(int done, int total, bool scanning, const QString &current);
-    void build_finished(int done, int total, bool cancelled);
     void on_thumb_progress(int done, int total);
     void toggle_panel(QWidget *w, const QString &key, bool on);
     void open_videos(const QStringList &videos);
@@ -150,7 +153,6 @@ private:
     void folder_style_menu(QMenu *m, const QStringList &folders);
     void close_when_idle();
     void sync_undo();
-    void preferences_saved();
     void run_shred(const QStringList &targets, const QString &title);
     void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
     void make_folder(const QString &dir, const QString &name);   // New Folder / New File, once the name is given
@@ -161,13 +163,12 @@ private:
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
-    QLabel *status_label, *free_label, *build_label;
+    QLabel *status_label, *free_label;
+    QString free_root;   // the mount point free_label is about
+    void update_free_label();
     QSlider *zoom_slider;
-    QProgressBar *thumb_progress, *build_bar;
-    RecursiveBuilder *builder = nullptr;
-    QString build_root;
-    QWidget *build_box;
-    QToolButton *build_stop, *view_btn, *sort_btn, *menu_btn;
+    QProgressBar *thumb_progress;
+    QToolButton *view_btn, *sort_btn, *menu_btn;
     QMenu *sort_menu;
     QAction *a_back, *a_fwd, *a_up, *a_home, *a_search, *a_hidden, *a_sidebar, *a_info, *a_undo;
     bool closing = false;
@@ -180,6 +181,8 @@ extern QList<MainWindow *> WINDOWS;   // this process's windows (file choosers a
 extern ThumbnailManager *g_thumbs;
 void repaint_all();
 void apply_preferences();   // after Preferences change, here or in another Kestrel
+// Settings changed (Preferences, prefs.h; or another Kestrel's): applied at once to every open window here
+void apply_settings(const QStringList &keys);
 MainWindow *open_window(const QStringList &paths);
 MainWindow *open_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
 void apply_thumb_settings(ThumbnailManager *t);

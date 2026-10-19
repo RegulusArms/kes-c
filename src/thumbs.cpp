@@ -1,5 +1,7 @@
 #include "thumbs.h"
 
+#include "drives.h"
+#include "fileops.h"
 #include "proc.h"
 #include "atc.h"
 #include "stats.h"
@@ -239,14 +241,14 @@ QImage system_thumb(const QString &path, int size)
     return QImage();
 }
 
-QImage file_thumb(const QString &path, qint64 mtime, int size)
+QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
 {
     QString flavor = FLAVORS.value(bucket_for(size));
     QString uri = file_uri(path);
     QString cache_dir = join(THUMB_DIR(), flavor);
     QString cache_path = join(cache_dir, md5(uri) + ".png");
     bool in_cache_dir = path.startsWith(THUMB_DIR());
-    if (!in_cache_dir && exists(cache_path)) {
+    if (!in_cache_dir && !fresh && exists(cache_path)) {
         QImage img(cache_path);
         if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
             stats::count("thumbnails from the disk cache");
@@ -492,11 +494,11 @@ QImage add_folder_symbol(const QImage &folder, const QString &icon, const QStrin
     return out;
 }
 
-QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts)
+QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts, bool fresh)
 {
     QString tag = QString("v2|%1|%2|%3|%4|%5").arg(mtime).arg(opts.count).arg(opts.order, opts.color, opts.cover);
     QString cache = join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size));
-    if (exists(cache)) {
+    if (!fresh && exists(cache)) {
         QImage img(cache);
         if (!img.isNull() && img.text("FE::Tag") == tag) {
             stats::count("folder previews from the disk cache");
@@ -513,7 +515,7 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
         struct stat st;
         if (!stat_(pth, st))
             continue;
-        QImage im = file_thumb(pth, st.st_mtime, tile);
+        QImage im = file_thumb(pth, st.st_mtime, tile, fresh);
         if (!im.isNull()) {
             images << im;
             videos << is_video(pth);
@@ -825,6 +827,10 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
         return QPixmap();
     if (!pending.contains(k)) {
         bool device = is_device_path(path);
+        // a tape or floppy: no thumbnails or folder mosaics unless the user allowed them for that drive (each one
+        // makes a tape seek, a floppy read for seconds). Not remembered as failed, so allowing them takes effect
+        if (!drives::reads_allowed(path))
+            return QPixmap();
         if (!is_dir && fsize > qint64(max_file_mb) * 1000000 && !is_video(path)) {
             failed << k;
             return QPixmap();
@@ -984,9 +990,9 @@ void ThumbnailManager::on_done(const QString &k, const QString &path, const QIma
 // ---------------------------------------------------------------- recursive pre-generation
 
 RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent,
-                                   int workers, bool folders_only, int depth)
-    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
-      depth(depth), current(root)
+                                   int workers, bool folders_only, int depth, bool fresh)
+    : QObject(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
+      depth(depth), fresh(fresh), current(root)
 {
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
@@ -1016,22 +1022,34 @@ void RecursiveBuilder::emit_progress(bool force)
         c = current;
     }
     Q_EMIT progress(d, t, s, c);
+    if (task) {
+        QString name = basename(rstrip(root, '/'));
+        task->report(d, s ? 0 : t,
+                     QString("%1 — %2 of %3%4").arg(name.isEmpty() ? root : name, group_digits(d), group_digits(t),
+                                                    s ? QString("+, scanning…") : QString()));
+    }
 }
 
 void RecursiveBuilder::one(char kind, const QString &path)
 {
-    if (!stop) {
+    while (task && task->paused() && !stop && !task->cancelled)   // the job is paused: so are its workers
+        QThread::msleep(50);
+    if (task && task->cancelled)
+        stop = true;
+    if (stop)   // skipped: not counted as done
+        return;
+    {
         struct stat st;
         if (stat_(path, st)) {
             if (kind == 'd') {
                 thumbs::FolderOpts o = opts;
                 o.cover = covers.value(path);
                 o.color = colors.value(path, opts.color);
-                thumbs::folder_thumb(path, st.st_mtime, size, o);
+                thumbs::folder_thumb(path, st.st_mtime, size, o, fresh);
             } else if (st.st_size <= max_bytes || is_video(path)) {
-                thumbs::file_thumb(path, st.st_mtime, size);
+                thumbs::file_thumb(path, st.st_mtime, size, fresh);
                 if (size != 128)   // mosaic tiles use the small size
-                    thumbs::file_thumb(path, st.st_mtime, 128);
+                    thumbs::file_thumb(path, st.st_mtime, 128, fresh);
             }
         }
     }
@@ -1043,8 +1061,9 @@ void RecursiveBuilder::one(char kind, const QString &path)
     emit_progress();
 }
 
-void RecursiveBuilder::run()
+bool RecursiveBuilder::run(Task *job)
 {
+    task = job;
     QSet<QString> exts = image_exts();
     exts.unite(VIDEO_EXTS);
     QThreadPool workers_pool;
@@ -1064,6 +1083,8 @@ void RecursiveBuilder::run()
     };
     QString top = rstrip(root, '/');
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
+        if (task && task->cancelled)
+            stop = true;
         if (stop)
             return false;
         QStringList keep;
@@ -1075,7 +1096,7 @@ void RecursiveBuilder::run()
         natural_sort(keep);
         dirs = keep;
         natural_sort(files);
-        if (!folders_only)
+        if (!folders_only && (depth < 0 || level == 0))   // files' thumbnails: the whole tree, or just root's
             for (const QString &f : files)
                 if (!f.startsWith('.') && exts.contains(ext_of(f)))
                     if (!submit('f', join(dir, f)))
@@ -1094,5 +1115,6 @@ void RecursiveBuilder::run()
         workers_pool.clear();
     workers_pool.waitForDone();
     emit_progress(true);
-    Q_EMIT finished_build(done, total, stop);
+    task = nullptr;
+    return stop;
 }

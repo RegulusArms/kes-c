@@ -95,6 +95,12 @@ public:
     QVariant headerData(int section, Qt::Orientation o, int role = Qt::DisplayRole) const override;
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
     QModelIndex sibling(int row, int column, const QModelIndex &index) const override;
+    // Dragging and dropping go to the source as well. (Its items' data: the source isn't QAbstractProxyModel's
+    // sourceModel(), so its defaults would ask an empty model, and a drag from a grouped view carried no files.)
+    QStringList mimeTypes() const override;
+    QMimeData *mimeData(const QModelIndexList &indexes) const override;
+    Qt::DropActions supportedDropActions() const override;
+    Qt::DropActions supportedDragActions() const override;
     bool canDropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
                          const QModelIndex &parent) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,

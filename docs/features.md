@@ -65,9 +65,28 @@
     - The tag descriptions and "Accepts" types were written with the help of an AI tool while Kestrel was being made, and may not be completely accurate. They ship as fixed text: Kestrel itself runs no AI. Descriptions outside the common tags are built from exiftool's tag names and categories.
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum, or **Browse…** for a checksum file that lists the file (see [Checksum files](features.md#checksum-files)).
 
+**Jobs: one queue, and the Jobs window**
+- Jobs that read or write drives (copy, move, delete, extract, compress, checksums, shredding) wait for their turn on the drives they use, across every Kestrel window and process, so two jobs never fight over one drive. By drive (the default): jobs on different drives run side by side, jobs on the same drive one after the other, in order. Or one at a time. A rename within a drive doesn't wait.
+- Click the job progress in the status bar (or ☰ → **Jobs…**, Ctrl+Shift+J) for the **Jobs window**: every job of every Kestrel window, running, waiting and finished, with progress and time left. Select one for its steps and its log (the archive tools' live output, passwords masked), with Copy and Save Log…. Pause, Resume, Stop (Delete), Start Now, move a waiting job up or down; Pause All / Resume All; start new jobs paused; choose by drive or one at a time.
+- A paused copy stops within a few megabytes (its part file kept aside); a paused extraction or compression pauses its program. Administrator jobs can't be paused.
+- Preferences → **Show developer tools** adds ☰ → **Tower…**: the tower's status, the Kestrels checked in, every message it passes on, the queue and the drives in use, and the shared undo list (also `kes --tower-monitor`). Its **Windows** tab shows each of that Kestrel's windows as Qt sees it (size, the minimum and maximum it asks for, state, screen, border) and its recent changes, to copy or save: for a window that misbehaves, compare it with a new one (Ctrl+N).
+
+**Tapes (LTFS) and floppy disks**
+- Recognised automatically (a tape by its LTFS mount, a floppy as a removable disk of a few MB), with their own icons in the sidebar and on the Overview, where a tape shows its volume name and LTFS's details.
+- Kestrel never waits for them in the window: their size is read in the background, and opening a folder or a checksum file on one doesn't freeze anything, even while another program is using the drive.
+- Thumbnails, folder previews, image details, GIF/WebM playback and dates taken aren't read from them (each would make a tape wind or a floppy read for a long time). Right-click the drive → **Show Previews on This Drive** to allow them.
+- One job at a time per drive (the job queue above): a second copy waits for its turn. Files are read off a tape in the order they lie on it, with "Positioning the tape" while it winds.
+- After a copy to a tape its index is written (also **Write Tape Index Now** on the drive's menu); copying more than 1,000 small files to a tape asks first, since an archive of them is much faster. Unmounting runs in the background, and asks first while a job still uses the drive.
+- **No shoe-shining:** copies onto a tape go through a buffer in memory, so the drive keeps streaming instead of stopping and rewinding whenever the source slows down (a seek, many small files, the next file being opened). The buffer uses the memory available less 10% of the total kept free (set in Preferences → Files → Tapes, with the size it would get now), gives memory back when other programs need it, and streams files far larger than itself (1 TB tarballs). Writing starts once the buffer is full; when the source can keep the drive at its lowest streaming speed or above (set the drive's generation in Preferences), the tape writes at the source's pace, otherwise it waits for the buffer to fill and writes in full-speed runs. The status bar and the Jobs window show "Filling the buffer", how full it is and both speeds; the job's log says afterwards how fast it went and how often the tape had to wait, and says so when the source is too slow for the tape to stream.
+- Before writing a file to a tape, Kestrel checks it fits (a write that runs out of tape wastes what it wrote: LTFS never reuses it), and nothing Kestrel shows while it writes (Properties, the info panel, previews) reads files from the tape. LTFS writes a tape's index every 5 minutes by default, stopping the drive each time: the tape's Overview card and the copy's log say so when that's how it's mounted, with the option to use (`-o sync_type=unmount`).
+
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
-- **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong.
+- **Open as Archive**: a window listing what's inside an archive, to extract single files or folders from it (7z, zip, rar, zpaq, tar and what 7-Zip opens).
+- **Test Archive(s)**: check every file in one or several archives against its checksum without extracting, with one message at the end.
+- **Extract All Here** and **Extract All To…** for several archives at once: one job, one ✕, one summary at the end; a split set counts as one archive.
+- **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong. In Extract All the first password typed is tried on the rest, and you're asked again only when it doesn't open one.
+- **Remember this password** (opt-in) saves an archive's password in your login keyring (GNOME Keyring, KWallet); a saved password is found again even after the archive is renamed or moved. Preferences can forget them all.
 - **Compress…** on any files or folders: 7z, zip, rar, zpaq, tar, tar.gz/bz2/xz/zst/lz/lz4 or a single compressed file, using pigz, gzip, zpaq, zstd, xz, bzip2, lzip, 7-Zip, rar and the other tools you have installed.
 - Every option the format supports: program, level, method, CPU threads, password (AES-256), encrypted file names, split volumes, solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
 - **Compress to “name.ext”** repeats your last settings in one click.
@@ -96,8 +115,11 @@
 **Images and galleries**
 - Folder icons show a 1–4 image mosaic. If a folder has no images of its own, the mosaic is taken from its subfolders.
 - A folder with only videos uses a still from the middle of each video, marked with a ▶ badge.
-- Right-click a folder → **Generate Previews Recursively** pre-builds every thumbnail and folder preview below it in the background. Progress shows in the status bar, and ✕ stops it.
-- **Generate Folder Previews** builds only the folder previews, for the folder and the folders directly in it, without making a thumbnail for every file. **Generate Folder Previews Recursively** does the same for every folder below it.
+- Right-click a folder (or empty space in one) → **Previews**:
+  - **Generate Previews Recursively** pre-builds every thumbnail and folder preview below it.
+  - **Generate Folder Previews** builds only the folder previews, for the folder and the folders directly in it, without making a thumbnail for every file. **Generate Folder Previews Recursively** does the same for every folder below it.
+  - **Regenerate Previews**, **Regenerate Folder Previews** and their **Recursively** forms make them again even where they were made before, replacing the cached ones (for previews that look wrong or out of date). Without "Recursively": the folder's own files and its preview, and the previews of the folders directly in it.
+  - Each one is a job of its own: it waits for its turn on the drive, shows in the status bar and the Jobs window, and can be paused or stopped (✕). Several can be started at once.
 - The **Folder previews** checkbox in the toolbar (Ctrl+Shift+P) turns the mosaics off for speed in large or slow folders. Image file thumbnails stay on.
 - If a folder contains an image named `cover`, `folder`, `front` or `poster` (any extension, also hidden as `.cover` or `.folder`), that image is used as the cover. You can also right-click an image and choose "Use as Folder Cover", and "Reset Folder Cover" to undo it.
 - Right-click a folder → **Regenerate Preview** rebuilds its mosaic. The ☰ menu has **Clear Folder Preview Cache** and **Delete All Thumbnails…** to free disk space or start fresh.
@@ -111,7 +133,24 @@
 - The info panel (F3) shows EXIF details: camera, lens, exposure and GPS.
 - It also shows the prompts and settings that Stable Diffusion, ComfyUI and other image generators save in PNG, WebP and JPEG files. Kestrel only reads that text from the file.
 
-Press F1 in the app for all keyboard shortcuts. Settings are in the ☰ menu under Preferences: homepage, how many images a mosaic uses, which images it picks (first or last by name, newest or oldest first, or from the beginning, middle and end), folder colour (the desktop's accent colour unless you pick one), the thumbnail size limit, which apps open images and videos, single-click, folder previews in list view, slideshow speed, playing GIFs and WebM videos, sharing undo between windows, and opening folders from other apps as tabs.
+Press F1 in the app for all keyboard shortcuts.
+
+## Preferences
+
+☰ → **Preferences…** shows every setting Kestrel keeps in one window, in tabs, including the ones you'd otherwise change somewhere in the windows (each says where else it's set, such as "Also: ☰ → View → Show Hidden Files (Ctrl+H)"):
+
+- **General:** homepage, single-click, which apps open images and videos, opening the image viewer full screen, sharing undo between windows, developer tools.
+- **Views:** grid or list, icon sizes, hidden files, the sidebar and info panel, the default sort and grouping for folders without their own, Pinned & Starred First, folder previews (how many images, which ones, the colour), and the search bar's options.
+- **Sidebar:** the order of its sections and which are collapsed.
+- **Images & Videos:** slideshow speed, playing GIFs and WebM videos, the preview size limit, and the tapes and floppies you allowed previews on.
+- **Files:** checksum file defaults, how the job queue runs, and the tape buffer.
+- **Archives:** the default format and each format's options for Compress…, Extract To…'s choices, and forgetting saved archive passwords.
+- **Windows:** opening folders from other apps as tabs, and the file chooser's own view (it follows the main windows' until you set it).
+- **Menus:** the right-click menus (below).
+
+A change applies at once to every open window, and to the other Kestrels; a change made in a window (Ctrl+H, the zoom slider…) shows in an open Preferences window as it happens. The search box at the top filters every tab's settings. **Reset This Tab** and **Reset All** go back to the defaults, after asking.
+
+**Your own right-click menus.** Preferences → **Menus** sets up the right-click menu separately for a folder, a file, an archive, several items, and the empty space in a folder. Untick an entry to hide it; drag entries (or use Move Up / Move Down) to reorder them and to move them into or out of a submenu, such as Links & Shortcuts; add separators and submenus of your own. An entry only appears when it applies (Extract for archives, BleachBit's entries when it's installed…), wherever you put it, and entries added in later versions show up in their default place. **Reset to Default** puts a menu back as it was.
 
 ## Checksum files
 

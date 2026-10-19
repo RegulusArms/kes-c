@@ -4,6 +4,169 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.0
+
+No test changes.
+
+## 0.3.1-alpha.16
+
+Added:
+- `slow`: the type GLib would read from a file's contents (Open With, opening, Recent) is taken from its name on a
+  tape (a PDF without an extension is still "unknown" there, while elsewhere it's read as a PDF), and opening a file
+  on a tape adds it to Recent with its type by name. The alpha.14 check couldn't see this read: its busy tape only
+  made stat wait. Covers the fix for the freeze still seen when double-clicking a checksum file on a tape.
+
+## 0.3.1-alpha.15
+
+Added:
+- `jobs`: the Tower's Windows tab shows each window's size, the minimum it asks for, its border and screen, its
+  recent resizes (a resize made by the test) and a child wanting more room than the window has, and saves it all to
+  a file in the home folder. Covers the window diagnostics.
+
+## 0.3.1-alpha.14
+
+Added:
+- `slow`: while the tape is busy seeking (`util::set_test_busy`: every stat under it waits 1.5 s, as LTFS's do),
+  selecting files there and opening a checksum file there don't hold the window, the info panel fills in later and
+  Verify Checksums opens. The alpha.11 check only made the checksum file's read wait (a FIFO), so it missed the window
+  asking the tape for other things meanwhile (reported on alpha.12: it still froze). Covers that fix.
+
+## 0.3.1-alpha.13
+
+Added:
+- **`prefs`, a new test for the Preferences window and the right-click menus' layouts.** Every setting the code reads
+  is in the list Preferences is built from (or is kept state, like window sizes): it scans `src/` for the keys read,
+  so a new setting can't be left out. The window: a free window with its tabs and a control for every setting. A
+  change applies at once to every open window (hidden files, list view, icon size, Pinned & Starred First, the default
+  sort, the sidebar, folder preview settings) and is told to the other Kestrels with its key; a change made in a
+  window (Ctrl+H, the zoom) shows in the open window; the search box filters rows and greys out tabs; a homepage that
+  isn't a folder is refused; the file chooser's view follows the main windows' until set; a format's level and Extract
+  To…'s choices set there are what those windows start with; Reset This Tab and Reset All. The menus: every entry has
+  an id and the default layouts list them all in the menu's order (for a folder, a file, an image, an archive,
+  several items and the empty space); a saved layout hides, reorders, takes an entry out of its submenu and puts two
+  in a submenu of the user's own, with no stray separators; an entry that doesn't apply doesn't appear, and appears
+  where it was put when it does; a layout is for its kind only; an entry added in a later version appears in its
+  default place; the editor hides, moves up, into and out of a submenu, and its changes are told to the other
+  Kestrels. Covers the new Preferences and customised right-click menus.
+
+- `slow`: the tape write buffer. Its size follows the memory figures (a stand-in /proc/meminfo,
+  `KESTREL_TEST_MEMINFO`): available less 10% of the total, the share kept free, the largest size, at least 64 MB. The
+  buffer gives every file whole and in order (also ones larger than it), drops skipped files, and leaves files not
+  planned or changed since to be read directly. With a slow source (`KESTREL_TEST_TAPEBUF_DELAY_MS`): writing starts
+  only once it's full and, below the drive's lowest streaming speed, waits for a full buffer again after running dry;
+  within the speed-matching range it carries on without refilling. A copy onto the tape folder fills first, writes
+  nothing meanwhile, then every file whole and in order, and its log gives the buffer's figures; pausing pauses the
+  reading (/proc/self/io); ✕ while filling leaves nothing, not even a part file; a file that doesn't fit isn't started
+  (`KESTREL_TEST_TAPE_FREE`). LTFS's index sync is read from a stand-in ltfs command line (`KESTREL_TEST_PROC`). Properties
+  doesn't read a tape file to name its type. Covers preventing shoe-shining on tapes.
+
+Changed:
+- `atc_sync`: "Saved Preferences are reported" is now "a change made in Preferences is reported, with the setting
+  that changed": Preferences has no OK any more (changes apply as they're made), and the message names the keys.
+
+## 0.3.1-alpha.12
+
+Added:
+- **`jobs`, a new test for the job queue, the Jobs window and the Tower window.** The scheduler's rules (by drive: a job
+  waits for a running one on its drives, keeps its order within a lane, isn't overtaken; a paused waiting job doesn't
+  hold others up; Start Now; one at a time). Drive ids: paths on one drive share one, a tape is its own, a partition
+  counts as its whole disk. In one Kestrel: a job waits for another on its drive (saying so) while one on another
+  drive runs; one at a time; cancelling a waiting job, Start Now, moving a job up, Start New Jobs Paused; pausing a copy
+  (its part file stops growing, then it finishes) and a program a job runs (stopped and continued, then ended on
+  cancel); a copy's steps and its log kept after it ends. The Jobs window opens from the job panel, lists running,
+  waiting and finished jobs, and Delete cancels the selected one without moving the main window's selection to the
+  trash. Through the tower: another Kestrel's job holds a lane our job waits for, a Kestrel that leaves frees its lanes,
+  another Kestrel pauses and resumes our job, everyone hears the queue; the tower's Status (pid, protocol, refused
+  messages) and UndoList; the Tower window shows the status and the messages live. Covers the unified job queue and the
+  two windows.
+
+- **`archives`, a new test for extracting through the window and remembered passwords.** Which archives a selection
+  holds (a split set once, no other files) and the menu it gets (Extract All for several, Extract for a split set
+  selected whole, nothing with other files mixed in); the quick password test for 7z (also with encrypted names), zip,
+  rar and zpaq; Extract All asking once, again only for an archive the typed password doesn't open and after a wrong
+  one, extracting each into its own folder and ending with one summary (a damaged archive among them leaves no
+  folder); no keyring seen and no Remember box while the test holds the Secret Service's name (so the bus can't
+  start gnome-keyring by itself, as it would on a clean Ubuntu); a cancelled password window skipping just that archive; ✕ while it waits for a password closing the window
+  and stopping the job with a summary; the password window a job's thread asks with being a free window; Extract
+  Here on one archive as before. With a real gnome-keyring-daemon on the
+  test's private bus (skipped where it isn't installed): fingerprints follow the contents, nothing is saved without
+  Remember, a ticked one is saved, found again after a rename and move, other saved passwords are tried, and
+  Preferences forgets them. Covers Extract All and remembered archive passwords.
+  Also, for Open as Archive and Test Archive: 7z, zip, tar.gz, rar and zpaq archives are listed (paths, sizes) and a
+  single file or a folder extracted from each into a folder (a taken name gets a number, nothing replaced, nothing else
+  extracted, no part folder left; rar and zpaq skipped where not installed); extracting single items that fails
+  part-way (a file-size limit standing for a full disk) leaves nothing; a folder taken out on its own leaves out a
+  symlink that would then lead out of the destination; Test tells sound 7z, zip and tar.gz archives from damaged
+  ones, names the damaged file, and tells a wrong password apart; the menu offers Open as Archive / Test Archive(s)
+  (not Open as Archive for a single .gz); Test Archives asks for an encrypted one's password and tells all results
+  in one message; the archive window asks for the password of an archive with encrypted names, shows its tree in a
+  free window (raised, not doubled, when opened again) and extracts the selected files without asking again; with
+  encrypted files but visible names it opens without asking and asks once when one is extracted.
+  The keyring checks wait for the test's own gnome-keyring-daemon to own the Secret Service's name (asked with
+  NameHasOwner) before using it: asking libsecret earlier could make the bus start a second, locked keyring that took
+  the name first (seen on a clean Ubuntu 24.04).
+- CI's test and sanitizer jobs install `gnome-keyring` and `p7zip-full` (so these checks run there) and `libsecret-1-dev`.
+
+- `ui`: files dragged from a view grouped by period or by day onto a folder in it move into that folder, in the grid
+  and the list. The drag is what the view's own model gives for the selected items, with the actions it offers (as
+  the view's startDrag asks): the earlier drop checks used files from outside the view, so they missed that a grouped
+  view's drag carried no files and offered no move.
+
+Changed:
+- `theme`: the preview-build checks run the builder directly (it's no longer a thread of its own but runs in a job).
+  Added: each Generate is a job of its own (two at once are both queued and shown in the status bar); Generate keeps
+  previews already made while Regenerate Previews makes them again (a cached preview replaced by a grey stand-in
+  with the same tags must be gone), for the folder's own files and its and its subfolders' previews but nothing
+  deeper; Regenerate Folder Previews (here and recursively) and Regenerate Previews Recursively; ✕ stops a preview job
+  also after its folders are all found (the workers stop, not just the walk); the Previews submenu's entries. Covers
+  preview builds as jobs and the Regenerate options.
+- `ui_actions.txt`: Generate Previews… moved into a Previews submenu (folder and empty space), with the four
+  Regenerate entries.
+- `slow`: "a copy to a tape that another job is using waits" now holds the tape with a queued job (the per-Kestrel
+  lanes it used are replaced by the job queue).
+- `ui_actions.txt`: ☰ → Jobs… (Ctrl+Shift+J) and Tower….
+
+
+## 0.3.1-alpha.11
+
+Added:
+- **`slow`, a new test for tapes and floppies**: folders marked as a tape and a floppy (`KESTREL_TEST_SLOW`, read by
+  `src/drives.cpp`) with a statfs that waits like a busy tape's (`KESTREL_TEST_STATFS_DELAY_MS`). Checks: they're
+  recognised and listed (also that a snap's small loop device isn't taken for a floppy); asking their size doesn't
+  hold the window (sidebar, status bar, Properties, Overview) and the size comes later; a checksum file is read in the
+  background (a FIFO stands in for a seeking tape); no thumbnail, date taken, GIF playback or image details read
+  from a tape until previews are allowed, then they are; copies read a tape in tape order (from LTFS's start-block
+  attributes); a job waits while another holds the tape; the index is written after a copy; more than 1,000 small
+  files ask first; the Overview shows the tape by its volume name. Covers the LTFS and floppy fixes.
+- `fileops`: on a file system without RENAME_NOREPLACE or hard links (`KESTREL_TEST_NO_LINK`, acting as LTFS) a copy
+  to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name. Guards
+  against the "no permission" failure copying to a tape.
+- `admin_helper`: the same for the helper's copy, write and copyfile.
+- `ui`: no `QStorageInfo` outside the Overview's background scan (it asks drives for their size, which waits on a busy
+  tape or floppy). Guards against the window freezing on slow drives again.
+
+## 0.3.1-alpha.10
+
+Added:
+- **Dropping into a subfolder keeps the view where it was** (`ui`): a long folder scrolled to the top, its last files
+  (the view's current item among them) dropped onto a subfolder at the top; after the move the scroll position is
+  unchanged, in the grid, the list and the grouped grid. Guards against the list jumping to where the moved items were.
+- **The mouse's back button doesn't drag** (`ui`): double-click into a folder, click a file there, go back with the
+  back button and move the mouse while it's down: no drag picture appears in the folder above. Guards against the
+  folder just left being dragged and sliding back into place.
+- **The grid is packed** (`ui`): a folder of 850 items, re-laid out by zooming and at window widths one pixel apart:
+  every item in its own cell in order, with as many columns as fit. Guards against the gap a batched layout left at
+  the 400-item batch boundary, and the empty last column when the cells added up to exactly the width.
+- **Save follows the place shown** (`chooser`): a Save chooser's button is off on the Overview and Starred and on
+  again in a folder with nothing selected, and saves there. Guards against it staying greyed out after the Overview.
+
+## 0.3.1-alpha.9
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes Markdown files (`*.md`: the docs, changelogs, README, TODO)
+  no longer starts the workflow, so the tests, sanitizers and package jobs don't run for it, and no package is built
+  or published. A change to anything else, in the same push or later, runs everything as before.
+
 ## 0.3.1-alpha.8
 
 Added:

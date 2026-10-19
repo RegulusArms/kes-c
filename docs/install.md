@@ -16,7 +16,7 @@ printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nC
 sudo apt update && sudo apt install kestrel-explorer
 ```
 
-**Development builds** (the newest build of the `DEV` branch, updated on every push):
+**Development builds** (the newest build of the `DEV` branch, updated on every push that changes the code):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
@@ -74,7 +74,7 @@ The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files ar
 To build by hand:
 
 ```bash
-sudo apt install g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev
+sudo apt install g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ```

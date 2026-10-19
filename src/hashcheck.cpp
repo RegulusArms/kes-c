@@ -2,6 +2,8 @@
 // hash), hashing with progress, and the Verify Checksums dialog.
 #include "hashcheck.h"
 
+#include "drives.h"
+
 #include "app.h"
 #include "fileops.h"
 #include "pane.h"
@@ -331,9 +333,12 @@ void VerifyDialog::start()
     results = QList<Result>(entries.size());
     sizes.clear();
     total = before = 0;
-    for (const Entry &e : entries) {
+    for (const Entry &e : entries) {   // read in the background with the checksum file (a busy tape answers late)
         struct stat st;
-        sizes << (stat_(e.path, st) ? qint64(st.st_size) : 0);
+        sizes << (e.size >= 0                                         ? e.size
+                  : drives::slow_kind(e.path) != drives::Slow::None   ? 0
+                  : stat_(e.path, st)                                 ? qint64(st.st_size)
+                                                                      : 0);
         total += sizes.last();
     }
     for (int i = 0; i < entries.size(); i++)
@@ -362,8 +367,8 @@ void VerifyDialog::step()
     // no parent: closing the dialog mustn't destroy a thread that is still reading. The result comes through
     // on_done, not a connection made afterwards, which a quick file could finish before.
     QPointer<VerifyDialog> self(this);
-    task = fileops::run_job(
-        nullptr, "Verifying " + e.name,
+    task = fileops::queue_job(
+        nullptr, "Verifying " + e.name, {e.path},
         [e](Task *t) -> QVariant {
             try {
                 Result r = verify(e, t);
@@ -378,7 +383,7 @@ void VerifyDialog::step()
             if (self && g == self->gen)
                 self->on_result(res);
         },
-        true, true);
+        true, {}, true);
     connect(task, &Task::progress, this, [this, g, i](double f, const QString &) {
         if (g != gen)
             return;
@@ -471,13 +476,33 @@ void VerifyDialog::summary()
                                 : QString());
 }
 
-bool open_dialog(QWidget *parent, const QString &path)
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing)
 {
-    QList<Entry> entries = parse(path);
-    if (entries.isEmpty())
-        return false;
-    show_free(new VerifyDialog(parent, path, entries));
-    return true;
+    QPointer<QWidget> p(parent);
+    fileops::run_task(
+        parent, "Reading " + basename(path),
+        [path]() {
+            QVariantList out;
+            for (const Entry &e : parse(path)) {   // and the files' sizes (for the progress), here too
+                struct stat st;
+                out << QVariant(QStringList{e.path, e.name, e.expected, e.algo,
+                                            QString::number(stat_(e.path, st) ? qint64(st.st_size) : 0)});
+            }
+            return QVariant(out);
+        },
+        [p, path, not_listing](const QVariant &res) {
+            QList<Entry> entries;
+            for (const QVariant &v : res.toList()) {
+                QStringList f = v.toStringList();
+                entries << Entry{f.value(0), f.value(1), f.value(2), f.value(3), f.value(4).toLongLong()};
+            }
+            if (entries.isEmpty()) {
+                if (res.isValid() && not_listing)
+                    not_listing();
+                return;
+            }
+            show_free(new VerifyDialog(p, path, entries));
+        });
 }
 
 }   // namespace hashcheck
@@ -778,7 +803,7 @@ void run_create(MainWindow *win, const QStringList &paths, const QString &dir, c
             warn(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
         }
     };
-    fileops::run_job(win, "Creating checksums", work, done);
+    fileops::queue_job(win, "Creating checksums", paths + QStringList{dir}, work, done);
 }
 
 }   // namespace hashcheck

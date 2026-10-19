@@ -29,9 +29,17 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
             paths << x;
     if (paths.isEmpty())
         return;
+    // folder or file: as the view knows it where it can (on a tape busy seeking, a stat would hold the window until the
+    // drive gets there); a link is followed
+    QHash<QString, int> kinds;
+    for (const Pane::Known &k : p->selected_known())
+        kinds.insert(k.path, k.kind);
     QStringList dirs, files;
-    for (const QString &x : paths)
-        (isdir(x) ? dirs : files) << x;
+    for (const QString &x : paths) {
+        int kind = kinds.value(x, -1);
+        bool dir = kind >= 0 && !(kind & KIND_LINK) ? bool(kind & KIND_DIR) : isdir(x);
+        (dir ? dirs : files) << x;
+    }
     if (chooser) {   // a file chooser: folders open as usual, files are the choice
         if (!dirs.isEmpty())
             p->set_path(dirs.first());
@@ -52,8 +60,11 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     for (const QString &f : files) {
         if (archive::opens_as_archive(f))
             archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
-        else if (hashcheck::is_hash_file(f) && hashcheck::open_dialog(this, f))
-            ;   // Verify Checksums (one that lists nothing opens as text)
+        else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
+            hashcheck::open_dialog(this, f, [self = QPointer<MainWindow>(this), f]() {
+                if (self && !self->open_file(f))
+                    warn(self, "Open", "Could not open " + f);
+            });
         else if (is_image(f))
             images << f;
         else if (is_video(f))

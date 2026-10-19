@@ -1,6 +1,7 @@
 #include "dialogs.h"
 
 #include "admin.h"
+#include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
 #include "undo.h"
@@ -34,7 +35,6 @@
 #include <QRegularExpression>
 #include <QSpinBox>
 #include <QStandardItemModel>
-#include <QStorageInfo>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTimer>
@@ -412,7 +412,8 @@ QWidget *PropertiesDialog::general_tab()
         bool is_dir = isdir(path);
         name_edit = new QLineEdit(basename(rstrip(path, '/')));
         form->addRow("Name:", name_edit);
-        QMimeType mime = isfile(path) ? mime_for_content(path) : mime_for(path);
+        // its type from its contents, but not on a tape or floppy (reading it makes the drive seek: by its name there)
+        QMimeType mime = isfile(path) && drives::reads_allowed(path) ? mime_for_content(path) : mime_for(path);
         form->addRow("Type:", sel_label(QString("%1 (%2)").arg(mime.comment(), mime.name())));
         form->addRow("Location:", sel_label(dirname(abspath(path))));
         if (S_ISLNK(st.st_mode)) {
@@ -480,11 +481,28 @@ QWidget *PropertiesDialog::general_tab()
             },
             [this](const QVariant &r) { show_dir_size(r); });
     }
-    QStorageInfo vol(path);
-    if (vol.isValid())
-        form->addRow("Volume:", sel_label(QString("%1 (%2) — %3 free of %4")
-                                              .arg(vol.rootPath(), QString::fromUtf8(vol.fileSystemType()),
-                                                   human_size(vol.bytesAvailable()), human_size(vol.bytesTotal()))));
+    // the drive's size from drives::Sizes (statfs can wait on a slow drive): filled in when it comes
+    QString root = drives::mount_root(path);
+    QString fstype;
+    for (const drives::Mount &mt : drives::mounts())
+        if (mt.root == root)
+            fstype = mt.fstype;
+    QLabel *vol = sel_label(root);
+    form->addRow("Volume:", vol);
+    QPointer<QLabel> vp(vol);
+    auto show_vol = [vp, root, fstype]() {
+        if (!vp)
+            return;
+        drives::Sizes::Info info = drives::Sizes::instance()->get(root);
+        QString head = fstype.isEmpty() ? root : QString("%1 (%2)").arg(root, fstype);
+        vp->setText(info.total >= 0 ? QString("%1 — %2 free of %3").arg(head, human_size(info.free), human_size(info.total))
+                                    : head + " — reading the size…");
+    };
+    show_vol();
+    connect(drives::Sizes::instance(), &drives::Sizes::changed, vol, [show_vol, root](const QString &r) {
+        if (r == root)
+            show_vol();
+    });
     return w;
 }
 
@@ -986,34 +1004,39 @@ void PropertiesDialog::verify_against(const QString &hash_path)
         hash_result->setText(text);
         hash_result->setStyleSheet(QString("color: %1").arg((good ? ok_color() : error_color()).name()));
     };
-    QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
-    const hashcheck::Entry *found = hashcheck::find(entries, path);
-    if (entries.isEmpty())
-        return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
-    if (!found)
-        return said(QString("✘ “%1” isn't listed in it.").arg(basename(path)), false);
-    hashcheck::Entry e = *found;
-    QString algo = hashcheck::algo_label(e.algo);
     hash_result->setStyleSheet(QString());
-    hash_result->setText(QString("Checking (%1)…").arg(algo));
+    hash_result->setText("Checking…");
     QPointer<QLabel> label(hash_result);
-    fileops::run_job(
-        this, "Verifying " + basename(path),
-        [e](Task *t) -> QVariant {
+    QString file = path;
+    // the checksum file is read on the job's thread too (it can be on a tape or floppy, which takes long to read)
+    fileops::queue_job(
+        this, "Verifying " + basename(path), {file, hash_path},
+        [hash_path, file](Task *t) -> QVariant {
+            QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
+            const hashcheck::Entry *found = hashcheck::find(entries, file);
+            if (entries.isEmpty())
+                return QVariantList{"not_checksums"};
+            if (!found)
+                return QVariantList{"not_listed"};
+            hashcheck::Entry e = *found;
             hashcheck::Result r = hashcheck::verify(e, t);
-            return QVariantList{r.status, r.actual, r.error};
+            return QVariantList{r.status, r.actual, r.error, e.expected, hashcheck::algo_label(e.algo)};
         },
-        [label, said, e, algo](const QVariant &res) {
+        [label, said, hash_path, file](const QVariant &res) {
             if (!label)
                 return;
             QVariantList r = res.toList();
-            QString status = r.value(0).toString();
+            QString status = r.value(0).toString(), algo = r.value(4).toString();
             if (!res.isValid())
                 return said("Stopped.", false);
+            if (status == "not_checksums")
+                return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
+            if (status == "not_listed")
+                return said(QString("✘ “%1” isn't listed in it.").arg(basename(file)), false);
             if (status == "ok")
                 return said(QString("✔ Matches (%1).").arg(algo), true);
             if (status == "failed") {
-                label->setToolTip(QString("Expected: %1\nActual: %2").arg(e.expected, r.value(1).toString()));
+                label->setToolTip(QString("Expected: %1\nActual: %2").arg(r.value(3).toString(), r.value(1).toString()));
                 return said(QString("✘ Doesn't match (%1).").arg(algo), false);
             }
             said("✘ " + (status == "missing" ? QString("Not found.") : r.value(2).toString()), false);
@@ -1328,194 +1351,6 @@ void BatchRenameDialog::apply()
         if (basename(temps[i].second) != names[i])
             renamed << qMakePair(temps[i].second, finals[i]);
     undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
-    accept();
-}
-
-// ---------------------------------------------------------------- preferences
-
-// Folder preview picks: the choices and their folder_order setting (thumbs::pick_folder_images)
-static const QList<QPair<QString, QString>> FOLDER_ORDERS = {
-    {"First by name", "name"}, {"Last by name", "last"}, {"Newest first", "newest"}, {"Oldest first", "oldest"},
-    {"Beginning, middle and end", "spread"}};
-
-PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
-{
-    setWindowTitle("Preferences");
-    QSettings &s = settings();
-    auto *form = new QFormLayout(this);
-    // homepage: overview page, home folder, or any folder / network location
-    QString hp = s.value("homepage", "overview").toString();
-    hp_mode = new QComboBox;
-    hp_mode->addItems({"Overview (drives, network & bookmarks)", "Home folder", "Custom location…"});
-    hp_mode->setCurrentIndex(hp == "overview" ? 0 : hp == "home" ? 1 : 2);
-    hp_edit = new QLineEdit(hp == "overview" || hp == "home" ? QString() : hp);
-    hp_edit->setPlaceholderText("/path/to/folder  or  smb://server/share, sftp://user@host/path");
-    auto *browse = new QPushButton("Browse…");
-    connect(browse, &QPushButton::clicked, this, &PreferencesDialog::browse_home);
-    auto *hp_row = new QHBoxLayout;
-    hp_row->addWidget(hp_edit, 1);
-    hp_row->addWidget(browse);
-    hp_custom = new QWidget;
-    hp_custom->setLayout(hp_row);
-    hp_row->setContentsMargins(0, 0, 0, 0);
-    connect(hp_mode, &QComboBox::currentIndexChanged, this, [this](int i) { hp_custom->setEnabled(i == 2); });
-    hp_custom->setEnabled(hp_mode->currentIndex() == 2);
-    form->addRow("Homepage:", hp_mode);
-    form->addRow("", hp_custom);
-    form->addRow(new QLabel("<small>Used when the app starts and for the Home button (Alt+Home). "
-                            "Network locations are connected automatically.</small>"));
-    count = new QSpinBox;
-    count->setRange(1, 4);
-    count->setValue(s.value("folder_count", 4).toInt());
-    order = new QComboBox;
-    for (auto [label, value] : FOLDER_ORDERS)
-        order->addItem(label, value);
-    order->setCurrentIndex(std::max(0, order->findData(s.value("folder_order", "name").toString())));
-    QString color_setting = s.value("folder_color", "accent").toString();
-    color_accent = new QCheckBox("Use the desktop's accent colour");
-    color_accent->setChecked(thumbs::follows_accent(color_setting));
-    color = color_accent->isChecked() ? accent_color() : QColor(color_setting);
-    color_btn = new QPushButton;
-    paint_color();
-    connect(color_btn, &QPushButton::clicked, this, &PreferencesDialog::pick_color);
-    connect(color_accent, &QCheckBox::toggled, this, [this](bool on) {
-        if (on)
-            color = accent_color();
-        paint_color();
-    });
-    auto *color_row = new QHBoxLayout;
-    color_row->addWidget(color_btn);
-    color_row->addWidget(color_accent, 1);
-    max_mb = new QSpinBox;
-    max_mb->setRange(1, 10000);
-    max_mb->setSuffix(" MB");
-    max_mb->setValue(s.value("thumb_max_mb", 200).toInt());
-    img_opener = opener_combo("image/jpeg", s.value("image_opener", "system").toString(), true);
-    vid_opener = opener_combo("video/mp4", s.value("video_opener", "system").toString());
-    single_click = new QCheckBox("Single-click to open items");
-    single_click->setChecked(s.value("single_click", false).toBool());
-    list_previews = new QCheckBox("Previews for folders in list view");
-    list_previews->setChecked(s.value("list_folder_previews", false).toBool());
-    slide = new QSpinBox;
-    slide->setRange(1, 120);
-    slide->setSuffix(" s");
-    slide->setValue(s.value("slideshow_secs", 4).toInt());
-    play_gifs = new QCheckBox("Play animated GIFs in the file view");
-    play_gifs->setChecked(s.value("play_gifs", false).toBool());
-    play_webm = new QCheckBox("Play WebM videos in the file view (silent looping previews)");
-    play_webm->setChecked(s.value("play_webm", false).toBool());
-    if (!which("ffmpeg")) {
-        play_webm->setEnabled(false);
-        play_webm->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
-    }
-    shared_undo = new QCheckBox("Share undo between all Kestrel windows");
-    shared_undo->setChecked(s.value("shared_undo", false).toBool());
-    shared_undo->setToolTip("On: Ctrl+Z in any Kestrel window undoes the newest action from any of them.\nOff: each Kestrel undoes only what was done in it.");
-    open_in_tabs = new QCheckBox("Open folders from other apps as tabs in an open Kestrel window");
-    open_in_tabs->setChecked(s.value("open_in_tabs", false).toBool());
-    open_in_tabs->setToolTip("On: a folder opened from another app (or with “Show in folder”) becomes a tab in the "
-                             "Kestrel window you used last.\nOff: it opens in a new window.");
-    form->addRow("Images in folder previews:", count);
-    form->addRow("Folder preview picks:", order);
-    form->addRow("Folder colour:", color_row);
-    form->addRow("Don't thumbnail files larger than:", max_mb);
-    form->addRow("Slideshow interval:", slide);
-    form->addRow("Open images with:", img_opener);
-    form->addRow("Open videos with:", vid_opener);
-    form->addRow(single_click);
-    form->addRow(list_previews);
-    form->addRow(play_gifs);
-    form->addRow(play_webm);
-    form->addRow(shared_undo);
-    form->addRow(open_in_tabs);
-    auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(bb, &QDialogButtonBox::accepted, this, &PreferencesDialog::save);
-    connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    form->addRow(bb);
-}
-
-QComboBox *PreferencesDialog::opener_combo(const QString &ct, const QString &current, bool builtin)
-{
-    // system default / built-in viewer / any installed app that handles `ct`; item data is the setting value
-    auto *cb = new QComboBox;
-    AppRef def = default_app_for_type(ct);
-    cb->addItem(def ? QString("System default (%1)").arg(app_name(def)) : QString("System default"), "system");
-    if (builtin)
-        cb->addItem(QGuiApplication::windowIcon(), "Kestrel image viewer", "builtin");
-    QList<AppRef> apps = apps_for_type(ct);
-    if (current != "system" && current != "builtin") {
-        bool known = false;
-        for (const AppRef &a : apps)
-            known = known || app_id(a) == current;
-        if (!known)
-            if (AppRef a = app_by_id(current))
-                apps << a;
-    }
-    for (const AppRef &a : apps)
-        cb->addItem(app_icon(a), app_name(a), app_id(a));
-    int i = cb->findData(current);
-    cb->setCurrentIndex(i >= 0 ? i : 0);
-    return cb;
-}
-
-void PreferencesDialog::browse_home()
-{
-    QString start = hp_edit->text().startsWith('/') ? hp_edit->text() : HOME();
-    choose_folder(this, "Choose Homepage Folder", start, [this](const QString &d) { hp_edit->setText(d); });
-}
-
-void PreferencesDialog::paint_color()
-{
-    color_btn->setStyleSheet(QString("background:%1; min-width:60px; min-height:20px").arg(color.name()));
-    color_btn->setEnabled(!color_accent->isChecked());
-    color_btn->setToolTip(color_accent->isChecked() ? "Follows the desktop's accent colour" : "Choose the colour");
-}
-
-void PreferencesDialog::pick_color()
-{
-    auto *d = new QColorDialog(color, this);
-    d->setWindowTitle("Folder colour");
-    d->setOption(QColorDialog::DontUseNativeDialog);   // the desktop's own one would be modal
-    connect(d, &QColorDialog::colorSelected, this, [this](const QColor &c) {
-        color = c;
-        paint_color();
-    });
-    show_free(d);
-}
-
-void PreferencesDialog::save()
-{
-    QSettings &s = settings();
-    int m = hp_mode->currentIndex();
-    QString custom = hp_edit->text().trimmed();
-    if (m == 2) {
-        if (custom.isEmpty()) {
-            warn(this, "Homepage", "Enter a folder or network location for the homepage.");
-            return;
-        }
-        if (custom.startsWith('~'))
-            custom = expanduser(custom);
-        if (custom.startsWith('/') && !isdir(custom)) {
-            warn(this, "Homepage", QString("“%1” is not a folder.").arg(custom));
-            return;
-        }
-        s.setValue("homepage", custom);
-    } else {
-        s.setValue("homepage", m == 0 ? "overview" : "home");
-    }
-    s.setValue("folder_count", count->value());
-    s.setValue("folder_order", order->currentData().toString());
-    s.setValue("folder_color", color_accent->isChecked() ? QString("accent") : color.name());
-    s.setValue("thumb_max_mb", max_mb->value());
-    s.setValue("image_opener", img_opener->currentData());
-    s.setValue("video_opener", vid_opener->currentData());
-    s.setValue("single_click", single_click->isChecked());
-    s.setValue("list_folder_previews", list_previews->isChecked());
-    s.setValue("slideshow_secs", slide->value());
-    s.setValue("play_gifs", play_gifs->isChecked());
-    s.setValue("play_webm", play_webm->isChecked());
-    s.setValue("shared_undo", shared_undo->isChecked());
-    s.setValue("open_in_tabs", open_in_tabs->isChecked());
     accept();
 }
 

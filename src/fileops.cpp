@@ -1,10 +1,13 @@
 #include "fileops.h"
 
 #include "admin.h"
+#include "drives.h"
+#include "jobs.h"
 #include "atc.h"
 #include "proc.h"
 #include "undo.h"
 #include "stats.h"
+#include "tapebuf.h"
 #include "util.h"
 #include "windows.h"
 
@@ -14,6 +17,7 @@
 #include <QElapsedTimer>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QMouseEvent>
 #include <QLabel>
 #include <QMainWindow>
 #include <QRegularExpression>
@@ -24,6 +28,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <sys/statvfs.h>
 
 #include <cerrno>
 #include <climits>
@@ -57,17 +63,110 @@ Task::Task(const QString &title, Fn fn, bool cancellable) : title(title), cancel
     id = QString::number(++next_id);
 }
 
+static thread_local Task *running_task = nullptr;
+
+Task *Task::current() { return running_task; }
+
+qint64 Task::elapsed_ms() const { return started_ms ? monotonic_ms() - started_ms : 0; }
+
+void Task::cancel()
+{
+    cancelled = true;
+    if (pause_flag)   // a paused job (and its programs) carries on to its cancel
+        set_paused(false);
+    Q_EMIT cancel_asked();
+}
+
 void Task::check()
 {
     if (cancelled)
         throw Cancelled();
+    if (pause_flag) {
+        QMutexLocker l(&mtx);
+        while (pause_flag && !cancelled)
+            resumed.wait(&mtx, 200);
+    }
+    if (cancelled)
+        throw Cancelled();
 }
 
-void Task::report(double done, double total, const QString &t)
+void Task::set_paused(bool on)
+{
+    if (on && !pausable())
+        return;
+    QMutexLocker l(&mtx);
+    pause_flag = on;
+    for (pid_t pg : programs)
+        ::killpg(pg, on ? SIGSTOP : SIGCONT);
+    if (!on)
+        resumed.wakeAll();
+}
+
+void Task::started(pid_t pid)
+{
+    QMutexLocker l(&mtx);
+    programs.insert(pid);
+    if (pause_flag)   // started while paused (between two checks): stopped at once
+        ::killpg(pid, SIGSTOP);
+}
+
+void Task::ended(pid_t pid)
+{
+    QMutexLocker l(&mtx);
+    programs.remove(pid);
+}
+
+void Task::log(const QString &line)
+{
+    QMutexLocker l(&mtx);
+    if (head.size() < 300) {
+        head << line;
+        return;
+    }
+    tail << line;
+    if (tail.size() > 3000) {
+        tail.removeFirst();
+        ++skipped;
+    }
+}
+
+void Task::log_output(const QByteArray &chunk)
+{
+    QByteArray all;
+    {
+        QMutexLocker l(&mtx);
+        all = partial + chunk;
+        partial.clear();
+    }
+    // lines end with \n, or with \r for a tool redrawing its progress line (kept once, the last state of it)
+    QList<QByteArray> lines = all.split('\n');
+    QByteArray rest = lines.takeLast();
+    for (const QByteArray &line : lines) {
+        QByteArray shown = line.split('\r').last();
+        if (!shown.trimmed().isEmpty())
+            log(QString::fromUtf8(shown));
+    }
+    QMutexLocker l(&mtx);
+    partial = rest.size() > 4096 ? rest.right(4096) : rest;
+}
+
+QString Task::log_text() const
+{
+    QMutexLocker l(&mtx);
+    QStringList out = head;
+    if (skipped)
+        out << QString("… %1 lines not kept …").arg(skipped);
+    out << tail;
+    if (!partial.trimmed().isEmpty())
+        out << QString::fromUtf8(partial.split('\r').last());
+    return out.join('\n');
+}
+
+void Task::report(double done, double total, const QString &t, bool force)
 {
     // at most ~12 updates a second, so thousands of tiny files can't flood the UI thread
     qint64 now = monotonic_ms();
-    if (now - last < 80)
+    if (now - last < 80 && !force)
         return;
     last = now;
     Q_EMIT progress(total > 0 ? std::min(done / total, 1.0) : -1.0, t);
@@ -76,15 +175,25 @@ void Task::report(double done, double total, const QString &t)
 void Task::run()
 {
     QVariant res;
+    running_task = this;
+    proc::set_watcher(this);
+    started_ms = monotonic_ms();
     try {
+        check();   // cancelled while it waited in the queue: it ends at once
         res = fn(this);
     } catch (const Cancelled &) {
         was_cancelled = true;
         res = QVariant();
     } catch (const std::exception &e) {
+        failed = true;
+        log("Error: " + QString::fromStdString(e.what()));
+        proc::set_watcher(nullptr);
+        running_task = nullptr;
         Q_EMIT error(QString::fromStdString(e.what()));
         return;
     }
+    proc::set_watcher(nullptr);
+    running_task = nullptr;
     Q_EMIT result(res);
 }
 
@@ -118,10 +227,25 @@ void TaskBoard::add(Task *task)
     });
     connect(task, &QThread::finished, this, [this, task]() {
         local.removeAll(task);
+        QString log = task->log_text();
+        QString state = task->was_cancelled ? "cancelled"
+                        : task->failed      ? "failed"
+                        : log.contains("  failed: ") ? "done with errors"
+                                                     : "done";
+        finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
+                                 task->admin};
+        while (finished.size() > 50)
+            finished.removeFirst();
         schedule(0);
         Q_EMIT changed();
     });
     schedule(0);
+    Q_EMIT changed();
+}
+
+void TaskBoard::clear_finished()
+{
+    finished.clear();
     Q_EMIT changed();
 }
 
@@ -136,10 +260,14 @@ void TaskBoard::publish()
 {
     QJsonArray list;
     for (Task *t : local)
-        list << QJsonObject{{"id", t->id},           {"title", t->title},
-                            {"text", t->text},       {"fraction", t->fraction},
-                            {"cancellable", t->cancellable}, {"cancelling", bool(t->cancelled)},
-                            {"admin", t->admin}};
+        list << QJsonObject{{"id", t->id},
+                            {"title", t->title},
+                            {"text", t->text},
+                            {"fraction", t->fraction},
+                            {"cancellable", t->cancellable},
+                            {"cancelling", bool(t->cancelled)},
+                            {"admin", t->admin},
+                            {"state", t->queued ? "waiting" : t->paused() ? "paused" : "running"}};
     atc::announce("tasks", {{"tasks", list}}, true);
 }
 
@@ -149,7 +277,8 @@ QList<TaskInfo> TaskBoard::others(const QList<Task *> &mine) const
     QString me = atc::radio()->flight();
     for (Task *t : local)
         if (!mine.contains(t))
-            out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t};
+            out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t,
+                            t->queued ? "waiting" : t->paused() ? "paused" : "running"};
     for (const QList<TaskInfo> &l : remote)
         out << l;
     return out;
@@ -188,7 +317,8 @@ void TaskBoard::on_heard(const QJsonObject &m)
                           o.value("cancellable").toBool(),
                           o.value("cancelling").toBool(),
                           o.value("admin").toBool(),
-                          nullptr};
+                          nullptr,
+                          o.value("state").toString("running")};
         }
         if (l.isEmpty())
             remote.remove(from);
@@ -272,6 +402,13 @@ TaskPanel::TaskPanel(QWidget *parent) : QWidget(parent)
     connect(TaskBoard::instance(), &TaskBoard::changed, this, &TaskPanel::refresh);
 }
 
+void TaskPanel::mousePressEvent(QMouseEvent *ev)
+{
+    if (ev->button() == Qt::LeftButton)
+        Q_EMIT clicked();
+    QWidget::mousePressEvent(ev);
+}
+
 void TaskPanel::add(Task *task)
 {
     tasks << task;
@@ -318,15 +455,24 @@ void TaskPanel::refresh()
     TaskInfo first;
     QString where;
     if (!tasks.isEmpty()) {
-        Task *t = tasks.first();
-        first = TaskInfo{QString(), t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), false, t};
+        Task *t = tasks.first();   // the first one running (a waiting one only when none is)
+        for (Task *x : tasks)
+            if (!x->queued) {
+                t = x;
+                break;
+            }
+        first = TaskInfo{QString(), t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), false, t,
+                         t->queued ? "waiting" : t->paused() ? "paused" : "running"};
     } else {
         first = others.takeFirst();
         where = " (in another window)";
     }
     QString shown = (first.admin && !first.local ? "🛡 " : "") + first.title;
     QString text = shown + where +
-                   (first.cancelling ? QString(" — cancelling…") : !first.text.isEmpty() ? ": " + first.text : QString());
+                   (first.cancelling           ? QString(" — cancelling…")
+                    : first.state == "paused"  ? QString(" — paused")
+                    : !first.text.isEmpty()    ? ": " + first.text
+                                               : QString());
     QStringList more;
     if (tasks.size() > 1)
         more << QString("+%1 more").arg(tasks.size() - 1);
@@ -345,6 +491,7 @@ void TaskPanel::refresh()
     bar->set_busy(first.fraction < 0);
     if (first.fraction >= 0)
         bar->setValue(int(first.fraction * 1000));
+    setToolTip(toolTip() + "\n\nClick for the Jobs window");
     stop->setVisible(first.cancellable);
     stop->setEnabled(!first.cancelling);
     stop->setToolTip("Cancel " + first.title.toLower() + where);
@@ -384,6 +531,26 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
     }
     QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
     t->start();
+    return t;
+}
+
+Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done,
+                bool cancellable, const QStringList &steps, bool quiet)
+{
+    auto *t = new Task(title, std::move(fn), cancellable);
+    t->paths = paths;
+    t->steps = steps;
+    QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
+    if (on_done)
+        QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
+    if (!quiet) {
+        QPointer<QWidget> p(parent);
+        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        if (TaskPanel *panel = panel_for(parent))
+            panel->add(t);
+    }
+    QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
+    jobs::Queue::instance()->submit(t);
     return t;
 }
 
@@ -493,6 +660,17 @@ static void copy_times_mode(int fd, const struct stat &st)   // on a descriptor:
     ::fchmod(fd, st.st_mode & 07777);
 }
 
+// a job as a step in the Jobs window: "Copy photo.jpg → /media/…/Backup"
+static QString step_text(const Job &j)
+{
+    static const QHash<QString, QString> verbs = {{"copy", "Copy"}, {"move", "Move"}, {"delete", "Delete"},
+                                                 {"merge_copy", "Copy (merge)"}, {"merge_move", "Move (merge)"}};
+    QString verb = verbs.value(j.op, j.op);
+    if (j.op == "delete")
+        return verb + " " + j.src;
+    return QString("%1 %2 → %3").arg(verb, basename(j.src), j.dst);
+}
+
 // Runs a list of jobs for a Task. Progress is in bytes, or in files when every job is a delete.
 class Ops {
 public:
@@ -505,6 +683,7 @@ public:
     QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
     QList<Job> completed;   // jobs that succeeded (for undo)
     QStringList partial;    // new folders a copy left part-way (cancelled, or an error inside): undone like a copy
+    QList<Job> touched;     // jobs that changed something (done, or begun): a tape among them gets its index written
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
 
     QStringList run()
@@ -518,12 +697,41 @@ public:
         }
         total = std::max<qint64>(total, 1);
         qint64 started = stats::now_ms();
-        for (const Job &j : jobs) {
+        // jobs reading a tape go in the order their files lie on the tape (by partition and block), so the drive
+        // streams instead of winding back and forth; the others keep their order, after them
+        QList<QPair<QPair<qint64, qint64>, int>> keyed;   // (tape position, the job's index: its step)
+        for (int i = 0; i < jobs.size(); ++i) {
+            const Job &j = jobs[i];
+            QPair<qint64, qint64> at{LLONG_MAX, LLONG_MAX};
+            if (drives::slow_kind(j.src) == drives::Slow::Tape) {
+                at = drives::tape_position(j.src);
+                if (at.first < 0)
+                    at = {LLONG_MAX - 1, LLONG_MAX - 1};
+            }
+            keyed << qMakePair(at, i);
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+        start_tape_buffer(keyed);
+        struct EndBuffer {   // its figures in the log, and its memory given back, however the run ends
+            Ops *ops;
+            ~EndBuffer()
+            {
+                if (ops->buffer) {
+                    ops->task->log(ops->buffer->summary());
+                    ops->buffer.reset();
+                }
+            }
+        } end_buffer{this};
+        for (const auto &[at, index] : keyed) {
+            const Job &j = jobs[index];
             task->check();
+            task->step = index;
+            task->log(step_text(j));
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
             bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
             bool fresh = j.op == "copy" && !lexists(j.dst);
+            touched << j;
             auto left_part_way = [&]() {
                 if (fresh && isdir(j.dst) && !islink(j.dst))
                     partial << j.dst;
@@ -535,13 +743,18 @@ public:
                     move(j.src, j.dst, j.op == "merge_move", claim);
                 else
                     copy(j.src, j.dst, j.op == "merge_copy", claim);
-                if (replacing)
+                if (replacing) {
                     ++replaced;
-                else if (j.op == "merge_copy" || j.op == "merge_move")
+                    task->log("  done (replaced what was there)");
+                } else if (j.op == "merge_copy" || j.op == "merge_move") {
                     ++merged;
-                else
+                    task->log("  done (merged into the folder there)");
+                } else {
                     completed << j;
+                    task->log("  done");
+                }
             } catch (const OSError &e) {
+                task->log("  failed: " + e.message());
                 if (e.permission()) {
                     // retried as administrator; a new folder already begun is finished by merging into it
                     Job retry = j;
@@ -553,9 +766,11 @@ public:
                     errors << basename(j.src) + ": " + e.message();
                 }
             } catch (const Error &e) {
+                task->log("  failed: " + e.message());
                 left_part_way();
                 errors << basename(j.src) + ": " + e.message();
             } catch (const Cancelled &) {
+                task->log("  cancelled");
                 left_part_way();
                 throw;
             }
@@ -571,12 +786,69 @@ private:
     QList<Job> jobs;
     bool by_count;
     qint64 done = 0, total = 0;
+    std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
+    bool told_slow = false;                    // said the source is too slow for the tape to stream
 
     void report_progress(const QString &name)
     {
-        QString text = by_count ? QString("%1 of %2 — %3").arg(group_digits(done), group_digits(total), name)
-                                : QString("%1 of %2 — %3").arg(human_size(done), human_size(total), name);
+        QString text = by_count ? QString("%1 of %2 — ").arg(group_digits(done), group_digits(total)) + name
+                                : QString("%1 of %2 — ").arg(human_size(done), human_size(total)) + name;
+        if (buffer)
+            text += " · " + buffer->status();
         task->report(double(done), double(total), text);
+    }
+
+    // The regular files under src, in the order copy_at writes them (names_in's order, as it reads them)
+    static void plan_files(const QString &src, QStringList &out, Task *task)
+    {
+        task->check();
+        struct stat st;
+        if (!lstat_(src, st))
+            return;
+        if (S_ISREG(st.st_mode)) {
+            out << src;
+        } else if (S_ISDIR(st.st_mode)) {
+            int fd = ::open(enc(src).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (fd < 0)
+                return;
+            QStringList names;
+            try {
+                names = names_in(fd, src);
+            } catch (const OSError &) {
+            }
+            ::close(fd);
+            for (const QString &e : names)
+                plan_files(join(src, e), out, task);
+        }
+    }
+
+    // Copies onto a tape go through a RAM buffer read ahead by a thread (tapebuf.h), so the drive keeps streaming:
+    // the files of every job writing to a tape from another drive, in the order they'll be written
+    void start_tape_buffer(const QList<QPair<QPair<qint64, qint64>, int>> &order)
+    {
+        QStringList files;
+        QString tape;
+        for (const auto &entry : order) {
+            const Job &j = jobs[entry.second];
+            if (j.op == "delete" || (j.op == "move" && same_dev(j.src, j.dst)))
+                continue;
+            if (drives::slow_kind(j.dst) != drives::Slow::Tape || drives::slow_kind(j.src) == drives::Slow::Tape)
+                continue;
+            tape = drives::slow_root(j.dst);
+            plan_files(j.src, files, task);
+        }
+        if (files.isEmpty())
+            return;
+        tapebuf::Memory mem = tapebuf::memory();
+        buffer = std::make_unique<tapebuf::Buffer>(task, files);
+        buffer->waiting = [this](const QString &text) { task->report(double(done), double(total), text, true); };
+        task->log(QString("Tape buffer: up to %1 (memory %2, %3 available)")
+                      .arg(human_size(buffer->capacity()), human_size(mem.total), human_size(mem.available)));
+        if (int every = drives::ltfs_sync_minutes(drives::ltfs_sync(tape)))
+            task->log(QString("Note: LTFS writes this tape's index every %1 minutes while it's mounted (sync_type=%2), and "
+                              "the drive stops each time. Mounting it with -o sync_type=unmount avoids that (the index is "
+                              "then written when it's unmounted, or with Write Tape Index Now).")
+                          .arg(QString::number(every), drives::ltfs_sync(tape)));
     }
 
     // bytes under path, or the file count when counting deletes
@@ -744,7 +1016,16 @@ private:
         } else if (S_ISDIR(st.st_mode)) {
             Fd in(open_dir_at(sdir, sname, st, src));
             auto copy_into = [&](int out) {
-                for (const QString &e : names_in(in.fd, src)) {
+                QStringList names = names_in(in.fd, src);
+                if (drives::slow_kind(src) == drives::Slow::Tape) {   // in tape order (folders, which have none, last)
+                    QHash<QString, QPair<qint64, qint64>> at;
+                    for (const QString &e : names) {
+                        QPair<qint64, qint64> pos = drives::tape_position(join(src, e));
+                        at.insert(e, pos.first < 0 ? qMakePair(LLONG_MAX, LLONG_MAX) : pos);
+                    }
+                    std::stable_sort(names.begin(), names.end(), [&](const QString &a, const QString &b) { return at[a] < at[b]; });
+                }
+                for (const QString &e : names) {
                     struct stat est;
                     if (!stat_at(in.fd, e, est))
                         throw_errno(join(src, e));
@@ -832,32 +1113,67 @@ private:
             throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
         }
         Fd out(part_fd);
+        if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
+            task->report(double(done), double(total), "Positioning the tape — " + name, true);
+        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
+        qint64 written = 0;
         try {
-            std::unique_ptr<char[]> buf(new char[CHUNK]);
+            if (to_tape) {   // room for it first: a write that runs out of tape wastes what it wrote (LTFS never reuses it)
+                struct statvfs sv;
+                qint64 free = ::fstatvfs(ddir, &sv) == 0 ? qint64(sv.f_bavail) * qint64(sv.f_frsize) : -1;
+                if (qEnvironmentVariableIsSet("KESTREL_TEST_TAPE_FREE"))
+                    free = qEnvironmentVariable("KESTREL_TEST_TAPE_FREE").toLongLong();
+                if (free >= 0 && now.st_size > free)
+                    throw Error(QString("Not enough space on the tape for “%1”: it needs %2, the tape has %3 left")
+                                    .arg(name, human_size(qint64(now.st_size)), human_size(free)));
+            }
+            // from the tape buffer when it has it (read ahead by its thread), else straight from the file
+            bool buffered = to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
+            std::unique_ptr<char[]> buf(buffered ? nullptr : new char[CHUNK]);
             for (;;) {
-                if (task->cancelled)
-                    throw Cancelled();
-                ssize_t n = ::read(in.fd, buf.get(), CHUNK);
-                if (n < 0 && errno == EINTR)
-                    continue;
-                if (n < 0)
-                    throw_errno(src);
+                task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
+                const char *data = buf.get();
+                ssize_t n;
+                if (buffered) {
+                    n = ssize_t(buffer->next(&data));
+                } else {
+                    n = ::read(in.fd, buf.get(), CHUNK);
+                    if (n < 0 && errno == EINTR)
+                        continue;
+                    if (n < 0)
+                        throw_errno(src);
+                }
                 if (n == 0)
                     break;
+                QElapsedTimer writing;
+                writing.start();
                 for (ssize_t off = 0; off < n;) {
-                    ssize_t w = ::write(out.fd, buf.get() + off, size_t(n - off));
+                    ssize_t w = ::write(out.fd, data + off, size_t(n - off));
                     if (w < 0 && errno == EINTR)
                         continue;
                     if (w < 0)
                         throw_errno(dst);
                     off += w;
                 }
+                if (buffered)
+                    buffer->wrote(n, writing.nsecsElapsed());
                 done += n;
+                written += n;
+                if (buffer && !told_slow && buffer->source_too_slow()) {
+                    told_slow = true;
+                    task->log(QString("The source reads at %1/s, slower than the tape's lowest streaming speed: the tape "
+                                      "writes in bursts from the buffer, stopping in between. Copying from a faster "
+                                      "drive, or making an archive on a fast disk first, would keep it streaming.")
+                                  .arg(human_size(qint64(buffer->source_rate()))));
+                }
                 report_progress(name);
             }
             copy_times_mode(out.fd, st);
-            struct stat old;   // replacing something: on disk before the rename (a crash leaves the old or the new)
-            if (stat_at(ddir, dname, old) && ::fsync(out.fd) != 0)
+            // replacing something: on disk before the rename (a crash leaves the old or the new). Not on a tape: an fsync
+            // there writes LTFS's index (the drive stops), and LTFS never overwrites data anyway: until the rename is in
+            // the index, the old file is what the tape has
+            struct stat old;
+            if (!to_tape && stat_at(ddir, dname, old) && ::fsync(out.fd) != 0)
                 throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
@@ -865,6 +1181,10 @@ private:
         } catch (...) {
             out.reset();
             ::unlinkat(ddir, enc(part).constData(), 0);
+            if (to_tape && written >= 1024LL * 1024 * 1024)
+                task->log(QString("  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the "
+                                  "tape is reformatted.")
+                              .arg(human_size(written), name));
             throw;
         }
     }
@@ -890,23 +1210,31 @@ private:
     // fails on a taken name, and check-then-rename for a folder). A taken name throws conflict().
     void claim_name(int src_dir, const QString &src, int dst_dir, const QString &dst, const QString &shown)
     {
-        if (::renameat2(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), RENAME_NOREPLACE) == 0)
+        QByteArray s = enc(src), d = enc(dst);
+        if (util::rename_noreplace(src_dir, s.constData(), dst_dir, d.constData()) == 0)
             return;
         int e = errno;
         if (e == EINVAL) {
             struct stat st, existing;
-            if (stat_at(src_dir, src, st) && S_ISDIR(st.st_mode)) {
+            bool dir = stat_at(src_dir, src, st) && S_ISDIR(st.st_mode), check_then_rename = dir;
+            if (!dir) {
+                if (util::link_at(src_dir, s.constData(), dst_dir, d.constData()) == 0) {
+                    ::unlinkat(src_dir, s.constData(), 0);
+                    return;
+                }
+                e = errno;
+                check_then_rename = util::no_link_support(e);
+            }
+            // a folder can't be linked, and some file systems link nothing (LTFS tapes: link() fails with EPERM, which
+            // isn't a permission problem): check, then rename. Not atomic: a file another program makes under that name
+            // between the two could be replaced; the best these file systems allow
+            if (check_then_rename) {
                 if (stat_at(dst_dir, dst, existing))
                     e = EEXIST;
-                else if (::renameat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData()) == 0)
+                else if (::renameat(src_dir, s.constData(), dst_dir, d.constData()) == 0)
                     return;
                 else
                     e = errno;
-            } else if (::linkat(src_dir, enc(src).constData(), dst_dir, enc(dst).constData(), 0) == 0) {
-                ::unlinkat(src_dir, enc(src).constData(), 0);
-                return;
-            } else {
-                e = errno;
             }
         }
         if (e == EEXIST)
@@ -1017,10 +1345,17 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
         }
         return errors;
     };
-    admin::retry_as_admin(parent, title, message, work, [on_done](bool) {
-        if (on_done)
-            on_done();
-    });
+    QStringList paths;
+    for (const Job &j : denied)
+        paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
+    paths.removeAll(QString());
+    admin::retry_as_admin(
+        parent, title, message, work,
+        [on_done](bool) {
+            if (on_done)
+                on_done();
+        },
+        paths);
 }
 
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done,
@@ -1054,6 +1389,18 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
                     win->statusBar()->showMessage(what + " can't be undone: what was replaced is gone.", 8000);
             }
         }
+        // a tape changed: its index written now (LTFS otherwise writes it only at unmount or on its own timer), so a crash
+        // or power cut afterwards doesn't lose what was put on it
+        if (*ops) {
+            QSet<QString> tapes;
+            for (const Job &j : (*ops)->touched) {
+                for (const QString &path : {j.dst, j.op.contains("move") || j.op == "delete" ? j.src : QString()})
+                    if (drives::slow_kind(path) == drives::Slow::Tape)
+                        tapes << drives::slow_root(path);
+            }
+            for (const QString &root : tapes)
+                drives::sync_tape_job(p, root);
+        }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
             warn(p, title, "Some items could not be processed:\n\n" + errors.mid(0, 20).join('\n'));
@@ -1066,9 +1413,21 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
     };
     auto work = [ops, jobs](Task *task) {
         *ops = std::make_unique<Ops>(task, jobs);
-        return QVariant((*ops)->run());
+        QStringList errors = (*ops)->run();
+        task->log(errors.isEmpty() ? QString("Finished.") : QString("Finished, with %1 error(s).").arg(errors.size()));
+        return QVariant(errors);
     };
-    return run_job(parent, title, work, finished);
+    // the drives it reads and writes (its lanes in the job queue); a move within one drive is a rename: no lane
+    QStringList paths, steps;
+    for (const Job &j : jobs) {
+        steps << step_text(j);
+        struct stat a, b;
+        bool rename_only = j.op == "move" && lstat_(j.src, a) && stat_(dirname(j.dst), b) && a.st_dev == b.st_dev;
+        if (!rename_only)
+            paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
+    }
+    paths.removeAll(QString());
+    return queue_job(parent, title, paths, work, finished, true, steps);
 }
 
 namespace {
@@ -1153,7 +1512,51 @@ void plan_transfer(QWidget *parent, const QStringList &sources, const QString &d
     p->op = op;
     p->dest_real = realpath(dest_dir);
     p->planned = std::move(planned);
-    plan_next(p);
+    if (drives::slow_kind(dest_dir) != drives::Slow::Tape) {
+        plan_next(p);
+        return;
+    }
+    // to a tape: many small files are slow to write and waste tape (each costs about as much as a large one), so
+    // the user is asked first; counted on a worker (the sources may be large, or slow themselves)
+    const int many = 1000;
+    run_task(
+        parent, "Counting files",
+        [sources, many]() {
+            int small = 0;
+            for (const QString &src : sources) {
+                struct stat st;
+                if (!lstat_(src, st))
+                    continue;
+                if (!S_ISDIR(st.st_mode)) {
+                    small += st.st_size < (1 << 20);
+                    continue;
+                }
+                walk(src, [&](const QString &root, QStringList &, QStringList &files) {
+                    for (const QString &f : files) {
+                        struct stat fst;
+                        if (lstat_(join(root, f), fst) && fst.st_size < (1 << 20))
+                            ++small;
+                    }
+                    return small <= many;
+                });
+                if (small > many)
+                    break;
+            }
+            return QVariant(small);
+        },
+        [p, many](const QVariant &n) {
+            if (n.toInt() <= many) {
+                plan_next(p);
+                return;
+            }
+            ask_yes(p->parent, "Copy to Tape",
+                    QString("This copies more than %1 small files (under 1 MB) to the tape. A tape writes each file as "
+                            "slowly as a large one and uses extra space for it, so this will be slow. Putting them in an "
+                            "archive first (Compress…) and copying that is much faster.\n\nCopy them anyway?")
+                        .arg(many),
+                    [p]() { plan_next(p); });
+        },
+        true);
 }
 
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
@@ -1319,7 +1722,7 @@ Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
         }
         return still_there(paths);
     };
-    return run_job(parent, title, fn, [on_done](const QVariant &r) {
+    return queue_job(parent, title, paths, fn, [on_done](const QVariant &r) {
         if (r.isValid() && on_done)
             on_done(r.toStringList());
     });
@@ -1452,7 +1855,7 @@ void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(c
         release();
         return out;
     };
-    run_job(parent, "Loading from device", fn, [on_done](const QVariant &res) {
+    queue_job(parent, "Loading from device", paths, fn, [on_done](const QVariant &res) {
         if (res.isValid())
             on_done(res.toStringList());
     });

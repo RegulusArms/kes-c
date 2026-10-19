@@ -2,8 +2,10 @@
 
 #include "app.h"
 #include "fileops.h"
+#include "keyring.h"
 #include "windows.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -13,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMutex>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -21,6 +24,7 @@
 #include <QStandardItemModel>
 #include <QStatusBar>
 #include <QVBoxLayout>
+#include <QWaitCondition>
 
 using namespace util;
 
@@ -59,19 +63,31 @@ static bool argv_tool(const QString &t) { return t == "zpaq"; }
 
 namespace archive_ui {
 
-void ask_password(QWidget *parent, const QString &path, bool wrong, std::function<void(const QString &)> ok)
+QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool offer_remember,
+                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled)
 {
     auto *dlg = new QDialog(parent);
+    dlg->setObjectName("archive_password");
     dlg->setWindowTitle("Password Required");
     auto *lay = new QVBoxLayout(dlg);
-    QString msg = wrong ? QString("<b>Wrong password</b> for “%1”. Try again:").arg(basename(path).toHtmlEscaped())
-                        : QString("“%1” is encrypted. Enter its password:").arg(basename(path));
+    QString n = basename(path).toHtmlEscaped();
+    QString msg = reason == Ask::Wrong     ? QString("<b>Wrong password</b> for “%1”. Try again:").arg(n)
+                  : reason == Ask::NotSame ? QString("The password entered before doesn't open “%1”. Enter its "
+                                                     "password:").arg(n)
+                                           : QString("“%1” is encrypted. Enter its password:").arg(n);
     auto *lbl = new QLabel(msg);
-    lbl->setTextFormat(wrong ? Qt::RichText : Qt::PlainText);
+    lbl->setTextFormat(Qt::RichText);
     lbl->setWordWrap(true);
     lay->addWidget(lbl);
     auto *edit = new QLineEdit;
     lay->addLayout(password_row(edit));
+    QCheckBox *remember = nullptr;
+    if (offer_remember) {
+        remember = new QCheckBox("Remember this password");
+        remember->setObjectName("remember");
+        lay->addWidget(remember);
+        lay->addWidget(small("Saved in your login keyring (Passwords and Keys), where any app you run can read it."));
+    }
     QString t = archive::extract_tool(path);
     if (argv_tool(t))
         lay->addWidget(small(QString(ARGV_NOTE).arg(t)));
@@ -79,14 +95,17 @@ void ask_password(QWidget *parent, const QString &path, bool wrong, std::functio
     bb->button(QDialogButtonBox::Ok)->setText("Extract");
     QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
     QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
-    QObject::connect(dlg, &QDialog::accepted, dlg, [edit, ok]() {
-        if (!edit->text().isEmpty())
-            ok(edit->text());
+    QObject::connect(dlg, &QDialog::finished, dlg, [edit, remember, ok, cancelled](int r) {
+        if (r == QDialog::Accepted && !edit->text().isEmpty())
+            ok(edit->text(), remember && remember->isChecked());
+        else if (cancelled)
+            cancelled();
     });
     lay->addWidget(bb);
     dlg->resize(420, dlg->sizeHint().height());
     edit->setFocus();
     show_free(dlg);
+    return dlg;
 }
 
 }  // namespace archive_ui
@@ -495,14 +514,24 @@ void CompressDialog::save(const archive::Spec &sp)
 
 // ---------------------------------------------------------------- extract
 
-ExtractDialog::ExtractDialog(QWidget *parent, const QString &path, bool encrypted)
-    : QDialog(parent), path(path), encrypted(encrypted)
+ExtractDialog::ExtractDialog(QWidget *parent, const QStringList &paths, bool encrypted, bool offer_remember)
+    : QDialog(parent), paths(paths), path(paths.value(0)), encrypted(encrypted)
 {
-    setWindowTitle("Extract");
+    bool many = paths.size() > 1;
+    setWindowTitle(many ? "Extract All" : "Extract");
     QSettings &s = settings();
     auto *form = new QFormLayout(this);
     QString t = archive::extract_tool(path);
-    form->addRow("Archive:", new QLabel(QString("%1   (using %2)").arg(basename(path), t)));
+    if (many) {
+        QStringList names;
+        for (const QString &p : paths)
+            names << basename(p);
+        auto *lbl = new QLabel(QString("%1 archives").arg(paths.size()));
+        lbl->setToolTip(names.join('\n'));
+        form->addRow("Archives:", lbl);
+    } else {
+        form->addRow("Archive:", new QLabel(QString("%1   (using %2)").arg(basename(path), t)));
+    }
     dest = new QLineEdit(dirname(path));
     auto *browse_btn = new QPushButton("Browse…");
     connect(browse_btn, &QPushButton::clicked, this, &ExtractDialog::browse);
@@ -510,11 +539,13 @@ ExtractDialog::ExtractDialog(QWidget *parent, const QString &path, bool encrypte
     row->addWidget(dest, 1);
     row->addWidget(browse_btn);
     form->addRow("Extract to:", row);
-    subfolder = new QCheckBox(QString("Into a new folder named “%1”").arg(archive::archive_stem(path)));
+    subfolder = new QCheckBox(many ? QString("Each into a new folder named after its archive")
+                                   : QString("Into a new folder named “%1”").arg(archive::archive_stem(path)));
     subfolder->setChecked(s.value("archive/x_subfolder", true).toBool());
     form->addRow(subfolder);
-    form->addRow(small("If everything in the archive is already inside one folder, that folder is used instead of "
-                       "nesting it."));
+    form->addRow(small(QString("If everything in %1 is already inside one folder, that folder is used instead of "
+                               "nesting it.")
+                           .arg(many ? "an archive" : "the archive")));
     overwrite = new QComboBox;
     overwrite->addItem("Keep both (rename)", "rename");
     overwrite->addItem("Replace", "overwrite");
@@ -524,29 +555,46 @@ ExtractDialog::ExtractDialog(QWidget *parent, const QString &path, bool encrypte
     connect(subfolder, &QCheckBox::toggled, this, [this](bool on) { overwrite->setEnabled(!on); });
     overwrite->setEnabled(!subfolder->isChecked());
     pw = new QLineEdit;
-    form->addRow(encrypted ? "Password:" : "Password (if any):", password_row(pw));
-    if (encrypted)
-        form->addRow(small("This archive is encrypted."));
-    if (argv_tool(t))
-        form->addRow(small(QString(ARGV_NOTE).arg(t)));
-    if (archive::can_keep_damaged(path)) {   // not remembered: keeping broken files is for the one damaged archive
+    if (many) {   // each archive's password is found or asked for as it comes (the first one typed is tried on the rest)
+        form->addRow(small("Encrypted archives: the first password you enter is tried on the ones after it, and you're "
+                           "asked again only for one it doesn't open."));
+    } else {
+        form->addRow(encrypted ? "Password:" : "Password (if any):", password_row(pw));
+        if (encrypted) {
+            form->addRow(small(offer_remember ? "This archive is encrypted. Leave the password empty to use one you've "
+                                                "saved, or to be asked."
+                                              : "This archive is encrypted."));
+            if (offer_remember) {
+                remember = new QCheckBox("Remember this password");
+                remember->setObjectName("remember");
+                form->addRow(remember);
+                form->addRow(small("Saved in your login keyring (Passwords and Keys), where any app you run can read "
+                                   "it."));
+            }
+        }
+        if (argv_tool(t))
+            form->addRow(small(QString(ARGV_NOTE).arg(t)));
+    }
+    if (std::any_of(paths.begin(), paths.end(), [](const QString &p) { return archive::can_keep_damaged(p); })) {
+        // not remembered: keeping broken files is for the one damaged archive
         keep_damaged = new QCheckBox("Keep damaged files");
         form->addRow(keep_damaged);
         form->addRow(small("Files that fail their checksum are kept as far as they could be extracted, instead of the "
                            "extraction failing. They're listed afterwards: expect them to be broken in places."));
     }
-    trash_after = new QCheckBox("Move the archive to the trash afterwards");
+    trash_after = new QCheckBox(many ? "Move the archives to the trash afterwards"
+                                     : "Move the archive to the trash afterwards");
     trash_after->setChecked(s.value("archive/x_trash", false).toBool());
     form->addRow(trash_after);
-    open_after = new QCheckBox("Open the extracted folder");
+    open_after = new QCheckBox(many ? "Open the folder they're extracted to" : "Open the extracted folder");
     open_after->setChecked(s.value("archive/x_open", false).toBool());
     form->addRow(open_after);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    bb->button(QDialogButtonBox::Ok)->setText("Extract");
+    bb->button(QDialogButtonBox::Ok)->setText(many ? "Extract All" : "Extract");
     connect(bb, &QDialogButtonBox::accepted, this, &ExtractDialog::ok);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     form->addRow(bb);
-    (encrypted ? pw : dest)->setFocus();
+    (encrypted && !many ? pw : dest)->setFocus();
     resize(560, sizeHint().height());
 }
 
@@ -558,10 +606,6 @@ void ExtractDialog::browse()
 void ExtractDialog::ok()
 {
     QString d = expanduser(dest->text().trimmed());
-    if (encrypted && pw->text().isEmpty()) {
-        warn(this, "Extract", "This archive is encrypted. Enter its password.");
-        return;
-    }
     if (!isdir(d)) {
         ask_yes(this, "Extract", QString("“%1” doesn't exist. Create it?").arg(d), [this, d]() {
             try {
@@ -592,7 +636,7 @@ QVariantMap ExtractDialog::options() const
     return {{"dest", expanduser(dest->text().trimmed())}, {"subfolder", subfolder->isChecked()},
             {"overwrite", overwrite->currentData()},       {"password", pw->text()},
             {"trash_after", trash_after->isChecked()},     {"open_after", open_after->isChecked()},
-            {"keep_damaged", keep_damaged && keep_damaged->isChecked()}};
+            {"keep_damaged", keep_damaged && keep_damaged->isChecked()}, {"remember", remember && remember->isChecked()}};
 }
 
 // ---------------------------------------------------------------- flows (called from the main window)
@@ -611,8 +655,8 @@ static bool check_tool(MainWindow *win, const QString &path)
     return true;
 }
 
-// check the archive (on a thread) and call then(encrypted)
-static void probe_then(MainWindow *win, const QString &path, std::function<void(bool)> then)
+// check the archive (on a thread) and call then(encrypted, keyring): keyring, an encrypted one's password can be saved
+static void probe_then(MainWindow *win, const QString &path, std::function<void(bool, bool)> then)
 {
     if (!check_tool(win, path))
         return;
@@ -621,7 +665,8 @@ static void probe_then(MainWindow *win, const QString &path, std::function<void(
         win, "Opening " + basename(path),
         [path]() {
             archive::ProbeResult r = archive::probe(path);
-            return QVariant(QVariantMap{{"encrypted", r.encrypted}, {"error", r.error}});
+            return QVariant(QVariantMap{{"encrypted", r.encrypted}, {"error", r.error},
+                                        {"keyring", r.encrypted && keyring::available()}});
         },
         [w, then](const QVariant &res) {
             QVariantMap info = res.toMap();
@@ -630,7 +675,7 @@ static void probe_then(MainWindow *win, const QString &path, std::function<void(
             if (!info["error"].toString().isEmpty())
                 warn(w, "Extract", info["error"].toString());
             else
-                then(info["encrypted"].toBool());
+                then(info["encrypted"].toBool(), info["keyring"].toBool());
         });
 }
 
@@ -698,12 +743,169 @@ static void say_damaged(QWidget *win, const QString &name, const QStringList &da
     show_free(box);
 }
 
-static void run_extract(MainWindow *win, const QString &path, const QVariantMap &opts)
+// ---- Extract All: one job for one or several archives
+
+// A password asked for from the job's thread: the window opens in the UI thread while the job waits (it can still be
+// cancelled; its window then closes).
+struct Asking {
+    QMutex m;
+    QWaitCondition answered;
+    bool done = false;
+    QString password;
+    bool remember = false;
+    QPointer<QDialog> dlg;
+};
+
+// (password, remember), or an empty password when the window was cancelled or closed. Throws Cancelled.
+static QPair<QString, bool> ask_from_job(Task *task, QPointer<QWidget> parent, const QString &path, Ask reason,
+                                         bool offer_remember)
 {
-    QString name = basename(path);
-    auto work = [path, opts](Task *task) -> QVariant {
-        QString dest = opts["dest"].toString();
-        bool sub = opts["subfolder"].toBool();
+    auto a = std::make_shared<Asking>();
+    task->report(0, 0, "Waiting for the password for " + basename(path), true);
+    auto finish = [a](const QString &pw, bool remember) {
+        QMutexLocker l(&a->m);
+        if (a->done)
+            return;
+        a->done = true;
+        a->password = pw;
+        a->remember = remember;
+        a->answered.wakeAll();
+    };
+    QMetaObject::invokeMethod(
+        qApp,
+        [a, parent, path, reason, offer_remember, finish]() {
+            QDialog *d = ask_password(parent, path, reason, offer_remember, finish, [finish]() { finish(QString(), false); });
+            QObject::connect(d, &QObject::destroyed, [finish]() { finish(QString(), false); });   // with its window
+            QMutexLocker l(&a->m);
+            a->dlg = d;
+        },
+        Qt::QueuedConnection);
+    QMutexLocker l(&a->m);
+    while (!a->done) {
+        a->answered.wait(&a->m, 200);
+        if (task->cancelled && !a->done) {
+            l.unlock();
+            QMetaObject::invokeMethod(qApp, [a]() {
+                QDialog *d;
+                {
+                    QMutexLocker l2(&a->m);
+                    d = a->dlg;
+                }
+                if (d)
+                    d->reject();
+            }, Qt::QueuedConnection);
+            task->check();   // throws
+            l.relock();
+        }
+    }
+    return {a->password, a->remember};
+}
+
+// What the job knows about passwords: the last one typed (tried first on every encrypted archive after it) and the
+// keyring's, read once
+struct Passwords {
+    QString typed, typed_for;   // and the archive it was typed for
+    std::optional<bool> keyring;   // a Secret Service answers (asked once, when the first encrypted archive comes)
+    std::optional<QStringList> saved;
+    bool has_keyring()
+    {
+        if (!keyring)
+            keyring = keyring::available();
+        return *keyring;
+    }
+    const QStringList &all_saved()
+    {
+        if (!saved)
+            saved = has_keyring() ? keyring::all() : QStringList();
+        return *saved;
+    }
+};
+
+// The password that opens `path`: the one typed last, the one saved for it, the other saved ones (each a quick test),
+// then asking until one opens it. Empty when asking was cancelled. `tried`: ones known not to open it (skipped).
+// `remember`: ticked in the dialog for the password given in `pw.typed` (stored once it opens the archive).
+static QString find_password(Task *task, QPointer<QWidget> parent, const QString &path, Passwords &pw,
+                             QStringList &tried, bool &remember)
+{
+    QString fp;
+    auto opens = [&](const QString &c) {
+        if (c.isEmpty() || tried.contains(c))
+            return false;
+        task->check();
+        if (archive::password_opens(task, path, c))
+            return true;
+        tried << c;
+        return false;
+    };
+    auto keep = [&](const QString &c, bool ticked) {
+        if (ticked && pw.has_keyring()) {
+            if (fp.isEmpty())
+                fp = keyring::fingerprint(path);
+            keyring::store(fp, basename(path), c);
+            if (pw.saved && !pw.saved->contains(c))
+                pw.saved->append(c);
+        }
+    };
+    bool typed_tried = !pw.typed.isEmpty() && !tried.contains(pw.typed);
+    if (opens(pw.typed)) {
+        keep(pw.typed, remember);
+        remember = false;
+        return pw.typed;
+    }
+    remember = false;
+    if (pw.has_keyring()) {
+        fp = keyring::fingerprint(path);
+        if (QString c = keyring::lookup(fp); opens(c))
+            return c;
+        for (const QString &c : pw.all_saved())
+            if (opens(c))
+                return c;
+    }
+    Ask reason = typed_tried && pw.typed_for != path ? Ask::NotSame : tried.isEmpty() ? Ask::First : Ask::Wrong;
+    for (;;) {
+        auto [c, ticked] = ask_from_job(task, parent, path, reason, pw.has_keyring());
+        if (c.isEmpty())
+            return QString();
+        pw.typed = c;   // the one tried on the rest
+        pw.typed_for = path;
+        if (opens(c)) {
+            keep(c, ticked);
+            return c;
+        }
+        reason = Ask::Wrong;
+    }
+}
+
+// One archive, as Extract Here / Extract To… does it: into a new folder (or its single top-level folder), or into
+// `dest` itself. Returns its outcome: status ok, password (asking was cancelled), missing (a tool), error.
+static QVariantMap extract_one(Task *task, QPointer<QWidget> parent, const QString &path, const QVariantMap &opts,
+                               Passwords &pw)
+{
+    QVariantMap res{{"path", path}, {"name", basename(path)}};
+    auto failed = [&res](const QString &status, const QString &message = QString()) {
+        res["status"] = status;
+        res["message"] = message;
+        return res;
+    };
+    QString missing = archive::missing_extract_tool(path);
+    if (!missing.isEmpty())
+        return failed("missing", missing);
+    task->report(0, 0, "Opening " + basename(path));
+    archive::ProbeResult probe = archive::probe(path);
+    if (!probe.error.isEmpty())
+        return failed("error", probe.error);
+    QStringList tried;
+    bool remember = opts["remember"].toBool();
+    QString password;
+    if (probe.encrypted) {
+        password = find_password(task, parent, path, pw, tried, remember);
+        if (password.isEmpty())
+            return failed("password");
+    }
+    QString dest = opts["dest"].toString().isEmpty() ? dirname(path) : opts["dest"].toString();
+    bool sub = opts["subfolder"].toBool();
+    for (;;) {
+        task->check();
         QString out = dest;
         if (sub) {
             out = unique_path(dest, archive::archive_stem(path), "num");
@@ -712,16 +914,26 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         QList<archive::DroppedLink> dropped;
         archive::Damaged damaged;
         try {
-            archive::extract(task, path, out, opts["password"].toString(), opts["overwrite"].toString(), 0, &dropped,
+            archive::extract(task, path, out, password, opts["overwrite"].toString(), 0, &dropped,
                              opts["keep_damaged"].toBool() ? &damaged : nullptr);
         } catch (const archive::WrongPassword &) {
+            // the quick test can pass where extracting fails (or the archive didn't look encrypted): find another
             if (sub)
                 rmtree(out);
-            return QVariantMap{{"wrong_password", true}};
-        } catch (...) {
+            if (!password.isEmpty())
+                tried << password;
+            password = find_password(task, parent, path, pw, tried, remember);
+            if (password.isEmpty())
+                return failed("password");
+            continue;
+        } catch (const Cancelled &) {
             if (sub)
                 rmtree(out);
             throw;
+        } catch (const std::exception &e) {
+            if (sub)
+                rmtree(out);
+            return failed("error", QString::fromStdString(e.what()));
         }
         QString result = sub ? collapse(out, dest) : out;
         if (opts["trash_after"].toBool()) {
@@ -733,76 +945,355 @@ static void run_extract(MainWindow *win, const QString &path, const QVariantMap 
         QVariantList links;
         for (const archive::DroppedLink &l : dropped)
             links << QVariant(QStringList{l.path, l.target, l.why});
-        return QVariantMap{{"out", result}, {"dropped", links}, {"damaged", damaged.files},
-                           {"damaged_details", damaged.details}};
+        res.insert({{"status", "ok"}, {"out", result}, {"dropped", links}, {"damaged", damaged.files},
+                    {"damaged_details", damaged.details}, {"with_password", !password.isEmpty()}});
+        return res;
+    }
+}
+
+QStringList archives_of(const QStringList &paths)
+{
+    QStringList out;
+    for (const QString &p : paths) {
+        if (!archive::can_extract(p) || isdir(p))
+            continue;
+        QString first = archive::first_volume(p);
+        if (!out.contains(first))
+            out << first;
+    }
+    return out;
+}
+
+// A single archive's outcome, as Extract Here / Extract To… has always told it
+static void say_one(MainWindow *w, const QVariantMap &res, const QVariantMap &opts)
+{
+    QString name = res["name"].toString(), status = res["status"].toString();
+    if (status == "password") {
+        w->statusBar()->showMessage(QString("Extracting %1 cancelled").arg(name), 4000);
+        return;
+    }
+    if (status == "missing") {
+        warn(w, "Extract", QString("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install ")
+                               .arg(name) + res["message"].toString());
+        return;
+    }
+    if (status == "error") {
+        warn(w, "Extracting " + name, res["message"].toString());
+        return;
+    }
+    QString out = res["out"].toString();
+    QStringList damaged = res["damaged"].toStringList();
+    w->statusBar()->showMessage(damaged.isEmpty() ? QString("Extracted %1 to %2").arg(name, out)
+                                                  : QString("Extracted %1 to %2, keeping %3 damaged file%4")
+                                                        .arg(name, out, QString::number(damaged.size()),
+                                                             damaged.size() > 1 ? "s" : ""),
+                                6000);
+    if (!damaged.isEmpty())
+        say_damaged(w, name, damaged, res["damaged_details"].toString(), res["with_password"].toBool());
+    if (!res["dropped"].toList().isEmpty())
+        say_dropped_links(w, name, res["dropped"].toList());
+    if (opts["open_after"].toBool())
+        w->navigate(out);
+    else if (w->pane() && w->pane()->dir() == dirname(out))
+        w->pane()->select_later(out);
+}
+
+// Several archives' outcomes: one summary of what was extracted and what wasn't
+static void say_all(MainWindow *w, const QVariantList &results, const QStringList &archives, bool stopped,
+                    const QVariantMap &opts)
+{
+    QStringList lines, details;
+    int ok = 0;
+    QString last_out;
+    for (const QVariant &v : results) {
+        QVariantMap r = v.toMap();
+        QString name = r["name"].toString(), status = r["status"].toString();
+        if (status == "ok") {
+            ++ok;
+            last_out = r["out"].toString();
+            QString line = "✓ " + name + " → " + basename(last_out);
+            QStringList damaged = r["damaged"].toStringList();
+            if (!damaged.isEmpty()) {
+                line += QString(" (kept %1 damaged file%2)").arg(damaged.size()).arg(damaged.size() > 1 ? "s" : "");
+                details << name + ": damaged files kept:\n  " + damaged.mid(0, 50).join("\n  ") + "\n" +
+                               r["damaged_details"].toString();
+            }
+            QVariantList dropped = r["dropped"].toList();
+            if (!dropped.isEmpty()) {
+                line += QString(" (left out %1 link%2 leading outside it)").arg(dropped.size()).arg(dropped.size() > 1 ? "s" : "");
+                QStringList ls;
+                for (const QVariant &d : dropped) {
+                    QStringList l = d.toStringList();
+                    ls << l.value(0) + " → " + l.value(1) + (l.value(2).isEmpty() ? "" : " (couldn't be removed: " + l.value(2) + ")");
+                }
+                details << name + ": symbolic links left out:\n  " + ls.join("\n  ");
+            }
+            lines << line;
+        } else if (status == "password") {
+            lines << "✗ " + name + " — no password (asking was cancelled)";
+        } else if (status == "missing") {
+            lines << "✗ " + name + " — needs another program: sudo apt install " + r["message"].toString();
+        } else {
+            QString msg = r["message"].toString();
+            lines << "✗ " + name + " — " + msg.section('\n', 0, 0);
+            details << name + ":\n" + msg;
+        }
+    }
+    for (int i = results.size(); i < archives.size(); ++i)
+        lines << "– " + basename(archives[i]) + " — not extracted (stopped)";
+    QString head = QString("Extracted %1 of %2 archives%3.")
+                       .arg(QString::number(ok), QString::number(archives.size()), stopped ? " (stopped)" : "");
+    w->statusBar()->showMessage(head, 6000);
+    auto *box = new QMessageBox(ok == archives.size() && details.isEmpty() ? QMessageBox::Information : QMessageBox::Warning,
+                                "Extract All", head + "\n\n" + lines.join('\n'), QMessageBox::Ok, w);
+    box->setObjectName("extract_all_summary");
+    if (!details.isEmpty())
+        box->setDetailedText(details.join("\n\n"));
+    show_free(box);
+    if (ok && opts["open_after"].toBool())
+        w->navigate(opts["dest"].toString().isEmpty() ? dirname(last_out) : opts["dest"].toString());
+}
+
+Task *extract_all(MainWindow *win, const QStringList &archives, const QVariantMap &opts)
+{
+    if (archives.isEmpty())
+        return nullptr;
+    QPointer<QWidget> parent(win);
+    auto work = [archives, opts, parent](Task *task) -> QVariant {
+        Passwords pw;
+        pw.typed = opts["password"].toString();   // typed in Extract To… for its archive
+        pw.typed_for = archives[0];
+        QVariantList results;
+        try {
+            for (int i = 0; i < archives.size(); ++i) {
+                task->check();
+                task->step = i;
+                QVariantMap r = extract_one(task, parent, archives[i], opts, pw);
+                if (r["status"] == "ok")
+                    task->log(r["name"].toString() + " → " + r["out"].toString());
+                else   // (the Jobs window shows a job with these as done with errors)
+                    task->log(r["name"].toString() + "  failed: " +
+                              (r["status"] == "password" ? QString("no password (asking was cancelled)")
+                               : r["status"] == "missing" ? "needs " + r["message"].toString()
+                                                          : r["message"].toString().section('\n', 0, 0)));
+                results << r;
+            }
+        } catch (const Cancelled &) {
+            if (archives.size() == 1)
+                throw;
+            task->was_cancelled = true;   // what was extracted before the ✕ is still told
+            return QVariantMap{{"results", results}, {"stopped", true}};
+        }
+        return QVariantMap{{"results", results}, {"stopped", false}};
     };
     QPointer<MainWindow> w(win);
-    auto done = [w, path, name, opts](const QVariant &r) {
+    QString title = archives.size() == 1 ? "Extracting " + basename(archives[0])
+                                         : QString("Extracting %1 archives").arg(archives.size());
+    auto done = [w, archives, opts, title](const QVariant &r) {
         if (!w)
             return;
         if (!r.isValid()) {   // cancelled
-            w->statusBar()->showMessage(QString("Extracting %1 cancelled").arg(name), 4000);
+            w->statusBar()->showMessage(title + " cancelled", 4000);
             return;
         }
-        QVariantMap res = r.toMap();
-        if (res.value("wrong_password").toBool()) {
-            ask_password(w, path, true, [w, path, opts](const QString &pw) {
-                QVariantMap again = opts;
-                again["password"] = pw;
-                run_extract(w, path, again);
-            });
-            return;
-        }
-        QString out = res["out"].toString();
-        QStringList damaged = res["damaged"].toStringList();
-        w->statusBar()->showMessage(damaged.isEmpty() ? QString("Extracted %1 to %2").arg(name, out)
-                                                      : QString("Extracted %1 to %2, keeping %3 damaged file%4")
-                                                            .arg(name, out, QString::number(damaged.size()),
-                                                                 damaged.size() > 1 ? "s" : ""),
-                                    6000);
-        if (!damaged.isEmpty())
-            say_damaged(w, name, damaged, res["damaged_details"].toString(), !opts["password"].toString().isEmpty());
-        if (!res["dropped"].toList().isEmpty())
-            say_dropped_links(w, name, res["dropped"].toList());
-        if (opts["open_after"].toBool())
-            w->navigate(out);
-        else if (w->pane() && w->pane()->dir() == dirname(out))
-            w->pane()->select_later(out);
+        QVariantMap m = r.toMap();
+        QVariantList results = m["results"].toList();
+        if (archives.size() == 1 && results.size() == 1)
+            say_one(w, results[0].toMap(), opts);
+        else
+            say_all(w, results, archives, m["stopped"].toBool(), opts);
     };
-    fileops::run_job(win, "Extracting " + name, work, done);
+    QStringList lanes = archives;
+    QStringList steps;
+    for (const QString &a : archives)
+        steps << basename(a);
+    lanes << (opts["dest"].toString().isEmpty() ? dirname(archives[0]) : opts["dest"].toString());
+    return fileops::queue_job(win, title, lanes, work, done, true, archives.size() > 1 ? steps : QStringList());
+}
+
+QString job_password(Task *task, QPointer<QWidget> parent, const QString &path, QStringList &tried)
+{
+    Passwords pw;
+    bool remember = false;
+    return find_password(task, parent, path, pw, tried, remember);
+}
+
+// ---- Test Archive: one job for one or several archives
+
+// One archive tested: status ok, damaged, password (asking was cancelled), missing (a tool), error
+static QVariantMap test_one(Task *task, QPointer<QWidget> parent, const QString &path, Passwords &pw)
+{
+    QVariantMap res{{"path", path}, {"name", basename(path)}};
+    auto failed = [&res](const QString &status, const QString &message = QString()) {
+        res["status"] = status;
+        res["message"] = message;
+        return res;
+    };
+    QString missing = archive::missing_extract_tool(path);
+    if (!missing.isEmpty())
+        return failed("missing", missing);
+    task->report(0, 0, "Opening " + basename(path));
+    archive::ProbeResult probe = archive::probe(path);
+    if (!probe.error.isEmpty())
+        return failed("damaged", probe.error);
+    QStringList tried;
+    bool remember = false;
+    QString password;
+    if (probe.encrypted) {
+        password = find_password(task, parent, path, pw, tried, remember);
+        if (password.isEmpty())
+            return failed("password");
+    }
+    for (;;) {
+        try {
+            archive::TestResult r = archive::test(task, path, password);
+            if (r.ok)
+                return failed("ok");
+            res["damaged"] = r.damaged;
+            return failed("damaged", r.details);
+        } catch (const archive::WrongPassword &) {
+            if (!password.isEmpty())
+                tried << password;
+            password = find_password(task, parent, path, pw, tried, remember);
+            if (password.isEmpty())
+                return failed("password");
+        } catch (const Cancelled &) {
+            throw;
+        } catch (const std::exception &e) {
+            return failed("error", QString::fromStdString(e.what()));
+        }
+    }
+}
+
+static void say_tests(MainWindow *w, const QVariantList &results, const QStringList &archives, bool stopped)
+{
+    QStringList lines, details;
+    int ok = 0;
+    for (const QVariant &v : results) {
+        QVariantMap r = v.toMap();
+        QString name = r["name"].toString(), status = r["status"].toString(), msg = r["message"].toString();
+        QStringList damaged = r["damaged"].toStringList();
+        if (status == "ok") {
+            ++ok;
+            lines << "✓ " + name + " — OK";
+        } else if (status == "damaged") {
+            lines << "✗ " + name + " — damaged" +
+                         (damaged.isEmpty() ? QString()
+                                            : QString(": %1 file%2 failed %3 check")
+                                                  .arg(QString::number(damaged.size()), damaged.size() > 1 ? "s" : "",
+                                                       damaged.size() > 1 ? "their" : "its"));
+            details << name + ":\n" + (damaged.isEmpty() ? QString() : "  " + damaged.mid(0, 50).join("\n  ") + "\n") + msg;
+        } else if (status == "password") {
+            lines << "✗ " + name + " — not tested: no password (asking was cancelled)";
+        } else if (status == "missing") {
+            lines << "✗ " + name + " — needs another program: sudo apt install " + msg;
+        } else {
+            lines << "✗ " + name + " — " + msg.section('\n', 0, 0);
+            details << name + ":\n" + msg;
+        }
+    }
+    for (int i = results.size(); i < archives.size(); ++i)
+        lines << "– " + basename(archives[i]) + " — not tested (stopped)";
+    QString head;
+    if (archives.size() == 1 && results.size() == 1) {
+        QVariantMap r = results[0].toMap();
+        head = r["status"] == "ok" ? QString("“%1” is OK: everything in it passed its check.").arg(r["name"].toString())
+                                   : lines.value(0).mid(2);
+        lines.clear();
+    } else {
+        head = QString("%1 of %2 archives are OK%3.")
+                   .arg(QString::number(ok), QString::number(archives.size()), stopped ? " (stopped)" : "");
+    }
+    w->statusBar()->showMessage(head, 6000);
+    auto *box = new QMessageBox(ok == archives.size() ? QMessageBox::Information : QMessageBox::Warning,
+                                archives.size() == 1 ? "Test Archive" : "Test Archives",
+                                lines.isEmpty() ? head : head + "\n\n" + lines.join('\n'), QMessageBox::Ok, w);
+    box->setObjectName("test_summary");
+    if (!details.isEmpty())
+        box->setDetailedText(details.join("\n\n"));
+    show_free(box);
+}
+
+Task *test_archives(MainWindow *win, const QStringList &archives)
+{
+    if (archives.isEmpty())
+        return nullptr;
+    QPointer<QWidget> parent(win);
+    auto work = [archives, parent](Task *task) -> QVariant {
+        Passwords pw;
+        QVariantList results;
+        try {
+            for (int i = 0; i < archives.size(); ++i) {
+                task->check();
+                task->step = i;
+                QVariantMap r = test_one(task, parent, archives[i], pw);
+                if (r["status"] == "ok")
+                    task->log(r["name"].toString() + ": OK");
+                else
+                    task->log(r["name"].toString() + "  failed: " +
+                              (r["status"] == "password" ? QString("no password (asking was cancelled)")
+                                                         : r["message"].toString().section('\n', 0, 0)));
+                results << r;
+            }
+        } catch (const Cancelled &) {
+            if (archives.size() == 1)
+                throw;
+            task->was_cancelled = true;
+            return QVariantMap{{"results", results}, {"stopped", true}};
+        }
+        return QVariantMap{{"results", results}, {"stopped", false}};
+    };
+    QPointer<MainWindow> w(win);
+    QString title = archives.size() == 1 ? "Testing " + basename(archives[0])
+                                         : QString("Testing %1 archives").arg(archives.size());
+    auto done = [w, archives, title](const QVariant &r) {
+        if (!w)
+            return;
+        if (!r.isValid()) {
+            w->statusBar()->showMessage(title + " cancelled", 4000);
+            return;
+        }
+        QVariantMap m = r.toMap();
+        say_tests(w, m["results"].toList(), archives, m["stopped"].toBool());
+    };
+    QStringList steps;
+    for (const QString &a : archives)
+        steps << basename(a);
+    return fileops::queue_job(win, title, archives, work, done, true, archives.size() > 1 ? steps : QStringList());
+}
+
+static QVariantMap here_options()
+{
+    return {{"dest", QString()}, {"subfolder", true}, {"overwrite", "rename"}, {"trash_after", false}, {"open_after", false}};
 }
 
 void extract_here(MainWindow *win, const QString &path)
 {
-    // extract next to the archive, into a new folder (or its single top-level folder); asks for a password when the
-    // archive is encrypted
-    QPointer<MainWindow> w(win);
-    probe_then(win, path, [w, path](bool encrypted) {
-        if (!w)
-            return;
-        auto go = [w, path](const QString &pw) {
-            if (w)
-                run_extract(w, path,
-                            {{"dest", dirname(path)}, {"subfolder", true}, {"overwrite", "rename"}, {"password", pw},
-                             {"trash_after", false}, {"open_after", false}});
-        };
-        if (encrypted)
-            ask_password(w, path, false, go);
-        else
-            go(QString());
-    });
+    // next to the archive, into a new folder (or its single top-level folder); its password is found or asked for
+    if (check_tool(win, path))
+        extract_all(win, {path}, here_options());
 }
+
+void extract_all_here(MainWindow *win, const QStringList &archives) { extract_all(win, archives, here_options()); }
 
 void extract_dialog(MainWindow *win, const QString &path)
 {
     QPointer<MainWindow> w(win);
-    probe_then(win, path, [w, path](bool encrypted) {
+    probe_then(win, path, [w, path](bool encrypted, bool keyring) {
         if (!w)
             return;
-        auto *dlg = new ExtractDialog(w, path, encrypted);
-        QObject::connect(dlg, &QDialog::accepted, w, [w, dlg, path]() { run_extract(w, path, dlg->options()); });
+        auto *dlg = new ExtractDialog(w, {path}, encrypted, keyring);
+        QObject::connect(dlg, &QDialog::accepted, w, [w, dlg, path]() { extract_all(w, {path}, dlg->options()); });
         show_free(dlg);
     });
+}
+
+void extract_all_dialog(MainWindow *win, const QStringList &archives)
+{
+    auto *dlg = new ExtractDialog(win, archives, false);
+    QPointer<MainWindow> w(win);
+    QObject::connect(dlg, &QDialog::accepted, win, [w, dlg, archives]() { extract_all(w, archives, dlg->options()); });
+    show_free(dlg);
 }
 
 void compress_dialog(MainWindow *win, const QStringList &paths)
@@ -858,7 +1349,7 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
         if (w->pane() && w->pane()->dir() == dirname(out))
             w->pane()->select_later(out);
     };
-    fileops::run_job(win, "Compressing " + name, work, done);
+    fileops::queue_job(win, "Compressing " + name, paths + QStringList{dirname(spec_in.out)}, work, done);
 }
 
 QString quick_compress_label(const QStringList &paths)

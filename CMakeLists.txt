@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.1-alpha.8")
+set(KES_VERSION "0.3.2-alpha.0")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -16,6 +16,7 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)   # focus.cpp: activating a drop target on X11
+pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)   # keyring.cpp: remembered archive passwords
 
 # GLib headers use "signals" as an identifier, so Qt's lowercase keywords are off (Q_SIGNALS, Q_EMIT, ...)
 add_compile_definitions(QT_NO_KEYWORDS KES_VERSION="${KES_VERSION}")
@@ -41,6 +42,17 @@ add_executable(kes
     src/viewer.cpp
     src/widgets.cpp
     src/groups.cpp
+    src/drives.cpp
+    src/jobs.cpp
+    src/keyring.cpp
+    src/archivewin.cpp
+    src/prefs.cpp
+    src/prefswin.cpp
+    src/menus.cpp
+    src/tapebuf.cpp
+    src/windiag.cpp
+    src/jobswin.cpp
+    src/towerwin.cpp
     src/overview.cpp
     src/dialogs.cpp
     src/archive.cpp
@@ -54,7 +66,7 @@ add_executable(kes
     src/stats.cpp
     data/kestrel.qrc
 )
-target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
+target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)
 target_compile_options(kes PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 # The small root helper for the admin session (started through pkexec). Qt Core only, for JSON.
@@ -91,7 +103,7 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RegulusArms/kes-c")
 set(CPACK_DEBIAN_PACKAGE_SECTION utils)
 # Depends written out rather than from dpkg-shlibdeps: the libraries' package names differ between releases
 # (Ubuntu 24.04 has libqt6gui6t64, 26.04 libqt6gui6 again), and one .deb is built for all of them
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libsecret-1-0, libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins")
 # install.sh's RECOMMENDED list
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
 # kes-setup's OPTIONAL_PACKAGES and the Optional table in docs/dependencies.md

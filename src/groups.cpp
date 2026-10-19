@@ -1,5 +1,6 @@
 #include "groups.h"
 
+#include "drives.h"
 #include "metadata.h"
 #include "util.h"
 
@@ -125,7 +126,7 @@ QDate Dates::taken(const QString &path, qint64 mtime, bool *pending)
 {
     if (pending)
         *pending = false;
-    if (!metadata::may_have_taken(path))
+    if (!metadata::may_have_taken(path) || !drives::reads_allowed(path))   // a tape or floppy: not read
         return created(path, mtime);
     auto it = shot.constFind(path);
     if (it != shot.constEnd() && it->mtime == mtime)
@@ -479,6 +480,29 @@ void DateGroupProxy::sort(int column, Qt::SortOrder order)
     set_order(column, order);
     if (src)
         src->sort(column, order);
+}
+
+QStringList DateGroupProxy::mimeTypes() const { return src ? src->mimeTypes() : QStringList(); }
+
+QMimeData *DateGroupProxy::mimeData(const QModelIndexList &indexes) const
+{
+    if (!src)
+        return nullptr;
+    QModelIndexList items;   // the headers aren't dragged
+    for (const QModelIndex &i : indexes)
+        if (i.isValid() && !is_header(i))
+            items << mapToSource(i);
+    return items.isEmpty() ? nullptr : src->mimeData(items);
+}
+
+Qt::DropActions DateGroupProxy::supportedDropActions() const
+{
+    return src ? src->supportedDropActions() : Qt::IgnoreAction;
+}
+
+Qt::DropActions DateGroupProxy::supportedDragActions() const
+{
+    return src ? src->supportedDragActions() : Qt::IgnoreAction;
 }
 
 bool DateGroupProxy::canDropMimeData(const QMimeData *data, Qt::DropAction action, int, int,

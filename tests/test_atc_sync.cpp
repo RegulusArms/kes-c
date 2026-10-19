@@ -1,6 +1,10 @@
 // The tower (atc.h): starting it, checking in, and passing shared-state changes between Kestrels.
 #include "common.h"
 
+#include "prefswin.h"
+
+#include <QSpinBox>
+
 #include "stats.h"
 
 using namespace test;
@@ -53,9 +57,14 @@ int main(int argc, char **argv)
     check(wait_for([&]() { return fake.heard_type("bookmarks", me); }), "Bookmarks are reported");
     w->preferences();
     auto *pd = w->findChild<PreferencesDialog *>();
+    auto *count_box = pd ? qobject_cast<QSpinBox *>(pd->editor("folder_count")) : nullptr;
+    if (count_box)
+        count_box->setValue(count_box->value() == 3 ? 2 : 3);   // a change applies (and is told) as it's made
+    check(count_box && wait_for([&]() { return fake.heard_type("settings", me); }) &&
+              fake.last_of("settings").value("keys").toArray() == QJsonArray{"folder_count"},
+          "A change made in Preferences is reported, with the setting that changed");
     if (pd)
-        pd->accept();
-    check(pd && wait_for([&]() { return fake.heard_type("settings", me); }), "Saved Preferences are reported");
+        pd->close();
     w->clear_cache();
     check(wait_for([&]() { return fake.heard_type("thumbs_cleared", me); }), "Clearing the preview cache is reported");
 

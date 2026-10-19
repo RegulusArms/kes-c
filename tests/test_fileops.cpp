@@ -377,6 +377,36 @@ int main(int argc, char **argv)
         check(listdir(P("race/newdir")) == QStringList{"theirs.txt"} && leftovers().isEmpty() && !boxes.isEmpty() &&
                   boxes.last().contains("appeared"),
               "...and so is a folder made under the new name after a folder copy was planned");
+
+        // a file system without RENAME_NOREPLACE or hard links (an LTFS tape: link() fails with EPERM, which isn't a
+        // permission problem): a copy still claims its new name, by checking it's free and renaming. It used to fail as
+        // "permission denied" (also as administrator)
+        qputenv("KESTREL_TEST_NO_LINK", "1");
+        boxes.clear();
+        write_text(P("race/small.txt"), "small");
+        bool copied = run_ops(w, {{"copy", P("race/small.txt"), P("race/nolink.txt")}}) &&
+                      text_of(P("race/nolink.txt")) == "small" && leftovers().isEmpty();
+        spin(300);
+        check(copied && boxes.isEmpty(), "on a file system without hard links or RENAME_NOREPLACE (as LTFS), a copy to a "
+                                         "new name works, with no error and no part file left");
+        ::unlink(enc(P("race/new.bin")).constData());
+        stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
+                             []() { write_text(P("race/new.bin"), "theirs"); });
+        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+                  boxes.last().contains("appeared"),
+              "...and a file another program saves under the name meanwhile is still kept, and reported");
+        QString part = P("race/" + part_name());
+        write_text(part, "p");
+        bool taken = false;
+        try {
+            put_new(part, P("race/nolink.txt"));
+        } catch (const OSError &e) {
+            taken = e.code == EEXIST;
+        }
+        put_new(part, P("race/put-new.txt"));
+        check(taken && text_of(P("race/nolink.txt")) == "small" && text_of(P("race/put-new.txt")) == "p",
+              "...and put_new (renames, archives) refuses a taken name and claims a free one there too");
+        qunsetenv("KESTREL_TEST_NO_LINK");
         make(P("race/taken.txt"), "mine");
         make(P("race/small.txt"), "small");
         boxes.clear();

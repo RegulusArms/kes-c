@@ -105,6 +105,8 @@ QString ext_of(const QString &p);        // lower-cased extension with the dot
 
 // ---------------------------------------------------------------- file system (raise OSError)
 
+// tests: every stat_/lstat_ under prefix waits ms, as on a tape busy seeking (empty prefix: off)
+void set_test_busy(const QString &prefix, int ms);
 bool stat_(const QString &p, struct stat &st);    // follows links; false on error
 bool lstat_(const QString &p, struct stat &st);
 bool exists(const QString &p);
@@ -139,6 +141,13 @@ void write_atomic(const QString &path, const QByteArray &data);   // write_text(
 // the general form: fill(fd) writes a part file beside path; new_only: take the name only if free; sync: fsync first
 // (for data that matters, not caches)
 void write_parts(const QString &path, const std::function<void(int)> &fill, bool new_only, bool sync = false);
+// Claiming a new name (never replacing): renameat2(RENAME_NOREPLACE), and link() where a file system lacks it. Some
+// file systems have neither (LTFS tapes, some FUSE ones: no rename flags, no hard links, link() fails with EPERM);
+// no_link_support() tells that EPERM-style failure apart, and the claim then checks the name is free and renames.
+// Tests: KESTREL_TEST_NO_LINK=1 makes these act as on such a file system.
+int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst);
+int link_at(int src_dir, const char *src, int dst_dir, const char *dst);
+bool no_link_support(int err);
 void put_new(const QString &part, const QString &path);   // a finished part file to a name that must still be free
 void write_all(int fd, const char *data, qint64 size, const QString &shown);
 // A new, empty file to write something into before it is renamed over a name in the same folder (so that name keeps

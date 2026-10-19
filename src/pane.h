@@ -57,6 +57,8 @@ public:
     void apply_folder_previews();
     void zoom(int step, int absolute = -1);
     int zoom_value() const;
+    void set_sizes(int grid, int list);   // both zooms (Preferences); saved by whoever changed them
+    void set_search_options(bool subfolders, bool contents);   // the search bar's switches (Preferences)
     void update_grid_size();
     bool set_path(const QString &path, bool record = true, const QString &select = QString());
     void show_trash();
@@ -73,6 +75,14 @@ public:
     void close_search(bool refocus = true, bool navigating = false);
     void stop_search();
     QStringList selected_paths() const;
+    // the selected items as the view knows them (kind: KindRole's bits, -1 if it doesn't know; size: -1 likewise),
+    // without asking the file system: on a busy tape, a stat waits until the drive gets there
+    struct Known {
+        QString path;
+        int kind = -1;
+        qint64 size = -1;
+    };
+    QList<Known> selected_known() const;
     QStringList all_paths() const;
     QString current_path() const;
     void invert_selection();

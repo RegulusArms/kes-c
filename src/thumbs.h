@@ -47,15 +47,17 @@ QStringList thumbnailers_for(const QString &path);
 bool can_thumbnail(const QString &path);
 QImage system_thumb(const QString &path, int size);
 QImage video_frame(const QString &path, int size);
-// a QImage thumbnail (max size x size) using the freedesktop cache; null if there is none
-QImage file_thumb(const QString &path, qint64 mtime, int size);
+// a QImage thumbnail (max size x size) using the freedesktop cache; null if there is none. fresh: made again even if
+// the cache has one (Regenerate Previews), and the cache's copy replaced
+QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh = false);
 QStringList pick_folder_images(const QString &folder, int count, const QString &order, const QString &cover = QString());
 QImage compose_folder(const QList<QImage> &images, int size, const QString &color, const QList<bool> &videos);
 // The symbol of a special folder (icon theme name, e.g. "folder-download": its -symbolic version) drawn on a plain
 // folder in `color`, in a shade of that colour so it shows on any. Unchanged if the theme has no such symbol. UI thread
 // (it uses the icon theme).
 QImage add_folder_symbol(const QImage &folder, const QString &icon, const QString &color);
-QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts);
+// fresh: made again even if cached, its tiles' thumbnails too (Regenerate Folder Previews)
+QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts, bool fresh = false);
 // The phone's own small preview of a file (is_device_path; uri from device_uri), scaled to fit size; null if it has
 // none. Worker thread.
 QImage device_preview(const QString &uri, int size);
@@ -134,25 +136,32 @@ private:
     QQueue<QPair<qint64, int>> scaled_order;
 };
 
-// Pre-generate file thumbnails and folder previews for a whole tree.
+class Task;
+
+// Pre-generate file thumbnails and folder previews for a tree (Generate / Regenerate Previews, each its own job:
+// thumbs::preview_job in app.cpp's MainWindow::build_previews).
 // folders_only: only folder previews (each makes thumbnails of just the few images it shows), not one for every file.
-// depth: how many levels of folders below root to go (-1: all; 1: root and the folders directly in it).
+// depth: how many levels of folders below root to go (-1: all; 1: root and the folders directly in it, whose folder
+// previews are made; files' thumbnails only in root).
+// fresh: make them again even where the caches have them (Regenerate).
 //
 // Scanning and generating overlap: items are queued to a small worker pool as the walk finds them, so work starts
-// immediately and the total grows until the walk completes. Everything goes to the on-disk caches.
-class RecursiveBuilder : public QThread {
+// immediately and the total grows until the walk completes. Everything goes to the on-disk caches. Made on the UI
+// thread (it reads the manager's settings), then run() on a job's thread.
+class RecursiveBuilder : public QObject {
     Q_OBJECT
 public:
     RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent = nullptr,
-                     int workers = 3, bool folders_only = false, int depth = -1);
+                     int workers = 3, bool folders_only = false, int depth = -1, bool fresh = false);
     void cancel() { stop = true; }
+    // Builds them, here (blocking). task: the job it runs in, for its progress, ✕ and pause (also stops when cancel()ed).
+    // Returns whether it was stopped before the end.
+    bool run(Task *task = nullptr);
+    int done_count() const { return done; }
+    int total_count() const { return total; }
 
 Q_SIGNALS:
     void progress(int done, int total, bool scanning, const QString &current);
-    void finished_build(int done, int total, bool cancelled);
-
-protected:
-    void run() override;
 
 private:
     void one(char kind, const QString &path);
@@ -164,6 +173,8 @@ private:
     int workers;
     bool folders_only;
     int depth;
+    bool fresh;
+    Task *task = nullptr;
     qint64 max_bytes;
     thumbs::FolderOpts opts;
     QHash<QString, QString> covers;

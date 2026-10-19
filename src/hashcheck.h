@@ -25,6 +25,7 @@ namespace hashcheck {
 // (lowercase hex) and the algorithm: "crc32", "md5", "sha1", "sha224", "sha256", "sha384", "sha512" or "blake2b".
 struct Entry {
     QString path, name, expected, algo;
+    qint64 size = -1;   // read with the checksum file, in the background (-1: not known)
 };
 
 bool is_hash_file(const QString &path);   // by its name: .sfv, .md5, .sha256, …, SHA256SUMS, …-CHECKSUM
@@ -84,8 +85,9 @@ private:
     QPushButton *again, *stop_btn;
 };
 
-// Opening a checksum file: the Verify Checksums dialog, or false if it lists nothing (open it as a text file).
-bool open_dialog(QWidget *parent, const QString &path);
+// Verify Checksums for path: the file is read and parsed on a worker (a checksum file on a tape or floppy can take long to
+// read), then the window opens; one that lists nothing calls not_listing() instead (it opens as an ordinary file).
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing);
 
 // ---- making checksum files
 

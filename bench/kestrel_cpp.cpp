@@ -60,17 +60,9 @@ int main(int argc, char **argv)
     QElapsedTimer t;
     t.start();
     if (test == "bulk_thumbs" || test == "mosaics") {
-        bool fin = false;
-        int done = 0;
-        auto *b = new RecursiveBuilder(test == "bulk_thumbs" ? D + "/gallery" : D + "/albums", 160, tm);
-        QObject::connect(b, &RecursiveBuilder::finished_build, [&](int d, int, bool) {
-            fin = true;
-            done = d;
-        });
-        b->start();
-        wait_for([&] { return fin; });
-        b->wait();
-        n = done;
+        RecursiveBuilder b(test == "bulk_thumbs" ? D + "/gallery" : D + "/albums", 160, tm);
+        b.run();   // (in the app it runs as a job; here on its own, as the build itself is what's measured)
+        n = b.done_count();
     } else if (test == "search") {
         long found = 0;
         auto *st = new SearchThread(D + "/tree", "*_7.jpg", false);

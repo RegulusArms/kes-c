@@ -1,10 +1,12 @@
 #include "util.h"
 
 #include "atc.h"
+#include "drives.h"
 
 #include "proc.h"
 #include "uwp.h"
 
+#include <QThread>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -26,6 +28,7 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
+#include <atomic>
 #include <gio/gdesktopappinfo.h>
 #include <gio/gio.h>
 
@@ -295,8 +298,35 @@ QString ext_of(const QString &p) { return splitext_ext(p).toLower(); }
 
 // ---------------------------------------------------------------- file system
 
-bool stat_(const QString &p, struct stat &st) { return ::stat(enc(p).constData(), &st) == 0; }
-bool lstat_(const QString &p, struct stat &st) { return ::lstat(enc(p).constData(), &st) == 0; }
+// the tests: a drive busy seeking (set_test_busy), every stat under it waits as LTFS's do
+static std::atomic<bool> busy_on{false};
+static QString busy_prefix;
+static int busy_ms = 0;
+
+void set_test_busy(const QString &prefix, int ms)
+{
+    busy_prefix = rstrip(prefix, '/') + "/";
+    busy_ms = ms;
+    busy_on = !prefix.isEmpty() && ms > 0;
+}
+
+static void busy_wait(const QString &p)
+{
+    if (busy_on.load(std::memory_order_relaxed) && (p + "/").startsWith(busy_prefix))
+        QThread::msleep(busy_ms);
+}
+
+bool stat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::stat(enc(p).constData(), &st) == 0;
+}
+
+bool lstat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::lstat(enc(p).constData(), &st) == 0;
+}
 
 bool exists(const QString &p)
 {
@@ -615,25 +645,52 @@ void write_parts(const QString &path_in, const std::function<void(int)> &fill, b
     }
 }
 
+static bool test_no_link() { return qEnvironmentVariableIntValue("KESTREL_TEST_NO_LINK") == 1; }
+
+int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EINVAL;
+        return -1;
+    }
+    return ::renameat2(src_dir, src, dst_dir, dst, RENAME_NOREPLACE);
+}
+
+int link_at(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EPERM;
+        return -1;
+    }
+    return ::linkat(src_dir, src, dst_dir, dst, 0);
+}
+
+bool no_link_support(int err) { return err == EPERM || err == ENOTSUP || err == EOPNOTSUPP || err == ENOSYS || err == EMLINK; }
+
 void put_new(const QString &part, const QString &path)
 {
-    if (::renameat2(AT_FDCWD, enc(part).constData(), AT_FDCWD, enc(path).constData(), RENAME_NOREPLACE) == 0)
+    QByteArray p = enc(part), d = enc(path);
+    if (rename_noreplace(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0)
         return;
     if (errno != EINVAL)
         throw_errno(path);
-    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken; a folder can't be linked, so
-    // there it's check, then rename
+    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken
     struct stat st;
-    if (::lstat(enc(part).constData(), &st) == 0 && S_ISDIR(st.st_mode)) {
-        if (lexists(path))
-            throw OSError(EEXIST, errno_text(EEXIST, path));
-        if (::rename(enc(part).constData(), enc(path).constData()) != 0)
+    bool dir = ::lstat(p.constData(), &st) == 0 && S_ISDIR(st.st_mode);
+    if (!dir) {
+        if (link_at(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0) {
+            ::unlink(p.constData());
+            return;
+        }
+        if (!no_link_support(errno))
             throw_errno(path);
-        return;
     }
-    if (::link(enc(part).constData(), enc(path).constData()) != 0)
+    // a folder can't be linked, and some file systems link nothing (LTFS): check, then rename. Not atomic: a file
+    // another program makes under that name between the two could be replaced; the best these allow
+    if (lexists(path))
+        throw OSError(EEXIST, errno_text(EEXIST, path));
+    if (::rename(p.constData(), d.constData()) != 0)
         throw_errno(path);
-    ::unlink(enc(part).constData());
 }
 
 void write_atomic(const QString &path, const QByteArray &data)
@@ -1520,7 +1577,22 @@ static QString take_gerror(GError *err)
 bool open_default(const QString &path)
 {
     GError *err = nullptr;
-    if (g_app_info_launch_default_for_uri(file_uri(path).toUtf8().constData(), nullptr, &err))
+    QByteArray uri = file_uri(path).toUtf8();
+    if (drives::slow_kind(path) != drives::Slow::None) {
+        // a tape or floppy: GIO's own launch would read the file here to tell its type (the window waits while a tape
+        // seeks); the app for its type by name is started instead, and reads the file itself
+        if (AppRef app = default_app_for_type(content_type(path))) {
+            GList *uris = g_list_append(nullptr, uri.data());
+            bool ok = g_app_info_launch_uris(app.get(), uris, nullptr, &err);
+            g_list_free(uris);
+            if (ok)
+                return true;
+            if (err)
+                g_clear_error(&err);
+        }
+        return proc::start_detached({"xdg-open", path});
+    }
+    if (g_app_info_launch_default_for_uri(uri.constData(), nullptr, &err))
         return true;
     if (err)
         g_error_free(err);
@@ -1529,6 +1601,10 @@ bool open_default(const QString &path)
 
 QString content_type(const QString &path)
 {
+    // on a tape or floppy, by its name only: GIO reads a file's start to tell its type, and on a tape that read waits
+    // until the drive gets there (Recent, Open With and opening it all ask, on the window's thread)
+    if (drives::slow_kind(path) != drives::Slow::None)
+        return mime_for(path, 0).name();
     GFile *f = g_file_new_for_path(enc(path).constData());
     GFileInfo *info = g_file_query_info(f, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE, G_FILE_QUERY_INFO_NONE,
                                         nullptr, nullptr);

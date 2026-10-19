@@ -1,6 +1,7 @@
 #include "overview.h"
 
 #include "dialogs.h"
+#include "drives.h"
 #include "fileops.h"
 #include "places.h"
 #include "proc.h"
@@ -66,6 +67,14 @@ static QString gstr(char *s)
     return r;
 }
 
+// what a slow drive's card shows from drives::Sizes, to redraw it only when that changes
+static QString slow_sig(const drives::Sizes::Info &i)
+{
+    return QStringList{i.volume_name, QString::number(i.total), QString::number(i.free), i.loads, i.alert, i.sync,
+                       i.busy ? "busy" : ""}
+        .join('|');
+}
+
 namespace overview {
 
 static MountRef mount_ref(GMount *m)
@@ -90,27 +99,39 @@ QVariantList scan_filesystems()
         }
     }
     QMap<QString, QVariantMap> by_dev;
-    for (const QStorageInfo &v : QStorageInfo::mountedVolumes()) {
-        if (!v.isValid() || !v.isReady())
-            continue;
-        QString root = v.rootPath();
-        QString fs = QString::fromUtf8(v.fileSystemType());
-        QString dev = QString::fromUtf8(v.device());
-        bool hidden = false;
-        for (const QString &h : HIDDEN_ROOTS)
-            hidden = hidden || root.startsWith(h);
-        if (root != "/" && hidden && !root.startsWith("/run/media/"))
-            continue;
-        if (dev.startsWith("/dev/loop"))
-            continue;
+    // from the mount table (no drive asked), then each drive kept asked for its size here, on the worker; a slow drive
+    // (tape, floppy) isn't asked at all: the page fills in its size from drives::Sizes when it comes
+    for (const drives::Mount &mt : drives::mounts()) {
+        QString root = mt.root, fs = mt.fstype, dev = mt.source;
+        drives::Slow slow = drives::slow_kind(root);
+        if (slow == drives::Slow::None) {
+            bool hidden = false;
+            for (const QString &h : HIDDEN_ROOTS)
+                hidden = hidden || root.startsWith(h);
+            if (root != "/" && hidden && !root.startsWith("/run/media/"))
+                continue;
+            if (dev.startsWith("/dev/loop"))
+                continue;
+        }
         bool net = NET_FS.contains(fs);
-        if (!net && !LOCAL_FS.contains(fs))
+        if (slow == drives::Slow::None && !net && !LOCAL_FS.contains(fs))
             continue;
-        qint64 total = v.bytesTotal(), free = v.bytesAvailable();
-        QString key = dev;
-        QString name = v.displayName() != root ? v.displayName() : basename(root);
+        qint64 total = -1, free = -1;
+        QString name = drives::device_label(dev);
+        if (slow == drives::Slow::None) {
+            QStorageInfo v(root);
+            if (!v.isValid() || !v.isReady())
+                continue;
+            total = v.bytesTotal();
+            free = v.bytesAvailable();
+            if (name.isEmpty() && v.displayName() != root)
+                name = v.displayName();
+        }
+        if (name.isEmpty())
+            name = basename(root);
         if (name.isEmpty())
             name = root;
+        QString key = slow == drives::Slow::None ? dev : root;
         if (fs == "zfs") {
             QString pool = dev.split('/').first();
             key = "zfs:" + pool;
@@ -120,8 +141,9 @@ QVariantList scan_filesystems()
             }
             name = pool;
         }
-        QVariantMap entry{{"name", name}, {"root", root}, {"fs", fs}, {"device", dev}, {"total", total},
-                          {"free", free}, {"kind", net ? "network" : (root == "/" ? "system" : "local")}};
+        QString kind = slow != drives::Slow::None ? drives::slow_name(slow) : net ? "network" : root == "/" ? "system" : "local";
+        QVariantMap entry{{"name", name}, {"root", root}, {"fs", slow == drives::Slow::Tape ? QString("LTFS") : fs},
+                          {"device", dev}, {"total", total}, {"free", free}, {"kind", kind}};
         // one card per device/pool: keep the shallowest mount (skips bind mounts, subvolumes, nested datasets)
         auto prev = by_dev.find(key);
         if (prev == by_dev.end() || root.size() < prev->value("root").toString().size()) {
@@ -637,9 +659,10 @@ DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), in
                                    "QProgressBar::chunk { border-radius: 4px; background: %2; }")
                                .arg(card_border().name(), color));
         col->addWidget(bar);
-        col->addWidget(small(new QLabel(QString("%1 free of %2  (%3% used)")
-                                            .arg(human_size(free), human_size(total))
-                                            .arg(qRound(pct)))));
+        QString line = QString("%1 free of %2  (%3% used)").arg(human_size(free), human_size(total)).arg(qRound(pct));
+        if ((info.kind == "tape" || info.kind == "floppy") && !info.status.isEmpty())   // "Tape · 12 loads" and the like
+            line = info.status + "  ·  " + line;
+        col->addWidget(small(new QLabel(line)));
     } else {
         QString state = !info.status.isEmpty() ? info.status
                                                 : (!info.mounted ? QString("Not mounted — click to mount") : QString());
@@ -722,6 +745,11 @@ OverviewPage::OverviewPage(ThumbnailManager *thumbs, QWidget *parent) : QScrollA
     usage_timer.setInterval(15000);
     connect(&usage_timer, &QTimer::timeout, this, &OverviewPage::refresh);
     connect(thumbs, &ThumbnailManager::updated, this, &OverviewPage::thumb_ready);
+    // a tape's or floppy's size and details come later (read on a worker): its card is redrawn when they change
+    connect(drives::Sizes::instance(), &drives::Sizes::changed, this, [this](const QString &root) {
+        if (isVisible() && shown_slow.contains(root) && shown_slow.value(root) != slow_sig(drives::Sizes::instance()->get(root)))
+            rebuild();
+    });
     on_palette_change(this, [this]() { rebuild(); });   // a light/dark switch: cards and icons in the new colours
     monitor = g_volume_monitor_get();
     for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
@@ -898,6 +926,8 @@ DriveLists OverviewPage::drive_infos()
         QVariantMap e = v.toMap();
         QString root = e["root"].toString(), kind = e["kind"].toString();
         QString icon = kind == "system"    ? "drive-harddisk-system"
+                       : kind == "tape"    ? "media-tape"
+                       : kind == "floppy"  ? "media-floppy"
                        : kind == "network" ? "folder-remote"
                        : (root.startsWith("/media/") || root.startsWith("/run/media/")) ? "drive-removable-media"
                                                                                         : "drive-harddisk";
@@ -909,8 +939,27 @@ DriveLists OverviewPage::drive_infos()
         info.total = e["total"].toLongLong();
         info.free = e["free"].toLongLong();
         info.kind = kind;
-        info.icon = theme_icon({icon, "drive-harddisk"});
+        info.icon = theme_icon({icon, "drive-removable-media", "drive-harddisk"});
         info.mounted = true;
+        if (kind == "tape" || kind == "floppy") {   // size and tape details from drives::Sizes, read on a worker
+            drives::Sizes::Info sz = drives::Sizes::instance()->get(root);
+            info.total = sz.total > 0 ? sz.total : 0;
+            info.free = sz.free;
+            if (!sz.volume_name.isEmpty())
+                info.name = sz.volume_name;
+            QStringList st;
+            st << (kind == "tape" ? "Tape" : "Floppy disk");
+            if (sz.busy)
+                st << "reading its size…";
+            if (!sz.loads.isEmpty())
+                st << QString("%1 loads").arg(sz.loads);
+            if (!sz.alert.isEmpty() && sz.alert != "0" && sz.alert.toLower() != "none")
+                st << "⚠ " + sz.alert;
+            if (int every = drives::ltfs_sync_minutes(sz.sync))   // each index write stops the drive mid-copy
+                st << QString("index written every %1 min (stops the drive; mount with -o sync_type=unmount)").arg(every);
+            info.status = st.join("  ·  ");
+            shown_slow[root] = slow_sig(sz);
+        }
         overview::MountRef m = gio_by_root.value(root);
         if (m) {
             QString n = gstr(g_mount_get_name(m.get()));
@@ -1065,6 +1114,18 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             refresh();
         });
         m.addAction("Properties", this, [this, target]() { Q_EMIT properties(target); });
+    }
+    if (info.kind == "tape" || info.kind == "floppy") {
+        m.addSeparator();
+        if (info.kind == "tape")
+            m.addAction("Write Tape Index Now", this, [this, target]() { drives::sync_tape_job(this, target); });
+        QAction *pv = m.addAction("Show Previews on This Drive", this, [target](bool on) {
+            drives::set_previews_allowed(target, on);
+        });
+        pv->setCheckable(true);
+        pv->setChecked(drives::previews_allowed(target));
+        pv->setToolTip("Thumbnails, folder previews and image details read the files, which makes a " + info.kind +
+                       " seek: off unless chosen here");
     }
     if (info.mount) {
         overview::MountRef mt = info.mount;

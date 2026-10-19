@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.1-alpha.8.** This is an early alpha release, so expect rough edges.
+**Version 0.3.2-alpha.0.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -89,6 +89,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
 | [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |
 | [Changelog](CHANGELOG.md) | What changed in each version |
+| [To do](TODO.md) | Planned additions, fixes and changes |
 
 ## License
 

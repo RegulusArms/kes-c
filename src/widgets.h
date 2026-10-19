@@ -31,6 +31,7 @@ enum Roles {
     PathRole = Qt::UserRole + 51,
     StatRole = Qt::UserRole + 52,   // search results: (is_dir, mtime, size)
     KindRole = Qt::UserRole + 53,   // bit 1: directory, bit 2: symbolic link
+    SizeRole = Qt::UserRole + 54,   // the file's size as the view knows it (no file system call)
 };
 enum Kind { KIND_DIR = 1, KIND_LINK = 2 };
 
@@ -334,7 +335,13 @@ private:
     void clear();
     void row(const QString &k, const QString &v);
     void refresh();
+    void add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai);
     ThumbnailManager *thumbs;
+    int gen = 0;   // a slow drive's details, read on a worker, are for the path shown when they were asked
+    // a slow drive's item, as the worker read it (nothing on a tape or floppy is asked from the window's thread: a busy
+    // tape answers only when it gets there)
+    bool cached = false, cached_dir = false;
+    qint64 cached_mtime = 0, cached_size = 0;
     QLabel *preview;
     QLabel *title;
     QFormLayout *form;

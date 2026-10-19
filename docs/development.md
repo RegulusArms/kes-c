@@ -9,7 +9,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 487 checks in 15 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, pinned items and folder sorts, grouping by date, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
+There are 638 checks in 19 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), archives (extracting several at once, looking inside one, testing, and remembered passwords with a real keyring), Preferences and the right-click menus' layouts, the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar, pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), the job queue and its windows, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 on every push that changes more than Markdown files, also with AddressSanitizer and UndefinedBehaviorSanitizer, and installs the .deb on clean Ubuntu 24.04 and 26.04 systems. Details: [tests/README.md](../tests/README.md).
 
 ## Architecture
 
@@ -66,6 +66,7 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │ • shared changes: Preferences, stars, pins, folder colours,   │
        │   covers, folder sorts, bookmarks, cleared caches             │
        │ • hands folders to an open window ("open folders as tabs")    │
+       │ • the job queue: lanes on drives for every Kestrel's jobs     │
        │                                                               │
        │ Checks every message (protocol version, known types, the      │
        │ types of known fields, absolute paths, size); so does each    │
@@ -114,11 +115,17 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | File | Purpose |
 |---|---|
 | `src/main.cpp` | The `kes` program's entry point (calls `kes_main` in `app.cpp`) |
-| `src/app.cpp` | Main window: tabs, toolbar, menus and shortcuts, context menus, preferences, starting up |
+| `src/app.cpp` | Main window: tabs, toolbar, menus and shortcuts, context menus, applying settings, starting up |
 | `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
 | `src/incoming.cpp` | Requests from outside this Kestrel: changes other Kestrels report through the tower, folders handed over to open as tabs, and other apps' "Show in folder" (FileManager1) |
 | `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection, each folder's sort and grouping |
+| `src/drives.cpp` | Slow drives (LTFS tapes, floppy disks): recognising them from the mount table, their sizes read in the background, tape attributes and index sync, one job at a time per drive |
+| `src/tapebuf.cpp` | The RAM write buffer for copies onto a tape (no shoe-shining): read ahead by a thread, sized from the memory available |
+| `src/jobs.cpp` | The job queue: one for every Kestrel (kept by the tower, else each Kestrel's own), by drive or one at a time |
+| `src/jobswin.cpp` | The Jobs window: every job, its steps and log, the queue's controls |
+| `src/windiag.cpp` | Window diagnostics: each window's size, limits, state and recent changes (the Tower window's Windows tab) |
+| `src/towerwin.cpp` | The Tower window (developer tools, `kes --tower-monitor`): what the tower is doing, live |
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
@@ -134,7 +141,10 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
 | `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
-| `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark, preferences |
+| `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark |
+| `src/prefs.cpp` | Every setting: its tab, label, default and where else it's changed; setting one applies it everywhere and tells the other Kestrels |
+| `src/prefswin.cpp` | The Preferences window, built from that list: tabs, search, resets |
+| `src/menus.cpp` | The right-click menus as the user lays them out: entry ids, the default layouts, rearranging a built menu, and the editor (Preferences → Menus) |
 | `src/hashcheck.cpp` | Checksum files: Verify Checksums, Create Checksum File…, and checking one file in Properties |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
