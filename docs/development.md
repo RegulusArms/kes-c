@@ -64,7 +64,8 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │ • ✕ Cancel: passed to the Kestrel that owns the job           │
        │ • shared undo list (optional, off by default)                 │
        │ • shared changes: Preferences, stars, pins, folder colours,   │
-       │   covers, folder sorts, bookmarks, cleared caches             │
+       │   covers, folder sorts, bookmarks, the sidebar's layout,      │
+       │   cleared caches                                              │
        │ • hands folders to an open window ("open folders as tabs")    │
        │ • the job queue: lanes on drives for every Kestrel's jobs     │
        │                                                               │
@@ -151,7 +152,9 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |
-| `src/archive_ui.cpp` | Compress and Extract dialogs, password prompts, and the archive job flows |
+| `src/archive_ui.cpp` | Compress and Extract dialogs, password prompts, and the archive job flows: Extract, Extract All and its password search, Test Archive(s) |
+| `src/archivewin.cpp` | Open as Archive: the window listing what's inside an archive, extracting single items from it, or all of it, or testing it |
+| `src/keyring.cpp` | Remembered archive passwords in the desktop's keyring (the Secret Service, through libsecret), found by the archive's fingerprint |
 | `src/uwp.cpp` | Integration with the UWP wallpaper manager (over D-Bus and the `uwp` command) |
 | `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |

@@ -92,10 +92,14 @@ int main(int argc, char **argv)
         qint64 clicked = -1;
         QTimer closer;   // Empty Trash asks first: answer like a user would, and start the clock there
         QObject::connect(&closer, &QTimer::timeout, [&] {
-            if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()); m && clicked < 0) {
-                clicked = t.elapsed();
-                m->button(QMessageBox::Yes)->click();
-            }
+            if (clicked >= 0)
+                return;
+            for (QWidget *top : QApplication::topLevelWidgets())   // a free window, not modal (windows.h)
+                if (auto *m = qobject_cast<QMessageBox *>(top); m && m->isVisible() && m->button(QMessageBox::Yes)) {
+                    clicked = t.elapsed();
+                    m->button(QMessageBox::Yes)->click();
+                    return;
+                }
         });
         closer.start(5);
         w->empty_trash();

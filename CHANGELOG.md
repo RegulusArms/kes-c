@@ -2,9 +2,14 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.0
+## 0.3.2-alpha.1
 
-- Nothing yet.
+- The benchmark (`bench/`) works again: its Empty Trash step waited for a modal question, which Kestrel no longer
+  shows since its windows became free. [Performance](docs/performance.md) has new figures against GNOME Files.
+
+## 0.3.2-alpha.0 (2026-10-18)
+
+- Version bump only.
 
 ## 0.3.1-alpha.16 (2026-10-18)
 

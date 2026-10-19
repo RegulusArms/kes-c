@@ -22,33 +22,33 @@ Both apps are measured in the same way:
 
 | Test | Kestrel | GNOME Files |
 |---|---|---|
-| Startup (launch to window shown) | 0.37 s | 0.40 s |
-| Open a 600-image folder (launch to the first 12 thumbnails) | 0.40 s | 1.26 s |
-| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.79 s | 9.00 s |
-| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.73 s | 0.84 s |
-| Copy 20,000 small files + 5 × 50 MB | 0.83 s | 2.24 s |
-| Move the same to another drive | 1.04 s | 4.39 s |
-| Move 10,000 files to the trash (all selected in one folder) | 1.68 s | 1.96 s |
-| Empty the trash (those 10,000 files) | 0.33 s | 8.62 s |
-| Peak memory (startup / 600-image folder open) | 137 / 149 MB | 194 / 303 MB |
-| Memory with 5 folders opened from other apps | 85 MB (29 MB as tabs) | 95 MB |
-| CPU time used in 30 s with a folder open, idle | 25 ms (0.08% of a core) | 5 ms (0.02% of a core) |
+| Startup (launch to window shown) | 0.38 s | 0.42 s |
+| Open a 600-image folder (launch to the first 12 thumbnails) | 0.43 s | 1.25 s |
+| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.87 s | 8.11 s |
+| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.79 s | 0.85 s |
+| Copy 20,000 small files + 5 × 50 MB | 1.54 s | 2.14 s |
+| Move the same to another drive | 1.78 s | 4.20 s |
+| Move 10,000 files to the trash (all selected in one folder) | 1.59 s | 1.86 s |
+| Empty the trash (those 10,000 files) | 1.08 s | 8.20 s |
+| Peak memory (startup / 600-image folder open) | 141 / 151 MB | 192 / 300 MB |
+| Memory with 5 folders opened from other apps | 107 MB (48 MB as tabs) | 134 MB |
+| CPU time used in 30 s with a folder open, idle | 150 ms (0.50% of a core) | 10 ms (0.03% of a core) |
 
 Kestrel compared with GNOME Files:
 - startup: 1.1× faster;
-- first thumbnails in a 600-image folder: 3.1× faster;
-- first video thumbnails: 5.0× faster;
-- first PDF thumbnails: 1.2× faster;
-- copying: 2.7× faster;
-- moving to another drive: 4.2× faster;
+- first thumbnails in a 600-image folder: 2.9× faster;
+- first video thumbnails: 4.3× faster;
+- first PDF thumbnails: 1.1× faster;
+- copying: 1.4× faster;
+- moving to another drive: 2.4× faster;
 - moving to the trash: 1.2× faster;
-- emptying the trash: about 26× faster.
+- emptying the trash: 7.6× faster.
 
 **Limits of this comparison:**
 - **Opening a folder:** the two apps don't do the same amount of work.
-  - GNOME Files makes thumbnails for the whole folder in the background. It finished all 600 images 11.06 s after launch.
+  - GNOME Files makes thumbnails for the whole folder in the background. It finished all 600 images 10.64 s after launch.
   - Kestrel makes them only for what's on screen (40 images here), and the rest as you scroll.
-  - To thumbnail a whole folder at once, Kestrel has "Generate Previews": 4.84 s for these 600 images (table below).
+  - To thumbnail a whole folder at once, Kestrel has "Generate Previews": 4.88 s for these 600 images (table below).
 - **File operations:** GNOME Files' D-Bus service returns straight away, so its times were measured by watching the files until the operation had finished, to within about 50 ms.
 - **Memory:** GNOME Files makes thumbnails in separate sandboxed helper processes, whose memory isn't counted in its figures. Kestrel makes them inside the app.
 - **Search:** GNOME Files' search can't be timed from outside without its file indexer, so it isn't compared.
@@ -59,15 +59,19 @@ These are measured inside the app, because GNOME Files has no equivalent ("Gener
 
 | Test | Kestrel |
 |---|---|
-| Thumbnail all 600 images ("Generate Previews") | 4.84 s |
-| Build 150 folder mosaics | 6.24 s |
+| Thumbnail all 600 images ("Generate Previews") | 4.88 s |
+| Build 150 folder mosaics | 6.22 s |
 | Recursive search over 50,000 files | 0.12 s |
-| Read EXIF / image-generation prompts for 400 images | 0.042 s |
-| Peak memory (background jobs) | 37–42 MB |
+| Read EXIF / image-generation prompts for 400 images | 0.041 s |
+| Peak memory (background jobs) | 40–45 MB |
 
 ## Performance: Kestrel vs Nemo
 
 Kestrel Explorer is compared here with Nemo, the file manager it replaces.
+
+These figures were measured with Kestrel 0.2.1-alpha.3 (2026-10-06) and haven't been re-run since. The GNOME Files
+comparison above is newer; between the two, Kestrel's copies and Empty Trash got slower on the GNOME machine, so its
+figures here are likely better than the current version's.
 
 **Test machine:** a VirtualBox virtual machine running Linux Mint 22 (Cinnamon). The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 
