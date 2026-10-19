@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.1-alpha.16
+## 0.3.2-alpha.0
+
+- Nothing yet.
+
+## 0.3.1-alpha.16 (2026-10-18)
 
 - **Fixed: double-clicking a checksum file on a tape still froze Kestrel** while the drive sought to it (most
   noticeably right after writing to the tape, when the drive has to wind back from the index). Adding the file to
