@@ -5,6 +5,7 @@
 #include "drives.h"
 #include "groups.h"
 #include "hashcheck.h"
+#include "places.h"
 #include "tapebuf.h"
 
 #include <QElapsedTimer>
@@ -566,6 +567,18 @@ int main(int argc, char **argv)
         QString on_tape = type_shown(join(tape, "document")), at_home = type_shown(home_path("document"));
         check(!on_tape.contains("PDF") && at_home.contains("PDF"),
               "Properties of a file on a tape doesn't read it to name its type (a file elsewhere is)");
+
+        // GIO's type of a file (for Open With, opening it, and Recent) reads its start: on a tape, by its name instead
+        QString tape_doc = join(tape, "document"), home_doc = home_path("document");
+        check(content_type(tape_doc) == "application/octet-stream" && content_type(home_doc) == "application/pdf",
+              "the type GIO would read from a file's contents is taken from its name on a tape (" + content_type(tape_doc) +
+                  ", elsewhere " + content_type(home_doc) + ")");
+        places::add_recent({tape_doc});
+        QString xbel = QString::fromUtf8(read_file(home_path(".local/share/recently-used.xbel")));
+        int at = xbel.indexOf(QUrl::fromLocalFile(tape_doc).toString(QUrl::FullyEncoded));
+        QString entry = at >= 0 ? xbel.mid(at, xbel.indexOf("</bookmark>", at) - at) : QString();
+        check(!entry.isEmpty() && entry.contains("application/octet-stream") && !entry.contains("application/pdf"),
+              "opening a file on a tape adds it to Recent without reading it (its type by name)");
     }
     finish();
 }

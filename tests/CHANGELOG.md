@@ -4,6 +4,14 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.1-alpha.16
+
+Added:
+- `slow`: the type GLib would read from a file's contents (Open With, opening, Recent) is taken from its name on a
+  tape (a PDF without an extension is still "unknown" there, while elsewhere it's read as a PDF), and opening a file
+  on a tape adds it to Recent with its type by name. The alpha.14 check couldn't see this read: its busy tape only
+  made stat wait. Covers the fix for the freeze still seen when double-clicking a checksum file on a tape.
+
 ## 0.3.1-alpha.15
 
 Added:
