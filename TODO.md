@@ -139,6 +139,25 @@ into.
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
     what's on which tape).
 
+- [ ] **Write straight to the file on a tape or floppy, without a part file.** A copy or move onto a slow drive
+  (`drives::slow_kind(dst)` is Tape or Floppy) writes each file under its real name instead of a hidden
+  `.kes-….part` renamed into place when whole (`open_part_at` in `copy_file`, src/fileops.cpp; the admin helper's own).
+  - Why: on LTFS the part file buys nothing. A write that fails part-way loses that tape space whatever the file is
+    called (LTFS never reuses it), and LTFS has neither RENAME_NOREPLACE nor `link()`, so claiming the name already
+    falls back to check-then-rename, which isn't airtight; `O_EXCL` on the real name is the better claim there.
+  - A floppy (FAT) does give a failed part file's space back, so there the part file works as intended and costs
+    only a rename; it's included for one behaviour on every slow drive. To reconsider if that turns out to matter.
+  - A new name is still claimed without replacing anything: create it with `O_CREAT | O_EXCL` (fails on a taken name,
+    as RENAME_NOREPLACE does now), so a file another program saved there meanwhile is kept and reported.
+  - On a cancel or a failure part-way, the half-written file is deleted, so nothing half-made is left under a real
+    name once the job has ended (a crash or power cut mid-file can still leave one; LTFS never reuses the space
+    anyway).
+  - Replacing an existing file can't be done this way without losing the old one first: to decide whether that
+    keeps the part file and rename, or asks first.
+  - An exception to Kestrel's failure-atomic writes, by the user's choice: say so in a comment at the write, and
+    cover it in `slow` (cancel and a write that fails part-way on a `KESTREL_TEST_SLOW`
+    tape leave no file under the real name; a name taken meanwhile is kept).
+
 ### Views and search
 
 - [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
