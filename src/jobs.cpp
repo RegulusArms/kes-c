@@ -106,11 +106,7 @@ Queue::Local *Queue::find(Task *t)
 
 void Queue::submit(Task *t)
 {
-    QStringList ids;
-    for (const QString &p : t->paths)
-        for (const QString &id : drives::drive_ids(p))
-            if (!ids.contains(id))
-                ids << id;
+    QStringList ids = drives::drive_ids(t->paths);   // on the UI thread: each mount looked up once, not each item
     if (ids.isEmpty()) {   // nothing to wait for
         t->start();
         return;

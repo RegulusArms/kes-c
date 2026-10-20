@@ -71,6 +71,12 @@ int main(int argc, char **argv)
     check(!home_ids.isEmpty() && home_ids == drives::drive_ids(HOME()) && tape_ids == QStringList{"mount:fuse:ltfs:test"} &&
               home_ids != tape_ids,
           "paths on one drive share its id (also a file not made yet); a tape is a drive of its own (" + home_ids.join(",") + ")");
+    QStringList many;   // a job's items: thousands on one drive, then one on the tape
+    for (int i = 0; i < 2000; ++i)
+        many << home_path("x/item" + QString::number(i));
+    many << join(tape, "z") << home_path("y");
+    check(drives::drive_ids(many) == home_ids + tape_ids && drives::drive_ids(QStringList{}).isEmpty(),
+          "a job's items give each drive they're on once, in order (" + drives::drive_ids(many).join(",") + ")");
     QString part_src, disk;
     for (const drives::Mount &m : drives::mounts()) {
         QString name = basename(realpath(m.source));

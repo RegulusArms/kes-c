@@ -2,7 +2,16 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.1
+## 0.3.2-alpha.2
+
+- **Faster again with many files** (slower since 0.3.1-alpha.11, when tapes and floppies came in, which made Kestrel
+  ask for every file whether it was on a tape):
+  - Deleting, emptying the trash or acting on thousands of items at once no longer freezes the window before the job
+    starts: about 0.7 s for every 10,000 items on an SSD, now a few hundredths of a second.
+  - Copying and moving many small files is a third faster (20,000 files: 1.54 s → 1.04 s), and emptying a trash of
+    10,000 files more than twice as fast (1.08 s → 0.44 s). With no tape or floppy mounted, nothing is looked up.
+
+## 0.3.2-alpha.1 (2026-10-19)
 
 - The benchmark (`bench/`) works again: its Empty Trash step waited for a modal question, which Kestrel no longer
   shows since its windows became free. [Performance](docs/performance.md) has new figures against GNOME Files.

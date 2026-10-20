@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.2
+
+Added:
+- `jobs`: the drives of a job's items, asked all at once (2,000 items on one drive and one on a tape), come back as
+  each drive once, in order. The job queue now asks this way, looking each mount up once instead of each item, so a
+  job of thousands of items doesn't hold up the window.
+
 ## 0.3.2-alpha.1
 
 No test changes.

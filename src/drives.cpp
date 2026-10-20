@@ -14,6 +14,8 @@
 #include <sys/statvfs.h>
 #include <sys/xattr.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cerrno>
 
 using namespace util;
@@ -50,6 +52,9 @@ static QList<QPair<Slow, QString>> test_slow()
     return out;
 }
 
+static Slow kind_of(const Mount &mt);
+static std::atomic<bool> slow_mounted{false};   // a tape or floppy is in the mount list (kept with it, below)
+
 QList<Mount> mounts()
 {
     static QMutex m;
@@ -74,6 +79,7 @@ QList<Mount> mounts()
     }
     for (const auto &[kind, path] : test_slow())
         cached << Mount{path, kind == Slow::Floppy ? "/dev/test-floppy" : "ltfs:test", kind == Slow::Floppy ? "vfat" : "fuse"};
+    slow_mounted = std::any_of(cached.begin(), cached.end(), [](const Mount &mt) { return kind_of(mt) != Slow::None; });
     return cached;
 }
 
@@ -107,8 +113,9 @@ QString device_label(const QString &device)
 static const Mount *mount_of(const QList<Mount> &all, const QString &path)
 {
     const Mount *best = nullptr;
-    for (const Mount &mt : all) {
-        bool under = path == mt.root || mt.root == "/" || path.startsWith(mt.root + "/");
+    for (const Mount &mt : all) {   // called for every item of a job: no string built per mount
+        qsizetype n = mt.root.size();
+        bool under = mt.root == "/" || (path.startsWith(mt.root) && (path.size() == n || path[n] == '/'));
         if (under && (!best || mt.root.size() >= best->root.size()))
             best = &mt;
     }
@@ -139,18 +146,9 @@ static QStringList disks_of(const QString &name, int depth = 0)
     return {name};
 }
 
-QStringList drive_ids(const QString &path)
+// the ids of a mount's drives (not a GVFS mount's: those depend on the path)
+static QStringList mount_ids(const Mount *mt)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
-        return {};
-    QList<Mount> all = mounts();
-    const Mount *mt = mount_of(all, path);
-    if (!mt)
-        return {};
-    if (mt->fstype == "fuse.gvfsd-fuse") {   // one FUSE mount for every GVFS share and phone: each is its own drive
-        QString first = path.mid(mt->root.size() + 1).section('/', 0, 0);
-        return {first.isEmpty() ? QString("gvfs") : "gvfs:" + first};
-    }
     if (mt->source.startsWith("/dev/")) {
         QStringList out;
         for (const QString &d : disks_of(basename(realpath(mt->source))))
@@ -161,6 +159,32 @@ QStringList drive_ids(const QString &path)
         return {"zfs:" + mt->source.section('/', 0, 0)};
     return {"mount:" + mt->fstype + ":" + mt->source};
 }
+
+QStringList drive_ids(const QStringList &paths)
+{
+    QList<Mount> all = mounts();
+    QHash<const Mount *, QStringList> known;   // a mount's ids, looked up once (a job may name thousands of items on it)
+    QStringList out;
+    for (const QString &path : paths) {
+        const Mount *mt = path.startsWith('/') ? mount_of(all, path) : nullptr;
+        if (!mt)
+            continue;
+        QStringList ids;
+        if (mt->fstype == "fuse.gvfsd-fuse") {   // one FUSE mount for every GVFS share and phone: each is its own drive
+            QString first = path.mid(mt->root.size() + 1).section('/', 0, 0);
+            ids = {first.isEmpty() ? QString("gvfs") : "gvfs:" + first};
+        } else {
+            auto it = known.constFind(mt);
+            ids = it != known.constEnd() ? *it : *known.insert(mt, mount_ids(mt));
+        }
+        for (const QString &id : ids)
+            if (!out.contains(id))
+                out << id;
+    }
+    return out;
+}
+
+QStringList drive_ids(const QString &path) { return drive_ids(QStringList{path}); }
 
 // a floppy: the old /dev/fd*, or a removable disk (a USB floppy drive is an sd device) holding at most 4 MB (a 2.88 MB
 // disk, with room). Not loop, RAM or device-mapper devices, which can be as small (snap's squashfs images are)
@@ -202,9 +226,16 @@ static Slow kind_of(const Mount &mt)
     return Slow::None;
 }
 
+// none mounted (nearly always): asked for every file a job copies or deletes, so answered without looking up the path
+static bool any_slow()
+{
+    mounts();   // re-read if it's old
+    return slow_mounted;
+}
+
 Slow slow_kind(const QString &path)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
+    if (path.isEmpty() || !path.startsWith('/') || !any_slow())
         return Slow::None;
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
@@ -213,7 +244,7 @@ Slow slow_kind(const QString &path)
 
 QString slow_root(const QString &path)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
+    if (path.isEmpty() || !path.startsWith('/') || !any_slow())
         return QString();
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);

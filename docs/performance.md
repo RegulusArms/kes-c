@@ -26,10 +26,10 @@ Both apps are measured in the same way:
 | Open a 600-image folder (launch to the first 12 thumbnails) | 0.43 s | 1.25 s |
 | Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.87 s | 8.11 s |
 | Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.79 s | 0.85 s |
-| Copy 20,000 small files + 5 × 50 MB | 1.54 s | 2.14 s |
-| Move the same to another drive | 1.78 s | 4.20 s |
-| Move 10,000 files to the trash (all selected in one folder) | 1.59 s | 1.86 s |
-| Empty the trash (those 10,000 files) | 1.08 s | 8.20 s |
+| Copy 20,000 small files + 5 × 50 MB | 1.04 s | 2.26 s |
+| Move the same to another drive | 1.28 s | 4.32 s |
+| Move 10,000 files to the trash (all selected in one folder) | 1.60 s | 1.90 s |
+| Empty the trash (those 10,000 files) | 0.44 s | 8.56 s |
 | Peak memory (startup / 600-image folder open) | 141 / 151 MB | 192 / 300 MB |
 | Memory with 5 folders opened from other apps | 107 MB (48 MB as tabs) | 134 MB |
 | CPU time used in 30 s with a folder open, idle | 150 ms (0.50% of a core) | 10 ms (0.03% of a core) |
@@ -39,10 +39,10 @@ Kestrel compared with GNOME Files:
 - first thumbnails in a 600-image folder: 2.9× faster;
 - first video thumbnails: 4.3× faster;
 - first PDF thumbnails: 1.1× faster;
-- copying: 1.4× faster;
-- moving to another drive: 2.4× faster;
+- copying: 2.2× faster;
+- moving to another drive: 3.4× faster;
 - moving to the trash: 1.2× faster;
-- emptying the trash: 7.6× faster.
+- emptying the trash: about 20× faster.
 
 **Limits of this comparison:**
 - **Opening a folder:** the two apps don't do the same amount of work.
@@ -69,9 +69,8 @@ These are measured inside the app, because GNOME Files has no equivalent ("Gener
 
 Kestrel Explorer is compared here with Nemo, the file manager it replaces.
 
-These figures were measured with Kestrel 0.2.1-alpha.3 (2026-10-06) and haven't been re-run since. The GNOME Files
-comparison above is newer; between the two, Kestrel's copies and Empty Trash got slower on the GNOME machine, so its
-figures here are likely better than the current version's.
+These figures were measured with Kestrel 0.2.1-alpha.3 (2026-10-06) and haven't been re-run since; the GNOME Files
+comparison above is newer.
 
 **Test machine:** a VirtualBox virtual machine running Linux Mint 22 (Cinnamon). The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 

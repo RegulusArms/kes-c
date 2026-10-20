@@ -33,6 +33,7 @@ QString mount_root(const QString &path);       // the mount point path is on
 // "zfs:tank" for a ZFS dataset (its pool), "gvfs:<share>" for each network share or phone, otherwise the mount's
 // source ("mount:fuse:ltfs:/dev/sg0" for a tape, "mount:nfs:server:/export"…). Empty if it can't be told.
 QStringList drive_ids(const QString &path);
+QStringList drive_ids(const QStringList &paths);   // every drive any of them is on, each once
 
 enum class Slow { None, Tape, Floppy };
 Slow slow_kind(const QString &path);   // of the drive path is on
