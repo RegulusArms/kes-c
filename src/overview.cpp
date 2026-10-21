@@ -4,6 +4,7 @@
 #include "drives.h"
 #include "fileops.h"
 #include "places.h"
+#include "prefs.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -43,8 +44,6 @@ const QString OVERVIEW_TITLE = "Overview";
 static const QSet<QString> LOCAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "vfat", "exfat", "ntfs",
                                        "ntfs3", "fuseblk", "f2fs", "iso9660", "udf", "hfsplus", "apfs", "bcachefs",
                                        "jfs", "reiserfs", "msdos"};
-static const QSet<QString> NET_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "sshfs", "davfs",
-                                     "fuse.rclone", "9p", "fuse.davfs2", "afs", "ceph", "glusterfs"};
 static const QStringList HIDDEN_ROOTS = {"/boot", "/efi", "/snap", "/var/snap", "/var/lib/docker",
                                          "/var/lib/containers", "/run/", "/sys", "/proc", "/dev", "/tmp"};
 // partitions that belong to a pool/array/LVM: GIO offers to "mount" them, but they can't be
@@ -113,7 +112,7 @@ QVariantList scan_filesystems()
             if (dev.startsWith("/dev/loop"))
                 continue;
         }
-        bool net = NET_FS.contains(fs);
+        bool net = drives::network_fs(fs);
         if (slow == drives::Slow::None && !net && !LOCAL_FS.contains(fs))
             continue;
         qint64 total = -1, free = -1;
@@ -465,6 +464,51 @@ MountGroup mount_group(const QString &scheme, const QString &path, bool shadowed
     return MountGroup::Skip;
 }
 
+QList<DriveInfo> network_infos(GVolumeMonitor *monitor, const QSet<QString> &known_roots)
+{
+    QList<DriveInfo> out;
+    GList *mounts = g_volume_monitor_get_mounts(monitor);
+    for (GList *l = mounts; l; l = l->next) {
+        MountRef m = mount_ref(G_MOUNT(l->data));
+        GFile *root = g_mount_get_root(m.get());
+        QString path = gstr(g_file_get_path(root));
+        QString scheme = gstr(g_file_get_uri_scheme(root));
+        if (mount_group(scheme, path, g_mount_is_shadowed(m.get()), known_roots.contains(path)) == MountGroup::Network) {
+            DriveInfo info;
+            info.name = gstr(g_mount_get_name(m.get()));
+            info.root = path;
+            info.uri = gstr(g_file_get_uri(root));
+            info.fs = scheme;
+            GIcon *gi = g_mount_get_icon(m.get());
+            info.icon = gicon_to_qicon(gi);
+            g_object_unref(gi);
+            info.mount = m;
+            info.status = "Connected";
+            info.kind = "network";
+            out << info;
+        }
+        g_object_unref(root);
+    }
+    g_list_free(mounts);
+    return out;
+}
+
+bool connected(const QString &server, const QList<DriveInfo> &shares)
+{
+    auto bare = [](QString u) {
+        while (u.endsWith('/'))
+            u.chop(1);
+        return u;
+    };
+    QString s = bare(server);
+    for (const DriveInfo &sh : shares) {
+        QString u = bare(sh.uri);
+        if (!u.isEmpty() && (s == u || s.startsWith(u + "/")))
+            return true;
+    }
+    return false;
+}
+
 QList<DriveInfo> phone_infos(GVolumeMonitor *monitor)
 {
     QList<DriveInfo> out;
@@ -751,6 +795,10 @@ OverviewPage::OverviewPage(ThumbnailManager *thumbs, QWidget *parent) : QScrollA
             rebuild();
     });
     on_palette_change(this, [this]() { rebuild(); });   // a light/dark switch: cards and icons in the new colours
+    connect(prefs::Notifier::instance(), &prefs::Notifier::changed, this, [this](const QStringList &keys) {
+        if (save_places && keys.contains("chooser_places"))   // changed here, in Preferences or by another Kestrel
+            rebuild();
+    });
     monitor = g_volume_monitor_get();
     for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
                             "mount-changed"})
@@ -835,6 +883,9 @@ void OverviewPage::rebuild()
     int scroll = verticalScrollBar()->value();
     clear_layout(lay);
     bookmark_cards.clear();
+    save_cards.clear();
+    if (save_places)
+        save_places_section();
     auto [local, phones, network] = drive_infos();
     FlowLayout *flow = section("Drives");
     for (const DriveInfo &info : local)
@@ -894,7 +945,8 @@ DriveLists OverviewPage::drive_infos()
         QVariantMap e = v.toMap();
         roots.insert(e["root"].toString(), e);
     }
-    QList<DriveInfo> local, network;
+    QList<DriveInfo> local;
+    QList<DriveInfo> network = overview::network_infos(monitor, QSet<QString>(roots.keyBegin(), roots.keyEnd()));
     QHash<QString, overview::MountRef> gio_by_root;
     GList *mounts = g_volume_monitor_get_mounts(monitor);
     for (GList *l = mounts; l; l = l->next) {
@@ -902,23 +954,9 @@ DriveLists OverviewPage::drive_infos()
         GFile *root = g_mount_get_root(m.get());
         QString path = gstr(g_file_get_path(root));
         QString scheme = gstr(g_file_get_uri_scheme(root));
-        auto group = overview::mount_group(scheme, path, g_mount_is_shadowed(m.get()), roots.contains(path));
-        if (group == overview::MountGroup::Local) {
+        if (overview::mount_group(scheme, path, g_mount_is_shadowed(m.get()), roots.contains(path)) ==
+            overview::MountGroup::Local)
             gio_by_root.insert(path, m);
-        } else if (group == overview::MountGroup::Network) {
-            DriveInfo info;
-            info.name = gstr(g_mount_get_name(m.get()));
-            info.root = path;
-            info.uri = gstr(g_file_get_uri(root));
-            info.fs = scheme;
-            GIcon *gi = g_mount_get_icon(m.get());
-            info.icon = gicon_to_qicon(gi);
-            g_object_unref(gi);
-            info.mount = m;
-            info.status = "Connected";
-            info.kind = "network";
-            network << info;
-        }
         g_object_unref(root);
     }
     g_list_free(mounts);
@@ -1164,4 +1202,92 @@ void OverviewPage::thumb_ready(const QString &path)
 {
     if (BookmarkCard *card = bookmark_cards.value(path))
         card->update_pic();
+    if (BookmarkCard *card = save_cards.value(path))
+        card->update_pic();
+}
+
+// ---------------------------------------------------------------- a Save window's save locations
+
+void OverviewPage::set_save_places(bool on)
+{
+    if (on == save_places)
+        return;
+    save_places = on;
+    rebuild();
+}
+
+void OverviewPage::add_save_place(const QString &path)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    if (!path.isEmpty() && !l.contains(path))
+        prefs::set("chooser_places", l << path);   // every Save window's Overview shows it (prefs::Notifier)
+}
+
+void OverviewPage::remove_save_place(const QString &path)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    if (l.removeAll(path))
+        prefs::set("chooser_places", l);
+}
+
+void OverviewPage::move_save_place(const QString &path, int by)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    int i = l.indexOf(path), j = i + by;
+    if (i < 0 || j < 0 || j >= l.size())
+        return;
+    l.move(i, j);
+    prefs::set("chooser_places", l);
+}
+
+QStringList OverviewPage::save_place_cards() const { return save_places ? save_order : QStringList(); }
+
+void OverviewPage::save_places_section()
+{
+    FlowLayout *flow = section("Save Locations");
+    save_order = prefs::get("chooser_places").toStringList();
+    for (const QString &target : save_order) {
+        QString label = target == HOME() ? QString("Home") : basename(target);
+        auto *card = new BookmarkCard(target, label, thumbs);
+        connect(card, &Card::clicked, this, [this, target]() { Q_EMIT navigate(target); });
+        connect(card, &Card::middle_clicked, this, [this, target]() { Q_EMIT open_in_tab(target); });
+        connect(card, &Card::menu_requested, this, [this, target](const QPoint &pos) { save_place_menu(target, pos); });
+        flow->addWidget(card);
+        save_cards.insert(target, card);
+    }
+    auto *row = new QHBoxLayout;
+    if (save_order.isEmpty()) {
+        auto *hint = small(new QLabel("No save locations yet: add the folders you save to most from other apps "
+                                      "(Downloads, a project folder…). They're only for these Save windows."));
+        hint->setWordWrap(true);
+        row->addWidget(hint, 1);
+    }
+    auto *add = new QPushButton(theme_icon({"list-add", "folder-new"}), "Add Folder…");
+    add->setObjectName("add_save_place");
+    connect(add, &QPushButton::clicked, this, [this]() {
+        QString start = settings().value("chooser_folder").toString();   // where the last Save window saved
+        QPointer<OverviewPage> self(this);
+        choose_folder(window(), "Add a Save Location", isdir(start) ? start : HOME(), [self](const QString &p) {
+            if (self)
+                self->add_save_place(p);
+        });
+    });
+    row->addWidget(add);
+    if (!save_order.isEmpty())
+        row->addStretch(1);
+    lay->addLayout(row);
+}
+
+void OverviewPage::save_place_menu(const QString &target, const QPoint &pos)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    int i = l.indexOf(target);
+    QMenu m(this);
+    m.addAction("Open", this, [this, target]() { Q_EMIT navigate(target); });
+    m.addAction("Open in New Tab", this, [this, target]() { Q_EMIT open_in_tab(target); });
+    m.addSeparator();
+    m.addAction("Move Earlier", this, [this, target]() { move_save_place(target, -1); })->setEnabled(i > 0);
+    m.addAction("Move Later", this, [this, target]() { move_save_place(target, 1); })->setEnabled(i >= 0 && i + 1 < l.size());
+    m.addAction("Remove from Save Locations", this, [this, target]() { remove_save_place(target); });
+    m.exec(pos);
 }

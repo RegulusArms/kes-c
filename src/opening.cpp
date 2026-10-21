@@ -19,7 +19,33 @@
 
 #include <QPointer>
 
+#include <gio/gio.h>
+
 using namespace util;
+
+// A content search's result opened at its matching line, where the default app is an editor known to take one on its
+// command line (documented: gedit and its forks, Geany, VS Code and its forks, Kate, Sublime Text, Zed). Others,
+// GNOME Text Editor among them (no such option), open the file as usual: false.
+static bool open_at_line(const QString &path, int line)
+{
+    AppRef app = default_app(path);
+    const char *exe = app ? g_app_info_get_executable(app.get()) : nullptr;
+    if (!exe || line <= 0)
+        return false;
+    QString bin = basename(QString::fromLocal8Bit(exe)), l = QString::number(line);
+    QStringList argv;
+    if (QStringList{"gedit", "xed", "pluma", "geany"}.contains(bin))
+        argv = {exe, "+" + l, path};
+    else if (QStringList{"code", "codium", "code-oss", "cursor"}.contains(bin))
+        argv = {exe, "-g", path + ":" + l};
+    else if (QStringList{"kate", "kwrite"}.contains(bin))
+        argv = {exe, "-l", l, path};
+    else if (QStringList{"subl", "sublime_text", "zed", "zeditor"}.contains(bin))
+        argv = {exe, path + ":" + l};
+    else
+        return false;
+    return proc::start_detached(argv);
+}
 
 void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
 {
@@ -97,7 +123,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     if (!videos.isEmpty())
         open_videos(videos);
     for (const QString &f : others)
-        if (!open_file(f))
+        if (!open_at_line(f, p->match_line(f)) && !open_file(f))
             warn(this, "Open", "Could not open " + f);
 }
 

@@ -911,10 +911,10 @@ QPair<QString, QString> split_ext(const QString &name)
     return {stem, ext};
 }
 
-QString unique_path(const QString &directory, const QString &name, const QString &style)
+QString unique_path(const QString &directory, const QString &name, const QString &style, const QSet<QString> &taken)
 {
     QString target = join(directory, name);
-    if (!lexists(target))
+    if (!lexists(target) && !taken.contains(target))
         return target;
     auto [stem, ext] = split_ext(name);
     static const QRegularExpression suffix_re(R"( \((copy|copy \d+|\d+)\)$)");
@@ -924,9 +924,9 @@ QString unique_path(const QString &directory, const QString &name, const QString
         if (style == "copy")
             suffix = i == 1 ? QString(" (copy)") : QString(" (copy %1)").arg(i);
         else
-            suffix = QString(" (%1)").arg(i + 1);
+            suffix = QString(" (%1)").arg(style == "download" ? i : i + 1);
         target = join(directory, stem + suffix + ext);
-        if (!lexists(target))
+        if (!lexists(target) && !taken.contains(target))
             return target;
     }
 }

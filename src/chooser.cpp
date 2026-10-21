@@ -1,6 +1,7 @@
 #include "chooser.h"
 
 #include "app.h"
+#include "drives.h"
 #include "util.h"
 #include "windows.h"
 
@@ -85,6 +86,7 @@ Request parse(const QString &method, const QString &title, GVariant *options)
     if (!current_file.isEmpty()) {
         r.current_folder = dirname(current_file);
         r.current_name = basename(current_file);
+        r.replacing = r.method == "SaveFile";
     }
     if (GVariant *fs = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"))) {
         for (gsize i = 0; i < g_variant_n_children(fs); ++i) {
@@ -320,14 +322,12 @@ ChooserBar::ChooserBar(MainWindow *win, const chooser::Request &req, std::functi
         name->setMinimumWidth(320);
         connect(name, &QLineEdit::returnPressed, this, &ChooserBar::accept);
         connect(name, &QLineEdit::textChanged, this, &ChooserBar::update_button);
+        connect(name, &QLineEdit::textEdited, this, [this]() { name_theirs = true; });
         lay->addWidget(name, 1);
-        // select the name without its extension, ready to type over
-        int dot = req.current_name.lastIndexOf('.');
-        name->setSelection(0, dot > 0 ? dot : req.current_name.size());
+        set_name(req.current_name);
     } else if (req.method == "SaveFiles") {
-        lay->addWidget(new QLabel(QString("Choose a folder for %1 file%2")
-                                      .arg(QString::number(req.files.size()), req.files.size() == 1 ? "" : "s")),
-                       1);
+        files_label = new QLabel;
+        lay->addWidget(files_label, 1);
     } else {
         lay->addStretch(1);
     }
@@ -371,11 +371,57 @@ void ChooserBar::update_button()
 
 void ChooserBar::selection_changed()
 {
-    // saving: picking a file puts its name in the box (to save over it, or to start from it)
+    // saving: picking a file puts its name in the box (to save over it, or to start from it); the name is then theirs
     if (name && win->pane()) {
         QStringList sel = win->pane()->selected_paths();
-        if (sel.size() == 1 && !isdir(sel[0]))
+        if (sel.size() == 1 && !isdir(sel[0])) {
             name->setText(basename(sel[0]));
+            name_theirs = true;
+        }
+    }
+    update_button();
+}
+
+void ChooserBar::set_name(const QString &n)
+{
+    name->setText(n);
+    int dot = n.lastIndexOf('.');   // the name without its extension selected, ready to type over
+    name->setSelection(0, dot > 0 ? dot : n.size());
+}
+
+// names are only looked up where that can't hold the window: not on a tape or floppy (drives.h)
+static bool can_look(const QString &dir) { return !dir.isEmpty() && drives::slow_kind(dir) == drives::Slow::None; }
+
+QStringList ChooserBar::save_targets(const QString &folder) const
+{
+    QStringList out;
+    QSet<QString> given;   // two of the files may want the same free name
+    for (const QString &f : req.files) {
+        QString t = can_look(folder) ? unique_path(folder, f, "download", given) : join(folder, f);
+        given << t;
+        out << t;
+    }
+    return out;
+}
+
+void ChooserBar::folder_changed()
+{
+    QString dir = win->cur_dir();
+    if (name && !name_theirs && !req.replacing && !req.current_name.isEmpty() && can_look(dir)) {
+        QString free = basename(unique_path(dir, req.current_name, "download"));
+        if (free != name->text())
+            set_name(free);
+    }
+    if (files_label) {
+        int n = req.files.size(), renamed = 0;
+        QStringList targets = can_look(dir) ? save_targets(dir) : QStringList();
+        for (int i = 0; i < targets.size(); ++i)
+            renamed += basename(targets[i]) != req.files[i];
+        QString text = QString("Choose a folder for %1 file%2").arg(QString::number(n), n == 1 ? "" : "s");
+        if (renamed)
+            text += QString(" (%1 get%2 a new name: the folder has a file of the same name)")
+                        .arg(QString::number(renamed), renamed == 1 ? "s" : "");
+        files_label->setText(text);
     }
     update_button();
 }
@@ -428,13 +474,13 @@ void ChooserBar::accept()
         else
             finish(true, {target});
     } else if (req.method == "SaveFiles") {
+        // each under a free name (the portal lets the names change), so nothing there is replaced; on a tape or
+        // floppy, where names aren't looked up, Replace is asked about as before
         QString folder = sel.size() == 1 && isdir(sel[0]) ? sel[0] : dir;
-        QStringList targets, existing;
-        for (const QString &f : req.files) {
-            targets << join(folder, f);
-            if (lexists(targets.last()))
-                existing << targets.last();
-        }
+        QStringList targets = save_targets(folder), existing;
+        for (const QString &t : targets)
+            if (!can_look(folder) && lexists(t))
+                existing << t;
         if (!existing.isEmpty())
             confirm_replace(this, existing, [this, targets]() { finish(true, targets); });
         else

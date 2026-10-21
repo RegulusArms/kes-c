@@ -302,6 +302,7 @@ void DateGroupProxy::build()
             to_row[r] = int(rows.size());
             rows << Row{k, r};
         }
+        rows << Row{k, FOOTER};   // collapses the group from its end
     }
     if (!midnight.isActive()) {
         QDateTime next(today.addDays(1), QTime(0, 0, 1));
@@ -382,14 +383,56 @@ bool DateGroupProxy::is_header(const QModelIndex &i) const
     return i.isValid() && i.model() == this && i.row() < rows.size() && rows[i.row()].src < 0;
 }
 
+bool DateGroupProxy::is_footer(const QModelIndex &i) const
+{
+    return is_header(i) && rows[i.row()].src == FOOTER;
+}
+
 void DateGroupProxy::toggle(const QModelIndex &header)
 {
     if (!is_header(header))
         return;
     int k = rows[header.row()].key;
-    if (!folded.remove(k))
-        folded.insert(k);
+    set_collapsed(k, is_footer(header) || !folded.contains(k));
+}
+
+int DateGroupProxy::group_of(const QModelIndex &i) const
+{
+    return i.isValid() && i.model() == this && i.row() < rows.size() ? rows[i.row()].key : -1;
+}
+
+QModelIndex DateGroupProxy::header_index(int key) const
+{
+    return header_at.contains(key) ? index(header_at.value(key), 0) : QModelIndex();
+}
+
+void DateGroupProxy::set_collapsed(int key, bool on)
+{
+    if (!header_at.contains(key) || on == folded.contains(key))
+        return;
+    if (on)
+        folded.insert(key);
+    else
+        folded.remove(key);
     regroup();
+}
+
+void DateGroupProxy::set_all_collapsed(bool on)
+{
+    QSet<int> now = on ? QSet<int>(header_at.keyBegin(), header_at.keyEnd()) : QSet<int>();
+    if (now == folded)
+        return;
+    folded = now;
+    regroup();
+}
+
+QList<int> DateGroupProxy::group_keys() const
+{
+    QList<int> out;
+    for (const Row &r : rows)
+        if (r.src == HEADER)
+            out << r.key;
+    return out;
 }
 
 void DateGroupProxy::reveal(const QModelIndex &s)
@@ -454,11 +497,18 @@ QVariant DateGroupProxy::data(const QModelIndex &i, int role) const
         return row.key;
     if (role == GroupFoldedRole)
         return folded.contains(row.key);
+    if (role == GroupFooterRole)
+        return row.src == FOOTER;
+    QString title = mode == groups::DAY ? groups::day_title(row.key, today) : groups::title(row.key, today);
+    QString count = util::group_digits(counts.value(row.key));
+    if (i.column() == 0 && row.src == FOOTER && (role == Qt::DisplayRole || role == Qt::AccessibleTextRole))
+        return "Collapse " + title + " (" + count + ")";
+    if (i.column() == 0 && row.src == FOOTER && role == Qt::ToolTipRole)
+        return QString("Collapse this group (also Ctrl+Left on any of its items)");
     if (i.column() == 0 && (role == Qt::DisplayRole || role == Qt::AccessibleTextRole))
-        return QString("%1 (%2)").arg(mode == groups::DAY ? groups::day_title(row.key, today) : groups::title(row.key, today),
-                                      QString::number(counts.value(row.key)));
+        return title + " (" + count + ")";
     if (i.column() == 0 && role == Qt::AccessibleDescriptionRole)
-        return folded.contains(row.key) ? QString("Collapsed group") : QString("Group");
+        return row.src == FOOTER ? QString("Collapses the group") : folded.contains(row.key) ? QString("Collapsed group") : QString("Group");
     return QVariant();
 }
 

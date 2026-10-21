@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QThread>
 
+#include <gio/gunixmounts.h>
 #include <sys/statvfs.h>
 #include <sys/xattr.h>
 
@@ -79,6 +80,12 @@ QList<Mount> mounts()
     }
     for (const auto &[kind, path] : test_slow())
         cached << Mount{path, kind == Slow::Floppy ? "/dev/test-floppy" : "ltfs:test", kind == Slow::Floppy ? "vfat" : "fuse"};
+    // Tests add mounts of their own: KESTREL_TEST_MOUNTS="/path|fstype|source;…"
+    for (const QString &part : qEnvironmentVariable("KESTREL_TEST_MOUNTS").split(';', Qt::SkipEmptyParts)) {
+        QStringList f = part.split('|');
+        if (f.size() == 3)
+            cached << Mount{f[0], f[2], f[1]};
+    }
     slow_mounted = std::any_of(cached.begin(), cached.end(), [](const Mount &mt) { return kind_of(mt) != Slow::None; });
     return cached;
 }
@@ -122,11 +129,38 @@ static const Mount *mount_of(const QList<Mount> &all, const QString &path)
     return best;
 }
 
+bool network_fs(const QString &fstype)
+{
+    static const QSet<QString> NET = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "sshfs", "davfs",
+                                      "fuse.rclone", "9p", "fuse.davfs2", "afs", "ceph", "glusterfs"};
+    return NET.contains(fstype);
+}
+
+bool user_mount(const Mount &mt)
+{
+    QByteArray root = mt.root.toUtf8(), fs = mt.fstype.toUtf8(), dev = mt.source.toUtf8();
+    if (g_unix_is_mount_path_system_internal(root.constData()) || g_unix_is_system_fs_type(fs.constData()) ||
+        g_unix_is_system_device_path(dev.constData()))
+        return false;
+    if (mt.root.contains("/."))   // inside a hidden folder: hidden on purpose
+        return false;
+    if (mt.root.startsWith("/media/") || mt.root.startsWith("/run/media/" + QString::fromUtf8(g_get_user_name()) + "/"))
+        return true;
+    return mt.root.startsWith(HOME() + "/");
+}
+
 QString mount_root(const QString &path)
 {
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
     return mt ? mt->root : QString("/");
+}
+
+QString mount_fstype(const QString &path)
+{
+    QList<Mount> all = mounts();
+    const Mount *mt = mount_of(all, path);
+    return mt ? mt->fstype : QString();
 }
 
 // the whole disks under a block device: a partition's disk, the disks under a device-mapper or md device (its slaves)

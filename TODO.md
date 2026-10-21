@@ -90,24 +90,6 @@ into.
     puts the drive's own name back.
   - Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than guessing.
 
-- [ ] **A sidebar section (dropdown) for mounts.** A collapsible **Mounts** section in the sidebar, like Places,
-  Bookmarks and Devices (moved and collapsed the same way), listing the mounts GNOME Files shows that Kestrel's
-  sidebar leaves out.
-  - Found on this machine (2026-10-14): GNOME Files lists `~/dataset-a` and `~/dataset-b` (ZFS datasets
-    `tank/secure/…` mounted inside the home folder); Kestrel's sidebar doesn't. Its Devices list (`Sidebar::mount_list`
-    in `src/widgets.cpp`) only takes a mount whose device is a `/dev/…` disk, or one under `/media`, `/run/media` or
-    `/mnt`, so anything else is dropped: ZFS datasets, bind mounts, and FUSE mounts (rclone, sshfs, gocryptfs,
-    Cryptomator…) in the home folder or elsewhere.
-  - Use GIO's own rule for what to show (`g_unix_mount_guess_should_display()`, or the volume monitor's mounts, as
-    GNOME Files does), so Kestrel lists the same mounts, including those in the home folder.
-  - Network shares (SMB, SFTP, NFS, FTP: GVFS mounts) aren't in the sidebar either, only on the Overview: list them in
-    this section too, with Unmount on the entry or its menu. Recently used servers that aren't mounted could show
-    greyed, a click reconnecting them.
-  - Each entry: its name (and the friendly name, see that item), an icon by kind (ZFS dataset, network share, FUSE,
-    disk), and opening on click. Check the Overview's Drives section for the same gap.
-  - Also compare with GNOME Files in the user's real session (unmounted partitions it offers to mount), which a
-    shell without the desktop's udisks volume monitor can't show.
-
 - [ ] **Overview page improvements, chosen in Preferences.** Let the user pick what the Overview shows, in
   Preferences → Overview. Today it always shows the same four sections: Drives, Phones & Cameras, Network, Bookmarks.
   - Show or hide each section, and put them in any order (as the sidebar's sections can be).
@@ -139,52 +121,7 @@ into.
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
     what's on which tape).
 
-- [ ] **Write straight to the file on a tape or floppy, without a part file.** A copy or move onto a slow drive
-  (`drives::slow_kind(dst)` is Tape or Floppy) writes each file under its real name instead of a hidden
-  `.kes-….part` renamed into place when whole (`open_part_at` in `copy_file`, src/fileops.cpp; the admin helper's own).
-  - Why: on LTFS the part file buys nothing. A write that fails part-way loses that tape space whatever the file is
-    called (LTFS never reuses it), and LTFS has neither RENAME_NOREPLACE nor `link()`, so claiming the name already
-    falls back to check-then-rename, which isn't airtight; `O_EXCL` on the real name is the better claim there.
-  - A floppy (FAT) does give a failed part file's space back, so there the part file works as intended and costs
-    only a rename; it's included for one behaviour on every slow drive. To reconsider if that turns out to matter.
-  - A new name is still claimed without replacing anything: create it with `O_CREAT | O_EXCL` (fails on a taken name,
-    as RENAME_NOREPLACE does now), so a file another program saved there meanwhile is kept and reported.
-  - On a cancel or a failure part-way, the half-written file is deleted, so nothing half-made is left under a real
-    name once the job has ended (a crash or power cut mid-file can still leave one; LTFS never reuses the space
-    anyway).
-  - Replacing an existing file can't be done this way without losing the old one first: to decide whether that
-    keeps the part file and rename, or asks first.
-  - An exception to Kestrel's failure-atomic writes, by the user's choice: say so in a comment at the write, and
-    cover it in `slow` (cancel and a write that fails part-way on a `KESTREL_TEST_SLOW`
-    tape leave no file under the real name; a name taken meanwhile is kept).
-
 ### Views and search
-
-- [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
-  all the way back up to its header to collapse it. Make it collapsible from the bottom too, and without scrolling:
-  - **A footer at the end of each group:** a slim row ("▴ Collapse Today (1,240)") after the group's last item that
-    collapses it, then keeps the view on that group's header so the user doesn't lose their place. A new row kind in
-    `DateGroupProxy` (`src/groups.cpp`), drawn like the header, not selectable, spanning the list's columns and taking
-    a whole line in the grid, as headers do.
-  - **A sticky header:** the header of the group at the top of the view stays pinned there while scrolling through it
-    (as phones' photo apps and many file managers do), still clickable to collapse. Collapsing from it scrolls so the
-    collapsed header is at the top. Could replace the footer, or come with it (to decide; maybe a preference).
-  - **From anywhere:** right-click an item → **Collapse This Group**, plus **Collapse All Groups** / **Expand All
-    Groups** (Sort menu and right-click on empty space); a key for it, e.g. Ctrl+Left / Ctrl+Right or
-    Ctrl+Shift+Minus / Plus, on the current item's group.
-  - Keep: a collapsed group still counts its items, and selecting an item in it opens it (as now).
-
-- [ ] **Better search: filters, and grep.** The search bar gains filters, and a way to search inside files that
-  doesn't depend on the desktop's index.
-  - **Filters** (what `find` does): type (images, videos, audio, documents, archives, folders), size (over / under),
-    modified/created date (today, this week, a range), combined with the name; usable with "search subfolders".
-    Shown as chips or a small filter row, and remembered for the session.
-  - **grep** (search file contents directly): today *File contents* uses the desktop's search index (`localsearch`),
-    which only covers indexed folders (not external drives, network shares or folders it skips) and doesn't do regular
-    expressions. Add a direct content search with `grep -r` (or `ripgrep` when installed, much faster): plain text or
-    a regular expression, case-sensitive or not, skipping binary files, on a thread with ✕. Results show the matching
-    line and line number, and open the file (in a text editor at that line where possible).
-  - Use the index when it covers the folder (instant), grep otherwise, or let the user pick.
 
 ### File tools
 
@@ -336,29 +273,13 @@ into.
   - A whole folder at once, keeping its subfolders in the output folder.
   - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
 
-### The file chooser
-
-- [ ] **File chooser: its own Overview for downloads, and free names when changing folders.** For the Save dialogs other
-  apps open in Kestrel (a browser's downloads, "Save image as"…).
-  - **Its own start page:** a Save chooser can open on an Overview of its own, with quick-access save locations the user
-    sets up for the chooser only (like Starred, but separate: adding one doesn't star the folder in Kestrel), e.g.
-    Downloads, Pictures/Saved, a project folder. Managed from the page itself (add the current folder, remove, reorder)
-    and from the chooser's preferences.
-  - **Or keep today's behaviour:** a setting in the chooser's preferences chooses where a Save chooser starts: that
-    Overview, or as now (the folder the app suggests, else where the last chooser saved; `chooser_folder` in
-    `src/app.cpp` / `src/chooser.cpp`). Open choosers keep starting as now unless this should apply to them too
-    (to decide).
-  - **A free name in each folder:** when the user goes to another folder while saving, Kestrel checks the name in the
-    name box against that folder and, if a file of that name is already there, changes it to the next free one
-    (`photo.jpg` → `photo (1).jpg`, then `(2)`…), as browsers name repeated downloads. Going back to a folder where the
-    original name is free puts the original name back. Only names Kestrel changed itself are changed back: once the
-    user edits the name, it's theirs (still checked, with today's "Replace?" question when saving over a file).
-    Several files saved at once: each name made free the same way.
-  - Numbering: `util::unique_path(..., "number")` starts at ` (2)`; downloads want ` (1)` first, so it needs a style
-    for that (and it already strips an existing ` (n)` before numbering).
-
 ## Done
 
+- [x] **Better search: filters, and grep** (0.3.2-alpha.3). Filters: `SearchFilter` (src/search.h; type by name, size, date modified or created) in a row under the search bar (`Pane::build_filter_row`), kept for the session, applied by `SearchThread` (also with no name, and without subfolders). Inside files: `ContentSearch` (Automatic / Search index / Read the files, Regular expression, Match case); `SearchThread::run_read` streams ripgrep (else grep, `--null`) with a few lines per file into a Match column, stopped with ✕; Automatic uses localsearch where its settings cover the folder (`index_covers`) for plain words, and reads the files when it finds nothing. Opening a result at its line: gedit and forks, Geany, VS Code and forks, Kate, Sublime, Zed (GNOME Text Editor has no line option). Decided: chips weren't used (a row of drop-downs); File contents now follows Include subfolders (it always searched subfolders); nothing is read on tapes or floppies. ripgrep is optional (kes-setup, Suggests). Test: `search`.
+- [x] **Collapse a date group from anywhere in it** (0.3.2-alpha.3). A footer row in `DateGroupProxy` (src/groups.cpp: a row kind of its own after an open group's last item, "Collapse Today (1,240)", drawn quieter like a header, not selectable, spanning the list's columns and a whole line in the grid); `Pane::collapse_group` keeps the view on the header (the current row). Ctrl+Left / Ctrl+Right on the current item's group (Ctrl+Shift+Minus / Plus would clash with zoom on many layouts); Collapse This Group on an item's menu (`collapse_group`), Collapse / Expand All Groups in the Sort menu and on empty space's (`collapse_groups`, `expand_groups`). Not done: the sticky header (the footer was chosen). Test: `groups`.
+- [x] **Write straight to the file on a tape, without a part file** (0.3.2-alpha.3; tapes only, by the user's choice: floppies keep the part file, which works as intended on FAT). `copy_file_at` (src/fileops.cpp) and the admin helper's `Job::copy` (it recognises a tape from the mount table, `on_tape`) open a new name on a tape with O_CREAT|O_EXCL and write it there; a cancel or failure deletes it; a taken name is a conflict, kept. Decided: replacing a file on a tape keeps the part file and rename (the old one is never lost first). Test: `slow`, `admin_helper` (inotify: `DirWatch`).
+- [x] **File chooser: its own Overview for downloads, and free names when changing folders** (0.3.2-alpha.3). Free names: `ChooserBar::folder_changed` (src/chooser.cpp) makes the suggested name free in each folder shown, also the one it opens in, with `util::unique_path(..., "download")` (from (1)); the original comes back where it's free; a name typed or a file picked is the user's; an app replacing a file (current_file) keeps its name; SaveFiles gives each file a free name (the portal allows it) instead of asking to replace; not on tapes or floppies (not looked up there). Save locations: `chooser_places`, shown first on a Save window's Overview (`OverviewPage::save_places_section`), managed there (Add Folder…, Move Earlier / Later, Remove) and in Preferences → Windows; `chooser_start` (default: as before) can open Save windows there. Decided: Open windows start as before; an app replacing a file opens in its folder; Add Folder… starts where the last Save window saved. BleachBit cleaner: a Save locations option. Test: `chooser`, `installer`.
+- [x] **A sidebar section for mounts** (0.3.2-alpha.3). A **Mounts** section (`Sidebar::user_mount_list`, src/widgets.cpp) lists what file managers show that Devices doesn't: GIO's rule (`drives::user_mount`: in the home folder, /media or /run/media/<user>, not a system file system, device or path, not inside a hidden folder), from the mount table only (GIO also tries to enter /media mounts, which can ask the drive, and hides bind mounts; GNOME Files' udisks2 monitor lists them, as ~/dataset-a here). Plus GVFS network shares (`overview::network_infos`, shared with the Overview) with Unmount, and recent servers that aren't connected, greyed, with Remove from Recent Servers. An icon and a tooltip by kind (ZFS dataset, network share, encrypted folder, FUSE, disk). Not done: friendly names (their own item); the Overview still shows one card per ZFS pool (datasets in the home folder aren't cards of their own) and leaves out FUSE mounts that aren't network ones (gocryptfs…); comparing with GNOME Files in the real session (unmounted partitions it offers to mount) is still to do by hand. Test: `sidebar` (`KESTREL_TEST_MOUNTS`).
 - [x] **Double-clicking a checksum file on a tape still froze Kestrel while the drive sought** (0.3.1-alpha.16). Caught with a trace of the window's thread: adding the file to Recent asked GIO for its content type (`util::content_type`, `g_file_query_info`), which reads the file's start, right after a write to the tape when the drive winds back from the index. On slow drives the type is now by name (Recent, Open With, `open_default` starts the type's app itself). Test: `slow`.
 - [x] **Prevent shoe-shining on tapes as much as possible: a RAM write buffer, and more** (0.3.1-alpha.13). `src/tapebuf.cpp` (the buffer: memory available less a share kept free, re-checked; a reader thread in the copy's order; fill first, then stream at the source's pace within the drive's speed-matching range or refill-and-burst below it; posix_fadvise; status and log figures), used by copies onto a tape (`Ops::start_tape_buffer`, src/fileops.cpp); room checked before each file; no fsync on tapes; Properties no longer reads a tape file to name its type; LTFS's timed index sync read from its command line (Overview card, the copy's log). Preferences → Files → Tapes. Not done: mounting tapes from Kestrel with `sync_type=unmount` (in "LTFS and slow drives: what's left"); not yet measured on the real drive. Test: `slow`.
 - [x] **A better Preferences window that shows every setting** (0.3.1-alpha.13). `src/prefs.cpp` (every setting: tab, label, default, where else it's changed; set() applies it to every window and tells the other Kestrels, "settings" with its keys, PROTOCOL 4), `src/prefswin.cpp` (tabs General, Views, Sidebar, Images & Videos, Files, Archives, Windows, Menus; live changes, search, Reset This Tab / Reset All). Not done: the Overview's contents ("Overview page improvements"); conflict and trash choices (Kestrel keeps none). Test: `prefs`.

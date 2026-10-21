@@ -3,7 +3,8 @@
 // then one per year. Group by Day: one header per date. The date is when an item was modified, created, or taken (its
 // metadata, see Dates). The groups go newest first (oldest first when sorted by Modified, ascending); inside each group
 // the items keep the order of the chosen sort (name, size, type…). A header is a row of its own, clicked to collapse
-// or expand its group.
+// or expand its group; an open group ends with a footer row ("Collapse Today (1,240)"), clicked to collapse it from
+// the bottom.
 #pragma once
 
 #include <QAbstractProxyModel>
@@ -61,8 +62,9 @@ private:
 }  // namespace groups
 
 enum {
-    GroupRole = Qt::UserRole + 60,         // on a header row: its group's key (the items have none)
+    GroupRole = Qt::UserRole + 60,         // on a header or footer row: its group's key (the items have none)
     GroupFoldedRole = Qt::UserRole + 61,   // on a header row: its group is collapsed
+    GroupFooterRole = Qt::UserRole + 62,   // true on a footer row
 };
 
 class DateGroupProxy : public QAbstractProxyModel {
@@ -76,10 +78,16 @@ public:
     void set_order(int column, Qt::SortOrder order);   // the sort shown: picks the order of the groups
     void set_mode(int mode);   // groups::PERIOD or DAY
     void set_watch_dates(bool on);   // regroup as taken dates come in (grouping by them)
-    bool is_header(const QModelIndex &index) const;
-    void toggle(const QModelIndex &header);   // collapse or expand its group
+    bool is_header(const QModelIndex &index) const;   // a group's header or footer row (not an item)
+    bool is_footer(const QModelIndex &index) const;
+    void toggle(const QModelIndex &header);   // collapse or expand its group (a footer: collapse)
     bool collapsed(int key) const { return folded.contains(key); }
-    QList<int> header_rows() const;
+    int group_of(const QModelIndex &index) const;   // the group of an item, header or footer (-1: none)
+    QModelIndex header_index(int key) const;
+    void set_collapsed(int key, bool on);
+    void set_all_collapsed(bool on);
+    QList<int> group_keys() const;   // in order
+    QList<int> header_rows() const;   // the headers' and footers' rows
     QList<int> source_rows() const { return in_order; }   // in the groups' order, also those in collapsed groups
     void reveal(const QModelIndex &source);   // expand the group of a source index (to select it)
 
@@ -107,9 +115,10 @@ public:
                       const QModelIndex &parent) override;
 
 private:
+    enum { HEADER = -1, FOOTER = -2 };
     struct Row {
         int key;
-        int src;   // the source row; -1 for the group's header
+        int src;   // the source row; HEADER or FOOTER for the group's own rows
     };
     void before();   // the source is about to change: the views keep their places (persistent indexes)
     void after();    // ...and has: regroup

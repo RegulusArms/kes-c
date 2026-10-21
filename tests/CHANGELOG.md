@@ -4,6 +4,54 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.3
+
+Added:
+- `sidebar`: the Mounts section. Which mounts are shown (GIO's rule, from the mount table), when a recent server
+  counts as connected, and, with mounts added through the new `KESTREL_TEST_MOUNTS` hook and two recent servers: the
+  section's entries in order, a mount Devices lists not repeated, a mount's name and tooltip, a greyed server, moving
+  an entry (saved), collapsing, and Remove from Recent Servers (also told to other Kestrels).
+- `chooser`: free names (download numbering from (1), the suggested name made free where the window opens and in
+  each folder visited, the original back where it's free, a name the user typed left alone, an app replacing a file
+  keeping its name and the Replace question, several files each made free without asking) and save locations (only on a
+  Save window's Overview, starting there when set to and not when replacing a file or opening, added, moved and removed
+  from the page and saved, a click going there).
+
+- `slow`: writing onto a tape, watched with inotify (the new `DirWatch` in common.h): a new file is written under its
+  name with no part file; replacing one there, and a new file onto a floppy, still go through a part file; a taken name
+  is kept; a write failing part-way (RLIMIT_FSIZE) and a cancel while writing leave no half-written file and no part.
+- `admin_helper`: the same onto a tape through the admin helper (it recognises a tape from the mount table, or a
+  `KESTREL_TEST_SLOW` folder when not root): written under its name, a replacement through a part file, a taken name
+  kept, a failed write leaving nothing.
+
+- `groups`: collapsing a date group from anywhere in it: the footer at each open group's end (named, counted, not
+  selectable; a click collapses the group and makes its header current, also for a 150-item group whose header was out
+  of view), Ctrl+Left / Ctrl+Right on an item, Collapse This Group on an item's menu, and Collapse / Expand All Groups
+  on empty space's menu and the Sort menu.
+
+- `search` (a new test): the search bar's filters (types by name, size, dates, a new tab keeping them) and searching
+  inside files: with ripgrep and with grep (matching lines, case, regular expressions and a bad one, subfolders,
+  binary and hidden files), ✕ ending the program, which folders the index covers and when Automatic uses it or reads
+  the files (also after an index that finds nothing), nothing read on a tape, and opening a result at its line.
+
+- `search`: a progress bar while a search runs ("Searching…" in the view), "Nothing found" in the view with no window
+  and no progress bar left (also filtering the folder by name), nothing said over results, and the progress bar gone
+  after ✕; the view's message is checked as seen: above the list view.
+
+Changed:
+- `sidebar`: the saved section order now includes Mounts.
+- `search`: a regular expression that doesn't parse is reported in the view ("Nothing found" and why), not the status
+  bar.
+- `installer`: --install-optional's expected packages include ripgrep.
+- `groups`: the list of what a grouped view shows leaves out the new footers (checked on their own).
+- `slow`: "a copy onto a tape writes nothing while the buffer fills" now looks for data written (a new file on a tape
+  is made under its name, empty, when it's opened).
+- `chooser`: "saving over a file asks first" now has the user type the taken name: a suggested name that's taken is
+  made free instead of asking.
+- `installer`: the BleachBit cleaner's new Save locations option (its action, the dry run and the real clean removing
+  `chooser_places` and keeping the other settings).
+- `prefs`: `sidebar_mounts_order` (the Mounts section's order) is kept state, not a setting to choose.
+
 ## 0.3.2-alpha.2
 
 Added:

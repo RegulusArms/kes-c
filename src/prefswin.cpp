@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -67,7 +68,7 @@ static void select_data(QComboBox *cb, const QVariant &v)
     cb->setCurrentIndex(std::max(i, 0));
 }
 
-static const QMap<QString, QString> SECTION_NAMES = {{"places", "Places"}, {"bookmarks", "Bookmarks"}, {"devices", "Devices"}};
+static const QMap<QString, QString> SECTION_NAMES = {{"places", "Places"}, {"bookmarks", "Bookmarks"}, {"devices", "Devices"}, {"mounts", "Mounts"}};
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
 {
@@ -371,6 +372,57 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             list->addItems(prefs::get("slow_previews").toStringList());
             remove->setEnabled(list->count() > 0);
             list->setToolTip(list->count() ? QString() : QString("None: no tape or floppy shows previews"));
+        };
+        return box;
+    }
+    if (key == "chooser_places") {   // a Save window's save locations (OverviewPage::save_places_section)
+        auto *box = new QWidget;
+        auto *h = new QHBoxLayout(box);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto *list = new QListWidget;
+        list->setObjectName("chooser_places_list");
+        list->setMaximumHeight(110);
+        auto *bv = new QVBoxLayout;
+        auto *add = new QPushButton("Add…"), *remove = new QPushButton("Remove");
+        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        for (QPushButton *b : {add, remove, up, down})
+            bv->addWidget(b);
+        bv->addStretch(1);
+        h->addWidget(list, 1);
+        h->addLayout(bv);
+        connect(add, &QPushButton::clicked, this, [this]() {
+            QPointer<PreferencesDialog> self(this);
+            choose_folder(this, "Add a Save Location", HOME(), [self](const QString &p) {
+                QStringList l = prefs::get("chooser_places").toStringList();
+                if (self && !l.contains(p))
+                    self->save("chooser_places", l << p);
+            });
+        });
+        connect(remove, &QPushButton::clicked, this, [this, list]() {
+            QStringList l = prefs::get("chooser_places").toStringList();
+            for (QListWidgetItem *it : list->selectedItems())
+                l.removeAll(it->text());
+            save("chooser_places", l);
+        });
+        auto move = [this, list](int by) {
+            QStringList l = prefs::get("chooser_places").toStringList();
+            int r = list->currentRow();
+            if (r < 0 || r + by < 0 || r + by >= l.size())
+                return;
+            l.move(r, r + by);
+            save("chooser_places", l);
+            list->setCurrentRow(r + by);
+        };
+        connect(up, &QPushButton::clicked, this, [move]() { move(-1); });
+        connect(down, &QPushButton::clicked, this, [move]() { move(1); });
+        loaders[key] = [list, remove, up, down]() {
+            int r = list->currentRow();
+            list->clear();
+            list->addItems(prefs::get("chooser_places").toStringList());
+            list->setCurrentRow(std::min(r, list->count() - 1));
+            for (QPushButton *b : {remove, up, down})
+                b->setEnabled(list->count() > 0);
+            list->setToolTip(list->count() ? QString() : QString("None yet: add the folders you save to most"));
         };
         return box;
     }

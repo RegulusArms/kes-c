@@ -52,4 +52,5 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 | `rar` (non-free, multiverse; a trial version of WinRAR's command-line tool) | Creating `.rar` archives (passwords, volumes, recovery records) |
 | `bleachbit` | **Shred with BleachBit…** and **Empty Trash with BleachBit…**, and the cleaner `kes-setup --bleachbit` adds to it |
 | `pbzip2` or `lbzip2`, `plzip`, `lz4` | Multi-core `.bz2` and `.lz`, and `.lz4` archives. Kestrel offers whichever are installed |
+| `ripgrep` | Searching inside files by reading them (search bar → *File contents*), much faster than `grep`, which is used without it |
 | [UWP](https://github.com/RegulusArms/UWP) (not an apt package; install with its `install.sh`) | "Set as Wallpaper" through UWP profiles, and "Add to Selected UWP Monitor". Found as `uwp` on your PATH or in `~/.local/bin` |

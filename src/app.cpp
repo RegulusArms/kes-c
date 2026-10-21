@@ -177,8 +177,11 @@ void MainWindow::make_chooser(const chooser::Request &req, std::function<void(co
     lay->addWidget(chooser);
     setCentralWidget(box);
     setWindowTitle(req.title.isEmpty() ? chooser::button_text(req) : req.title);
-    for (Pane *p : panes())
+    for (Pane *p : panes()) {
         p->set_type_filter(chooser->type_filter());
+        p->overview_page()->set_save_places(chooser->saving());   // a Save window's Overview: its save locations first
+    }
+    chooser->folder_changed();   // the suggested name made free in the folder it starts in
     if (chooser->name)
         chooser->name->setFocus();
 }
@@ -314,6 +317,16 @@ void MainWindow::add_sort_items(QMenu *m, Pane *p)
             d->setToolTip("When a photo or video was taken, from its metadata; the date created when it has none");
     }
     dm->setToolTipsVisible(true);
+    if (p->grouping() != groups::NONE) {   // also on empty space's right-click menu
+        m->addAction("Collapse All Groups", this, [pp]() {
+            if (pp)
+                pp->set_all_groups_collapsed(true);
+        });
+        m->addAction("Expand All Groups", this, [pp]() {
+            if (pp)
+                pp->set_all_groups_collapsed(false);
+        });
+    }
     m->addSeparator();
     m->addAction("Set as Default", this, [this, pp]() {
         if (pp)
@@ -655,8 +668,8 @@ void MainWindow::pane_path_changed(Pane *p)
     sync_zoom_slider();
     update_free_label();
     update_status();
-    if (chooser)   // Save needs a folder: re-checked in each place, not only when the name or the selection changes
-        chooser->update_button();
+    if (chooser)   // Save needs a folder, and the names a free one in each: re-checked in each place
+        chooser->folder_changed();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }
@@ -1011,6 +1024,19 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         QAction *a = T(m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); }), "show_hidden");
         a->setCheckable(true);
         a->setChecked(show_hidden);
+        if (p->grouping() != groups::NONE) {
+            QPointer<Pane> pp(p);
+            T(m->addAction("Collapse All Groups", this, [pp]() {
+                  if (pp)
+                      pp->set_all_groups_collapsed(true);
+              }),
+              "collapse_groups");
+            T(m->addAction("Expand All Groups", this, [pp]() {
+                  if (pp)
+                      pp->set_all_groups_collapsed(false);
+              }),
+              "expand_groups");
+        }
         m->addSeparator();
         T(m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); }),
           "open_terminal");
@@ -1080,6 +1106,15 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     if (p->in_search)
         T(m->addAction(icon({"folder-open"}), "Show in Folder", this, [this, paths]() { reveal(paths.first()); }),
           "show_in_folder");
+    if (p->group_of_path(paths.value(0)) >= 0) {   // grouped by date: its group collapses from here, not only its header
+        QPointer<Pane> pp(p);
+        int key = p->group_of_path(paths.value(0));
+        T(m->addAction("Collapse This Group", this, [pp, key]() {
+              if (pp)
+                  pp->collapse_group(key);
+          }),
+          "collapse_group");
+    }
     if (!is_dir && !single.isEmpty()) {
         QMenu *ow = m->addMenu("Open With");
         T(ow->menuAction(), "open_with");
@@ -1407,6 +1442,8 @@ void apply_settings(const QStringList &keys)
                 w->sidebar->refresh();
         } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
             // read each time a menu is built, or a copy onto a tape starts
+        } else if (key == "chooser_start" || key == "chooser_places") {
+            // read when a Save window opens; a Save window's Overview follows chooser_places itself (prefs::Notifier)
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
         } else {
@@ -1500,6 +1537,7 @@ void MainWindow::show_shortcuts()
 <tr><td><b>Delete / Shift+Delete</b></td><td>Trash / delete permanently</td></tr>
 <tr><td><b>Alt+Enter</b></td><td>Properties</td></tr>
 <tr><td><b>F3 / F9</b></td><td>Info panel / sidebar</td></tr>
+<tr><td><b>Ctrl+Left / Ctrl+Right</b></td><td>Grouped by date: collapse / expand the current item's group</td></tr>
 <tr><td><b>Drag + Ctrl / Shift / Ctrl+Shift / Alt</b></td><td>Copy / move / link / ask</td></tr>
 <tr><td colspan=2><br><b>Image viewer</b></td></tr>
 <tr><td><b>←/→, scroll wheel</b></td><td>Previous / next</td></tr>
@@ -1621,9 +1659,11 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
 {
     // not in WINDOWS: a chooser isn't a window other Kestrels hand folders to
     QString start = req.current_folder;
-    if (!isdir(start))
+    if (req.saving() && !req.replacing && prefs::get("chooser_start").toString() == "overview")
+        start = OVERVIEW;   // its own Overview, with the save locations (a file being replaced: its folder)
+    if (start != OVERVIEW && !isdir(start))
         start = settings().value("chooser_folder").toString();   // where the last chooser picked something
-    if (!isdir(start))
+    if (start != OVERVIEW && !isdir(start))
         start = HOME();
     auto *w = new MainWindow({start}, g_thumbs, true);
     w->make_chooser(req, std::move(done));

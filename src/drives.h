@@ -28,6 +28,13 @@ struct Mount {
 QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a second); safe on any thread
 QString device_label(const QString &device);   // a file system's label (/dev/disk/by-label), without asking the drive
 QString mount_root(const QString &path);       // the mount point path is on
+QString mount_fstype(const QString &path);     // the file system type of the mount path is on ("fuse.sshfs"…)
+// A mount file managers show of their own accord, by GIO's rule (g_unix_mount_guess_should_display, which GNOME Files'
+// volume monitors follow): not a system file system, device or path, not inside a hidden folder, and under the home
+// folder, /media or /run/media/<user>. From the mount table alone: GIO also checks it can enter a /media mount, which
+// asks the drive (a busy tape, a dead network share), and it skips bind mounts, which GNOME Files' udisks2 monitor lists.
+bool user_mount(const Mount &mt);
+bool network_fs(const QString &fstype);   // a network file system (NFS, SMB, sshfs, rclone…)
 // The physical drives a path is on, the same in every Kestrel (the job queue's lanes, jobs.h), from the mount table and
 // /sys only (no drive is asked): "disk:sda" for a partition of sda (an encrypted or LVM volume: the disks under it),
 // "zfs:tank" for a ZFS dataset (its pool), "gvfs:<share>" for each network share or phone, otherwise the mount's

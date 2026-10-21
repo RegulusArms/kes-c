@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QScrollArea>
 #include <QTimer>
+#include <QSet>
 #include <QVariantMap>
 
 #include <functional>
@@ -108,6 +109,10 @@ MountGroup mount_group(const QString &scheme, const QString &path, bool shadowed
 
 // Connected phones (mounted, with their FUSE path) and ones that can be mounted (uri = where to mount them).
 QList<DriveInfo> phone_infos(GVolumeMonitor *monitor);
+// Network shares mounted through GVFS (smb, sftp, ftp…). known_roots: paths that are kernel mounts (listed as local).
+QList<DriveInfo> network_infos(GVolumeMonitor *monitor, const QSet<QString> &known_roots);
+// A recent server's address is one of these shares, or inside one
+bool connected(const QString &server, const QList<DriveInfo> &shares);
 
 }  // namespace overview
 
@@ -138,6 +143,13 @@ public:
     explicit OverviewPage(ThumbnailManager *thumbs, QWidget *parent = nullptr);
     ~OverviewPage() override;
     void refresh();   // re-scan filesystems in the background, then rebuild
+    // A Save window's Overview (chooser.h) starts with its save locations: folders the user keeps for saving from other
+    // apps ("chooser_places"; like Starred, but only the chooser's). Managed here and in Preferences → Windows.
+    void set_save_places(bool on);
+    void add_save_place(const QString &path);
+    void remove_save_place(const QString &path);
+    void move_save_place(const QString &path, int by);   // -1: earlier, 1: later
+    QStringList save_place_cards() const;                // the save locations shown, in order
 
 Q_SIGNALS:
     void navigate(const QString &target);
@@ -161,6 +173,8 @@ private:
     void do_unmount(const overview::MountRef &mount);
     void drive_menu(const DriveInfo &info, const QPoint &pos);
     void bookmark_menu(const QString &target, const QPoint &pos);
+    void save_place_menu(const QString &target, const QPoint &pos);
+    void save_places_section();
     void thumb_ready(const QString &path);
     static void monitor_changed(void *, void *, void *self);
 
@@ -168,6 +182,9 @@ private:
     QWidget *body;
     QVBoxLayout *lay;
     QHash<QString, BookmarkCard *> bookmark_cards;
+    QHash<QString, BookmarkCard *> save_cards;
+    QStringList save_order;   // the save locations shown
+    bool save_places = false;
     bool fs_running = false;
     bool have_fs = false;
     QHash<QString, QString> shown_slow;   // tape / floppy root -> what its card showed (redrawn when it changes)

@@ -33,6 +33,7 @@
 #include <QJsonObject>
 
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -348,6 +349,81 @@ static std::vector<std::string> list_dir(int dirfd)   // the names in an open fo
     return out;
 }
 
+// Whether a real path (walked: no symlinks) is on an LTFS tape: the mount it's on, from the mount table (the longest
+// mount point it's under), is LTFS (as Kestrel's drives::slow_kind tells). Tests mark folders as tapes with
+// KESTREL_TEST_SLOW ("tape=/path;…"); never as root (pkexec clears the environment anyway, and it would only make a
+// copy write straight to its name, never give it more rights).
+static bool on_tape(const std::string &path)
+{
+    auto under = [&](const std::string &root) {
+        return root == "/" || path == root || path.rfind(root + "/", 0) == 0;
+    };
+    if (geteuid() != 0)
+        if (const char *test = getenv("KESTREL_TEST_SLOW")) {
+            std::string spec = test;
+            for (size_t at = 0; at <= spec.size();) {
+                size_t end = spec.find(';', at);
+                std::string part = spec.substr(at, end == std::string::npos ? std::string::npos : end - at);
+                if (part.rfind("tape=", 0) == 0 && under(part.substr(5)))
+                    return true;
+                if (end == std::string::npos)
+                    break;
+                at = end + 1;
+            }
+        }
+    FILE *f = fopen("/proc/self/mountinfo", "re");
+    if (!f)
+        return false;
+    auto unescape = [](const std::string &s) {   // mountinfo's \040-style escapes
+        std::string out;
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '\\' && i + 3 < s.size() && isdigit(s[i + 1]) && isdigit(s[i + 2]) && isdigit(s[i + 3])) {
+                out += char((s[i + 1] - '0') * 64 + (s[i + 2] - '0') * 8 + (s[i + 3] - '0'));
+                i += 3;
+            } else {
+                out += s[i];
+            }
+        }
+        return out;
+    };
+    std::string best;
+    bool tape = false;
+    char *line = nullptr;
+    size_t cap = 0;
+    while (getline(&line, &cap, f) > 0) {
+        std::string l = line;
+        size_t dash = l.find(" - ");
+        if (dash == std::string::npos)
+            continue;
+        std::vector<std::string> before, after;
+        std::string w;
+        for (char c : l.substr(0, dash) + " ")
+            if (c == ' ') {
+                before.push_back(w);
+                w.clear();
+            } else {
+                w += c;
+            }
+        for (char c : l.substr(dash + 3))
+            if (c == ' ' || c == '\n') {
+                after.push_back(w);
+                w.clear();
+            } else {
+                w += c;
+            }
+        if (before.size() < 5 || after.size() < 2)
+            continue;
+        std::string root = unescape(before[4]), fstype = after[0], source = unescape(after[1]);
+        if (under(root) && root.size() >= best.size()) {
+            best = root;
+            tape = source.rfind("ltfs", 0) == 0 || fstype.find("ltfs") != std::string::npos;
+        }
+    }
+    free(line);
+    fclose(f);
+    return tape;
+}
+
 // A hidden name for building something beside the name it will replace (see Job::install): ".kes-<random>.part".
 static std::string part_name()
 {
@@ -393,6 +469,7 @@ public:
     explicit Job(qint64 id) : id(id) {}
     qint64 id;
     double done = 0, total = 0;
+    bool to_tape = false;   // the destination is on an LTFS tape (on_tape): a new file is written straight to its name
 
     void check_cancel()
     {
@@ -474,7 +551,7 @@ public:
             return;
         }
         std::string part = staged ? dst : part_name();
-        bool made = false;
+        bool made = false, direct = false;
         try {
             if (S_ISLNK(st.st_mode)) {
                 char target[PATH_MAX];
@@ -510,10 +587,21 @@ public:
                 if (fstat(in.get(), &now) != 0 || !same_file(now, st))
                     throw Failure(src + " changed while it was being worked on");
                 Fd out(-1);
-                if (staged)
+                // An exception, by the user's choice (as in Kestrel's own copy): a new name on a tape is written under
+                // that name straight away, no part file. LTFS never reuses what a failed write used, whatever the file
+                // is called, and has no RENAME_NOREPLACE or link() for a part's claim; O_EXCL claims the name itself.
+                // A failure or cancel deletes the half-written file (discard, below); a crash can leave it.
+                direct = to_tape && !staged && !dst_exists;
+                if (direct) {
+                    part = dst;
+                    out = Fd(openat(dst_dir, dst.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
+                    if (out.get() < 0 && errno == EEXIST)
+                        throw conflict(dst);   // taken meanwhile: kept
+                } else if (staged) {
                     out = Fd(openat(dst_dir, part.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
-                else
+                } else {
                     out = open_part(dst_dir, part);
+                }
                 if (out.get() < 0)
                     fail_errno();
                 made = true;
@@ -527,9 +615,9 @@ public:
             } else {
                 throw Failure(src + " isn't a regular file, folder or link");
             }
-            if (claim)
+            if (claim && !direct)   // (direct: already under its name)
                 claim_name(dst_dir, part, dst);
-            else if (!staged)
+            else if (!staged && !direct)
                 install(dst_dir, part, dst);
         } catch (...) {
             if (made && !staged)
@@ -805,6 +893,7 @@ static void handle(const QJsonObject &req)
             throw Failure("can't " + op + " " + src.path + " into itself");
         // progress: every item, and the bytes copied; a move then deletes the items
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
+        job.to_tape = on_tape(dst.path);
         if (op == "copy")
             job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else

@@ -528,5 +528,59 @@ int main(int argc, char **argv)
                                      "tree (%1 swaps)").arg(swaps > 0 ? "some" : "no"));
 
     h.stop();
+
+    // -- onto a tape (a folder marked with KESTREL_TEST_SLOW, which the helper honours when not root): a new file is
+    // written straight to its name, no part file; a replaced one still goes through a part; a failure leaves nothing
+    {
+        QString tape = join(T, "tape");
+        QDir().mkpath(tape);
+        write_file(join(W, "t.bin"), QByteArray(3 << 20, 't'));
+        qputenv("KESTREL_TEST_SLOW", ("tape=" + tape).toUtf8());
+        Helper th;
+        bool started = th.start();
+        QStringList fresh, replaced;
+        QJsonObject r1, r2, r3;
+        {
+            DirWatch watch(tape);
+            r1 = th.call({{"op", "copy"}, {"src", join(W, "t.bin")}, {"dst", join(tape, "t.bin")}, {"replace", false}});
+            fresh = watch.events();
+        }
+        qint64 fresh_size = read_file(join(tape, "t.bin")).size();
+        write_file(join(W, "t2.bin"), "new");
+        {
+            DirWatch watch(tape);
+            r2 = th.call({{"op", "copy"}, {"src", join(W, "t2.bin")}, {"dst", join(tape, "t.bin")}});
+            replaced = watch.events();
+        }
+        write_file(join(tape, "theirs.bin"), "theirs");
+        r3 = th.call({{"op", "copy"}, {"src", join(W, "t2.bin")}, {"dst", join(tape, "theirs.bin")}, {"replace", false}});
+        th.stop();
+        check(started && ok(r1) && fresh == QStringList{"+t.bin"} && fresh_size == (3 << 20),
+              "admin helper: a new file onto a tape is written under its own name, no part file (" + fresh.join(" ") + ")");
+        check(ok(r2) && replaced.size() == 2 && replaced[0].startsWith("+.kes-") && replaced[1] == ">t.bin" &&
+                  read_file(join(tape, "t.bin")) == "new",
+              "...replacing a file there still goes through a part file (" + replaced.join(" ") + ")");
+        check(!ok(r3) && read_file(join(tape, "theirs.bin")) == "theirs", "...and a name taken there is kept");
+
+        Helper small;   // writes failing past 1 MB, as on a full tape
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        bool small_started = small.start();
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QJsonObject full = small.call({{"op", "copy"}, {"src", join(W, "t.bin")}, {"dst", join(tape, "full.bin")}, {"replace", false}});
+        small.stop();
+        QStringList left;
+        for (const QString &n : QDir(tape).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot))
+            if (n.startsWith(".kes-") || n == "full.bin")
+                left << n;
+        check(small_started && !full.isEmpty() && !ok(full) && left.isEmpty(),
+              "...and a write there that fails part-way leaves no half-written file under its name (" + left.join(", ") + ")");
+        qunsetenv("KESTREL_TEST_SLOW");
+    }
     finish();
 }

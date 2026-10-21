@@ -174,7 +174,11 @@ QString human_size(double n);
 QString group_digits(qint64 n);           // 12,345
 bool natural_less(const QString &a, const QString &b);
 void natural_sort(QStringList &list);
-QString unique_path(const QString &directory, const QString &name, const QString &style = "copy");
+// A free name for name in directory (name itself if it's free), without an earlier " (n)" / " (copy)": style "copy"
+// ("a (copy).txt", "a (copy 2).txt"), "num" ("a (2).txt", "a (3).txt") or "download" ("a (1).txt", "a (2).txt", as
+// browsers number repeated downloads). taken: paths to treat as taken too (names already given out in a batch).
+QString unique_path(const QString &directory, const QString &name, const QString &style = "copy",
+                    const QSet<QString> &taken = {});
 QPair<QString, QString> split_ext(const QString &name);
 QString fmt_time(qint64 ts, const char *fmt);   // strftime in local time
 

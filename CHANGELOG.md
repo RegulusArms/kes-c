@@ -2,7 +2,52 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.2
+## 0.3.2-alpha.3
+
+- **A Mounts section in the sidebar** lists the mounts GNOME Files shows and Kestrel's sidebar left out: ZFS datasets,
+  FUSE mounts (sshfs, rclone, gocryptfs…) and other mounts in your home folder, and network shares (SMB, SFTP, FTP…)
+  connected through the desktop, which until now only showed on the Overview. Hover over one to see what it is;
+  right-click to unmount it. Recently used servers that aren't connected show greyed: click one to connect, or
+  right-click → Remove from Recent Servers. It moves and collapses like the other sections, and Preferences → Sidebar
+  lists it too.
+- **Other apps' Save windows give free names, as browsers do with downloads.** When the folder already has a file of
+  the suggested name, the name becomes the next free one (photo.jpg → photo (1).jpg, then (2)…), in every folder you
+  go to, and the original comes back where it's free. A name you type or a file you pick stays yours (with the
+  "Replace?" question as before). Saving several files at once gives each a free name instead of asking to replace.
+- **Save locations for other apps' Save windows:** Preferences → Windows → "A Save window starts in" can open them on
+  an Overview of their own, which lists first the folders you keep for saving (Downloads, a project folder…), separate
+  from Starred and bookmarks. Add Folder… on that page or in Preferences; right-click one to move or remove it. The
+  default stays as before (the folder the app suggests), an app saving over an existing file always opens in its
+  folder, and Open windows aren't affected. BleachBit's cleaner (`kes-setup --bleachbit`) gets a Save locations option.
+
+- **Copies onto an LTFS tape write each new file straight to its name**, without the hidden part file renamed into
+  place afterwards. On a tape that part file protected nothing (LTFS never gives back what a failed write used,
+  whatever the file is called), and the tape can't claim a name safely the way other drives do. A file already there
+  is never replaced, and a cancel or failed write deletes the half-written file. Replacing a file on a tape still keeps
+  the old one until the new one is whole, and floppies are unchanged. Also with the admin session.
+
+- **Collapse a date group from anywhere in it.** Grouped by Period or by Day, a long group no longer needs scrolling
+  back to its header: each open group ends with a "Collapse Today (1,240)" line, Ctrl+Left on any of its items
+  collapses it (Ctrl+Right expands it), and an item's right-click menu has Collapse This Group. The view stays on the
+  group's header. Collapse All Groups and Expand All Groups are in the Sort menu and on empty space's right-click menu.
+
+- **Search filters:** the search bar's Filters button finds by type (images, videos, audio, documents, archives,
+  folders), size and date (today, this week, this month, this year, or between two days; modified or created), with
+  or without a name, here or in subfolders. They're kept for the session in every tab and window.
+- **Searching inside files works everywhere now.** File contents used only the desktop's search index, which covers only
+  the folders it indexes. Now Automatic uses the index where it covers the folder and otherwise reads the files with
+  ripgrep (or grep), so external drives, network shares and skipped folders are searched too, as are folders the
+  index hasn't got to. Reading the files offers regular expressions and Match case, skips binary files, shows the
+  matching line and its number, and stops with ✕. Opening a result starts the text editor at that line where the
+  editor allows it (gedit, VS Code, Kate…). `kes-setup --install-optional` now offers ripgrep.
+
+- **Searching shows its progress, and "Nothing found" in the window.** A thin progress bar runs under the search bar
+  while a search is going ("Searching…" in the view until something turns up). A search that finds nothing says
+  "Nothing found" in the view, with the reason when there is one (a regular expression that doesn't parse), instead of
+  only in the status bar; filtering the folder by name no longer says "Folder is empty".
+- **Fixed:** the view's own messages ("Folder is empty", search messages) could be hidden behind the list view.
+
+## 0.3.2-alpha.2 (2026-10-19)
 
 - **Faster again with many files** (slower since 0.3.1-alpha.11, when tapes and floppies came in, which made Kestrel
   ask for every file whether it was on a tape):

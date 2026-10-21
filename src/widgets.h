@@ -2,8 +2,10 @@
 #pragma once
 
 #include "overview.h"
+#include "search.h"
 
 #include <QAbstractFileIconProvider>
+#include <QDate>
 #include <QFileSystemModel>
 #include <QFormLayout>
 #include <QLabel>
@@ -32,6 +34,7 @@ enum Roles {
     StatRole = Qt::UserRole + 52,   // search results: (is_dir, mtime, size)
     KindRole = Qt::UserRole + 53,   // bit 1: directory, bit 2: symbolic link
     SizeRole = Qt::UserRole + 54,   // the file's size as the view knows it (no file system call)
+    LineRole = Qt::UserRole + 55,   // content search results: the first matching line's number (0: none)
 };
 enum Kind { KIND_DIR = 1, KIND_LINK = 2 };
 
@@ -103,8 +106,10 @@ class SearchModel : public QStandardItemModel {
     Q_OBJECT
 public:
     explicit SearchModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    // add result rows; `locations` optionally maps a path to the text for its Location column
-    void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {});
+    // add result rows; `locations` optionally maps a path to the text for its Location column; `matches` a path to
+    // its matching lines ("12:text", content search), shown in the Match column (the first) and its tooltip (all)
+    void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {},
+                   const QVariantMap &matches = {});
     void clear_results();
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<QString, QStandardItem *> rows;
@@ -119,24 +124,34 @@ private:
 class SearchThread : public QThread {
     Q_OBJECT
 public:
+    // recursive: the subfolders too (else root's own items); an empty query matches every name (filters only)
     SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent = nullptr,
-                 bool contents = false);
+                 bool contents = false, bool recursive = true, const SearchFilter &filter = {},
+                 const ContentSearch &how = {});
     std::atomic<bool> stop{false};
+    QString engine;   // a content search: what it used ("index", "ripgrep", "grep", "index, then grep"…)
+    QString error;    // why it found nothing it should have (a bad regular expression, …)
 
 Q_SIGNALS:
-    void found(const QStringList &paths);
+    void found(const QStringList &paths, const QVariantMap &matches = {});
 
 protected:
     void run() override;
 
 private:
     bool match(const QString &name) const;
-    void run_contents();
+    bool keep(const QString &path) const;   // the filter
+    int run_contents();   // the files found with the index; -1 if it couldn't be asked
+    void run_read();      // ripgrep / grep
     QString root;
     QString query, raw_query;
     bool hidden;
     bool wildcard;
     bool contents;
+    bool recursive;
+    SearchFilter filter;
+    ContentSearch how;
+    QDate today;
 };
 
 bool can_search_contents();   // the desktop's search index (localsearch) is installed
@@ -247,6 +262,7 @@ public:
     void toggle_section(const QString &section);
     QStringList shown_sections() const;                   // in order
     QStringList entry_keys(const QString &section) const;   // in order; empty when collapsed
+    void forget_server(const QString &uri);   // takes a recent server out of the Mounts section (and the Overview)
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
@@ -277,6 +293,7 @@ private:
         QString kind = "place";
         QVariant extra;
         QString key, tip;   // key: what the saved order lists (the path; "phone:<name>" for a phone)
+        bool dim = false;   // greyed (a recent server that isn't connected)
     };
     struct Drop {
         int row = -1;            // insertion row (count() = after the last)
@@ -298,8 +315,14 @@ private:
     int section_end(const QString &section) const;   // the row after its last entry
     Drop drop_for(const QPoint &pos, const QString &section, const QString &key) const;
     void save_order(const QString &setting, const QStringList &keys);
+    struct UserMount {   // the Mounts section's own mounts (drives::user_mount), not those Devices lists
+        QString root, fs, source;
+        bool operator==(const UserMount &o) const { return root == o.root && fs == o.fs && source == o.source; }
+    };
     QList<Mount> mount_list() const;
+    QList<UserMount> user_mount_list(const QList<Mount> &devices) const;
     void check_mounts();
+    void unmount_share(int i);
     void clicked(QListWidgetItem *it);
     void menu(const QPoint &pos);
     void unmount(const QString &path);
@@ -309,7 +332,9 @@ private:
     void remove_bookmark(int i);
     void move_bookmark(int i, int d);
     QList<Mount> mounts;
+    QList<UserMount> user_mounts;
     QList<DriveInfo> phones;   // phones and cameras (GIO)
+    QList<DriveInfo> shares;   // network shares mounted through GVFS (GIO)
     QTimer timer, phone_timer;
     GVolumeMonitor *monitor = nullptr;
     QPoint press_pos;

@@ -24,8 +24,8 @@ int main(int argc, char **argv)
     QString trash = join(TRASH_DIR(), "files");
 
     // -- the order helpers
-    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices"}) &&
-              sidebar::section_order({"devices", "nonsense"}) == QStringList({"devices", "places", "bookmarks"}),
+    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices", "mounts"}) &&
+              sidebar::section_order({"devices", "nonsense"}) == QStringList({"devices", "places", "bookmarks", "mounts"}),
           "a saved section order ignores unknown sections and adds missing ones");
     check(sidebar::ordered({"a", "b", "c", "d"}, {"c", "gone", "a"}) == QStringList({"c", "a", "b", "d"}),
           "a saved order puts new entries after the saved ones, in their natural order");
@@ -85,6 +85,74 @@ int main(int argc, char **argv)
     fake.report({{"type", "sidebar"}});
     check(wait_for([&]() { return s->shown_sections() == QStringList({"bookmarks", "places", "devices"}); }),
           "a sidebar change from another Kestrel is picked up");
+
+    // -- Mounts: what file managers show of their own accord (GIO's rule) that Devices doesn't list
+    QString user = QString::fromUtf8(g_get_user_name());
+    auto shown = [](const QString &root, const QString &fs, const QString &source) {
+        return drives::user_mount(drives::Mount{root, source, fs});
+    };
+    check(shown(home_path("data"), "zfs", "tank/data") && shown(home_path("box"), "fuse.sshfs", "user@host:/srv") &&
+              shown("/media/" + user + "/stick", "vfat", "/dev/sdz1") && shown("/run/media/" + user + "/x", "exfat", "/dev/sdz2"),
+          "mounts in the home folder, /media and the user's /run/media are shown");
+    check(!shown(home_path(".hidden/x"), "zfs", "tank/x") && !shown(HOME(), "zfs", "tank/home") &&
+              !shown("/mnt/x", "ext4", "/dev/sdz3") && !shown(home_path("tmp"), "tmpfs", "tmpfs") &&
+              !shown("/run/media/someone-else/x", "exfat", "/dev/sdz4"),
+          "...not one inside a hidden folder, the home folder itself, /mnt, a system file system or another user's");
+    DriveInfo share;
+    share.uri = "smb://nas/photos/";
+    check(overview::connected("smb://nas/photos/2024", {share}) && overview::connected("smb://nas/photos", {share}) &&
+              !overview::connected("smb://nas/photos2", {share}) && !overview::connected("smb://nas/photos", {}),
+          "a recent server counts as connected when it's a mounted share or inside one");
+    QString stick = "/media/" + user + "/kestrel-test-stick";
+    qputenv("KESTREL_TEST_MOUNTS", (home_path("data") + "|zfs|tank/data;" + home_path("box") + "|fuse.sshfs|user@host:/srv;" +
+                                    home_path(".hidden/x") + "|zfs|tank/x;" + stick + "|vfat|/dev/kestrel-test")
+                                       .toUtf8());
+    settings().setValue("recent_servers", QStringList({"smb://nas/photos", "sftp://user@backup.local/srv"}));
+    QStringList mounts_expected = {home_path("box"), home_path("data"), "server:smb://nas/photos",
+                                   "server:sftp://user@backup.local/srv"};
+    bool listed = wait_for([&]() {
+        s->refresh();   // the mount list is re-read once it's a second old
+        return s->entry_keys("mounts") == mounts_expected;
+    });
+    check(listed, "the Mounts section lists them by place, then the recent servers (" + s->entry_keys("mounts").join(", ") + ")");
+    check(s->entry_keys("devices").contains(stick) && !s->entry_keys("mounts").contains(stick),
+          "a mount Devices lists isn't listed again under Mounts");
+    QListWidgetItem *data_item = nullptr, *server_item = nullptr;
+    for (int i = 0; i < s->count(); ++i) {
+        if (s->item(i)->data(PathRole).toString() == home_path("data"))
+            data_item = s->item(i);
+        if (s->item(i)->data(PathRole).toString() == "smb://nas/photos")
+            server_item = s->item(i);
+    }
+    check(data_item && data_item->text() == "data" && data_item->toolTip().contains("ZFS dataset tank/data"),
+          "a mount is named after its folder and says what it is");
+    check(server_item && server_item->text() == "photos on nas" &&
+              server_item->foreground().color() == s->palette().color(QPalette::PlaceholderText) &&
+              server_item->toolTip().contains("click to connect"),
+          "a recent server that isn't connected is greyed, named like GNOME Files names it, and connects on a click");
+    s->move_entry("mounts", home_path("data"), 0);
+    check(wait_for([&]() { return s->entry_keys("mounts").value(0) == home_path("data"); }) &&
+              settings().value("sidebar_mounts_order").toStringList().value(0) == home_path("data"),
+          "a mount can be moved within Mounts, and the order is saved");
+    s->toggle_section("mounts");
+    check(wait_for([&]() { return s->entry_keys("mounts").isEmpty() && s->shown_sections().contains("mounts"); }),
+          "Mounts collapses like the other sections");
+    s->toggle_section("mounts");
+    auto sidebar_reports = [&]() {
+        int n = 0;
+        for (const auto &[f, msg] : fake.heard)
+            n += f == me && msg.value("type").toString() == "sidebar";
+        return n;
+    };
+    wait_for([&]() { return s->entry_keys("mounts").size() == 4; });
+    int reports = sidebar_reports();
+    s->forget_server("smb://nas/photos");
+    check(wait_for([&]() {
+              return s->entry_keys("mounts").size() == 3 && !s->entry_keys("mounts").contains("server:smb://nas/photos") &&
+                     sidebar_reports() > reports;
+          }) && !settings().value("recent_servers").toStringList().contains("smb://nas/photos"),
+          "Remove from Recent Servers takes it out of the section and the saved list, and tells other Kestrels");
+    qunsetenv("KESTREL_TEST_MOUNTS");
 
     finish();
 }

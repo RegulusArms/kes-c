@@ -147,6 +147,15 @@ static QList<Pref> build()
     add("Windows", chooser, "chooser/show_hidden", "Show hidden files", BOOL, QVariant(), in_chooser);
     add("Windows", chooser, "chooser/sidebar", "Show the sidebar", BOOL, QVariant(), in_chooser);
     add("Windows", chooser, "chooser/info_panel", "Show the info panel", BOOL, QVariant(), in_chooser);
+    add("Windows", chooser, "chooser_start", "A Save window starts in", CHOICE, "folder", QString(),
+        "Where a Save window of another app opens. An app saving over an existing file always opens in its folder; "
+        "Open windows start in the folder the app suggests either way.")
+        .choices = {{"The folder the app suggests, else where the last one saved", "folder"},
+                    {"Its own Overview, with the save locations", "overview"}};
+    add("Windows", chooser, "chooser_places", "Save locations", CUSTOM, QStringList(),
+        "a Save window's Overview (Add Folder…; right-click one to move or remove it)",
+        "Folders shown first on a Save window's Overview, for saving from other apps. Only for Save windows: adding "
+        "one doesn't star or bookmark it.");
     return l;
 }
 

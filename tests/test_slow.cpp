@@ -9,6 +9,7 @@
 #include "tapebuf.h"
 
 #include <QElapsedTimer>
+#include <sys/resource.h>
 #include <QImage>
 #include <QLabel>
 #include <QMessageBox>
@@ -437,8 +438,10 @@ int main(int argc, char **argv)
                 for (const QString &n : listdir(into)) {
                     if (!n.startsWith(".kes-") && !appeared.contains(n))
                         appeared << n;
-                    if (filling && !appeared.isEmpty() && clock.elapsed() < 400)
-                        early = true;   // written before the buffer could have filled (8 pieces × 120 ms)
+                    // data written before the buffer could have filled (8 pieces × 120 ms); a new file on a tape is
+                    // made under its name when it's opened, empty until then
+                    if (filling && !n.startsWith(".kes-") && QFileInfo(join(into, n)).size() > 0 && clock.elapsed() < 400)
+                        early = true;
                 }
             texts << t->text;
             spin(20);
@@ -448,7 +451,7 @@ int main(int argc, char **argv)
                 if (!n.startsWith(".kes-") && !appeared.contains(n))
                     appeared << n;
         bool intact = true, in_order = true;
-        auto ctime_ns = [&](const QString &n) {   // when it got its name (each file is renamed into place when whole)
+        auto ctime_ns = [&](const QString &n) {   // when it was finished (its times and permissions set when whole)
             struct stat st;
             return ::stat(enc(join(into, n)).constData(), &st) == 0 ? qint64(st.st_ctim.tv_sec) * 1000000000 + st.st_ctim.tv_nsec
                                                                      : -1;
@@ -579,6 +582,90 @@ int main(int argc, char **argv)
         QString entry = at >= 0 ? xbel.mid(at, xbel.indexOf("</bookmark>", at) - at) : QString();
         check(!entry.isEmpty() && entry.contains("application/octet-stream") && !entry.contains("application/pdf"),
               "opening a file on a tape adds it to Recent without reading it (its type by name)");
+    }
+
+    // ---- onto a tape, a new file is written straight to its name (no part file: LTFS never reuses tape anyway, and has
+    // no RENAME_NOREPLACE or link() for a part's claim); a replaced one, and anything onto a floppy, still go through one
+    {
+        auto run = [&](const QList<fileops::Job> &jobs) {
+            QPointer<Task> t = fileops::start_ops(w, jobs, "Test", []() {});
+            wait_for([&]() { return !t; }, 30000);
+            spin(200);
+            if (auto *box = shown_window<QMessageBox>())   // a conflict or failure says so: answered
+                box->close();
+        };
+        QByteArray data(3 * 1024 * 1024, 'd');
+        write_text(home_path("direct.bin"), data);
+        QString on_tape = join(tape, "direct.bin");
+        QStringList seen;
+        {
+            DirWatch watch(tape);
+            run({{"copy", home_path("direct.bin"), on_tape}});
+            seen = watch.events();
+        }
+        check(seen == QStringList{"+direct.bin"} && read_file(on_tape) == data,
+              "a new file copied onto a tape is written under its own name, with no part file (" + seen.join(" ") + ")");
+        write_text(home_path("direct.bin"), QByteArray(1024, 'n'));
+        {
+            DirWatch watch(tape);
+            run({{"copy", home_path("direct.bin"), on_tape, true}});
+            seen = watch.events();
+        }
+        check(seen.size() == 2 && seen[0].startsWith("+.kes-") && seen[1] == ">direct.bin" &&
+                  read_file(on_tape) == QByteArray(1024, 'n'),
+              "replacing a file on a tape still goes through a part file, renamed over it when whole (" + seen.join(" ") + ")");
+        QString on_floppy = join(floppy, "direct.bin");
+        {
+            DirWatch watch(floppy);
+            run({{"copy", home_path("direct.bin"), on_floppy}});
+            seen = watch.events();
+        }
+        check(seen.size() == 2 && seen[0].startsWith("+.kes-") && seen[1] == ">direct.bin" && isfile(on_floppy),
+              "a new file onto a floppy still goes through a part file (" + seen.join(" ") + ")");
+
+        // a name taken by the time the copy runs is kept, and nothing is put in its place
+        write_text(join(tape, "taken.bin"), "theirs");
+        run({{"copy", home_path("direct.bin"), join(tape, "taken.bin")}});
+        check(read_file(join(tape, "taken.bin")) == "theirs", "a name on the tape taken meanwhile is kept as it is");
+
+        // a write that fails part-way (a file-size limit standing for a full tape): nothing left under the name
+        auto leftovers = [&]() {
+            QStringList out;
+            for (const QString &n : listdir(tape))
+                if (n.startsWith(".kes-") || n == "full.bin")
+                    out << n;
+            return out;
+        };
+        write_text(home_path("full.bin"), QByteArray(4 * 1024 * 1024, 'f'));
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run({{"copy", home_path("full.bin"), join(tape, "full.bin")}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(leftovers().isEmpty(), "a write onto a tape that fails part-way leaves no half-written file under its name, "
+                                     "and no part file (" + leftovers().join(", ") + ")");
+
+        // cancelled while it writes: the half-written file goes too
+        write_text(home_path("cancel.bin"), QByteArray(100 * 1024 * 1024, 'c'));
+        qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "120");   // a slow source: writing spans a while
+        bool writing = false;
+        {
+            DirWatch watch(tape);
+            QPointer<Task> t = fileops::start_ops(w, {{"copy", home_path("cancel.bin"), join(tape, "cancel.bin")}},
+                                                  "Test", []() {});
+            writing = wait_for([&]() { return watch.events().contains("+cancel.bin"); }, 30000);
+            if (t)
+                t->cancel();
+            wait_for([&]() { return !t; }, 30000);
+        }
+        qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+        spin(200);
+        check(writing && !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(),
+              "cancelling a copy onto a tape while it writes deletes the half-written file");
     }
     finish();
 }

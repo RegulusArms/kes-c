@@ -23,6 +23,8 @@
 #include <functional>
 #include <gio/gio.h>
 #include <signal.h>
+#include <sys/inotify.h>
+#include <unistd.h>
 
 namespace test {
 
@@ -89,6 +91,35 @@ inline QString home_path(const QString &name) { return join(HOME(), name); }
 
 // A visible window of type T, or null. Kestrel's windows aren't modal (windows.h), so a test finds the one it waits
 // for among the top-level windows.
+// What appears in a folder while something runs (inotify): "+name" for a file or folder made there, ">name" for one
+// renamed into it, in order. A part file renamed into place shows as "+.kes-….part" then ">name"; a file written
+// straight to its name as "+name" alone.
+struct DirWatch {
+    int fd;
+    explicit DirWatch(const QString &dir)
+    {
+        fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+        inotify_add_watch(fd, dir.toLocal8Bit().constData(), IN_CREATE | IN_MOVED_TO);
+    }
+    ~DirWatch() { ::close(fd); }
+    QStringList events()
+    {
+        QStringList out;
+        alignas(struct inotify_event) char buf[64 * 1024];
+        for (;;) {
+            ssize_t n = ::read(fd, buf, sizeof buf);
+            if (n <= 0)
+                return out;
+            for (char *p = buf; p < buf + n;) {
+                auto *e = reinterpret_cast<struct inotify_event *>(p);
+                if (e->len)
+                    out << QString(e->mask & IN_MOVED_TO ? ">" : "+") + QString::fromLocal8Bit(e->name);
+                p += sizeof(struct inotify_event) + e->len;
+            }
+        }
+    }
+};
+
 template <typename T> T *shown_window()
 {
     for (QWidget *w : QApplication::topLevelWidgets())

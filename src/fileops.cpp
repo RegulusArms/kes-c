@@ -1105,17 +1105,35 @@ private:
         // Written to a new file beside the destination and renamed over it once complete: until then an existing file
         // keeps its contents (a cancel or an error removes only the new file), a symlink in the way is replaced (never
         // written through), and another hard link of the old file keeps the old contents.
+        //
+        // An exception, by the user's choice: a new name on a tape is written under that name straight away. There the
+        // part file buys nothing: what a write that fails part-way used stays used whatever the file is called (LTFS
+        // never reuses tape), and LTFS has neither RENAME_NOREPLACE nor link(), so a part's claim on the name would be
+        // check-then-rename, which O_EXCL on the name itself does better. A cancel or an error deletes the half-written
+        // file, so none is left under the real name once the job has ended (a crash or power cut mid-file can leave
+        // one). Replacing a file on a tape still goes through a part file: the old one is kept until the new is whole.
+        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
+        struct stat existing;
+        bool direct = to_tape && !stat_at(ddir, dname, existing);
         QString part;
         int part_fd;
-        try {
-            part_fd = open_part_at(ddir, QString(), &part);
-        } catch (const OSError &e) {
-            throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
+        if (direct) {
+            part = dname;
+            part_fd = ::openat(ddir, enc(dname).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+            if (part_fd < 0 && errno == EEXIST)   // taken meanwhile: never replaced (as a part's claim would find)
+                throw conflict(dst);
+            if (part_fd < 0)
+                throw_errno(dst);
+        } else {
+            try {
+                part_fd = open_part_at(ddir, QString(), &part);
+            } catch (const OSError &e) {
+                throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
+            }
         }
         Fd out(part_fd);
         if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
             task->report(double(done), double(total), "Positioning the tape — " + name, true);
-        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
         qint64 written = 0;
         try {
             if (to_tape) {   // room for it first: a write that runs out of tape wastes what it wrote (LTFS never reuses it)
@@ -1177,10 +1195,11 @@ private:
                 throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
-            commit(ddir, part, dname, dst, claim);
+            if (!direct)
+                commit(ddir, part, dname, dst, claim);
         } catch (...) {
             out.reset();
-            ::unlinkat(ddir, enc(part).constData(), 0);
+            ::unlinkat(ddir, enc(part).constData(), 0);   // the part, or (direct) the half-written file under its name
             if (to_tape && written >= 1024LL * 1024 * 1024)
                 task->log(QString("  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the "
                                   "tape is reformatted.")

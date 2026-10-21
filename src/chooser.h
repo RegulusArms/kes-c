@@ -33,6 +33,7 @@ struct Request {
     QString method;   // OpenFile, SaveFile or SaveFiles
     QString title, accept_label;
     QString current_name, current_folder;   // SaveFile: the suggested name; any: the folder to start in
+    bool replacing = false;                  // SaveFile: the app saves over this existing file (current_file)
     bool multiple = false, directory = false;
     QList<Filter> filters;
     int current_filter = -1;
@@ -73,6 +74,11 @@ public:
     void finish(bool ok, const QStringList &paths = {});   // once; closes the window
     void accept();
     void update_button();   // Save / Open enabled for the folder shown, the name and the selection
+    // Another folder is shown: saving, the names are made free in it (photo.jpg -> photo (1).jpg, as browsers name
+    // repeated downloads), and the suggested name comes back where it's free. A name the user typed or picked is theirs.
+    void folder_changed();
+    bool saving() const { return req.saving(); }
+    QStringList save_targets(const QString &folder) const;   // SaveFiles: where each file goes, under a free name
     QLineEdit *name = nullptr;
 
 private:
@@ -80,6 +86,9 @@ private:
     chooser::Request req;
     std::function<void(const chooser::Result &)> done;
     bool finished = false;
+    bool name_theirs = false;   // the user typed the name or picked a file: no longer changed for them
     QComboBox *filter = nullptr;
+    QLabel *files_label = nullptr;
     QPushButton *ok_btn;
+    void set_name(const QString &n);
 };

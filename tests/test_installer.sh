@@ -183,9 +183,10 @@ EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CONFIG_HOM
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sorts.json;delete $XDG_CONFIG_HOME/kestrel-explorer/starred.json;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_folder;'
+EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_places;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf recent_servers;'
-check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 8 ]]' \
-    "the cleaner only deletes Kestrel's cache and lists, and only the history keys from its settings"
+check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 9 ]]' \
+    "the cleaner only deletes Kestrel's cache and lists, and only the history and save locations keys from its settings"
 BLEACHBIT_XSD=/usr/share/doc/bleachbit/examples/cleaner_markup_language.xsd
 if command -v xmllint >/dev/null && [[ -f "$BLEACHBIT_XSD" ]]; then
     check 'xmllint --noout --schema "$BLEACHBIT_XSD" "$CLEANER" 2>/dev/null' "the cleaner follows BleachBit's CleanerML schema"
@@ -193,7 +194,7 @@ else
     echo "SKIP the cleaner follows BleachBit's CleanerML schema (needs xmllint and BleachBit's schema)"
 fi
 BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.history kestrel_explorer.starred kestrel_explorer.pinned
-            kestrel_explorer.folder_looks)
+            kestrel_explorer.save_places kestrel_explorer.folder_looks)
 # BleachBit's command line, started without its launcher: BleachBit 4.6's (Ubuntu 24.04) asks loginctl about the
 # login session first, and fails when there is none (CI, containers)
 bleachbit_cli() {
@@ -214,6 +215,7 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     ln -s "$HOME/Documents" "$KC/folders/linked"
     printf '[General]\nchooser_folder=/home/someone/Private\ngeometry=@ByteArray(\\x1\\xd9\\xd0\\xcb)\nhomepage=overview\n' \
         > "$KCONF/kestrel-explorer.conf"
+    printf 'chooser_places=/home/someone/Downloads, /home/someone/Saved\n' >> "$KCONF/kestrel-explorer.conf"
     printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n\n[archive]\nformat=7z\n' \
         >> "$KCONF/kestrel-explorer.conf"
     for f in starred.json pinned.json covers.json folder_styles.json sorts.json; do echo '{}' > "$KCONF/$f"; done
@@ -245,9 +247,9 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
                -f "$HOME/.cache/other-app/data" && -f "$KCONF/install-state" && -f "$CLEANER" ]]' \
             "...and leaves everything else (a folder linked from the cache, GNOME's thumbnails, other apps' caches)"
         settings() { sed -E 's/^([^=[]*[^ ]) = /\1=/' "$1" | grep -v '^$'; }
-        check '! grep -qE "^(recent_servers|chooser_folder) ?=" "$KCONF/kestrel-explorer.conf" &&
-               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder)=")" ]]' \
-            "...and removes the history from Kestrel's settings, keeping every other setting as it was"
+        check '! grep -qE "^(recent_servers|chooser_folder|chooser_places) ?=" "$KCONF/kestrel-explorer.conf" &&
+               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder|chooser_places)=")" ]]' \
+            "...and removes the history and the save locations from Kestrel's settings, keeping every other setting as it was"
     fi
 else
     echo "SKIP BleachBit's dry run and clean with Kestrel's cleaner (BleachBit isn't installed)"
@@ -269,7 +271,7 @@ printf '#!/bin/sh\necho "$@" >> "%s/sudo.log"\n' "$WORK" > "$WORK/apt-stubs/sudo
 chmod +x "$WORK/apt-stubs"/*
 rm -f "$WORK/sudo.log"
 PATH="$WORK/apt-stubs:$PATH" "$SETUP" --install-optional </dev/null >"$WORK/out9" 2>&1
-check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4" ]] &&
+check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep" ]] &&
        grep -q "Not available on this system (skipped): rar" "$WORK/out9" && grep -q "multiverse" "$WORK/out9"' \
     "kes-setup --install-optional: installs the missing optional packages apt has, and names the ones it hasn't"
 rm -f "$WORK/sudo.log"

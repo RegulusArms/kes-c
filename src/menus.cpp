@@ -96,7 +96,9 @@ QList<Entry> defaults(Kind k)
     if (k == BACKGROUND) {
         l << item("new_folder", "New Folder…") << item("new_document", "New Document ▸") << sep() << item("paste", "Paste")
           << item("paste_link", "Paste as Link") << item("select_all", "Select All") << sep()
-          << item("sort_by", "Sort By ▸") << item("show_hidden", "Show Hidden Files") << sep()
+          << item("sort_by", "Sort By ▸") << item("show_hidden", "Show Hidden Files")
+          << item("collapse_groups", "Collapse All Groups", "when grouped by date")
+          << item("expand_groups", "Expand All Groups", "when grouped by date") << sep()
           << item("open_terminal", "Open in Terminal") << item("bookmark_folder", "Bookmark This Folder")
           << previews_menu() << item("empty_trash", "Empty Trash", "in the Trash")
           << item("empty_trash_bleachbit", "Empty Trash with BleachBit…", "in the Trash, with BleachBit installed")
@@ -113,7 +115,8 @@ QList<Entry> defaults(Kind k)
         l << item("open_in_editor", "Open in (a code editor)", "when one is installed") << item("open_with", "Open With ▸");
     if (file || several)
         l << item("view_image", several ? "View Images" : "View Image", "for images");
-    l << item("show_in_folder", "Show in Folder", "in search results");
+    l << item("show_in_folder", "Show in Folder", "in search results")
+      << item("collapse_group", "Collapse This Group", "when grouped by date");
     if (file || arc)
         l << item("open_with", "Open With ▸");
     l << sep() << item("cut", "Cut") << item("copy", "Copy");
