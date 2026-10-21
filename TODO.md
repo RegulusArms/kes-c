@@ -30,6 +30,25 @@ into.
   - So something during a long session breaks that window's state. Still to find out: does the window follow the
     mouse until the next click, or jump away at once?
 
+- [ ] **Open as Archive leaves out part of a big archive's contents.** Seen with a .zpaq: the window listing what's
+  inside didn't show everything, though Extract All extracted it all. Found (2026-10-21): `run_reporting()`
+  (src/archive.cpp, around line 440) keeps only the last 1–2 MB of a program's output (`if (out.size() > 2000000)
+  out.remove(0, 1000000)`), which is fine for the errors at the end of an extraction, but `archive::list()` reads
+  `zpaq l`, `7z l -slt`, `unrar lt` and `unzip -Z` through it, so a listing over 2 MB loses its start without saying so.
+  Extract All doesn't use the listing, so it's whole.
+  - Reproduced with `archive::list()` itself, on 40,000 small files: zpaq (a 3.7 MB listing) gave 18,816 of 40,401
+    entries, everything before `folder_213` missing, the top folder too; 7z (an 8.3 MB listing) gave none at all,
+    because its parser waits for the `----------` line near the top, which is in the part dropped.
+  - From about 20,000 entries for zpaq (~90 bytes a line), about 10,000 for 7z (~200 bytes an entry, `-slt`); rar's
+    `lt` is as wordy; zip's about 80 bytes. The quick password test for encrypted 7z and rar archives reads its
+    listing the same way (around line 939–956), so on a big one it may find no file to test with. Extract, Extract
+    All, Extract Here and the encryption probe before extracting aren't affected.
+  - To change: no cap for listings; better, parse them line by line as the program prints them (a huge archive's
+    listing never held whole as text), keeping the 2 MB cap for logs and error messages only. The 7z and rar parsers
+    shouldn't need a line near the top, or the window should say a list is incomplete rather than look complete.
+  - Test: in `archives`, archives of tens of thousands of entries (zpaq and 7z) listed in full; the test's archives
+    today are far too small to reach 2 MB.
+
 ## New features
 
 ### Jobs
