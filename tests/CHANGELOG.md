@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.4
+
+Changed:
+- `groups`: "collapsing a long group from its footer brings its header into view" checks that the header is in view
+  from top to bottom, not that its whole rectangle fits: on Qt 6.4 (Ubuntu 24.04, CI) a header spanning the list's
+  columns is wider than the view, so the check failed there although the header was in view.
+
 ## 0.3.2-alpha.3
 
 Added:

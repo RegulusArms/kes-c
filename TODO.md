@@ -142,6 +142,17 @@ into.
 
 ### Views and search
 
+- [ ] **Drag files and folders from one tab to another.** Dragging items over a tab in the tab bar switches to that
+  tab (after a short hover, as browsers and GNOME Files do), so the drag can go on into its folder, a subfolder there,
+  or empty space (its folder). Dropping straight onto the tab itself drops into that tab's folder.
+  - The same rules as any other drop: with no key held, a move on the same drive and a copy to another drive; Ctrl
+    copies, Shift moves, Ctrl+Shift links, Alt asks. The folder or tab under the pointer is highlighted.
+  - Today the tab bar takes no drops at all (src/app.cpp: `tabs`, its `tabBar()` has only the tab menu). It also hides
+    itself with a single tab, so this is for windows with two or more.
+  - Not onto a tab showing the Overview, Starred, Recent or search results (no one folder to drop into): it still
+    switches, and the drop goes where the pointer then is. Onto the Trash: Move to Trash.
+  - Test: `ui`, as the drops onto folders are tested there (the drag events where a real drag sends them).
+
 ### File tools
 
 - [ ] **Find duplicate files.** Right-click a folder (or several, or a drive) → **Find Duplicates…**: lists groups of

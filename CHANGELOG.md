@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.3
+## 0.3.2-alpha.4
+
+- Nothing yet.
+
+## 0.3.2-alpha.3 (2026-10-21)
 
 - **A Mounts section in the sidebar** lists the mounts GNOME Files shows and Kestrel's sidebar left out: ZFS datasets,
   FUSE mounts (sshfs, rclone, gocryptfs…) and other mounts in your home folder, and network shares (SMB, SFTP, FTP…)

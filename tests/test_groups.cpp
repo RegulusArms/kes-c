@@ -444,7 +444,8 @@ int main(int argc, char **argv)
         QApplication::processEvents();
         QRect h = p->view()->visualRect(header(p, "Yesterday"));
         check(header_hidden && header(p, "Yesterday").data(GroupFoldedRole).toBool() &&
-                  p->view()->viewport()->rect().contains(h) && p->view()->currentIndex() == header(p, "Yesterday"),
+                  h.top() >= 0 && h.bottom() <= p->view()->viewport()->height() &&   // in view top to bottom (a spanned
+                  p->view()->currentIndex() == header(p, "Yesterday"),               // row can be wider than the view)
               "collapsing a long group from its footer brings its header into view, as the current row");
     }
     finish();
