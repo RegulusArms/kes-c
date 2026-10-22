@@ -121,6 +121,14 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
         if (root == free_root)
             update_free_label();
     });
+    // the free space is asked when a folder is opened and when a job has ended (it may have changed it), not on a timer
+    connect(TaskBoard::instance(), &TaskBoard::changed, this, [this]() {
+        qsizetype n = TaskBoard::instance()->finished.size();
+        if (n != finished_seen) {
+            finished_seen = n;
+            update_free_label();
+        }
+    });
     zoom_slider = new QSlider(Qt::Horizontal);
     zoom_slider->setFixedWidth(140);
     zoom_slider->setToolTip("Zoom (Ctrl+scroll)");

@@ -2,7 +2,20 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.5
+## 0.3.2-alpha.6
+
+- **Fixed: copies onto a tape could crawl at about a quarter of the drive's speed.** Every open Kestrel window asked
+  the tape for its size and its cartridge's health about every 8 seconds, also while it was writing; LTFS answers
+  those with commands to the drive (on an HP drive, a rejected one followed by eleven drive-dump attempts), which
+  knocked it out of streaming. Now a tape is asked nothing while a job of any Kestrel window uses it, and otherwise its
+  size every 30 seconds and its health every 10 minutes.
+- **Drives are no longer polled.** Every window asked every drive in the sidebar for its size every few seconds, to show
+  a total that never changes. Now Kestrel hears from the kernel when a drive is mounted or unmounted (nothing checked
+  on a timer), reads a disk's size from the system (as `lsblk` does, without asking the drive) and anything else's
+  once, and asks for the free space in the status bar when you open a folder or a job ends. An idle Kestrel also
+  uses less CPU.
+
+## 0.3.2-alpha.5 (2026-10-21)
 
 - **The tape buffer takes at most 16 GB by default** (it took as much as the memory allowed, less 10% of it):
   Preferences → Files → Tapes → Largest buffer changes it; 0 lets it use as much as the memory allows, as before.

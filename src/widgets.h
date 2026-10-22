@@ -335,7 +335,7 @@ private:
     QList<UserMount> user_mounts;
     QList<DriveInfo> phones;   // phones and cameras (GIO)
     QList<DriveInfo> shares;   // network shares mounted through GVFS (GIO)
-    QTimer timer, phone_timer;
+    QTimer phone_timer;   // a change to the drives (GIO, MountWatch): the list made again, once, shortly after
     GVolumeMonitor *monitor = nullptr;
     QPoint press_pos;
     QPersistentModelIndex press_index;

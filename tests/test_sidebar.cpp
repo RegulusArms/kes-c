@@ -1,6 +1,9 @@
 // The sidebar: rearranging entries and sections, collapsing sections, and sharing that with other windows and Kestrels.
 #include "common.h"
 
+#include "drives.h"
+#include "proc.h"
+
 using namespace test;
 
 int main(int argc, char **argv)
@@ -153,6 +156,45 @@ int main(int argc, char **argv)
           }) && !settings().value("recent_servers").toStringList().contains("smb://nas/photos"),
           "Remove from Recent Servers takes it out of the section and the saved list, and tells other Kestrels");
     qunsetenv("KESTREL_TEST_MOUNTS");
+
+    // -- drives aren't polled: the mount table is read again when the kernel says it changed (MountWatch), a drive's
+    // total is asked once, the free space when a folder is opened or a job has ended
+    drives::MountWatch::instance()->mounts_changed();   // (the test's mounts gone)
+    wait_for([&]() { return !s->entry_keys("mounts").contains(home_path("data")); });
+    spin(2000);   // (the answers to the first questions)
+    int answers = 0;
+    QMetaObject::Connection counted =
+        QObject::connect(drives::Sizes::instance(), &drives::Sizes::changed, [&](const QString &) { answers += 1; });
+    QStringList devices_before = s->entry_keys("devices");
+    spin(7000);
+    check(answers == 0 && s->entry_keys("devices") == devices_before,
+          "left alone, no drive is asked anything (its size, its label) over 7 seconds (" + QString::number(answers) +
+              " answers)");
+    QString arrived = "/media/" + user + "/kestrel-arrived";
+    qputenv("KESTREL_TEST_MOUNTS", (arrived + "|vfat|/dev/kestrel-arrived").toUtf8());
+    drives::MountWatch::instance()->mounts_changed();   // the kernel: the mount table changed
+    bool shows = wait_for([&]() { return s->entry_keys("devices").contains(arrived); }, 3000);
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    bool goes = wait_for([&]() { return !s->entry_keys("devices").contains(arrived); }, 3000);
+    check(shows && goes, "a drive mounted shows in the sidebar, and one unmounted goes, as soon as the mount table changes");
+    QString disk;   // a real block device, if this machine has one mounted
+    for (const drives::Mount &mt : drives::mounts())
+        if (mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd"))
+            disk = mt.source;
+    if (disk.isEmpty()) {
+        skip("a disk's size from /sys, as lsblk gives it (no disk mounted here)");
+    } else {
+        auto r = proc::run({"lsblk", "-bndo", "SIZE", disk});
+        check(r.rc == 0 && drives::device_bytes(disk) == r.out.trimmed().toLongLong(),
+              "a disk's size comes from /sys, as lsblk gives it, without asking the drive (" + disk + ")");
+    }
+    answers = 0;
+    write_text(home_path("job-src.bin"), QByteArray(4096, 'j'));
+    fileops::start_ops(w, {{"copy", home_path("job-src.bin"), home_path("job-dst.bin")}}, "Test", []() {});
+    check(wait_for([&]() { return answers > 0; }, 10000) && isfile(home_path("job-dst.bin")),
+          "when a job has ended, the free space of the folder's drive is asked again (the status bar)");
+    QObject::disconnect(counted);
 
     finish();
 }

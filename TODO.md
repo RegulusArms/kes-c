@@ -49,6 +49,27 @@ into.
   - Test: in `archives`, archives of tens of thousands of entries (zpaq and 7z) listed in full; the test's archives
     today are far too small to reach 2 MB.
 
+- [ ] **A closed window's folder previews keep being made.** Seen (2026-10-21): a window showing
+  /tank/secure/c/Modeling/fashon (253 subfolders, folder previews on) was closed at 21:44 (its size and layout were
+  saved then, so the close went through, past the "Operations Running" question), yet new mosaics were still written
+  to ~/.cache/kestrel-explorer/folders at 21:46, its process reading one subfolder after another.
+  - Found: the thumbnail and folder-preview queue belongs to the process (`g_thumbs`, src/thumbs.cpp: `pool`,
+    `dir_pool`), not to a window, and closing a window cancels nothing (`MainWindow::closeEvent` stops searches and
+    closes viewers; `Pane::~Pane` only stops a search). So while the process lives on, it works through everything the
+    closed window asked for (253 mosaics: each lists its folder, picks 4 images spread across it and reads them).
+  - Why the process lived on wasn't seen (it had gone before it could be looked at). Not an exit waiting for the
+    queue: `g_thumbs` is never deleted, so no `~QThreadPool` waits for it, and nothing runs on Qt's global pool (which
+    `~QApplication` would wait for). Not the hidden "Operations Running" question either (the layout was saved).
+    Most likely another window of the same process (Ctrl+N windows share it) left open, minimised or on another
+    workspace; the Jobs and Tower windows close with their main window. Next time: `xdotool search --pid <pid>`
+    lists its windows, and `gdb -p <pid> -batch -ex 'thread apply all bt'` shows what it's doing.
+  - The other way round, too: a pane moving to another folder calls `cancel_pending()`, which empties the whole
+    process's queue, other windows' and tabs' requests included (they're asked again only when those views repaint).
+  - To change: requests with an owner (the pane that asked): a pane leaving a folder, closing, or its window closing
+    cancels its own (queued tasks skipped when no one wants them any more, `QThreadPool::tryTake` where it can), and
+    no one else's. Test: two windows of one process, one closed while its previews are queued: nothing more is made
+    for it, and the other window's previews still come.
+
 ## New features
 
 ### Jobs

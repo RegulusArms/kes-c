@@ -1082,10 +1082,9 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     setStyleSheet("QListWidget { background: palette(window); } QListWidget::item { padding: 3px; }");
     refresh();
     on_palette_change(this, [this]() { refresh(); });   // the headers' colour is set per item
-    timer.setInterval(4000);
-    connect(&timer, &QTimer::timeout, this, &Sidebar::check_mounts);
+    // drives come and go: the kernel says so (MountWatch; GIO's monitor above for phones), nothing is polled
+    connect(drives::MountWatch::instance(), &drives::MountWatch::changed, this, [this]() { phone_timer.start(); });
     connect(drives::Sizes::instance(), &drives::Sizes::changed, this, &Sidebar::check_mounts);   // a size or tape name came
-    timer.start();
 }
 
 Sidebar::~Sidebar()
@@ -1183,8 +1182,9 @@ QList<Sidebar::Entry> Sidebar::in_order(const QList<Entry> &entries, const QStri
     return out;
 }
 
-// From the mount table, which asks no drive anything; the sizes come from drives::Sizes (read on a worker). A tape or a
-// floppy busy with another program's copy would otherwise hold the window every time this runs (every 4 s).
+// From the mount table, which asks no drive anything (read again only when the kernel says it changed). A drive's total
+// size is asked once while it's mounted: a disk's from /sys (no I/O at all), anything else's (a tape, ZFS, a network
+// share) from drives::Sizes, once, on a worker: a busy tape or floppy would otherwise hold the window.
 QList<Sidebar::Mount> Sidebar::mount_list() const
 {
     QList<Mount> out;
@@ -1206,11 +1206,13 @@ QList<Sidebar::Mount> Sidebar::mount_list() const
                 continue;
         }
         seen << root;
-        drives::Sizes::Info info = drives::Sizes::instance()->get(root);
+        qint64 bytes = slow == drives::Slow::None ? drives::device_bytes(dev) : -1;
+        drives::Sizes::Info info = bytes > 0 && slow == drives::Slow::None ? drives::Sizes::Info()
+                                                                           : drives::Sizes::instance()->once(root);
         QString name = slow == drives::Slow::Tape && !info.volume_name.isEmpty() ? info.volume_name : drives::device_label(dev);
         if (name.isEmpty())
             name = basename(root);
-        out << Mount{name, root, dev, info.total > 0 ? info.total : 0};
+        out << Mount{name, root, dev, bytes > 0 ? bytes : info.total > 0 ? info.total : 0};
     }
     std::sort(out.begin(), out.end(), [](const Mount &a, const Mount &b) { return a.root < b.root; });
     return out;

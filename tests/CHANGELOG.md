@@ -4,6 +4,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.6
+
+Added:
+- `sidebar`: no drive is asked anything over 7 idle seconds; a drive mounted shows and one unmounted goes as soon as the
+  mount table changes (MountWatch); a disk's size from /sys equals lsblk's; the free space is asked again when a job
+  ends.
+- `slow`: a tape isn't asked its size or health while a job uses it (each question is a command to the drive, which
+  slowed real copies to a quarter of the drive's speed), and is asked again once the job has ended.
+
 ## 0.3.2-alpha.5
 
 Changed:

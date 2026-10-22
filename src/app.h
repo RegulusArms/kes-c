@@ -165,6 +165,7 @@ private:
     QSplitter *split;
     QLabel *status_label, *free_label;
     QString free_root;   // the mount point free_label is about
+    qsizetype finished_seen = 0;   // jobs ended so far (TaskBoard): one more, the free space is asked again
     void update_free_label();
     QSlider *zoom_slider;
     QProgressBar *thumb_progress;

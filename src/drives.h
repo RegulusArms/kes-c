@@ -27,6 +27,22 @@ struct Mount {
 };
 QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a second); safe on any thread
 QString device_label(const QString &device);   // a file system's label (/dev/disk/by-label), without asking the drive
+qint64 device_bytes(const QString &device);    // a block device's size from /sys (as lsblk), without asking it; -1: none
+
+// The kernel's mount table changing (a drive mounted or unmounted, by anything): changed() then, and only then. Nothing
+// is polled: GIO waits on /proc/self/mountinfo, which the kernel wakes. mounts() and the labels are read afresh after.
+class MountWatch : public QObject {
+    Q_OBJECT
+public:
+    static MountWatch *instance();
+    void mounts_changed();   // (GIO's signal; also for the tests, standing for a mount or unmount)
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    MountWatch();
+};
 QString mount_root(const QString &path);       // the mount point path is on
 QString mount_fstype(const QString &path);     // the file system type of the mount path is on ("fuse.sshfs"…)
 // A mount file managers show of their own accord, by GIO's rule (g_unix_mount_guess_should_display, which GNOME Files'
@@ -66,8 +82,9 @@ QString sync_tape(const QString &root);   // write the tape's index now (LTFS's 
 void sync_tape_job(QWidget *parent, const QString &root);   // the same as a status-bar job, a message if it fails
 
 // Sizes of drives without waiting for them: get() answers from what was last read and asks again in the background
-// (at most every few seconds per drive); changed(root) says when a new answer came. A tape's volume name and media
-// details are read the same way.
+// (at most every 5 s per drive); changed(root) says when a new answer came. A tape's volume name and media details
+// are read the same way, but a tape is asked far less (its size every 30 s, its health every 10 minutes) and not at
+// all while a job uses it: each question is a command to the drive, which interrupts its writing.
 class Sizes : public QObject {
     Q_OBJECT
 public:
@@ -77,7 +94,8 @@ public:
         bool busy = false;   // asked, no answer yet
     };
     static Sizes *instance();
-    Info get(const QString &root);   // never waits
+    Info get(const QString &root);    // never waits
+    Info once(const QString &root);   // asked once while it's mounted (a total size doesn't change): never again after
     void forget(const QString &root);
 
 Q_SIGNALS:
@@ -88,6 +106,7 @@ private:
     struct Entry {
         Info info;
         qint64 asked_ms = 0;
+        qint64 health_ms = 0;   // a tape's health last asked (see get)
         bool running = false;
     };
     QHash<QString, Entry> cache;

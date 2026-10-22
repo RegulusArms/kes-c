@@ -5,6 +5,7 @@
 #include "drives.h"
 #include "groups.h"
 #include "hashcheck.h"
+#include "jobs.h"
 #include "places.h"
 #include "tapebuf.h"
 
@@ -671,6 +672,35 @@ int main(int argc, char **argv)
         spin(200);
         check(writing && !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(),
               "cancelling a copy onto a tape while it writes deletes the half-written file");
+
+        // nothing is asked of a tape while a job uses it (each question is a command to the drive, which interrupts its
+        // writing); once the job has ended, it's asked again. (A slow source: the job outlasts the checks.)
+        qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "1000");
+        drives::Sizes *sizes = drives::Sizes::instance();
+        int answers = 0;
+        QMetaObject::Connection counted = QObject::connect(sizes, &drives::Sizes::changed, [&](const QString &root) {
+            answers += root == tape;
+        });
+        QPointer<Task> busy_job = fileops::start_ops(w, {{"copy", home_path("cancel.bin"), join(tape, "held.bin")}},
+                                                     "Test", []() {});
+        wait_for([&]() { return jobs::Queue::instance()->busy(tape); }, 10000);
+        spin(1000);   // (a question sent before the job held the drive may still be answered)
+        answers = 0;
+        sizes->forget(tape);   // nothing known: would be asked at once
+        sizes->get(tape);
+        sizes->once(tape);
+        spin(1500);
+        bool held = jobs::Queue::instance()->busy(tape);   // (still, at the end of the wait)
+        int while_busy = answers;
+        if (busy_job)
+            busy_job->cancel();
+        wait_for([&]() { return !busy_job && !jobs::Queue::instance()->busy(tape); }, 30000);
+        qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+        sizes->get(tape);
+        bool asked_after = wait_for([&]() { return answers > while_busy; }, 5000);
+        QObject::disconnect(counted);
+        check(held && while_busy == 0 && asked_after,
+              "a tape isn't asked its size or health while a job uses it, and is asked again once the job has ended");
     }
     finish();
 }

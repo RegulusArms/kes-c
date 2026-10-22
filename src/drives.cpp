@@ -1,16 +1,19 @@
 #include "drives.h"
 
 #include "fileops.h"
+#include "jobs.h"
 #include "util.h"
 #include "windows.h"
 
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QMutex>
 #include <QPointer>
 #include <QSettings>
 #include <QThread>
 
+#include <gio/gio.h>
 #include <gio/gunixmounts.h>
 #include <sys/statvfs.h>
 #include <sys/xattr.h>
@@ -55,6 +58,7 @@ static QList<QPair<Slow, QString>> test_slow()
 
 static Slow kind_of(const Mount &mt);
 static std::atomic<bool> slow_mounted{false};   // a tape or floppy is in the mount list (kept with it, below)
+static std::atomic<bool> mounts_stale{false};   // the kernel said the mount table changed (MountWatch)
 
 QList<Mount> mounts()
 {
@@ -63,7 +67,7 @@ QList<Mount> mounts()
     static qint64 read_ms = -10000;
     QMutexLocker l(&m);
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (now - read_ms < 1000)
+    if (now - read_ms < 1000 && !mounts_stale.exchange(false))
         return cached;
     read_ms = now;
     cached.clear();
@@ -90,10 +94,39 @@ QList<Mount> mounts()
     return cached;
 }
 
+static QMutex labels_lock;
+static QHash<QString, QString> labels;   // device -> its label, until the mount table changes (MountWatch)
+
+static QString read_label(const QString &device);
+
 QString device_label(const QString &device)
 {
     if (!device.startsWith("/dev/"))
         return QString();
+    {
+        QMutexLocker l(&labels_lock);
+        auto it = labels.constFind(device);
+        if (it != labels.constEnd())
+            return *it;
+    }
+    QString label = read_label(device);
+    QMutexLocker l(&labels_lock);
+    labels.insert(device, label);
+    return label;
+}
+
+qint64 device_bytes(const QString &device)
+{
+    // the kernel's own figure (what lsblk shows): /sys, no I/O to the drive
+    if (!device.startsWith("/dev/"))
+        return -1;
+    bool ok = false;
+    qint64 sectors = read_file("/sys/class/block/" + basename(realpath(device)) + "/size", &ok).trimmed().toLongLong();
+    return ok && sectors > 0 ? sectors * 512 : -1;
+}
+
+static QString read_label(const QString &device)
+{
     QString real = realpath(device);
     QDir byl("/dev/disk/by-label");
     for (const QString &n : byl.entryList(QDir::System | QDir::Files | QDir::NoDotAndDotDot)) {
@@ -323,7 +356,9 @@ bool statfs_(const QString &path, qint64 *total, qint64 *free)
 }
 
 // LTFS shows its index through virtual extended attributes, "user.ltfs.<name>" on Linux (plain "ltfs.<name>" kept as
-// a fallback); answered from the index in memory
+// a fallback). Some are answered from the index in memory (volumeName, startblock, partition); the cartridge's
+// health (mediaLoads, mediaStorageAlert…) makes LTFS send the drive commands (log pages, and on an HP drive, which
+// rejects one of them, eleven drive-dump attempts): see Sizes::get for how rarely those are asked
 QString tape_attr(const QString &path, const QString &name)
 {
     QByteArray p = enc(path);
@@ -423,27 +458,84 @@ Sizes *Sizes::instance()
     return s;
 }
 
-Sizes::Sizes() { pool.setMaxThreadCount(4); }
+// ---------------------------------------------------------------- mount changes
+
+MountWatch *MountWatch::instance()
+{
+    static MountWatch *w = new MountWatch;
+    return w;
+}
+
+MountWatch::MountWatch()
+{
+    // GIO's watch on the kernel's mount table (it waits on /proc/self/mountinfo, which wakes it on every mount and
+    // unmount): nothing is polled, and no drive is asked anything
+    GUnixMountMonitor *m = g_unix_mount_monitor_get();
+    g_signal_connect(m, "mounts-changed", G_CALLBACK(+[](GUnixMountMonitor *, gpointer self) {
+                         static_cast<MountWatch *>(self)->mounts_changed();
+                     }),
+                     this);
+}
+
+void MountWatch::mounts_changed()
+{
+    mounts_stale = true;   // mounts() reads the table again at once
+    {
+        QMutexLocker l(&labels_lock);
+        labels.clear();   // (a drive mounted again may have been relabelled)
+    }
+    Q_EMIT changed();
+}
+
+Sizes::Sizes()
+{
+    pool.setMaxThreadCount(4);
+    connect(MountWatch::instance(), &MountWatch::changed, this, [this]() {   // drives gone: asked afresh if they come back
+        QSet<QString> roots;
+        for (const Mount &mt : mounts())
+            roots << mt.root;
+        for (auto it = cache.begin(); it != cache.end();)
+            it = !roots.contains(it.key()) && !it->running ? cache.erase(it) : std::next(it);
+    });
+}
+
+Sizes::Info Sizes::once(const QString &root)
+{
+    auto it = cache.constFind(root);
+    if (it != cache.constEnd() && it->asked_ms > 0)
+        return it->info;
+    return get(root);
+}
+
+// A tape is asked as little as possible: LTFS answers its size and its cartridge's health with commands to the drive,
+// and while it writes they knock it out of streaming. So nothing at all while a job (of any Kestrel) uses it: the last
+// answers stand. Otherwise its size every 30 s, and its health (loads, storage alert) once, then every 10 minutes.
+static const qint64 TAPE_SIZE_MS = 30000, TAPE_HEALTH_MS = 600000;
 
 Sizes::Info Sizes::get(const QString &root)
 {
     Entry &e = cache[root];
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!e.running && now - e.asked_ms > 5000) {
+    bool tape = slow_kind(root) == Slow::Tape;
+    if (!e.running && now - e.asked_ms > (tape ? TAPE_SIZE_MS : 5000) &&
+        !(tape && jobs::Queue::instance()->busy(root))) {
         e.running = true;
         e.asked_ms = now;
         if (e.info.total < 0)
             e.info.busy = true;
-        bool tape = slow_kind(root) == Slow::Tape;
-        pool.start([this, root, tape]() {
+        bool health = tape && (e.health_ms == 0 || now - e.health_ms > TAPE_HEALTH_MS);
+        if (health)
+            e.health_ms = now;
+        Info before = e.info;
+        pool.start([this, root, tape, health, before]() {
             Info info;
             if (!statfs_(root, &info.total, &info.free))
                 info.total = info.free = -1;
             if (tape) {
-                info.volume_name = tape_attr(root, "volumeName");
-                info.loads = tape_attr(root, "mediaLoads");
-                info.alert = tape_attr(root, "mediaStorageAlert");
-                info.sync = ltfs_sync(root);
+                info.volume_name = tape_attr(root, "volumeName");   // (from the index)
+                info.loads = health ? tape_attr(root, "mediaLoads") : before.loads;
+                info.alert = health ? tape_attr(root, "mediaStorageAlert") : before.alert;
+                info.sync = ltfs_sync(root);   // (from ltfs's command line)
             }
             QMetaObject::invokeMethod(
                 this,
