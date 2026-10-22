@@ -7,6 +7,10 @@ under the version whose change it covers. What each test checks today is in [REA
 ## 0.3.2-alpha.6
 
 Added:
+- `slow`: a copy onto a tape logs a line every 5 seconds (the time, the tape's speed or that it waits for the buffer,
+  the source's, the buffer, how far it is), both while the buffer fills and while the tape writes. It also guards
+  against the copy hanging when that line asks the buffer for its figures (the buffer called back while holding its
+  own lock).
 - `prefs`: Preferences shows the tape buffer's size now, and says when the system can't spare the largest size.
 - `sidebar`: no drive is asked anything over 7 idle seconds; a drive mounted shows and one unmounted goes as soon as the
   mount table changes (MountWatch); a disk's size from /sys equals lsblk's; the free space is asked again when a job

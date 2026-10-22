@@ -13,6 +13,10 @@ What changed in each version of Kestrel Explorer, newest first.
   buffer takes half the memory available at most (and still leaves the share kept free), checked when a copy starts
   and every second while it runs. Preferences → Files → Tapes shows the size it would get now, and says when the limit
   is more than the system can spare. The limit is now in GB as Kestrel shows sizes (16 GB, not 17.2).
+- **A tape copy's log shows its speed every 5 seconds**: the time, how fast the tape took the data (or that it's
+  waiting for the buffer), the source's speed, the buffer and how far the copy is, in the Jobs window as it runs and
+  in the saved log. A drive that slows down for a while shows when and for how long, to set beside the drive's own
+  logs.
 - **Drives are no longer polled.** Every window asked every drive in the sidebar for its size every few seconds, to show
   a total that never changes. Now Kestrel hears from the kernel when a drive is mounted or unmounted (nothing checked
   on a timer), reads a disk's size from the system (as `lsblk` does, without asking the drive) and anything else's

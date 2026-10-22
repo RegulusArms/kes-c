@@ -10,6 +10,7 @@
 #include "tapebuf.h"
 
 #include <QElapsedTimer>
+#include <QRegularExpression>
 #include <sys/resource.h>
 #include <QImage>
 #include <QLabel>
@@ -679,6 +680,40 @@ int main(int argc, char **argv)
         spin(200);
         check(writing && !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(),
               "cancelling a copy onto a tape while it writes deletes the half-written file");
+
+        // the job's log gets a line every 5 seconds: the time, the tape's speed (or that it waits for the buffer), the
+        // source's, the buffer and how far the copy is. A small buffer (64 MB), a slow source (8 MB a second) and a low
+        // streaming speed: it fills for ~8 s, then the tape writes at the source's pace for a few seconds more
+        {
+            QString mi2 = home_path("meminfo-small");
+            write_text(mi2, "MemTotal:       1048576 kB\nMemFree:        1000 kB\nMemAvailable:   102400 kB\n");
+            qputenv("KESTREL_TEST_MEMINFO", mi2.toUtf8());
+            qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "1000");
+            settings().setValue("tape_min_speed", 1);
+            write_text(home_path("rated.bin"), QByteArray(120 * 1024 * 1024, 'r'));
+            QPointer<Task> rt = fileops::start_ops(w, {{"copy", home_path("rated.bin"), join(tape, "rated.bin")}},
+                                                   "Rated", []() {});
+            wait_for([&]() { return !rt; }, 60000);
+            qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+            qunsetenv("KESTREL_TEST_MEMINFO");
+            settings().remove("tape_min_speed");
+            spin(300);
+            QString log;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == "Rated")
+                    log = f.log;
+            static const QRegularExpression line(
+                R"(^  \d\d:\d\d:\d\d  tape (waiting for the buffer|[\d.]+ [kMG]?B/s) · source \S+ \S+ · buffer .+ of .+ \(\d+%\) · .+ of .+ written$)");
+            QStringList lines, waiting, rated;
+            for (const QString &l : log.split('\n'))
+                if (line.match(l).hasMatch()) {
+                    lines << l;
+                    (l.contains("waiting for the buffer") ? waiting : rated) << l;
+                }
+            check(lines.size() >= 2 && !waiting.isEmpty() && !rated.isEmpty() && read_file(join(tape, "rated.bin")).size() == 120 * 1024 * 1024,
+                  "a copy onto a tape logs its speed every 5 seconds: while the buffer fills, and while the tape writes (" +
+                      lines.join(" | ") + ")");
+        }
 
         // nothing is asked of a tape while a job uses it (each question is a command to the drive, which interrupts its
         // writing); once the job has ended, it's asked again. (A slow source: the job outlasts the checks.)

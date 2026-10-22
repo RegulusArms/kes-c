@@ -15,6 +15,7 @@
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
+#include <QTime>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QMouseEvent>
@@ -788,6 +789,37 @@ private:
     qint64 done = 0, total = 0;
     std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
     bool told_slow = false;                    // said the source is too slow for the tape to stream
+    QElapsedTimer rate_clock;                  // copying onto a tape: since the last rate line in the log
+    qint64 rate_done = 0;                      // ...and the bytes written by then
+
+    // Copying onto a tape: every 5 seconds a line in the job's log (the Jobs window shows it as it comes), with the time
+    // (to set beside the drive's own logs), how fast the tape took the data in those 5 seconds, the source's read speed,
+    // the buffer, and how far the copy is: a drive that slows down shows when and for how long.
+    void log_tape_rate()
+    {
+        if (!buffer)
+            return;
+        if (!rate_clock.isValid()) {
+            rate_clock.start();
+            rate_done = done;
+            return;
+        }
+        qint64 ms = rate_clock.elapsed();
+        if (ms < 5000)
+            return;
+        qint64 wrote = done - rate_done;
+        qint64 cap = std::max<qint64>(buffer->capacity(), 1);
+        QString tape = wrote > 0 ? human_size(qint64(double(wrote) * 1000.0 / double(ms))) + "/s"
+                                 : QString("waiting for the buffer");
+        double src = buffer->source_rate();
+        task->log(QString("  %1  tape %2 · source %3 · buffer %4 of %5 (%6%) · %7 of %8 written")
+                      .arg(QTime::currentTime().toString("HH:mm:ss"), tape,
+                           src > 0 ? human_size(qint64(src)) + "/s" : QString("—"), human_size(buffer->filled()),
+                           human_size(cap), QString::number(buffer->filled() * 100 / cap), human_size(done),
+                           human_size(total)));
+        rate_clock.restart();
+        rate_done = done;
+    }
 
     void report_progress(const QString &name)
     {
@@ -841,7 +873,10 @@ private:
             return;
         tapebuf::Memory mem = tapebuf::memory();
         buffer = std::make_unique<tapebuf::Buffer>(task, files);
-        buffer->waiting = [this](const QString &text) { task->report(double(done), double(total), text, true); };
+        buffer->waiting = [this](const QString &text) {
+            task->report(double(done), double(total), text, true);
+            log_tape_rate();
+        };
         task->log(QString("Tape buffer: up to %1 (memory %2, %3 available)")
                       .arg(human_size(buffer->capacity()), human_size(mem.total), human_size(mem.available)));
         if (int every = drives::ltfs_sync_minutes(drives::ltfs_sync(tape)))
@@ -1177,6 +1212,7 @@ private:
                     buffer->wrote(n, writing.nsecsElapsed());
                 done += n;
                 written += n;
+                log_tape_rate();
                 if (buffer && !told_slow && buffer->source_too_slow()) {
                     told_slow = true;
                     task->log(QString("The source reads at %1/s, slower than the tape's lowest streaming speed: the tape "

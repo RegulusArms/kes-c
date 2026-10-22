@@ -216,6 +216,15 @@ void Buffer::read_all()
     cv.notify_all();
 }
 
+void Buffer::tell(std::unique_lock<std::mutex> &l, const QString &text)
+{
+    if (!waiting)
+        return;
+    l.unlock();   // the callback may ask the buffer for its figures (source_rate takes the lock): not while holding it
+    waiting(text);
+    l.lock();
+}
+
 void Buffer::wait_a_little(std::unique_lock<std::mutex> &l)
 {
     cv.wait_for(l, std::chrono::milliseconds(200));
@@ -251,9 +260,9 @@ bool Buffer::begin(const QString &path, dev_t dev, ino_t ino)
             break;
         if (reader_done && queue.empty())
             return false;
+        l.unlock();   // (the callback may ask the buffer for its figures: not under its lock)
         if (waiting && filling)
             waiting(QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
-        l.unlock();
         cv.notify_all();
         l.lock();
         wait_a_little(l);
@@ -290,15 +299,13 @@ qint64 Buffer::next(const char **data)
                 if (filling)
                     ++wait_count;
             }
-            if (waiting)
-                waiting(filling ? QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
-                                : QString("Waiting for the source"));
+            tell(l, filling ? QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
+                            : QString("Waiting for the source"));
             wait_a_little(l);
             continue;
         }
         if (filling && !reader_done && held.load() < cap.load() - chunk_size()) {
-            if (waiting)
-                waiting(QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
+            tell(l, QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
             wait_a_little(l);
             continue;
         }

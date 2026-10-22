@@ -56,7 +56,9 @@ public:
     qint64 next(const char **data);
     void wrote(qint64 bytes, qint64 ns);   // the writer's time writing a piece to the tape (for the tape's speed)
 
-    std::function<void(const QString &)> waiting;   // what to show while waiting for the buffer ("Filling the buffer…")
+    // what to show while waiting for the buffer ("Filling the buffer…"); called without the buffer's lock, so it may ask
+    // the buffer for its figures
+    std::function<void(const QString &)> waiting;
 
     qint64 capacity() const { return cap.load(); }
     qint64 filled() const { return held.load(); }
@@ -86,6 +88,7 @@ private:
     void release(Chunk &c);
     qint64 chunk_size() const;
     void wait_a_little(std::unique_lock<std::mutex> &l);   // up to 200 ms; a cancel or pause is handled meanwhile
+    void tell(std::unique_lock<std::mutex> &l, const QString &text);   // `waiting`, called without the lock
 
     Task *task;
     QStringList files;
