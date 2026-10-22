@@ -2,9 +2,14 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.4
+## 0.3.2-alpha.5
 
-- Nothing yet.
+- **The tape buffer takes at most 16 GB by default** (it took as much as the memory allowed, less 10% of it):
+  Preferences → Files → Tapes → Largest buffer changes it; 0 lets it use as much as the memory allows, as before.
+
+## 0.3.2-alpha.4 (2026-10-21)
+
+- Version bump only.
 
 ## 0.3.2-alpha.3 (2026-10-21)
 

@@ -34,7 +34,7 @@ struct Memory {
 Memory memory();   // /proc/meminfo (KESTREL_TEST_MEMINFO: a file in its format, for the tests)
 // The most the buffer may hold now: what's available (in_use: what it already holds counts as available to it), less
 // the share of the memory kept free (tape_buffer_keep, % of the total, default 10), and no more than the largest size
-// chosen (tape_buffer_gb, 0: no limit); at least 64 MB.
+// (tape_buffer_gb, default 16 GB, 0: no limit); at least 64 MB.
 qint64 budget(const Memory &m, qint64 in_use = 0);
 qint64 min_stream_rate();   // bytes/s: the drive's lowest streaming speed (tape_min_speed, MB/s); huge: always refill
 

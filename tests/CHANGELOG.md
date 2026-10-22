@@ -4,6 +4,12 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.5
+
+Changed:
+- `slow`: the tape buffer's size: at most 16 GB by default (20 GB available of 32 now gives 16 GB, not 16.8), and with
+  the limit set to 0, the memory available less what's kept free, as before.
+
 ## 0.3.2-alpha.4
 
 Changed:

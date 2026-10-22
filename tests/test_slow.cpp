@@ -326,14 +326,19 @@ int main(int argc, char **argv)
         qint64 b20 = tapebuf::budget(m);
         settings().setValue("tape_buffer_gb", 4);
         qint64 b4 = tapebuf::budget(m);
+        settings().setValue("tape_buffer_gb", 0);   // no limit
+        settings().remove("tape_buffer_keep");
+        qint64 unlimited = tapebuf::budget(m);
         settings().remove("tape_buffer_keep");
         settings().remove("tape_buffer_gb");
         meminfo(32 * kGiB, 50 * 1024);   // 50 MB available
         qint64 low = tapebuf::budget(tapebuf::memory());
-        check(m.total == 32 * GiB && m.available == 20 * GiB && b10 == 20 * GiB - qint64(0.1 * 32 * GiB) &&
-                  b20 == 20 * GiB - qint64(0.2 * 32 * GiB) && b4 == 4 * GiB && low == 64LL * 1024 * 1024,
-              "the tape buffer is the memory available less 10% of the total kept free (20 GB of 32: 16.8 GB), follows "
-              "the share kept free and the largest size chosen, and gets at least 64 MB");
+        check(m.total == 32 * GiB && m.available == 20 * GiB && b10 == 16 * GiB &&
+                  unlimited == 20 * GiB - qint64(0.1 * 32 * GiB) && b20 == 20 * GiB - qint64(0.2 * 32 * GiB) &&
+                  b4 == 4 * GiB && low == 64LL * 1024 * 1024,
+              "the tape buffer is the memory available less 10% of the total kept free, at most 16 GB by default (20 GB "
+              "available of 32: 16 GB; with no limit, 16.8 GB), follows the share kept free and the largest size "
+              "chosen, and gets at least 64 MB");
 
         // the buffer itself: files in order, whole, also ones larger than it; skipped ones dropped
         QString bs = home_path("bufsrc");

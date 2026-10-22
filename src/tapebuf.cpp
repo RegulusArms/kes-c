@@ -1,6 +1,7 @@
 #include "tapebuf.h"
 
 #include "fileops.h"
+#include "prefs.h"
 #include "util.h"
 
 #include <QElapsedTimer>
@@ -50,7 +51,7 @@ qint64 budget(const Memory &m, qint64 in_use)
 {
     QSettings &s = settings();
     double keep = std::clamp(s.value("tape_buffer_keep", 10).toDouble(), 0.0, 95.0) / 100.0;
-    qint64 most = s.value("tape_buffer_gb", 0).toLongLong() * 1024 * MB;
+    qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1024 * MB;   // (16 GB unless chosen: plenty to stream)
     qint64 b = m.available + in_use - qint64(keep * double(m.total));
     if (most > 0)
         b = std::min(b, most);
