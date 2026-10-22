@@ -70,6 +70,28 @@ into.
     no one else's. Test: two windows of one process, one closed while its previews are queued: nothing more is made
     for it, and the other window's previews still come.
 
+- [ ] **Possible bug, being investigated: copies onto an LTO tape slow to ~33 MB/s for long stretches.** Most likely
+  not Kestrel (the drive, its firmware or LTFS), but an edge case worth understanding. Seen 2026-10-21/22 on an LTO-5 drive in an autoloader, LTFS, 512 KB blocks, mounted with
+  big_writes and sync_type=unmount: copies alternate between full speed (~144 MB/s) and ~30–36 MB/s for many GB.
+  - Ruled out: the source and Kestrel's buffer (in the slow stretches the buffer is 99% full: 16 GB waiting), memory
+    (since 0.3.2-alpha.6 the buffer takes only what's safe), the tape (a new one too), dirty heads (cleaned; head hours checked), the SAS link (6 Gbps, no errors), write retries and errors (sg_logs: 0 retries, 0 hard errors, no
+    TapeAlerts), suspended writes (not climbing during slow stretches). `dd` through LTFS also reaches 144 MB/s.
+  - Fixed on the way (0.3.2-alpha.6): Kestrel asked the tape its size and health every ~8 s from every window, also
+    mid-copy (LTFS sends this HP drive an IBM-only log page and eleven drive-dump attempts each time); now nothing while
+    a job uses it. The buffer took up to 75% of the memory; now at most half of what's available. A copy's log now
+    gets a line every 5 seconds (time, tape and source speeds, buffer, progress), which is how the rest was found.
+  - What the 5-second lines show: the slow stretches don't follow the tape's tracks, and the tape runs at in-between
+    speeds too (46, 54, 60, 78, 82, 97, 103, 117, 133 MB/s): the drive's speed matching, choosing to run slower as if
+    the host were slow, while 16 GB waits; ~33 MB/s is below its slowest step, so it also repositions.
+  - Left: LTFS's way of feeding the drive (one 512 KB write at a time; this LTFS is IBM-oriented) or the drive's
+    firmware. To tell them apart: a raw `dd` of ~40 GB from /dev/shm to /dev/nst0, LTFS unmounted, on a spare
+    cartridge (it erases it; `mkltfs` after). ~140 MB/s throughout: LTFS (a newer one, or HPE StoreOpen Standalone).
+    The same speed steps: the drive (a firmware update through HPE L&TT, then its drive assessment).
+  - Kestrel could interrupt the drive less still: before every file on a tape, `copy_file_at` (src/fileops.cpp) checks
+    the free space (fstatvfs: on LTFS probably a command to the drive); once per job and counting down would do.
+    Not the whole cause (single-file copies slow too); left as it is until the cause is known.
+  - While LTFS holds /dev/sgN, read the drive's logs through /dev/bsg/H:C:T:L (sg_logs gets EBUSY on sg8).
+
 ## New features
 
 ### Jobs
