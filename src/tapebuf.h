@@ -7,7 +7,8 @@
 // carries on at the source's pace, when the source is at least as fast as the drive's lowest streaming speed (the
 // drive slows down to match it), or waits until the buffer is full again and writes another full-speed run.
 //
-// The buffer uses the memory available less a share kept free for other programs (Preferences → Files → Tapes), is
+// The buffer is the largest size chosen (16 GB by default) where the system can spare it, else what it safely can:
+// half the memory available at most, never leaving less than a share kept free (Preferences → Files → Tapes). It's
 // re-checked as it runs (giving memory back when others need it), and is never one large allocation. A file far larger
 // than the buffer streams through it. Sources are read with posix_fadvise so the kernel doesn't keep a second copy.
 #pragma once
@@ -32,9 +33,12 @@ struct Memory {
     qint64 total = 0, available = 0;   // bytes (MemTotal, MemAvailable)
 };
 Memory memory();   // /proc/meminfo (KESTREL_TEST_MEMINFO: a file in its format, for the tests)
-// The most the buffer may hold now: what's available (in_use: what it already holds counts as available to it), less
-// the share of the memory kept free (tape_buffer_keep, % of the total, default 10), and no more than the largest size
-// (tape_buffer_gb, default 16 GB, 0: no limit); at least 64 MB.
+// The most the buffer can hold now without disrupting the system: half the memory available at most (in_use: what it
+// already holds counts as available to it), and never leaving less than the share kept free (tape_buffer_keep, % of
+// the total, default 10); at least 64 MB. Checked when a copy starts and every second while it runs.
+qint64 safe_size(const Memory &m, qint64 in_use = 0);
+// What the buffer gets: the largest size chosen (tape_buffer_gb, default 16 GB; 0: no limit of its own) where that's
+// safe, else the safe size
 qint64 budget(const Memory &m, qint64 in_use = 0);
 qint64 min_stream_rate();   // bytes/s: the drive's lowest streaming speed (tape_min_speed, MB/s); huge: always refill
 

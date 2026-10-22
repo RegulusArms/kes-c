@@ -9,6 +9,10 @@ What changed in each version of Kestrel Explorer, newest first.
   those with commands to the drive (on an HP drive, a rejected one followed by eleven drive-dump attempts), which
   knocked it out of streaming. Now a tape is asked nothing while a job of any Kestrel window uses it, and otherwise its
   size every 30 seconds and its health every 10 minutes.
+- **The tape buffer only takes what the system can spare.** The 16 GB limit is used where it's safe; otherwise the
+  buffer takes half the memory available at most (and still leaves the share kept free), checked when a copy starts
+  and every second while it runs. Preferences → Files → Tapes shows the size it would get now, and says when the limit
+  is more than the system can spare. The limit is now in GB as Kestrel shows sizes (16 GB, not 17.2).
 - **Drives are no longer polled.** Every window asked every drive in the sidebar for its size every few seconds, to show
   a total that never changes. Now Kestrel hears from the kernel when a drive is mounted or unmounted (nothing checked
   on a timer), reads a disk's size from the system (as `lsblk` does, without asking the drive) and anything else's

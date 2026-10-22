@@ -465,8 +465,13 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         l->setWordWrap(true);
         loaders[key] = [l]() {
             tapebuf::Memory m = tapebuf::memory();
-            l->setText(QString("Up to %1 (memory %2, %3 available now)")
-                           .arg(human_size(tapebuf::budget(m)), human_size(m.total), human_size(m.available)));
+            qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1000000000, b = tapebuf::budget(m);
+            QString text = QString("Up to %1 (memory %2, %3 available now)")
+                               .arg(human_size(b), human_size(m.total), human_size(m.available));
+            if (most > 0 && b < most)   // the largest size isn't safe here: what's used instead, and why
+                text += "\n" + human_size(most) + " is more than this system can spare now: the buffer takes half the "
+                        "memory available at most.";
+            l->setText(text);
         };
         return l;
     }

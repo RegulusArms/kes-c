@@ -105,7 +105,7 @@ static QList<Pref> build()
               "Copies onto a tape go through a buffer in memory, so the drive keeps streaming instead of stopping and "
               "rewinding whenever the source slows down. It uses the memory available, less this share of the total."),
           0, 90, " %");
-    range(add("Files", tapes, "tape_buffer_gb", "Largest buffer (0: as much as the memory allows)", INT, 16), 0, 4096,
+    range(add("Files", tapes, "tape_buffer_gb", "Largest buffer (0: as much as is safe)", INT, 16), 0, 4096,
           " GB");
     add("Files", tapes, "tape_buffer_now", "The buffer now", CUSTOM, QVariant());
     add("Files", tapes, "tape_min_speed", "The drive's lowest streaming speed", CHOICE, 1000000, QString(),

@@ -47,15 +47,22 @@ Memory memory()
     return m;
 }
 
+qint64 safe_size(const Memory &m, qint64 in_use)
+{
+    double keep = std::clamp(settings().value("tape_buffer_keep", 10).toDouble(), 0.0, 95.0) / 100.0;
+    qint64 spare = m.available + in_use;   // what the buffer may draw on: what's available, and what it already holds
+    // half of it at most (the rest of the system keeps at least as much as the buffer takes, for its own growth, the
+    // page cache, other copies), and never so much that less than the share kept free is left
+    qint64 b = std::min(spare / 2, spare - qint64(keep * double(m.total)));
+    return std::max(b, FLOOR);
+}
+
 qint64 budget(const Memory &m, qint64 in_use)
 {
-    QSettings &s = settings();
-    double keep = std::clamp(s.value("tape_buffer_keep", 10).toDouble(), 0.0, 95.0) / 100.0;
-    qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1024 * MB;   // (16 GB unless chosen: plenty to stream)
-    qint64 b = m.available + in_use - qint64(keep * double(m.total));
-    if (most > 0)
-        b = std::min(b, most);
-    return std::max(b, FLOOR);
+    // (16 GB unless chosen, plenty to stream; GB as Kestrel shows sizes: 10^9 bytes)
+    qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1000000000;
+    qint64 safe = safe_size(m, in_use);
+    return most > 0 ? std::max(std::min(most, safe), FLOOR) : safe;   // the largest size, only where it's safe
 }
 
 qint64 min_stream_rate()

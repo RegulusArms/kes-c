@@ -7,11 +7,17 @@ under the version whose change it covers. What each test checks today is in [REA
 ## 0.3.2-alpha.6
 
 Added:
+- `prefs`: Preferences shows the tape buffer's size now, and says when the system can't spare the largest size.
 - `sidebar`: no drive is asked anything over 7 idle seconds; a drive mounted shows and one unmounted goes as soon as the
   mount table changes (MountWatch); a disk's size from /sys equals lsblk's; the free space is asked again when a job
   ends.
 - `slow`: a tape isn't asked its size or health while a job uses it (each question is a command to the drive, which
   slowed real copies to a quarter of the drive's speed), and is asked again once the job has ended.
+
+Changed:
+- `slow`: the tape buffer's size is what's safe: half the memory available at most (counting what it holds), never
+  leaving less than the share kept free, the 16 GB limit (now 10^9-byte GB, as Kestrel shows sizes) only where that's
+  safe; checked on a mid-sized, a big and a squeezed machine.
 
 ## 0.3.2-alpha.5
 

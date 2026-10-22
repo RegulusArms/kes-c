@@ -322,24 +322,31 @@ int main(int argc, char **argv)
         const qint64 GiB = 1024LL * 1024 * 1024, kGiB = 1024 * 1024;
         meminfo(32 * kGiB, 20 * kGiB);
         tapebuf::Memory m = tapebuf::memory();
-        qint64 b10 = tapebuf::budget(m);
-        settings().setValue("tape_buffer_keep", 20);
-        qint64 b20 = tapebuf::budget(m);
+        qint64 mid = tapebuf::budget(m);   // 20 GB available of 32: half of it, under the 16 GB limit
         settings().setValue("tape_buffer_gb", 4);
         qint64 b4 = tapebuf::budget(m);
-        settings().setValue("tape_buffer_gb", 0);   // no limit
-        settings().remove("tape_buffer_keep");
+        settings().setValue("tape_buffer_gb", 0);   // no limit of its own: still only what's safe
         qint64 unlimited = tapebuf::budget(m);
-        settings().remove("tape_buffer_keep");
         settings().remove("tape_buffer_gb");
+        meminfo(64 * kGiB, 50 * kGiB);   // a big machine: 16 GB, the limit, is safe
+        qint64 big_box = tapebuf::budget(tapebuf::memory());
+        meminfo(32 * kGiB, 5 * kGiB);    // squeezed: the 10% of 32 GB kept free leaves 1.8 GB of the 5 available
+        qint64 squeezed = tapebuf::budget(tapebuf::memory());
+        qint64 holding = tapebuf::budget(tapebuf::memory(), 10 * GiB);   // what it holds counts: 15 GB, half of it
+        settings().setValue("tape_buffer_keep", 20);
+        meminfo(32 * kGiB, 10 * kGiB);
+        qint64 keep20 = tapebuf::budget(tapebuf::memory());   // 10 - 6.4 = 3.6 GB, under half (5)
+        settings().remove("tape_buffer_keep");
         meminfo(32 * kGiB, 50 * 1024);   // 50 MB available
         qint64 low = tapebuf::budget(tapebuf::memory());
-        check(m.total == 32 * GiB && m.available == 20 * GiB && b10 == 16 * GiB &&
-                  unlimited == 20 * GiB - qint64(0.1 * 32 * GiB) && b20 == 20 * GiB - qint64(0.2 * 32 * GiB) &&
-                  b4 == 4 * GiB && low == 64LL * 1024 * 1024,
-              "the tape buffer is the memory available less 10% of the total kept free, at most 16 GB by default (20 GB "
-              "available of 32: 16 GB; with no limit, 16.8 GB), follows the share kept free and the largest size "
-              "chosen, and gets at least 64 MB");
+        auto in_gb = [](qint64 b) { return QString::number(double(b) / (1 << 30), 'f', 2); };
+        check(m.total == 32 * GiB && m.available == 20 * GiB && mid == 10 * GiB && b4 == 4000000000LL &&
+                  unlimited == 10 * GiB && big_box == 16000000000LL && squeezed == 5 * GiB - qint64(0.1 * 32 * GiB) && holding == 15 * GiB / 2 &&
+                  keep20 == 10 * GiB - qint64(0.2 * 32 * GiB) && low == 64LL * 1024 * 1024,
+              "the tape buffer is what's safe: half the memory available at most (counting what it holds), never leaving "
+              "less than the share kept free, and the 16 GB limit (or the one chosen) only where that's safe; at least "
+              "64 MB (" + in_gb(mid) + ", " + in_gb(b4) + ", " + in_gb(unlimited) + ", " + in_gb(big_box) + ", " +
+                  in_gb(squeezed) + ", " + in_gb(holding) + ", " + in_gb(keep20) + " GB)");
 
         // the buffer itself: files in order, whole, also ones larger than it; skipped ones dropped
         QString bs = home_path("bufsrc");

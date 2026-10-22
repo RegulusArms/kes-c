@@ -225,6 +225,24 @@ int main(int argc, char **argv)
                                               "with none, and clearing it shows them all again");
 
     // ---- the homepage: a folder that isn't one isn't saved
+    // the tape buffer's size now: when the system can't spare the largest size, it says so
+    {
+        QString mi = home_path("meminfo");
+        write_text(mi, "MemTotal:       8388608 kB\nMemFree:        1000 kB\nMemAvailable:   6291456 kB\n");   // 8 GB, 6 free
+        qputenv("KESTREL_TEST_MEMINFO", mi.toUtf8());
+        pd->refresh({"tape_buffer_now"});
+        auto *now = pd->findChild<QLabel *>("tape_buffer_now_label");
+        QString small = now ? now->text() : QString();
+        write_text(mi, "MemTotal:       67108864 kB\nMemFree:        1000 kB\nMemAvailable:   52428800 kB\n");   // 64, 50
+        pd->refresh({"tape_buffer_now"});
+        QString roomy = now ? now->text() : QString();
+        qunsetenv("KESTREL_TEST_MEMINFO");
+        check(small.startsWith("Up to 3.2 GB (memory 8.6 GB, 6.4 GB available now)\n16.0 GB is more than this system "
+                               "can spare now") &&
+                  roomy.startsWith("Up to 16.0 GB (") && !roomy.contains("spare"),
+              "Preferences shows the tape buffer's size now, and says when the system can't spare the largest size (" +
+                  small + " / " + roomy + ")");
+    }
     auto *hp_mode = pd->findChild<QComboBox *>("homepage_mode");
     auto *hp_path = pd->findChild<QLineEdit *>("homepage_path");
     auto *hp_err = pd->findChild<QLabel *>("homepage_error");
