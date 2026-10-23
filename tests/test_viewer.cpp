@@ -668,9 +668,13 @@ int main(int argc, char **argv)
     check(still_open && v && v->isVisible(), "closing with an unsaved rotation asks first; Cancel keeps the viewer open");
     questions.clear();
     v->close();
-    if (QAbstractButton *dont = button(questions.value(0), "Don't Save"))
+    QAbstractButton *dont = button(questions.value(0), "Don't Save");
+    if (dont)
         dont->click();
-    check(wait_for([&]() { return !v; }) && metadata::orientation_tag(a).value == 1, "Don't Save closes it without saving");
+    bool gone = wait_for([&]() { return !v; });
+    int tag = metadata::orientation_tag(a).value;
+    check(dont && gone && tag == 1, QString("Don't Save closes it without saving (asked: %1, closed: %2, tag: %3)")
+                                        .arg(dont ? "yes" : "no", gone ? "yes" : "no", QString::number(tag)));
 
     // remembered state
     QPointer<ImageViewer> v2 = open({a, d}, 0);

@@ -241,7 +241,8 @@ private:
     void ask_rotation(const QString &path, int rotation, bool flip, bool closing_viewer);
     // how: 0 Ctrl+S (Cancel keeps the edits), 1 leaving the image (Discard), 2 closing the viewer (Discard, Cancel)
     void ask_edit(const QString &src, const QList<imgedit::Edit> &edits, int how);
-    QList<imgedit::Edit> all_steps() const;   // steps, and a rotation made after the last one
+    QList<imgedit::Edit> all_steps() const;
+    void close_after_question();   // steps, and a rotation made after the last one
     bool write_rotation(const QString &path, int rotation, bool flip);
     void after_write(const QString &path);
     void drop_current();   // it went (trash, move): off the list

@@ -1008,13 +1008,19 @@ void ImageViewer::ask_rotation(const QString &path, int rotation, bool flip, boo
             prefs::set("viewer_save_rotation", "always");
         if (b == save || b == always)
             self->write_rotation(path, rotation, flip);
-        if (closing_viewer && (b == save || b == always || b == dont)) {
-            self->closing = true;
-            self->close();
-        }
+        if (closing_viewer && (b == save || b == always || b == dont))
+            self->close_after_question();
     });
     Q_UNUSED(cancel);
     ask(box);
+}
+
+// Closing when the question asked on closing is answered: once its click has been handled (from inside the question's
+// own click, a child window of this one, Qt 6.4 leaves the viewer open)
+void ImageViewer::close_after_question()
+{
+    closing = true;
+    QTimer::singleShot(0, this, [this]() { close(); });
 }
 
 bool ImageViewer::write_rotation(const QString &path, int rotation, bool flip)
@@ -1337,10 +1343,8 @@ void ImageViewer::ask_edit(const QString &src, const QList<imgedit::Edit> &edits
         if (!self)
             return;
         bool save = b && (b == as_new || b == replace);
-        if (how == 2 && (save || (b && b == discard))) {
-            self->closing = true;
-            self->close();   // the save goes on without the viewer
-        }
+        if (how == 2 && (save || (b && b == discard)))
+            self->close_after_question();   // the save goes on without the viewer
         if (!save)
             return;
         bool over = b == replace;

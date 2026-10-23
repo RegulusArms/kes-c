@@ -566,8 +566,15 @@ int main(int argc, char **argv)
     // ---- programs asking the tape for its free space stop it streaming: GNOME's low-disk-space check skips it while a
     // job writes to it, and a system monitor that's open is named in the job's log
     {
-        auto ignored = []() {
+        GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+        GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, "org.gnome.settings-daemon.plugins.housekeeping", TRUE) : nullptr;
+        bool gnome = schema != nullptr;   // (without it, GSettings aborts on the key)
+        if (schema)
+            g_settings_schema_unref(schema);
+        auto ignored = [gnome]() {
             QStringList out;
+            if (!gnome)
+                return out;
             GSettings *gs = g_settings_new("org.gnome.settings-daemon.plugins.housekeeping");
             gchar **v = g_settings_get_strv(gs, "ignore-paths");
             for (gchar **p = v; p && *p; ++p)
@@ -600,7 +607,7 @@ int main(int argc, char **argv)
             QPointer<Task> t = fileops::start_ops(w, {{"copy", home_path("quiet.bin"), join(tape, name)}}, "Quiet", []() {});
             *skipped_meanwhile = false;
             while (t) {
-                if (ignored().contains(tape))
+                if (gnome && ignored().contains(tape))
                     *skipped_meanwhile = true;
                 spin(20);
             }
@@ -612,12 +619,9 @@ int main(int argc, char **argv)
                     log = f.log;
             return log;
         };
-        GSettingsSchemaSource *src = g_settings_schema_source_get_default();
-        GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, "org.gnome.settings-daemon.plugins.housekeeping", TRUE) : nullptr;
-        if (!schema) {
+        if (!gnome) {
             skip("GNOME's low-disk-space check skips a tape while a job writes to it (GNOME's settings aren't installed)");
         } else {
-            g_settings_schema_unref(schema);
             set_ignored({"/srv/keep"});
             bool during = false;
             QString log = copy("quiet1.bin", &during);

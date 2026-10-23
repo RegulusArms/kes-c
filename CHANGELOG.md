@@ -2,7 +2,12 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.7
+## 0.3.2-alpha.8
+
+- **Fixed: the image viewer stayed open after answering its question on closing** (Save, Always Save, Don't Save, or
+  Discard for unsaved edits) on Ubuntu 24.04's Qt 6.4. It closes once the answer has been handled.
+
+## 0.3.2-alpha.7 (2026-10-23)
 
 - **Fixed: copies onto a tape slowed to about a quarter of the drive's speed for long stretches.** The cause wasn't
   Kestrel: programs that ask every drive for its free space knock a tape out of streaming, because on LTFS each

@@ -180,7 +180,8 @@ int main(int argc, char **argv)
     check(shows && goes, "a drive mounted shows in the sidebar, and one unmounted goes, as soon as the mount table changes");
     QString disk;   // a real block device, if this machine has one mounted
     for (const drives::Mount &mt : drives::mounts())
-        if (mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd"))
+        if ((mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd")) &&
+            lexists(mt.source))   // (in a container the host's disk is in the mount table, but not its device)
             disk = mt.source;
     if (disk.isEmpty()) {
         skip("a disk's size from /sys, as lsblk gives it (no disk mounted here)");

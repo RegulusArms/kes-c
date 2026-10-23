@@ -4,6 +4,18 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.8
+
+Changed:
+- `viewer`: closing with an unsaved rotation, then Don't Save, failed on Qt 6.4 (CI): the viewer closed itself from
+  inside the question's own click, which Qt 6.4 ignores (now it closes once the click is handled). The check now says
+  which part failed: whether it asked, closed, and the file's orientation tag.
+- `slow`: the check that GNOME's low-disk-space check skips a tape crashed the test where GNOME's housekeeping settings
+  aren't installed (GSettings aborts on a key without its schema): skipped there, and the system-monitor check that
+  follows no longer reads those settings.
+- `sidebar`: the disk-size check only picks a disk whose device node exists; in a container the host's disk is in the
+  mount table without one, so lsblk failed and the check with it.
+
 ## 0.3.2-alpha.7
 
 Added:
