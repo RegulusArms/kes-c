@@ -78,6 +78,16 @@ QPair<qint64, qint64> tape_position(const QString &path);   // (partition, start
 // is found (KESTREL_TEST_PROC: a folder in /proc's layout, for the tests)
 QString ltfs_sync(const QString &root);
 int ltfs_sync_minutes(const QString &sync);   // "time@5" -> 5; 0 when the index isn't written on a timer
+// Programs that ask every drive for its free space keep a tape from streaming: on LTFS each question is commands to the
+// drive, and it drops to a fraction of its speed for a while after each. While a job writes to a tape, GNOME's
+// low-disk-space check (gsd-housekeeping, once a minute) is told to skip it: its mount point goes on the check's
+// ignore-paths (org.gnome.settings-daemon.plugins.housekeeping), and comes off again after (unquiet_tape) if Kestrel
+// put it there. quiet_tape returns false when it was there already, or there's no such setting (not GNOME).
+bool quiet_tape(const QString &root);
+void unquiet_tape(const QString &root);
+// The running programs known to ask every drive for its free space every few seconds ("GNOME System Monitor"…)
+// (KESTREL_TEST_PROC: a folder in /proc's layout, for the tests)
+QStringList free_space_pollers();
 QString sync_tape(const QString &root);   // write the tape's index now (LTFS's sync attribute); an error, or empty
 void sync_tape_job(QWidget *parent, const QString &root);   // the same as a status-bar job, a message if it fails
 

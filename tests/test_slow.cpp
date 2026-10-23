@@ -61,6 +61,7 @@ int main(int argc, char **argv)
     int rc;
     if (is_tower(argc, argv, &rc))
         return rc;
+    qputenv("GSETTINGS_BACKEND", "memory");   // GNOME's settings that tape copies change: the test's own, in memory
     QApplication app(argc, argv);
     QString tape = home_path("tape"), floppy = home_path("floppy"), out = home_path("out");
     for (const QString &d : {tape, floppy, out})
@@ -560,6 +561,83 @@ int main(int argc, char **argv)
                   drives::ltfs_sync_minutes(plain) == 5 && drives::ltfs_sync_minutes(unmount) == 0,
               "how LTFS writes a tape's index is read from its ltfs process (every 5 minutes by default, or as "
               "sync_type says), so a copy's log and the Overview can say each one stops the drive");
+    }
+
+    // ---- programs asking the tape for its free space stop it streaming: GNOME's low-disk-space check skips it while a
+    // job writes to it, and a system monitor that's open is named in the job's log
+    {
+        auto ignored = []() {
+            QStringList out;
+            GSettings *gs = g_settings_new("org.gnome.settings-daemon.plugins.housekeeping");
+            gchar **v = g_settings_get_strv(gs, "ignore-paths");
+            for (gchar **p = v; p && *p; ++p)
+                out << QString::fromUtf8(*p);
+            g_strfreev(v);
+            g_object_unref(gs);
+            return out;
+        };
+        auto set_ignored = [](const QStringList &l) {
+            GSettings *gs = g_settings_new("org.gnome.settings-daemon.plugins.housekeeping");
+            QList<QByteArray> b;
+            QVector<const gchar *> p;
+            for (const QString &x : l)
+                b << x.toUtf8();
+            for (const QByteArray &x : b)
+                p << x.constData();
+            p << nullptr;
+            g_settings_set_strv(gs, "ignore-paths", p.constData());
+            g_object_unref(gs);
+        };
+        QString proc = home_path("proc2");
+        makedirs(join(proc, "4242"), true);
+        write_text(join(join(proc, "4242"), "comm"), "gnome-system-mo\n");
+        makedirs(join(proc, "4243"), true);
+        write_text(join(join(proc, "4243"), "comm"), "bash\n");
+        write_text(home_path("quiet.bin"), QByteArray(40 * 1024 * 1024, 'q'));
+        // a copy onto the tape, lasting a moment (a slow source); whether the tape was skipped while it ran, and its log
+        auto copy = [&](const QString &name, bool *skipped_meanwhile, const char *delay = "150") {
+            qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", delay);
+            QPointer<Task> t = fileops::start_ops(w, {{"copy", home_path("quiet.bin"), join(tape, name)}}, "Quiet", []() {});
+            *skipped_meanwhile = false;
+            while (t) {
+                if (ignored().contains(tape))
+                    *skipped_meanwhile = true;
+                spin(20);
+            }
+            qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+            spin(300);
+            QString log;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == "Quiet" && f.log.contains(name))
+                    log = f.log;
+            return log;
+        };
+        GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+        GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, "org.gnome.settings-daemon.plugins.housekeeping", TRUE) : nullptr;
+        if (!schema) {
+            skip("GNOME's low-disk-space check skips a tape while a job writes to it (GNOME's settings aren't installed)");
+        } else {
+            g_settings_schema_unref(schema);
+            set_ignored({"/srv/keep"});
+            bool during = false;
+            QString log = copy("quiet1.bin", &during);
+            check(during && ignored() == QStringList({"/srv/keep"}) && log.contains("low-disk-space check skips this tape"),
+                  "while a job writes to a tape, GNOME's low-disk-space check skips it (it asks the drive for its free "
+                  "space once a minute), and afterwards its list is as it was (" + ignored().join(", ") + ")");
+            set_ignored({"/srv/keep", tape});
+            log = copy("quiet2.bin", &during);
+            check(ignored() == QStringList({"/srv/keep", tape}) && !log.contains("low-disk-space check skips this tape"),
+                  "a tape the user put on that list stays there after the job");
+            set_ignored({});
+        }
+        qputenv("KESTREL_TEST_PROC", proc.toUtf8());
+        QStringList pollers = drives::free_space_pollers();
+        bool during = false;
+        QString log = copy("quiet3.bin", &during, "2500");   // past a 5-second check: still said once
+        qunsetenv("KESTREL_TEST_PROC");
+        check(pollers == QStringList({"GNOME System Monitor"}) && log.count("Note: GNOME System Monitor is running") == 1,
+              "a system monitor that's open (it asks every drive for its free space every few seconds) is named in a "
+              "tape copy's log, once, also when it runs on (" + pollers.join(", ") + ")");
     }
 
     // ---- Properties names a file's type on a tape by its name (its contents would make the drive seek)

@@ -381,6 +381,84 @@ QPair<qint64, qint64> tape_position(const QString &path)
     return {partition, block.toLongLong()};
 }
 
+static const char *HOUSEKEEPING = "org.gnome.settings-daemon.plugins.housekeeping";
+
+static GSettings *housekeeping()   // null where the desktop has no such setting
+{
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, HOUSEKEEPING, TRUE) : nullptr;
+    if (!schema)
+        return nullptr;
+    bool has = g_settings_schema_has_key(schema, "ignore-paths");
+    g_settings_schema_unref(schema);
+    return has ? g_settings_new(HOUSEKEEPING) : nullptr;
+}
+
+// Adds (on) or removes path in the check's ignore-paths; true if the list changed
+static bool set_ignored(const QString &path, bool on)
+{
+    static QMutex lock;   // jobs on two tapes at once: one read-modify-write at a time
+    QMutexLocker l(&lock);
+    GSettings *gs = housekeeping();
+    if (!gs)
+        return false;
+    QStringList list;
+    gchar **v = g_settings_get_strv(gs, "ignore-paths");
+    for (gchar **p = v; p && *p; ++p)
+        list << QString::fromUtf8(*p);
+    g_strfreev(v);
+    bool changed = on ? !list.contains(path) : list.removeAll(path) > 0;
+    if (on && changed)
+        list << path;
+    if (changed) {
+        QList<QByteArray> bytes;
+        QVector<const gchar *> ptrs;
+        for (const QString &s : list)
+            bytes << s.toUtf8();
+        for (const QByteArray &b : bytes)
+            ptrs << b.constData();
+        ptrs << nullptr;
+        g_settings_set_strv(gs, "ignore-paths", ptrs.constData());
+        g_settings_sync();
+    }
+    g_object_unref(gs);
+    return changed;
+}
+
+bool quiet_tape(const QString &root) { return !root.isEmpty() && set_ignored(rstrip(root, '/'), true); }
+
+void unquiet_tape(const QString &root)
+{
+    if (!root.isEmpty())
+        set_ignored(rstrip(root, '/'), false);
+}
+
+QStringList free_space_pollers()
+{
+    // their process names (as /proc/<pid>/comm has them, at most 15 characters)
+    static const QList<QPair<QString, QString>> KNOWN = {{"gnome-system-mo", "GNOME System Monitor"},
+                                                        {"plasma-systemmo", "KDE's System Monitor"},
+                                                        {"ksysguard", "KSysGuard"},
+                                                        {"conky", "Conky"}};
+    QString proc = qEnvironmentVariable("KESTREL_TEST_PROC", "/proc");
+    QStringList pids, out;
+    try {
+        pids = listdir(proc);
+    } catch (const OSError &) {
+    }
+    for (const QString &pid : pids) {
+        bool num = false;
+        pid.toLongLong(&num);
+        if (!num)
+            continue;
+        QString comm = QString::fromLocal8Bit(read_file(join(join(proc, pid), "comm"))).trimmed();
+        for (const auto &[name, shown] : KNOWN)
+            if (comm == name && !out.contains(shown))
+                out << shown;
+    }
+    return out;
+}
+
 QString ltfs_sync(const QString &root)
 {
     QString proc = qEnvironmentVariable("KESTREL_TEST_PROC", "/proc");

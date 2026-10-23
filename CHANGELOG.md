@@ -4,6 +4,11 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.7
 
+- **Fixed: copies onto a tape slowed to about a quarter of the drive's speed for long stretches.** The cause wasn't
+  Kestrel: programs that ask every drive for its free space knock a tape out of streaming, because on LTFS each
+  question is commands to the drive. While a job writes to a tape, Kestrel now takes it off GNOME's low-disk-space
+  check (which asks once a minute), and puts it back afterwards. A system monitor that's open (GNOME System Monitor's
+  File Systems tab asks every few seconds) is named in the job's log, so you know to close it.
 - **The image viewer opens images faster.** The next and previous images are decoded ahead of time at the screen's
   size, and the full image only when you zoom in past that. Until an image is ready, its preview from the thumbnail
   cache shows (for RAW photos, made from the camera's embedded preview), instead of an empty window.

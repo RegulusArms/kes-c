@@ -7,6 +7,10 @@ under the version whose change it covers. What each test checks today is in [REA
 ## 0.3.2-alpha.7
 
 Added:
+- `slow`: while a job writes to a tape, GNOME's low-disk-space check skips it, and afterwards its list is as it was (a
+  tape the user put there stays); a system monitor that's running is named in the job's log, once. These programs
+  asking the tape for its free space were what slowed real copies to a quarter of the drive's speed. The test keeps
+  GNOME's settings in memory (GSETTINGS_BACKEND=memory) and uses a stand-in /proc.
 - `viewer`, a new test for the image viewer's new features and for saving its changes. Rotations saved through the
   orientation tag (every orientation, turn and flip shows as the viewer showed it, and only the tag's two bytes
   change), exiftool adding a tag, a PNG written again turned with its text; a rotation or crop that fails part-way (a

@@ -721,6 +721,10 @@ public:
                     ops->task->log(ops->buffer->summary());
                     ops->buffer.reset();
                 }
+                if (!ops->quieted.isEmpty()) {   // GNOME's check may look at the tape again
+                    drives::unquiet_tape(ops->quieted);
+                    ops->quieted.clear();
+                }
             }
         } end_buffer{this};
         for (const auto &[at, index] : keyed) {
@@ -788,6 +792,8 @@ private:
     bool by_count;
     qint64 done = 0, total = 0;
     std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
+    QString quieted;                           // the tape GNOME's low-disk-space check skips while this runs
+    QStringList told_pollers;                  // programs asking every drive for its free space, said in the log
     bool told_slow = false;                    // said the source is too slow for the tape to stream
     QElapsedTimer rate_clock;                  // copying onto a tape: since the last rate line in the log
     qint64 rate_done = 0;                      // ...and the bytes written by then
@@ -819,6 +825,7 @@ private:
                            human_size(total)));
         rate_clock.restart();
         rate_done = done;
+        check_pollers();   // (one opened meanwhile)
     }
 
     void report_progress(const QString &name)
@@ -884,6 +891,27 @@ private:
                               "the drive stops each time. Mounting it with -o sync_type=unmount avoids that (the index is "
                               "then written when it's unmounted, or with Write Tape Index Now).")
                           .arg(QString::number(every), drives::ltfs_sync(tape)));
+        if (drives::quiet_tape(tape)) {
+            quieted = tape;
+            task->log("While this job runs, GNOME's low-disk-space check skips this tape: it asks the drive for its free "
+                      "space once a minute, and each time the tape stops streaming.");
+        }
+        check_pollers();
+    }
+
+    // A program asking every drive for its free space every few seconds slows the tape: said in the log, once each
+    void check_pollers()
+    {
+        for (const QString &p : drives::free_space_pollers()) {
+            if (told_pollers.contains(p))
+                continue;
+            told_pollers << p;
+            task->log(QString("Note: %1 is running. Programs like it ask every drive for its free space every few "
+                              "seconds (GNOME System Monitor in its File Systems tab); on a tape each question stops it "
+                              "streaming, and it can run at a fraction of its speed for a while after. Close it while "
+                              "the tape is written.")
+                          .arg(p));
+        }
     }
 
     // bytes under path, or the file count when counting deletes
