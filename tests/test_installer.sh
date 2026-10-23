@@ -185,7 +185,8 @@ EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sorts.json;delete $X
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_folder;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_places;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf recent_servers;'
-check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 9 ]]' \
+EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf viewer_recent_folders;'
+check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 10 ]]' \
     "the cleaner only deletes Kestrel's cache and lists, and only the history and save locations keys from its settings"
 BLEACHBIT_XSD=/usr/share/doc/bleachbit/examples/cleaner_markup_language.xsd
 if command -v xmllint >/dev/null && [[ -f "$BLEACHBIT_XSD" ]]; then
@@ -216,7 +217,8 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     printf '[General]\nchooser_folder=/home/someone/Private\ngeometry=@ByteArray(\\x1\\xd9\\xd0\\xcb)\nhomepage=overview\n' \
         > "$KCONF/kestrel-explorer.conf"
     printf 'chooser_places=/home/someone/Downloads, /home/someone/Saved\n' >> "$KCONF/kestrel-explorer.conf"
-    printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n\n[archive]\nformat=7z\n' \
+    printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n' >> "$KCONF/kestrel-explorer.conf"
+    printf 'viewer_recent_folders=/home/someone/Photos/Keep, /home/someone/Photos/Print\n\n[archive]\nformat=7z\n' \
         >> "$KCONF/kestrel-explorer.conf"
     for f in starred.json pinned.json covers.json folder_styles.json sorts.json; do echo '{}' > "$KCONF/$f"; done
     echo "chooser_conf=created" > "$KCONF/install-state"
@@ -247,8 +249,8 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
                -f "$HOME/.cache/other-app/data" && -f "$KCONF/install-state" && -f "$CLEANER" ]]' \
             "...and leaves everything else (a folder linked from the cache, GNOME's thumbnails, other apps' caches)"
         settings() { sed -E 's/^([^=[]*[^ ]) = /\1=/' "$1" | grep -v '^$'; }
-        check '! grep -qE "^(recent_servers|chooser_folder|chooser_places) ?=" "$KCONF/kestrel-explorer.conf" &&
-               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder|chooser_places)=")" ]]' \
+        check '! grep -qE "^(recent_servers|chooser_folder|chooser_places|viewer_recent_folders) ?=" "$KCONF/kestrel-explorer.conf" &&
+               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder|chooser_places|viewer_recent_folders)=")" ]]' \
             "...and removes the history and the save locations from Kestrel's settings, keeping every other setting as it was"
     fi
 else
@@ -271,7 +273,7 @@ printf '#!/bin/sh\necho "$@" >> "%s/sudo.log"\n' "$WORK" > "$WORK/apt-stubs/sudo
 chmod +x "$WORK/apt-stubs"/*
 rm -f "$WORK/sudo.log"
 PATH="$WORK/apt-stubs:$PATH" "$SETUP" --install-optional </dev/null >"$WORK/out9" 2>&1
-check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep" ]] &&
+check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs" ]] &&
        grep -q "Not available on this system (skipped): rar" "$WORK/out9" && grep -q "multiverse" "$WORK/out9"' \
     "kes-setup --install-optional: installs the missing optional packages apt has, and names the ones it hasn't"
 rm -f "$WORK/sudo.log"

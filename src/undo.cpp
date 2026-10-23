@@ -117,7 +117,7 @@ static QHash<QString, QString> trashed_index()
     return out;
 }
 
-void undo(MainWindow *win)
+void undo(MainWindow *win, std::function<void()> after)
 {
     Op op;
     QString got = shared() ? atc::radio()->request("UndoPop") : QString();
@@ -126,18 +126,25 @@ void undo(MainWindow *win)
         atc::valid_undo(QJsonDocument::fromJson(got.toUtf8()).object())) {
         op = from_json(got);
     } else {
-        if (stack.isEmpty())
+        if (stack.isEmpty()) {
+            if (after)
+                after();
             return;
+        }
         op = stack.takeLast();
     }
     Q_EMIT signals_()->changed();
     QString title = "Undo " + op.label;
     if (op.kind == "none") {
         win->statusBar()->showMessage("Can't undo that: what was replaced is gone.", 8000);
+        if (after)
+            after();
         return;
     }
     QPointer<MainWindow> w(win);
-    auto done = [w, title, op](const QVariant &res) {
+    auto done = [w, title, op, after](const QVariant &res) {
+        if (after)
+            after();
         if (!w)
             return;
         w->sidebar->refresh();
@@ -163,6 +170,8 @@ void undo(MainWindow *win)
             warn(win, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
         if (!jobs.isEmpty())
             fileops::start_ops(win, jobs, title, [done]() { done(QStringList()); });
+        else if (after)
+            after();
         return;
     }
 

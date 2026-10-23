@@ -721,7 +721,7 @@ void PreferencesDialog::apply_filter()
         int shown = 0;
         if (tab == "Menus") {
             QString words = "menus right-click context menu entries layout submenu reorder " +
-                            QStringList{"folder", "file", "archive", "several", "empty space"}.join(' ');
+                            QStringList{"folder", "file", "archive", "several", "empty space", "image viewer"}.join(' ');
             shown = t.isEmpty() || words.contains(t, Qt::CaseInsensitive);
         } else {
             QHash<QString, int> in_group;

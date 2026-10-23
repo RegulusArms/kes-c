@@ -26,9 +26,9 @@ using namespace util;
 namespace menus {
 
 // the built-in submenus whose entries can be moved one by one (others, like Open With or Send To, move as a whole)
-static const QSet<QString> CONTAINERS = {"links", "copy_path", "image", "previews"};
+static const QSet<QString> CONTAINERS = {"links", "copy_path", "image", "previews", "viewer_view", "viewer_edit"};
 
-QList<Kind> kinds() { return {FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND}; }
+QList<Kind> kinds() { return {FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND, VIEWER}; }
 
 QString kind_key(Kind k)
 {
@@ -38,6 +38,7 @@ QString kind_key(Kind k)
     case ARCHIVE: return "archive";
     case SEVERAL: return "several";
     case BACKGROUND: return "background";
+    case VIEWER: return "viewer";
     }
     return QString();
 }
@@ -50,6 +51,7 @@ QString kind_label(Kind k)
     case ARCHIVE: return "An archive";
     case SEVERAL: return "Several items";
     case BACKGROUND: return "Empty space in a folder";
+    case VIEWER: return "The image viewer";
     }
     return QString();
 }
@@ -93,6 +95,30 @@ static QList<Entry> previews_menu()
 QList<Entry> defaults(Kind k)
 {
     QList<Entry> l;
+    if (k == VIEWER) {   // ImageViewer::build_menu
+        l << item("next", "Next") << item("previous", "Previous") << sep()
+          << submenu("viewer_view", "View",
+                     {item("fullscreen", "Fullscreen"), item("slideshow", "Start / Stop Slideshow"),
+                      item("fit", "Fit to Window"), item("actual_size", "Actual Size"),
+                      item("keep_zoom", "Keep Zoom Between Images"), sep(), item("filmstrip", "Filmstrip"),
+                      item("info_panel", "Info Panel"), item("info_line", "Info Line"), sep(),
+                      item("compare", "Compare With the Next Image"),
+                      item("compare_ab", "One at a Time (A/B)", "while comparing"),
+                      item("compare_switch", "Show A / Show B", "comparing one at a time")})
+          << submenu("viewer_edit", "Rotate and Edit",
+                     {item("rotate_right", "Rotate Right"), item("rotate_left", "Rotate Left"),
+                      item("flip", "Flip Horizontally"), item("save_changes", "Save Rotation / Changes…"),
+                      item("undo_edits", "Undo the Edits", "with crops or resizes not saved"), sep(),
+                      item("crop", "Crop…"), item("resize", "Resize…"), item("straighten", "Straighten")})
+          << sep() << item("star", "Star / Unstar") << item("pin", "Pin / Unpin")
+          << item("viewer_copy_to", "Copy To ▸") << item("viewer_move_to", "Move To ▸")
+          << item("show_in_folder", "Show in Folder") << sep()
+          << item("open_default", "Open With Default Application") << item("open_with", "Open With…")
+          << item("copy_image", "Copy Image") << item("copy_full_path", "Copy Path") << item("wallpaper", "Set as Wallpaper")
+          << item("uwp_add", "Add to Selected UWP Monitor", "while UWP's editor is open") << sep()
+          << item("properties", "Properties") << item("trash", "Move to Trash") << item("undo", "Undo");
+        return l;
+    }
     if (k == BACKGROUND) {
         l << item("new_folder", "New Folder…") << item("new_document", "New Document ▸") << sep() << item("paste", "Paste")
           << item("paste_link", "Paste as Link") << item("select_all", "Select All") << sep()

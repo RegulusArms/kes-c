@@ -2,7 +2,39 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.6
+## 0.3.2-alpha.7
+
+- **The image viewer opens images faster.** The next and previous images are decoded ahead of time at the screen's
+  size, and the full image only when you zoom in past that. Until an image is ready, its preview from the thumbnail
+  cache shows (for RAW photos, made from the camera's embedded preview), instead of an empty window.
+- **A filmstrip** of thumbnails along the viewer's bottom (T); click one to jump to it.
+- **An info panel** (I): the file's details and the camera's settings, a GPS position with a link to a map,
+  image-generation prompts with Copy buttons, all of its metadata, and a histogram. The info line is now Tab.
+- **Better zoom:** double-click switches between fitting the window and 100% at the pointer (F still goes full
+  screen), a touchpad pinch zooms, the zoom level shows on screen as it changes, and K keeps the zoom from one image to
+  the next.
+- **Compare two images** (X): the current one and the next, side by side, or one at a time (V, then B switches
+  between them). Zooming or panning one does the same to the other.
+- **Rotations are saved without losing quality.** R, L and H used to be for viewing only. Now, leaving a turned image
+  asks whether to save it (with Always Save; Ctrl+S saves at once; Preferences → Images & Videos: ask, always or
+  never). Only a JPEG's or TIFF's orientation tag changes (exiftool adds one to a JPEG without it), and a PNG or BMP is
+  written again turned, keeping its generation prompts.
+- **Crop and resize** (Shift+C, Shift+S), shown in the viewer at once without touching the file: crop and resize again
+  as often as you like, and Esc undoes them. Ctrl+S saves the result as a new file beside the original or over it, as
+  you choose (leaving the image or closing the viewer asks the same, with Discard); a JPEG keeps its camera details, a
+  PNG its prompts. **Straighten** (Shift+O) turns a JPEG's pixels the way its orientation tag says
+  (jpegtran, from libjpeg-turbo-progs, now among the optional packages), for programs that ignore the tag.
+- **Quick actions in the viewer:** star (*), pin (P), show in its folder (G), Open With (O), move or copy to a folder
+  (M, C) or to one of the last nine folders in one key (Ctrl+1–9 moves, Alt+1–9 copies), and undo (Ctrl+Z), which puts
+  a trashed or moved image back in the viewer too. The viewer's Move to Trash can now be undone in Kestrel's windows as
+  well.
+- **The viewer's right-click menu can be laid out in Preferences → Menus**, like the others: hide entries, reorder
+  them, move them into or out of its View and Rotate and Edit submenus, and add separators and submenus of your own.
+- **The viewer remembers** its size and position, full screen, and whether the filmstrip and info panel were shown.
+- **Several selected images open in the folder's order**, not the order you clicked them in.
+- The info panel and Properties show a photo's GPS position as coordinates instead of "yes".
+
+## 0.3.2-alpha.6 (2026-10-22)
 
 - **Fixed: copies onto a tape could crawl at about a quarter of the drive's speed.** Every open Kestrel window asked
   the tape for its size and its cartridge's health about every 8 seconds, also while it was writing; LTFS answers

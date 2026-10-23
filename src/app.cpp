@@ -1549,12 +1549,20 @@ void MainWindow::show_shortcuts()
 <tr><td><b>Drag + Ctrl / Shift / Ctrl+Shift / Alt</b></td><td>Copy / move / link / ask</td></tr>
 <tr><td colspan=2><br><b>Image viewer</b></td></tr>
 <tr><td><b>←/→, scroll wheel</b></td><td>Previous / next</td></tr>
-<tr><td><b>Ctrl+scroll, +/-, 0, 1</b></td><td>Zoom, fit, 100%</td></tr>
-<tr><td><b>F / double-click</b></td><td>Fullscreen</td></tr>
+<tr><td><b>Ctrl+scroll, pinch, +/-, 0, 1</b></td><td>Zoom, fit, 100%</td></tr>
+<tr><td><b>Double-click</b></td><td>Fit ↔ 100% at the pointer</td></tr>
+<tr><td><b>K</b></td><td>Keep the zoom from image to image</td></tr>
+<tr><td><b>F</b></td><td>Fullscreen</td></tr>
 <tr><td><b>S</b></td><td>Slideshow</td></tr>
-<tr><td><b>R / L / H</b></td><td>Rotate right / left, flip</td></tr>
-<tr><td><b>I</b></td><td>Toggle info overlay</td></tr>
-<tr><td><b>Delete</b></td><td>Move to trash</td></tr>
+<tr><td><b>T / I / Tab</b></td><td>Filmstrip / info panel / info line</td></tr>
+<tr><td><b>X, V, B</b></td><td>Compare with the next image; side by side ↔ A/B; show A or B</td></tr>
+<tr><td><b>R / L / H, Ctrl+S</b></td><td>Rotate right / left, flip; save the rotation</td></tr>
+<tr><td><b>Shift+C / Shift+S / Shift+O</b></td><td>Crop / resize / straighten</td></tr>
+<tr><td><b>* / P</b></td><td>Star / pin</td></tr>
+<tr><td><b>M / C</b></td><td>Move to / copy to a folder</td></tr>
+<tr><td><b>Ctrl+1–9 / Alt+1–9</b></td><td>Move / copy to a recent folder</td></tr>
+<tr><td><b>G / O</b></td><td>Show in folder / Open With</td></tr>
+<tr><td><b>Delete, Ctrl+Z</b></td><td>Move to trash, undo</td></tr>
 </table>)";
     inform(this, "Keyboard Shortcuts", text);
 }

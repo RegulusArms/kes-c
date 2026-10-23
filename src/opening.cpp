@@ -12,6 +12,7 @@
 #include "hashcheck.h"
 #include "places.h"
 #include "proc.h"
+#include "undo.h"
 #include "util.h"
 #include "viewer.h"
 #include "widgets.h"
@@ -26,6 +27,18 @@ using namespace util;
 // A content search's result opened at its matching line, where the default app is an editor known to take one on its
 // command line (documented: gedit and its forks, Geany, VS Code and its forks, Kate, Sublime Text, Zed). Others,
 // GNOME Text Editor among them (no such option), open the file as usual: false.
+// Several images selected: the viewer shows them in the order the folder shows them, not the order they were picked in
+static QStringList in_view_order(Pane *p, QStringList files)
+{
+    QHash<QString, int> at;
+    const QStringList order = p->all_paths();
+    for (int i = 0; i < order.size(); ++i)
+        at.insert(order[i], i);
+    std::stable_sort(files.begin(), files.end(),
+                     [&](const QString &a, const QString &b) { return at.value(a, INT_MAX) < at.value(b, INT_MAX); });
+    return files;
+}
+
 static bool open_at_line(const QString &path, int line)
 {
     AppRef app = default_app(path);
@@ -115,7 +128,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
             int idx = std::max<int>(0, all_imgs.indexOf(images.first()));
             open_viewer(p, all_imgs.isEmpty() ? images : all_imgs, all_imgs.contains(images.first()) ? idx : 0);
         } else {
-            open_viewer(p, images, 0);
+            open_viewer(p, in_view_order(p, images), 0);
         }
     } else if (!images.isEmpty()) {
         others += open_with_choice(images, img_choice);
@@ -189,7 +202,7 @@ void MainWindow::quick_view(Pane *p, const QStringList &paths)
             int i = all_imgs.indexOf(imgs.first());
             open_viewer(p, all_imgs.isEmpty() ? imgs : all_imgs, std::max(i, 0));
         } else {
-            open_viewer(p, imgs, 0);
+            open_viewer(p, in_view_order(p, imgs), 0);
         }
     } else if (!paths.isEmpty()) {
         properties(paths);
@@ -204,6 +217,7 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
     cb.on_delete = [this](const QString &path) {
         try {
             util::trash(path);
+            undo::record_paths("trash", "Move to Trash", {path});
             sidebar->refresh();
             return true;
         } catch (const OSError &e) {
@@ -222,6 +236,15 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
     };
     cb.on_properties = [this, viewer_ptr](const QString &path) { properties({path}, viewer_ptr->data()); };
     cb.on_open_with = [viewer_ptr](const QString &path) { show_free(new OpenWithDialog(viewer_ptr->data(), {path})); };
+    cb.on_reveal = [this](const QString &path) {
+        reveal(path);
+        raise();
+        activateWindow();
+    };
+    cb.on_undo = [this](std::function<void()> after) { undo::undo(this, after); };
+    cb.on_transfer = [this](const QString &path, const QString &folder, const QString &op) {
+        fileops::transfer(this, {path}, folder, op);
+    };
     auto *v = new ImageViewer(images, idx, cb);
     *viewer_ptr = v;
     viewers << v;

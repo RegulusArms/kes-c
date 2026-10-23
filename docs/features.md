@@ -138,7 +138,15 @@
 - Thumbnails are shared with GNOME Files through the freedesktop cache (`~/.cache/thumbnails`).
 - Zoom with Ctrl+scroll or the slider, from 48 to 320 px in the grid (16 to 128 px in the list).
 - **Animated GIFs and WebM videos can play right in the file view** (Preferences → *Play animated GIFs* / *Play WebM videos in the file view*, both off by default). WebM files play as silent looping previews of their first 15 seconds, made once with `ffmpeg` and cached in `~/.cache/kestrel-explorer/animated`. Only items on screen play.
-- Built-in viewer: arrow keys or the scroll wheel to move between images, zoom and pan, fullscreen (F), slideshow (S), rotate (R/L) and flip (H), an info overlay (I), copy the image (Ctrl+C), trash (Delete), and animated GIF/WebP.
+- Built-in viewer: arrow keys or the scroll wheel to move between images, fullscreen (F), slideshow (S), copy the image (Ctrl+C), and animated GIF/WebP. Several selected images open in the order the folder shows them.
+  - **Fast:** the next and previous images are decoded ahead of time at screen size; the full image is decoded only when you zoom in past that. Until an image is ready, its preview from the thumbnail cache is shown (for RAW photos, made from the camera's embedded preview).
+  - **Zoom:** Ctrl+scroll, a touchpad pinch, +/-, 0 (fit) and 1 (100%); double-click switches between fitting and 100% at the pointer. The zoom shows on screen as it changes. **K** keeps the zoom from image to image.
+  - **Filmstrip (T)** of thumbnails along the bottom; click one to jump to it. **Info panel (I):** the file's details, the camera's settings, a GPS position with a map link, image-generation prompts (with Copy), all of its metadata, and a histogram. **Tab** hides the info line.
+  - **Compare (X)** the image with the next one, side by side, or one at a time (**V**, then **B** switches between A and B). Zooming or panning one does the same to the other.
+  - **Rotate (R/L) and flip (H)**, saved without losing quality: only a JPEG's or TIFF's orientation tag changes (exiftool adds one to a JPEG that has none), and a PNG or BMP is written again turned. When you leave a turned image, the viewer asks whether to save it, with **Always Save**; Ctrl+S saves at once. Preferences → Images & Videos sets ask, always or never.
+  - **Crop (Shift+C)**, drag over the part to keep and press Enter, and **Resize (Shift+S)** (50%, 1920x1080, or the longer side): the viewer shows the result at once, and nothing is written yet. Crop and resize again as often as you like; Esc undoes them all. **Ctrl+S** saves the result as a new file beside the original, or over it, as you choose; leaving the image or closing the viewer asks the same (with Discard). A JPEG keeps its camera details, a PNG its generation prompts. **Straighten (Shift+O)** turns a JPEG's pixels the way its orientation tag says (jpegtran, lossless), for programs that ignore the tag.
+  - **Quick actions:** star (*), pin (P), show in its folder (G), Open With (O), move or copy to a folder (M, C) or to one of the last nine in one key (Ctrl+1–9 moves, Alt+1–9 copies), Set as Wallpaper, Move to Trash (Delete) and undo (Ctrl+Z, which puts the image back in the viewer too).
+  - It remembers its size and position, full screen, and whether the filmstrip and info panel were shown.
 - Images and videos open in your system's default app unless you choose otherwise. In Preferences you can pick **Open images with** (system default, Kestrel's built-in viewer, or any installed image app) and **Open videos with** (system default or any installed video app). "View Image" in the right-click menu always uses the built-in viewer.
 - The info panel (F3) shows EXIF details: camera, lens, exposure and GPS.
 - It also shows the prompts and settings that Stable Diffusion, ComfyUI and other image generators save in PNG, WebP and JPEG files. Kestrel only reads that text from the file.
@@ -152,7 +160,7 @@ Press F1 in the app for all keyboard shortcuts.
 - **General:** homepage, single-click, which apps open images and videos, opening the image viewer full screen, sharing undo between windows, developer tools.
 - **Views:** grid or list, icon sizes, hidden files, the sidebar and info panel, the default sort and grouping for folders without their own, Pinned & Starred First, folder previews (how many images, which ones, the colour), and the search bar's options.
 - **Sidebar:** the order of its sections and which are collapsed.
-- **Images & Videos:** slideshow speed, playing GIFs and WebM videos, the preview size limit, and the tapes and floppies you allowed previews on.
+- **Images & Videos:** slideshow speed, the image viewer's filmstrip, info panel, kept zoom and saving rotations, playing GIFs and WebM videos, the preview size limit, and the tapes and floppies you allowed previews on.
 - **Files:** checksum file defaults, how the job queue runs, and the tape buffer.
 - **Archives:** the default format and each format's options for Compress…, Extract To…'s choices, and forgetting saved archive passwords.
 - **Windows:** opening folders from other apps as tabs, the file chooser's own view (it follows the main windows' until you set it), where a Save window starts, and its save locations.
@@ -160,7 +168,7 @@ Press F1 in the app for all keyboard shortcuts.
 
 A change applies at once to every open window, and to the other Kestrels; a change made in a window (Ctrl+H, the zoom slider…) shows in an open Preferences window as it happens. The search box at the top filters every tab's settings. **Reset This Tab** and **Reset All** go back to the defaults, after asking.
 
-**Your own right-click menus.** Preferences → **Menus** sets up the right-click menu separately for a folder, a file, an archive, several items, and the empty space in a folder. Untick an entry to hide it; drag entries (or use Move Up / Move Down) to reorder them and to move them into or out of a submenu, such as Links & Shortcuts; add separators and submenus of your own. An entry only appears when it applies (Extract for archives, BleachBit's entries when it's installed…), wherever you put it, and entries added in later versions show up in their default place. **Reset to Default** puts a menu back as it was.
+**Your own right-click menus.** Preferences → **Menus** sets up the right-click menu separately for a folder, a file, an archive, several items, the empty space in a folder, and the image viewer. Untick an entry to hide it; drag entries (or use Move Up / Move Down) to reorder them and to move them into or out of a submenu, such as Links & Shortcuts (or the viewer's View and Rotate and Edit); add separators and submenus of your own. An entry only appears when it applies (Extract for archives, BleachBit's entries when it's installed…), wherever you put it, and entries added in later versions show up in their default place. **Reset to Default** puts a menu back as it was.
 
 ## Checksum files
 

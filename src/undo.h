@@ -12,6 +12,8 @@
 #include <QPair>
 #include <QStringList>
 
+#include <functional>
+
 class MainWindow;
 
 namespace undo {
@@ -28,6 +30,7 @@ Signals *signals_();
 void record(const QString &kind, const QString &label, const QList<QPair<QString, QString>> &items);
 void record_paths(const QString &kind, const QString &label, const QStringList &paths);   // "trash" / "create"
 QString label();   // what Ctrl+Z would undo, e.g. "Move", or empty
-void undo(MainWindow *win);
+// after: runs once the undo has finished (also when there was nothing to undo)
+void undo(MainWindow *win, std::function<void()> after = {});
 
 }  // namespace undo

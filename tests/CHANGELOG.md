@@ -4,6 +4,29 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.7
+
+Added:
+- `viewer`, a new test for the image viewer's new features and for saving its changes. Rotations saved through the
+  orientation tag (every orientation, turn and flip shows as the viewer showed it, and only the tag's two bytes
+  change), exiftool adding a tag, a PNG written again turned with its text; a rotation or crop that fails part-way (a
+  file-size limit) keeping the original and leaving no part file; Straighten; crop and resize as a new file or over
+  the original, keeping the camera details and generation prompts; GPS positions. In the viewer: decoding at screen
+  size and at full size when zoomed in, double-click and pinch zoom, Keep Zoom, the filmstrip, the info panel (map
+  link, histogram), compare with linked zoom, star, move and copy to (recent) folders, Delete and Ctrl+Z, the question
+  about saving a rotation (also on closing), the remembered size and panels, and the folder's order for a selection.
+  Crops and resizes are previewed first: shown at once (turned as shown, on the screen-size copy) with nothing
+  written, Esc undoing them, and saved by Ctrl+S or when leaving the image (asked, with Discard).
+  The viewer's right-click menu in Preferences → Menus: every entry has an id in the default layout's order, a saved
+  layout and Reset apply to it, and the editor offers it.
+  CI's test jobs install exiftool and jpegtran so those checks run there.
+- `installer`: BleachBit's cleaner also clears the image viewer's recent Copy To / Move To folders (a list of paths
+  Kestrel now keeps).
+
+Changed:
+- `installer`: `kes-setup --install-optional` also installs libjpeg-turbo-progs (the viewer's Straighten).
+- `prefs`: the viewer's window size and recent folders are kept state, not settings.
+
 ## 0.3.2-alpha.6
 
 Added:

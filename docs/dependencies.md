@@ -45,7 +45,7 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 
 | Package | Used for |
 |---|---|
-| `libimage-exiftool-perl` | The full Metadata tab, plus editing, adding and clearing metadata |
+| `libimage-exiftool-perl` | The full Metadata tab, plus editing, adding and clearing metadata; in the image viewer, saving the rotation of a JPEG that has no orientation tag |
 | `ffmpeg` | Video thumbnails and video stills in folder previews (`ffmpeg` and `ffprobe`) |
 | `zfsutils-linux` | Showing a ZFS pool as one card with pool-level usage on the Overview page |
 | `pkexec` | The **admin session**: retrying operations that fail with "permission denied" as administrator (usually already installed) |
@@ -53,4 +53,5 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 | `bleachbit` | **Shred with BleachBit…** and **Empty Trash with BleachBit…**, and the cleaner `kes-setup --bleachbit` adds to it |
 | `pbzip2` or `lbzip2`, `plzip`, `lz4` | Multi-core `.bz2` and `.lz`, and `.lz4` archives. Kestrel offers whichever are installed |
 | `ripgrep` | Searching inside files by reading them (search bar → *File contents*), much faster than `grep`, which is used without it |
+| `libjpeg-turbo-progs` | The image viewer's **Straighten** (`jpegtran`): turning a JPEG's pixels the way its orientation tag says, without losing quality |
 | [UWP](https://github.com/RegulusArms/UWP) (not an apt package; install with its `install.sh`) | "Set as Wallpaper" through UWP profiles, and "Add to Selected UWP Monitor". Found as `uwp` on your PATH or in `~/.local/bin` |

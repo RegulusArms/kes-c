@@ -7,7 +7,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
-ALL=(fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search installer)
+ALL=(fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search viewer installer)
 TESTS=("$@")
 (( ${#TESTS[@]} )) || TESTS=("${ALL[@]}")
 for t in "${TESTS[@]}"; do

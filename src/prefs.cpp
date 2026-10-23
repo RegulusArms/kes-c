@@ -33,7 +33,8 @@ static QList<Pref> build()
     add("General", "", "single_click", "Single-click to open items", BOOL, false);
     add("General", "Opening files", "image_opener", "Open images with", CUSTOM, "system");
     add("General", "Opening files", "video_opener", "Open videos with", CUSTOM, "system");
-    add("General", "Opening files", "viewer_fullscreen", "Open the image viewer full screen", BOOL, false);
+    add("General", "Opening files", "viewer_fullscreen", "Open the image viewer full screen", BOOL, false,
+        "the image viewer's F (it opens as it was last left)");
     add("General", "", "shared_undo", "Share undo between all Kestrel windows", BOOL, false, QString(),
         "On: Ctrl+Z in any Kestrel window undoes the newest action from any of them. Off: each Kestrel undoes only "
         "what was done in it.");
@@ -85,6 +86,16 @@ static QList<Pref> build()
 
     // -- Images & Videos
     range(add("Images & Videos", "", "slideshow_secs", "Slideshow interval", INT, 4, "the image viewer"), 1, 120, " s");
+    add("Images & Videos", "Image viewer", "viewer_filmstrip", "Show the filmstrip", BOOL, true, "T in the image viewer");
+    add("Images & Videos", "Image viewer", "viewer_info_panel", "Show the info panel", BOOL, false, "I in the image viewer");
+    add("Images & Videos", "Image viewer", "viewer_keep_zoom", "Keep the zoom from image to image", BOOL, false,
+        "K in the image viewer");
+    add("Images & Videos", "Image viewer", "viewer_save_rotation", "Rotations (R, L, H)", CHOICE, "ask",
+        "the image viewer's Always Save",
+        "How an image turned in the viewer is saved when you leave it: only its orientation tag changes (or a "
+        "lossless format is written again), so nothing is lost. Ctrl+S saves it at once.")
+        .choices = {{"Ask whether to save them", "ask"}, {"Always save them", "always"},
+                    {"Never save them (only for viewing)", "never"}};
     add("Images & Videos", "", "play_gifs", "Play animated GIFs in the file view", BOOL, false);
     add("Images & Videos", "", "play_webm", "Play WebM videos in the file view (silent looping previews)", BOOL, false);
     range(add("Images & Videos", "", "thumb_max_mb", "Don't make previews of files larger than", INT, 200), 1, 10000,

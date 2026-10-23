@@ -20,6 +20,16 @@ struct MetaRow {
 
 Rows basic_info(const QString &path);   // fast summary for the info panel
 Rows ai_info(const QString &path);      // Stable Diffusion / ComfyUI generation info
+// A photo's GPS position from its EXIF (degrees, south and west negative); false if it has none
+bool gps_position(const QString &path, double *lat, double *lon);
+// The EXIF Orientation tag of a JPEG or TIFF file, found so its value can be changed without re-encoding the image
+struct OrientationTag {
+    qint64 offset = -1;   // where its 2-byte value is in the file; -1: the file has none (or isn't a JPEG or TIFF)
+    bool little_endian = true;
+    int value = 1;        // 1–8, as EXIF numbers them
+};
+OrientationTag orientation_tag(const QString &path);
+OrientationTag orientation_tag_in(const QByteArray &file);   // the same for a file's contents
 QList<MetaRow> full_metadata(const QString &path);
 // When a photo or video was taken, from its metadata (EXIF DateTimeOriginal / DateTimeDigitized, a PNG's Creation Time,
 // an MP4 / MOV movie header's creation time); invalid when it has none. Reads the file: not on the UI thread.

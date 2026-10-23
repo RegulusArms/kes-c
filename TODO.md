@@ -234,31 +234,11 @@ into.
 
 ### Images, video and audio
 
-- [ ] **Image viewer: quality-of-life improvements.** The viewer (`src/viewer.cpp`) covers the basics today: arrows,
-  wheel and mouse back/forward to move between images, Ctrl+wheel zoom at the pointer, drag to pan, fit (0) and
-  actual size (1), fullscreen, slideshow, the info overlay (I), trash, copy, and a cache of the nearby images.
-  Rotate and flip only change the display. Ideas, to choose from when this is picked up:
-  - **Saving rotation:** R / L / H can save the change to the file, losslessly (see the rotate item above), with an
-    "always save" choice so it doesn't ask each time.
-  - **A filmstrip** of thumbnails along the bottom (toggle), to jump to any image; the current one highlighted.
-  - **Same order as the folder:** the images in the order the folder is sorted (and grouped) in Kestrel, and only the
-    selection when several were selected.
-  - **Zoom:** the zoom level shown briefly when it changes; double-click toggles fit / 100% at the pointer;
-    pinch-to-zoom on touchpads; keep the zoom and position when moving to the next image (an option, for comparing).
-  - **Faster:** preload the next and previous images in the background at screen size (larger cache for big folders),
-    full-resolution decode only when zoomed in; show the embedded/thumbnail preview first for RAW and huge files.
-  - **Info:** a side panel option for the full EXIF (camera, lens, exposure, GPS with a map link, the image-generation
-    prompt) instead of only the overlay; a histogram.
-  - **Quick actions:** star / pin (the badges Kestrel shows elsewhere), rate, set as wallpaper, open the containing
-    folder with the file selected, Open With, copy to / move to a recent folder with one key (for sorting a card of
-    photos), and undo for trash from inside the viewer.
-  - **Light edits:** crop (saved under a new name or over the original, asking), resize, and auto-straighten the
-    orientation flag; anything bigger stays with a real editor (Open With).
+- [ ] **Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen then:
+  - **Rate** images (stars 1–5, as XMP Rating), next to star / pin.
   - **Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default app),
     with play/pause and a seek bar.
-  - **Compare:** two images side by side (or A/B toggle) with linked zoom, for picking the better shot.
   - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
-  - **Remembered:** window size and position, fullscreen, filmstrip and info panel state.
 
 - [ ] **Drag an image out of the viewer.** With an image open in Kestrel's image viewer, drag it out and drop a copy
   anywhere that takes files: the desktop, another Kestrel or GNOME Files window, a browser's upload field, a chat or
@@ -273,13 +253,13 @@ into.
     from a small handle / the filmstrip thumbnail (see the viewer improvements item). To decide; maybe the first plus a
     modifier for zoomed images.
   - A rotated or flipped view that hasn't been saved: drag the file as it is on disk (and say so), or the image as
-    shown (a temporary copy) — to decide with the rotation-saving item.
+    shown (a temporary copy). (Saving a rotation is in the viewer now: R / L / H, then Save or Ctrl+S.)
   - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
     folder pastes a copy of the file.
 
 - [ ] **Rotate images losslessly.** Right-click one image or a selection → **Rotate** → **90° clockwise**, **180°**,
   **90° counter-clockwise (270°)**, and **Flip horizontally / vertically**, saved to the files. Today rotating only
-  exists in the image viewer (R / L), and only for display.
+  exists in the image viewer (R / L / H, saved through the orientation tag: `imgedit::save_rotation`, reusable here).
   - JPEG: lossless (`jpegtran -rotate 90 -perfect -copy all`, or `exiftran`; package `libjpeg-turbo-progs` /
     `exiftran`): the picture data is turned without re-compressing, so no quality is lost. Where a JPEG's size isn't a
     multiple of its block size, `-perfect` refuses; then offer either trimming the odd edge pixels (`-trim`) or, as an
@@ -348,6 +328,7 @@ into.
 
 ## Done
 
+- [x] **Image viewer: quality-of-life improvements** (0.3.2-alpha.7). `src/viewer.cpp`: `ViewerCanvas` (one image: zoom, pan, rotation, crop selection, on-screen zoom level; double-click fit ↔ 100% at the pointer, pinch), `ImageViewer` with a second canvas for Compare (X; V side by side ↔ A/B, B switches; zoom linked relative to fitting), `Filmstrip` (T; thumbnails from the thumbnail manager, not on slow drives unless allowed) and `ViewerInfo` (I; details, GPS map link to OpenStreetMap, generation prompts, all metadata, histogram). Decoding at screen size ahead (next, previous, +2) and full size when zoomed past it; the thumbnail cache's preview meanwhile. Quick actions: * star, P pin, G show in folder, O Open With, M / C move or copy to a folder, Ctrl+1–9 / Alt+1–9 to the last nine (`viewer_recent_folders`, in the BleachBit cleaner's History), Delete records undo and Ctrl+Z puts the image back in the list (`undo::undo` gained an after-callback). `src/imgedit.cpp`: rotations saved losslessly (the EXIF orientation tag patched in a part file; exiftool adds one to a JPEG without; PNG/BMP re-written; others refused), asked when leaving the image (`viewer_save_rotation`: ask / always / never; Ctrl+S now), Straighten (jpegtran, now optional: libjpeg-turbo-progs), crop and resize (previewed at once as `steps`, `imgedit::preview` on the screen-size copy; saved with Ctrl+S or on leaving the image: new file or replace, asked; a JPEG's APP1 segments copied with the tag set to 1, a PNG's text kept). Remembered: geometry (`viewer_geometry`), full screen, filmstrip, info panel, keep zoom. A selection opens in the view's order. Its right-click menu is a kind in Preferences → Menus (`menus::VIEWER`, `ImageViewer::build_menu`; View and Rotate and Edit are containers). Changed: I is now the info panel (Tab the info line); double-click no longer goes full screen. Not done: see "Image viewer: what's left". Test: `viewer`.
 - [x] **Better search: filters, and grep** (0.3.2-alpha.3). Filters: `SearchFilter` (src/search.h; type by name, size, date modified or created) in a row under the search bar (`Pane::build_filter_row`), kept for the session, applied by `SearchThread` (also with no name, and without subfolders). Inside files: `ContentSearch` (Automatic / Search index / Read the files, Regular expression, Match case); `SearchThread::run_read` streams ripgrep (else grep, `--null`) with a few lines per file into a Match column, stopped with ✕; Automatic uses localsearch where its settings cover the folder (`index_covers`) for plain words, and reads the files when it finds nothing. Opening a result at its line: gedit and forks, Geany, VS Code and forks, Kate, Sublime, Zed (GNOME Text Editor has no line option). Decided: chips weren't used (a row of drop-downs); File contents now follows Include subfolders (it always searched subfolders); nothing is read on tapes or floppies. ripgrep is optional (kes-setup, Suggests). Test: `search`.
 - [x] **Collapse a date group from anywhere in it** (0.3.2-alpha.3). A footer row in `DateGroupProxy` (src/groups.cpp: a row kind of its own after an open group's last item, "Collapse Today (1,240)", drawn quieter like a header, not selectable, spanning the list's columns and a whole line in the grid); `Pane::collapse_group` keeps the view on the header (the current row). Ctrl+Left / Ctrl+Right on the current item's group (Ctrl+Shift+Minus / Plus would clash with zoom on many layouts); Collapse This Group on an item's menu (`collapse_group`), Collapse / Expand All Groups in the Sort menu and on empty space's (`collapse_groups`, `expand_groups`). Not done: the sticky header (the footer was chosen). Test: `groups`.
 - [x] **Write straight to the file on a tape, without a part file** (0.3.2-alpha.3; tapes only, by the user's choice: floppies keep the part file, which works as intended on FAT). `copy_file_at` (src/fileops.cpp) and the admin helper's `Job::copy` (it recognises a tape from the mount table, `on_tape`) open a new name on a tape with O_CREAT|O_EXCL and write it there; a cancel or failure deletes it; a taken name is a conflict, kept. Decided: replacing a file on a tape keeps the part file and rename (the old one is never lost first). Test: `slow`, `admin_helper` (inotify: `DirWatch`).

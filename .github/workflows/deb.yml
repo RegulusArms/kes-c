@@ -38,9 +38,11 @@ jobs:
         # gnome-shell-common: GNOME Shell's settings, for the dock and extension checks (skipped without them);
         # bleachbit, libxml2-utils: the BleachBit cleaner's dry run and schema check (skipped without them)
         # gnome-keyring, p7zip-full: remembered archive passwords and Extract All (skipped without them)
+        # libimage-exiftool-perl, libjpeg-turbo-progs: the image viewer's rotation and Straighten checks (skipped without them)
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
-            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full \
+            libimage-exiftool-perl libjpeg-turbo-progs
 
       - name: Run the tests
         run: tests/run.sh
@@ -53,7 +55,8 @@ jobs:
       - name: Install build and test dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
-            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full \
+            libimage-exiftool-perl libjpeg-turbo-progs
 
       - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
         # GCC 13's sanitizers can't start with the kernel's 32-bit address randomisation ("unexpected memory mapping")
