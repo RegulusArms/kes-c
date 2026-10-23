@@ -201,6 +201,7 @@ struct Job {
     // the user chose Replace or Merge for a dst that was there. Otherwise dst must be new: one that's there when the job
     // starts, or appears while it runs (another program saving a file), is kept and the job fails with a conflict.
     bool replace = false;
+    bool dd = false;   // onto a tape: each file written by dd (the user's choice) instead of Kestrel's buffered copy
 };
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
@@ -216,6 +217,9 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
 // job list for start_ops, unless the user cancels or parent is closed meanwhile.
 void plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
                    std::function<void(const QList<Job> &)> planned);
+// Jobs writing files onto a tape: by Kestrel's buffered copy or by dd (Job::dd), as Preferences say (tape_writer), or as
+// asked in a free window; go(jobs) runs with the choice made (not at all when the question is cancelled).
+void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<void(const QList<Job> &)> go);
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
               std::function<void()> on_done = nullptr);
 

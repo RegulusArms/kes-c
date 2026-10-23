@@ -53,7 +53,7 @@ bool user_mount(const Mount &mt);
 bool network_fs(const QString &fstype);   // a network file system (NFS, SMB, sshfs, rclone…)
 // The physical drives a path is on, the same in every Kestrel (the job queue's lanes, jobs.h), from the mount table and
 // /sys only (no drive is asked): "disk:sda" for a partition of sda (an encrypted or LVM volume: the disks under it),
-// "zfs:tank" for a ZFS dataset (its pool), "gvfs:<share>" for each network share or phone, otherwise the mount's
+// "zfs:pool" for a ZFS dataset (its pool), "gvfs:<share>" for each network share or phone, otherwise the mount's
 // source ("mount:fuse:ltfs:/dev/sg0" for a tape, "mount:nfs:server:/export"…). Empty if it can't be told.
 QStringList drive_ids(const QString &path);
 QStringList drive_ids(const QStringList &paths);   // every drive any of them is on, each once

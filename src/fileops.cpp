@@ -3,6 +3,7 @@
 #include "admin.h"
 #include "drives.h"
 #include "jobs.h"
+#include "prefs.h"
 #include "atc.h"
 #include "proc.h"
 #include "undo.h"
@@ -731,6 +732,7 @@ public:
             const Job &j = jobs[index];
             task->check();
             task->step = index;
+            dd_now = j.dd;
             task->log(step_text(j));
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
@@ -794,6 +796,7 @@ private:
     std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
     QString quieted;                           // the tape GNOME's low-disk-space check skips while this runs
     QStringList told_pollers;                  // programs asking every drive for its free space, said in the log
+    bool dd_now = false;                       // the job being run writes with dd (Job::dd)
     bool told_slow = false;                    // said the source is too slow for the tape to stream
     QElapsedTimer rate_clock;                  // copying onto a tape: since the last rate line in the log
     qint64 rate_done = 0;                      // ...and the bytes written by then
@@ -874,8 +877,17 @@ private:
             if (drives::slow_kind(j.dst) != drives::Slow::Tape || drives::slow_kind(j.src) == drives::Slow::Tape)
                 continue;
             tape = drives::slow_root(j.dst);
-            plan_files(j.src, files, task);
+            if (!j.dd)   // dd reads each file itself
+                plan_files(j.src, files, task);
         }
+        if (tape.isEmpty())
+            return;
+        if (drives::quiet_tape(tape)) {
+            quieted = tape;
+            task->log("While this job runs, GNOME's low-disk-space check skips this tape: it asks the drive for its free "
+                      "space once a minute, and each time the tape stops streaming.");
+        }
+        check_pollers();
         if (files.isEmpty())
             return;
         tapebuf::Memory mem = tapebuf::memory();
@@ -891,12 +903,76 @@ private:
                               "the drive stops each time. Mounting it with -o sync_type=unmount avoids that (the index is "
                               "then written when it's unmounted, or with Write Tape Index Now).")
                           .arg(QString::number(every), drives::ltfs_sync(tape)));
-        if (drives::quiet_tape(tape)) {
-            quieted = tape;
-            task->log("While this job runs, GNOME's low-disk-space check skips this tape: it asks the drive for its free "
-                      "space once a minute, and each time the tape stops streaming.");
+    }
+
+    // A file onto a tape written by dd (the user's choice): dd reads the source and writes the destination Kestrel has
+    // opened (its claimed name, or a part file), given to it as its input and output, so the claim, the conflict checks
+    // and the clean-up of a failed or cancelled write are Kestrel's as for its own copy. 512 KB blocks, LTFS's. Its
+    // output shows in the Jobs window as it runs; cancelling stops it, pausing the job pauses it.
+    void copy_with_dd(int in_fd, int out_fd, const QString &src, const QString &dst, qint64 size, qint64 &written)
+    {
+        QStringList argv{"dd", "bs=512K", "iflag=fullblock", "status=progress"};
+        task->log(QString("  %1 < “%2” > “%3”").arg(argv.join(' '), src, dst));
+        proc::Options o;
+        o.in = in_fd;
+        o.out = out_fd;
+        o.err = proc::PIPE;
+        o.c_utf8 = true;   // its progress and errors in English, to read them
+        auto p = proc::spawn(argv, o);
+        static const QRegularExpression bytes_re("(\\d+) bytes");
+        qint64 base = done;
+        QByteArray err;
+        QElapsedTimer since_look;
+        since_look.start();
+        auto take = [&](const QByteArray &chunk) {
+            task->log_output(chunk);   // the Jobs window shows it live
+            err += chunk;
+            if (err.size() > 65536)
+                err.remove(0, err.size() - 16384);
+            QRegularExpressionMatchIterator it = bytes_re.globalMatch(QString::fromLatin1(err.right(256)));
+            qint64 n = -1;
+            while (it.hasNext())
+                n = it.next().captured(1).toLongLong();
+            if (n >= 0) {
+                written = n;
+                done = base + n;
+            }
+        };
+        for (;;) {
+            task->check();   // a cancel throws: p goes, and dd with it
+            fd_set rf;
+            FD_ZERO(&rf);
+            FD_SET(p->err, &rf);
+            struct timeval tv = {0, 200000};
+            int r = ::select(p->err + 1, &rf, nullptr, nullptr, &tv);
+            if (r > 0) {
+                char buf[4096];
+                ssize_t n = ::read(p->err, buf, sizeof buf);
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n <= 0)
+                    break;
+                take(QByteArray(buf, int(n)));
+                report_progress(basename(src));
+            } else if (p->poll()) {
+                break;
+            }
+            if (since_look.elapsed() >= 5000) {   // (one opened meanwhile)
+                since_look.restart();
+                check_pollers();
+            }
         }
-        check_pollers();
+        take(p->read_all_err());
+        if (p->wait() != 0) {
+            QStringList lines;
+            for (const QString &l : QString::fromUtf8(err).split(QRegularExpression("[\\r\\n]"), Qt::SkipEmptyParts))
+                if (!l.contains(" bytes ") && !l.contains("records "))
+                    lines << l.trimmed();
+            throw Error(QString("dd couldn't write “%1”: %2")
+                            .arg(basename(dst), lines.isEmpty() ? QString("it failed") : lines.mid(lines.size() - 2).join(" ")));
+        }
+        written = size;
+        done = base + size;
     }
 
     // A program asking every drive for its free space every few seconds slows the tape: said in the log, once each
@@ -1208,10 +1284,14 @@ private:
                     throw Error(QString("Not enough space on the tape for “%1”: it needs %2, the tape has %3 left")
                                     .arg(name, human_size(qint64(now.st_size)), human_size(free)));
             }
+            if (to_tape && dd_now) {
+                copy_with_dd(in.fd, out.fd, src, dst, qint64(now.st_size), written);
+                report_progress(name);
+            }
             // from the tape buffer when it has it (read ahead by its thread), else straight from the file
-            bool buffered = to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
-            std::unique_ptr<char[]> buf(buffered ? nullptr : new char[CHUNK]);
-            for (;;) {
+            bool buffered = !dd_now && to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
+            std::unique_ptr<char[]> buf(buffered || (to_tape && dd_now) ? nullptr : new char[CHUNK]);
+            for (; !(to_tape && dd_now);) {
                 task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
                 const char *data = buf.get();
                 ssize_t n;
@@ -1642,13 +1722,73 @@ void plan_transfer(QWidget *parent, const QStringList &sources, const QString &d
         true);
 }
 
+// The jobs that write files onto a tape from another drive (a copy, or a move between drives), by index
+static QList<int> tape_writes(const QList<Job> &jobs)
+{
+    QList<int> out;
+    for (int i = 0; i < jobs.size(); ++i) {
+        const Job &j = jobs[i];
+        if ((j.op != "copy" && j.op != "move") || drives::slow_kind(j.dst) != drives::Slow::Tape ||
+            drives::slow_kind(j.src) == drives::Slow::Tape)
+            continue;
+        struct stat a, b;
+        if (j.op == "move" && lstat_(j.src, a) && stat_(dirname(j.dst), b) && a.st_dev == b.st_dev)
+            continue;   // a rename on the tape
+        out << i;
+    }
+    return out;
+}
+
+static QList<Job> with_dd(QList<Job> jobs, const QList<int> &which, bool dd)
+{
+    for (int i : which)
+        jobs[i].dd = dd;
+    return jobs;
+}
+
+void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<void(const QList<Job> &)> go)
+{
+    QList<int> onto = tape_writes(jobs);
+    QString how = settings().value("tape_writer", "ask").toString();
+    if (onto.isEmpty() || how != "ask") {
+        go(with_dd(jobs, onto, !onto.isEmpty() && how == "dd"));
+        return;
+    }
+    QString tape = basename(rstrip(drives::slow_root(jobs[onto.first()].dst), '/'));
+    auto *box = new QMessageBox(QMessageBox::Question, "Write to the Tape",
+                                QString("How should Kestrel write to the tape “%1”?").arg(tape), QMessageBox::NoButton,
+                                parent);
+    box->setInformativeText("Kestrel's copy reads ahead into a buffer in memory, so the tape keeps streaming when the "
+                            "source slows down. dd writes each file straight from the source, in 512 KB blocks as LTFS "
+                            "stores them; the Jobs window shows its output.");
+    QAbstractButton *kestrel = box->addButton("Kestrel's Copy", QMessageBox::AcceptRole);
+    QAbstractButton *dd = box->addButton("dd", QMessageBox::AcceptRole);
+    box->addButton(QMessageBox::Cancel);
+    box->setDefaultButton(qobject_cast<QPushButton *>(kestrel));
+    auto *always = new QCheckBox("Don't ask again (Preferences → Files → Tapes)");
+    box->setCheckBox(always);
+    ask_box(box, [jobs, onto, go, kestrel, dd, always](QAbstractButton *b) {
+        if (!b || (b != kestrel && b != dd))
+            return;   // cancelled: nothing is written
+        if (always->isChecked())
+            prefs::set("tape_writer", b == dd ? "dd" : "kestrel");
+        go(with_dd(jobs, onto, b == dd));
+    });
+}
+
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
               std::function<void()> on_done)
 {
     QPointer<QWidget> owner(parent);
-    plan_transfer(parent, sources, dest_dir, op, [owner, op, on_done](const QList<Job> &jobs) {
-        if (!jobs.isEmpty())
-            start_ops(owner, jobs, op == "copy" ? "Copying" : "Moving", on_done, op == "copy" ? "Copy" : "Move");
+    plan_transfer(parent, sources, dest_dir, op, [owner, op, on_done](const QList<Job> &planned) {
+        if (planned.isEmpty())
+            return;
+        choose_tape_writer(owner, planned, [owner, op, on_done](const QList<Job> &jobs) {
+            bool dd = std::any_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.dd; });
+            QString title = QString(op == "copy" ? "Copying" : "Moving") + (dd ? " with dd" : "");
+            if (owner)   // (re-read: the window may have closed while the question was open)
+                start_ops(owner, jobs, title, on_done, op == "copy" ? "Copy" : "Move");
+        });
     });
 }
 

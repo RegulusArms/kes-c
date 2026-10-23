@@ -4,6 +4,11 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.8
 
+- **Write to a tape with Kestrel's copy or with dd.** Copying or moving files onto a tape asks which to use: Kestrel's
+  copy (a buffer in memory keeps the tape streaming when the source slows down) or dd (each file written straight from
+  the source in 512 KB blocks). A dd job is named "Copying with dd" in the Jobs window, which shows dd's command and its
+  output live; cancelling or pausing the job stops or pauses dd, and a file it couldn't finish is deleted, as with
+  Kestrel's copy. "Don't ask again" keeps the choice; Preferences → Files → Tapes → Write files with changes it.
 - **Fixed: the image viewer stayed open after answering its question on closing** (Save, Always Save, Don't Save, or
   Discard for unsaved edits) on Ubuntu 24.04's Qt 6.4. It closes once the answer has been handled.
 

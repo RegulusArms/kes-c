@@ -94,10 +94,10 @@ int main(int argc, char **argv)
     auto shown = [](const QString &root, const QString &fs, const QString &source) {
         return drives::user_mount(drives::Mount{root, source, fs});
     };
-    check(shown(home_path("data"), "zfs", "tank/data") && shown(home_path("box"), "fuse.sshfs", "user@host:/srv") &&
+    check(shown(home_path("data"), "zfs", "pool/data") && shown(home_path("box"), "fuse.sshfs", "user@host:/srv") &&
               shown("/media/" + user + "/stick", "vfat", "/dev/sdz1") && shown("/run/media/" + user + "/x", "exfat", "/dev/sdz2"),
           "mounts in the home folder, /media and the user's /run/media are shown");
-    check(!shown(home_path(".hidden/x"), "zfs", "tank/x") && !shown(HOME(), "zfs", "tank/home") &&
+    check(!shown(home_path(".hidden/x"), "zfs", "pool/x") && !shown(HOME(), "zfs", "pool/home") &&
               !shown("/mnt/x", "ext4", "/dev/sdz3") && !shown(home_path("tmp"), "tmpfs", "tmpfs") &&
               !shown("/run/media/someone-else/x", "exfat", "/dev/sdz4"),
           "...not one inside a hidden folder, the home folder itself, /mnt, a system file system or another user's");
@@ -107,8 +107,8 @@ int main(int argc, char **argv)
               !overview::connected("smb://nas/photos2", {share}) && !overview::connected("smb://nas/photos", {}),
           "a recent server counts as connected when it's a mounted share or inside one");
     QString stick = "/media/" + user + "/kestrel-test-stick";
-    qputenv("KESTREL_TEST_MOUNTS", (home_path("data") + "|zfs|tank/data;" + home_path("box") + "|fuse.sshfs|user@host:/srv;" +
-                                    home_path(".hidden/x") + "|zfs|tank/x;" + stick + "|vfat|/dev/kestrel-test")
+    qputenv("KESTREL_TEST_MOUNTS", (home_path("data") + "|zfs|pool/data;" + home_path("box") + "|fuse.sshfs|user@host:/srv;" +
+                                    home_path(".hidden/x") + "|zfs|pool/x;" + stick + "|vfat|/dev/kestrel-test")
                                        .toUtf8());
     settings().setValue("recent_servers", QStringList({"smb://nas/photos", "sftp://user@backup.local/srv"}));
     QStringList mounts_expected = {home_path("box"), home_path("data"), "server:smb://nas/photos",
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
         if (s->item(i)->data(PathRole).toString() == "smb://nas/photos")
             server_item = s->item(i);
     }
-    check(data_item && data_item->text() == "data" && data_item->toolTip().contains("ZFS dataset tank/data"),
+    check(data_item && data_item->text() == "data" && data_item->toolTip().contains("ZFS dataset pool/data"),
           "a mount is named after its folder and says what it is");
     check(server_item && server_item->text() == "photos on nas" &&
               server_item->foreground().color() == s->palette().color(QPalette::PlaceholderText) &&

@@ -6,7 +6,14 @@ under the version whose change it covers. What each test checks today is in [REA
 
 ## 0.3.2-alpha.8
 
+Added:
+- `slow`: writing onto a tape with dd (the new choice): the question (a free window) marks only the jobs onto the tape,
+  Cancel starts nothing, "Don't ask again" saves the setting and then nothing is asked; dd writes the file whole, with
+  its command and output in the job's log and no buffer of Kestrel's; a dd write that fails part-way (a file-size limit,
+  which dd inherits) leaves no half-written file and says dd failed.
+
 Changed:
+- `sidebar`: the ZFS examples use the pool name "pool".
 - `viewer`: closing with an unsaved rotation, then Don't Save, failed on Qt 6.4 (CI): the viewer closed itself from
   inside the question's own click, which Qt 6.4 ignores (now it closes once the click is handled). The check now says
   which part failed: whether it asked, closed, and the file's orientation tag.

@@ -644,6 +644,102 @@ int main(int argc, char **argv)
               "tape copy's log, once, also when it runs on (" + pollers.join(", ") + ")");
     }
 
+    // ---- writing onto a tape with Kestrel's copy or with dd, as asked (or as Preferences say)
+    {
+        QString data_file = home_path("ddsrc.bin");
+        QByteArray payload(3 * 1024 * 1024 + 12345, '\0');
+        for (int i = 0; i < payload.size(); ++i)
+            payload[i] = char((i * 7 + i / 4096) & 0xff);
+        write_text(data_file, payload);
+        QList<fileops::Job> planned{{"copy", data_file, join(tape, "dd1.bin")}, {"copy", data_file, home_path("not-tape.bin")}};
+        settings().setValue("tape_writer", "ask");
+        QList<fileops::Job> got;
+        bool went = false;
+        auto run = [&]() {
+            went = false;
+            fileops::choose_tape_writer(w, planned, [&](const QList<fileops::Job> &jobs) {
+                got = jobs;
+                went = true;
+            });
+        };
+        auto question = [&]() {
+            QMessageBox *b = nullptr;
+            wait_for([&]() { return (b = shown_window<QMessageBox>()) && b->text().contains("write to the tape"); }, 3000);
+            return b;
+        };
+        auto press = [&](QMessageBox *b, const QString &text) {
+            for (QAbstractButton *x : b ? b->buttons() : QList<QAbstractButton *>())
+                if (x->text() == text)
+                    x->click();
+        };
+        run();
+        QMessageBox *q = question();
+        bool asked = q && is_free_window(q) && q->text().contains(basename(tape)) && !went;
+        press(q, "Cancel");
+        spin(100);
+        bool cancelled = !went;
+        run();
+        q = question();
+        press(q, "dd");
+        spin(100);
+        check(asked && cancelled && went && got.size() == 2 && got[0].dd && !got[1].dd,
+              "a copy onto a tape asks (a free window) whether Kestrel's copy or dd writes it; dd marks only the jobs "
+              "onto the tape, and Cancel starts nothing");
+        run();
+        q = question();
+        if (q && q->checkBox())
+            q->checkBox()->setChecked(true);
+        press(q, "Kestrel's Copy");
+        spin(100);
+        bool kestrel = went && !got[0].dd && settings().value("tape_writer").toString() == "kestrel";
+        run();
+        spin(200);
+        bool silent = went && !got[0].dd && !shown_window<QMessageBox>();
+        settings().setValue("tape_writer", "dd");
+        run();
+        spin(200);
+        check(kestrel && silent && went && got[0].dd && !got[1].dd,
+              "“Don't ask again” saves the choice (Preferences → Files → Tapes), and then nothing is asked");
+        settings().setValue("tape_writer", "ask");
+
+        // dd writing a file onto the tape, in a job: its command and its output are in the job's log
+        fileops::Job job{"copy", data_file, join(tape, "dd1.bin")};
+        job.dd = true;
+        QPointer<Task> t = fileops::start_ops(w, {job}, "With dd", []() {});
+        wait_for([&]() { return !t; }, 20000);
+        spin(300);
+        QString log;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == "With dd")
+                log = f.log;
+        check(read_file(join(tape, "dd1.bin")) == payload && log.contains("dd bs=512K iflag=fullblock status=progress") &&
+                  log.contains("records out") && !log.contains("Tape buffer:"),
+              "with dd, the file is written whole by dd (512 KB blocks), with no buffer of Kestrel's, and the job's log "
+              "has dd's command and its output");
+
+        // a dd write that fails part-way (a file-size limit, as a full tape) leaves no half-written file
+        fileops::Job job2{"copy", data_file, join(tape, "dd2.bin")};
+        job2.dd = true;
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1024 * 1024;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);   // (dd inherits it)
+        QPointer<Task> t2 = fileops::start_ops(w, {job2}, "With dd 2", []() {});
+        wait_for([&]() { return !t2; }, 20000);
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QMessageBox *box = nullptr;
+        wait_for([&]() { return (box = shown_window<QMessageBox>()) != nullptr; }, 5000);
+        QString said = box ? box->text() + "\n" + box->detailedText() : QString();
+        if (box)
+            box->close();
+        check(!lexists(join(tape, "dd2.bin")) && said.contains("dd couldn't write") && said.contains("dd2.bin"),
+              "a dd write that fails part-way (a file-size limit) leaves no half-written file on the tape, and says dd "
+              "failed (" + said.simplified().left(160) + ")");
+    }
+
     // ---- Properties names a file's type on a tape by its name (its contents would make the drive seek)
     {
         QByteArray pdf = "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n";

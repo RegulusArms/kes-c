@@ -112,6 +112,11 @@ static QList<Pref> build()
     add("Files", "Jobs", "jobs_start_paused", "Start new jobs paused", BOOL, false, "the Jobs window (Ctrl+Shift+J)");
 
     const QString tapes = "Tapes (copying onto an LTFS tape)";
+    add("Files", tapes, "tape_writer", "Write files with", CHOICE, "ask", "asked when a copy onto a tape starts",
+        "Kestrel's copy reads ahead into a buffer in memory, so the tape keeps streaming when the source slows down. "
+        "dd writes each file straight from the source, in 512 KB blocks; the Jobs window shows its output.")
+        .choices = {{"Ask each time", "ask"}, {"Kestrel's copy (a buffer in memory keeps the tape streaming)", "kestrel"},
+                    {"dd (each file straight from the source)", "dd"}};
     range(add("Files", tapes, "tape_buffer_keep", "Memory kept free for other programs", INT, 10, QString(),
               "Copies onto a tape go through a buffer in memory, so the drive keeps streaming instead of stopping and "
               "rewinding whenever the source slows down. It uses the memory available, less this share of the total."),
