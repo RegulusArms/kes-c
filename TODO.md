@@ -60,6 +60,14 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
+- [ ] **The scroll wheel over the image viewer's info panel goes to the next image.** With the Info Panel (I) open,
+  turning the wheel over it changes the image instead of scrolling the panel.
+  - Likely cause: `ViewerInfo` (src/viewer.cpp) is a QScrollArea with no wheel handling of its own. Its scroll bar
+    ignores a wheel event it can't use (the panel's contents fit, or it's already at that end), so the event goes up
+    to `ImageViewer::wheelEvent`, which turns it into `navigate()`. Check whether it also happens mid-scroll.
+  - To change: the panel keeps every wheel event over it (scrolling when it can, otherwise nothing), so only the
+    wheel over the picture or the filmstrip changes images.
+
 ## New features
 
 ### Jobs
