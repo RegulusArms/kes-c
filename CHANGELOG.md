@@ -2,7 +2,16 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.8
+## 0.3.2-alpha.9
+
+- **Fixed: Open as Archive left out part of a big archive's contents.** Only the last 1–2 MB of the program's listing
+  was read, so in an archive of more than about 10,000 files (7z, rar) or 20,000 (zpaq, zip) the first ones were
+  missing without a word, and a big 7z or zip could show as empty. The whole listing is now read, as it's printed.
+  The quick password test on big encrypted 7z and rar archives had the same problem and could take a wrong password.
+- **Fixed: opening, testing or extracting a big .tar archive (.tar.gz, .tar.xz…) could hang** once tar had printed
+  more than its output could hold while Kestrel was still feeding it the archive. Its output is now read as it comes.
+
+## 0.3.2-alpha.8 (2026-10-23)
 
 - **Write to a tape with Kestrel's copy or with dd.** Copying or moving files onto a tape asks which to use: Kestrel's
   copy (a buffer in memory keeps the tape streaming when the source slows down) or dd (each file written straight from

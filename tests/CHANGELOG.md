@@ -4,6 +4,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.9
+
+Added:
+- `archives`: big archives (25,000 files with long names, a listing of several MB) in 7z, zip, tar.gz, rar and zpaq
+  are listed in full, the first folder too: the listing used to keep only its last 1–2 MB (7z and zip then listed
+  nothing, rar and zpaq only the last files), and a big tar.gz hung (tar's output pipe filled while it was being fed).
+  The quick password test refuses a wrong password on a big encrypted 7z (it found no file to test with in the cut
+  listing, and took any password). The earlier archives were far too small to reach the limit.
+
 ## 0.3.2-alpha.8
 
 Added:

@@ -324,6 +324,56 @@ int main(int argc, char **argv)
                   left.join(", ") + ")");
     }
 
+    // a big archive: its listing (several MB) is read whole, not just its last part
+    {
+        QString many = join(base, "many");
+        const int folders = 250, per = 100;
+        QSet<QString> want;
+        for (int d = 0; d < folders; ++d) {
+            QString dir = QString("tree/folder_%1").arg(d, 3, 10, QChar('0'));
+            makedirs(join(many, dir), true);
+            for (int f = 0; f < per; ++f) {
+                QString name = QString("%1/a_rather_long_file_name_to_make_the_listing_longer_%2.txt").arg(dir).arg(f, 3, 10, QChar('0'));
+                write_text(join(many, name), "x");
+                want << name;
+            }
+        }
+        QMap<QString, bool> big;   // archive name -> made
+        big["big.7z"] = make({z7, "a", "-t7z", "-mx0", join(look, "big.7z"), "tree"}, many);
+        big["big.zip"] = make({z7, "a", "-tzip", "-mx0", join(look, "big.zip"), "tree"}, many);
+        big["big.tar.gz"] = make({"tar", "czf", join(look, "big.tar.gz"), "tree"}, many);
+        if (!archive::tool("rar").isEmpty() && !archive::tool("unrar").isEmpty())
+            big["big.rar"] = make({archive::tool("rar"), "a", "-m0", "-r", join(look, "big.rar"), "tree"}, many);
+        if (!archive::tool("zpaq").isEmpty())
+            big["big.zpaq"] = make({archive::tool("zpaq"), "a", join(look, "big.zpaq"), "tree"}, many);
+        for (auto it = big.begin(); it != big.end(); ++it) {
+            QSet<QString> files;
+            bool top = false;
+            QString error;
+            try {
+                for (const archive::Entry &e : archive::list(&look_task, join(look, it.key()))) {
+                    if (!e.dir)
+                        files << e.path;
+                    top = top || e.path == "tree/folder_000/";
+                }
+            } catch (const std::exception &e) {
+                error = e.what();
+            }
+            check(it.value() && files == want && top,
+                  it.key() + ": all " + QString::number(want.size()) + " files of a big archive are listed, the first " +
+                      "folder too (" + QString::number(files.size()) + " listed" + (error.isEmpty() ? "" : "; " + error) + ")");
+        }
+        // the quick password test finds a file to test in a big listing (finding none, it takes any password)
+        bool made = make({z7, "a", "-t7z", "-mx0", "-psecret", join(look, "big-enc.7z"), "tree"}, many);
+        bool right = false, wrong = true;
+        try {
+            right = archive::password_opens(&look_task, join(look, "big-enc.7z"), "secret");
+            wrong = archive::password_opens(&look_task, join(look, "big-enc.7z"), "nope");
+        } catch (const std::exception &) {
+        }
+        check(made && right && !wrong, "big encrypted 7z: the quick password test takes the right password and refuses a wrong one");
+    }
+
     // a write that fails part-way (a full disk): nothing half-made, no part folder
     {
         QString out = join(look, "full");
