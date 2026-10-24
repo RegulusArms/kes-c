@@ -1,0 +1,19 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: stable
+Date: Mon, 19 Oct 2026 02:25:03 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer releases (merges to main)
+MD5Sum:
+ 6f9d6af7a1aae15a1d8de22b0cf7311b 1240 main/binary-amd64/Packages
+ e341000a55c701ad77c0dbc253a719e7 720 main/binary-amd64/Packages.gz
+ 19af948ee654db0b45eeacc69ca05af0 141 main/binary-amd64/Release
+SHA1:
+ c821dddf5990b6200d01d3bfe29e4e19e47585a2 1240 main/binary-amd64/Packages
+ e6fd683161914ac8dc17b3cc374a70bb05e04178 720 main/binary-amd64/Packages.gz
+ aa0d67414e69c43114bc4fa971786758e3b45eaa 141 main/binary-amd64/Release
+SHA256:
+ e3b8e5d7ca38b59b6b99026d0f77032ea6aade49bee2367bfa43494b2bb2719a 1240 main/binary-amd64/Packages
+ 135d003d9660116add379a847d636801d76a1132ae4991a0b9432f8ec3ccf3ad 720 main/binary-amd64/Packages.gz
+ ed9285f876583b07987ba1fdf0efefaca034ba3a1a743138fe970ec37155a5bd 141 main/binary-amd64/Release

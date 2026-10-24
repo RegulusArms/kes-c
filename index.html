@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kestrel Explorer apt repository</title>
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #5f6368; --code: #f3f4f6; --border: #e1e4e8; --link: #0b62d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --fg: #e8eaed; --muted: #9aa0a6; --code: #23262d; --border: #33373f; --link: #7ab4ff; }
+  }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; margin: 0; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  p.lead { color: var(--muted); margin-top: 0; }
+  pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1rem;
+        overflow-x: auto; font-size: .88rem; line-height: 1.45; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  a { color: var(--link); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kestrel Explorer</h1>
+  <p class="lead">apt repository for Ubuntu 24.04 / Linux Mint 22 and newer (amd64).
+    Source: <a href="https://github.com/RegulusArms/kes-c">github.com/RegulusArms/kes-c</a></p>
+
+  <h2>Install</h2>
+<pre><code>sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+sudo tee /etc/apt/sources.list.d/kestrel.sources &gt;/dev/null &lt;&lt;'EOF'
+Types: deb
+URIs: https://regulusarms.github.io/kes-c
+Suites: stable
+Components: main
+Signed-By: /etc/apt/keyrings/kestrel.asc
+EOF
+sudo apt update &amp;&amp; sudo apt install kestrel-explorer</code></pre>
+  <p>Then run <code>kes</code>, or open Kestrel Explorer from the app menu.</p>
+
+  <h2>Development builds</h2>
+  <p>For the latest build of the DEV branch instead, use <code>Suites: dev</code> in
+    <code>/etc/apt/sources.list.d/kestrel.sources</code>, then <code>sudo apt update &amp;&amp; sudo apt upgrade</code>.</p>
+
+  <h2>Remove</h2>
+<pre><code>sudo apt remove kestrel-explorer
+sudo rm /etc/apt/sources.list.d/kestrel.sources /etc/apt/keyrings/kestrel.asc</code></pre>
+
+  <p>Signing key fingerprint: <code>40F0 256B 4398 2A85 B2B6  A469 925D ACC8 216A 421F</code></p>
+</main>
+</body>
+</html>
