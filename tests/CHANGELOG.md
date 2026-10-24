@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.10
+
+Added:
+- `viewer`: an image deleted and put back with Ctrl+Z is shown, even when a read of it started before the delete ends
+  afterwards with "can't read" (sent to the viewer by the test, so it doesn't depend on timing). On CI (0.3.2-alpha.9)
+  that race left "Cannot display this image" and failed the four crop and resize checks after it.
+
 ## 0.3.2-alpha.9
 
 Added:

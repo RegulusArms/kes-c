@@ -468,10 +468,17 @@ int main(int argc, char **argv)
     v->transfer_recent(4, "copy");
     check(transfers.size() == 2 && transfers[1] == QStringList({c, moved_dir, "copy"}) && v->canvas->osd_text().contains("No recent folder 4"),
           "Alt+1 copies it to the latest folder in one key; one that isn't there yet says so");
+    int c_gen = v->generation.value(c);
     v->delete_current();
     check(!v->paths.contains(c) && lexists(join(bin, "c.jpg")), "Delete moves it to the trash and off the list");
     v->undo();
     check(wait_for([&]() { return v->paths.contains(c) && v->current() == c && lexists(c); }), "...and Ctrl+Z puts it back");
+    // a decode started before the delete, ending after it with "can't read" (the file was in the trash meanwhile)
+    bool decoded = wait_for([&]() { return v->cache.contains(c) && !v->cache.value(c).pix.isNull(); });
+    Q_EMIT v->loaded(c, QImage(), QSize(), true, c_gen);
+    spin(300);
+    check(decoded && v->cache.contains(c) && !v->cache.value(c).pix.isNull() && !v->canvas->pix.isNull(),
+          "...shown, not \"Cannot display\" from a decode started before it was deleted");
 
     // rotations, saved when leaving the image
     settings().setValue("viewer_save_rotation", "ask");

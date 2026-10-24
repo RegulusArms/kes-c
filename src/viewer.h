@@ -210,7 +210,7 @@ public:
     std::function<void(QWidget *)> on_question;   // tests: each question the viewer asks, as it's shown
 
 Q_SIGNALS:
-    void loaded(const QString &path, const QImage &img, QSize full, bool is_full);
+    void loaded(const QString &path, const QImage &img, QSize full, bool is_full, int generation);
     void saved(const QString &path);   // an edit or rotation written
 
 protected:
@@ -227,10 +227,12 @@ public:
     };
     QHash<QString, Entry> cache;
     QSet<QString> pending;   // path, or path + FULL
+    QHash<QString, int> generation;   // raised when a file goes or changes: decodes started before are dropped
+    void forget(const QString &path);
 
 private:
     void request(const QString &path, bool full = false);
-    void on_loaded(const QString &path, const QImage &img, QSize full, bool is_full);
+    void on_loaded(const QString &path, const QImage &img, QSize full, bool is_full, int generation);
     void show_current();
     void show_on(ViewerCanvas *c, const QString &path);
     void want_full(ViewerCanvas *c, const QString &path);

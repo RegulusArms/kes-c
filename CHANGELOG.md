@@ -2,7 +2,13 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.9
+## 0.3.2-alpha.10
+
+- **Fixed: an image put back with Ctrl+Z could show "Cannot display this image"** in the viewer, if it was deleted (or
+  moved) while the viewer was still reading it: the read, failing once the file had gone, was kept for it. Reads that
+  were under way when an image was deleted, moved or saved over are now dropped.
+
+## 0.3.2-alpha.9 (2026-10-23)
 
 - **Fixed: Open as Archive left out part of a big archive's contents.** Only the last 1–2 MB of the program's listing
   was read, so in an archive of more than about 10,000 files (7z, rar) or 20,000 (zpaq, zip) the first ones were

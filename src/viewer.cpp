@@ -740,8 +740,8 @@ void ImageViewer::request(const QString &path, bool full)
     if (pending.contains(key) || pending.contains(path + FULL))
         return;
     pending << key;
-    int side = screen_side();
-    pool.start([this, path, full, side]() {
+    int side = screen_side(), gen = generation.value(path);
+    pool.start([this, path, full, side, gen]() {
         QImageReader reader(path);
         reader.setAutoTransform(true);
         if (is_raw(path) && !full)
@@ -753,12 +753,14 @@ void ImageViewer::request(const QString &path, bool full)
         QSize real = stored.isValid() ? stored : img.size();
         if (!img.isNull() && (img.width() > img.height()) != (real.width() > real.height()))
             real.transpose();   // turned by its orientation tag
-        Q_EMIT loaded(path, img, real, full || img.size() == real);
+        Q_EMIT loaded(path, img, real, full || img.size() == real, gen);
     });
 }
 
-void ImageViewer::on_loaded(const QString &path, const QImage &img, QSize full, bool is_full)
+void ImageViewer::on_loaded(const QString &path, const QImage &img, QSize full, bool is_full, int gen)
 {
+    if (gen != generation.value(path))   // started before the file was deleted, moved or saved over: out of date
+        return;
     pending.remove(path);
     pending.remove(path + FULL);
     auto it = cache.constFind(path);
@@ -1035,11 +1037,21 @@ bool ImageViewer::write_rotation(const QString &path, int rotation, bool flip)
     return true;
 }
 
-// The file changed under its decoded copies: they go, and what shows it is decoded again
-void ImageViewer::after_write(const QString &path)
+// A file deleted, moved or changed: its decoded copies go, and decodes of it still running are dropped when they end
+// (one that ends after the file has gone would otherwise cache "can't read it", shown if Ctrl+Z puts it back)
+void ImageViewer::forget(const QString &path)
 {
     cache.remove(path);
     cache_order.removeAll(path);
+    pending.remove(path);
+    pending.remove(path + FULL);
+    ++generation[path];
+}
+
+// The file changed under its decoded copies: they go, and what shows it is decoded again
+void ImageViewer::after_write(const QString &path)
+{
+    forget(path);
     if (auto *tm = ThumbnailManager::instance())
         tm->invalidate(path);
     if (path == pinned_path) {
@@ -1088,8 +1100,7 @@ void ImageViewer::drop_current()
     QString path = current();
     canvas->reset_view();   // its rotation went with it
     paths.removeAt(index);
-    cache.remove(path);
-    cache_order.removeAll(path);
+    forget(path);
     if (path == pinned_path) {
         compare = 0;
         pinned_path.clear();
