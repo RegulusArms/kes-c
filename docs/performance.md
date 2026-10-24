@@ -2,6 +2,28 @@
 
 [← Back to the README](../README.md)
 
+## At a glance
+
+Every comparison below in one table; the sections after it have the details, notes and the limits of each comparison.
+Kestrel, GNOME Files and Dolphin were measured in the same run, on the same machine (Ubuntu). After the divider:
+Kestrel and Nemo, measured earlier on Linux Mint 22 in a virtual machine, with Kestrel 0.2.1-alpha.3. Compare
+those two with each other, not with the columns before the divider: it's another machine. "—" is a test that couldn't
+be run on that app (see its section). Lower is better throughout.
+
+| Test | Kestrel | GNOME Files | Dolphin | │ | Kestrel (Mint) | Nemo (Mint) |
+| --- | --- | --- | --- | :-: | --- | --- |
+| Startup (launch to window shown) | 0.39 s | 0.40 s | 0.41 s | │ | 0.75 s | 0.82 s |
+| Open a 600-image folder (launch to the first 12 thumbnails) | 0.40 s | 1.22 s | 0.86 s | │ | 0.88 s | — |
+| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.75 s | 7.87 s | — | │ | 4.55 s | — |
+| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.73 s | 0.86 s | 1.22 s | │ | 1.52 s | — |
+| Copy 20,000 small files + 5 × 50 MB | 1.02 s | 2.25 s | 28.58 s | │ | 1.71 s | 34.87 s |
+| Move the same to another drive | 1.26 s | 4.41 s | 40.88 s | │ | 1.62 s | 8.70 s |
+| Move 10,000 files to the trash (all selected in one folder) | 1.59 s | 1.85 s | 187.65 s | │ | 3.23 s | — |
+| Empty the trash (those 10,000 files) | 0.41 s | 8.54 s | 5.45 s | │ | 1.01 s | 365.30 s |
+| Peak memory (startup / 600-image folder open) | 143 / 153 MB | 194 / 302 MB | 182 / 194 MB | │ | 116 / 125 MB | 123 / — MB |
+| Memory with 5 folders opened from other apps | 105 MB (51 MB as tabs) | 99 MB | 130 MB | │ | 58 MB (36 MB as tabs) | 51 MB |
+| CPU time in 30 s, idle with a folder open | 10 ms | 5 ms | 0 ms | │ | 35 ms | 7510 ms |
+
 ## Performance: Kestrel vs GNOME Files
 
 Kestrel Explorer is compared here with GNOME Files 50.2.2, the file manager it replaces.
@@ -22,33 +44,33 @@ Both apps are measured in the same way:
 
 | Test | Kestrel | GNOME Files |
 |---|---|---|
-| Startup (launch to window shown) | 0.38 s | 0.42 s |
-| Open a 600-image folder (launch to the first 12 thumbnails) | 0.43 s | 1.25 s |
-| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.87 s | 8.11 s |
-| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.79 s | 0.85 s |
-| Copy 20,000 small files + 5 × 50 MB | 1.04 s | 2.26 s |
-| Move the same to another drive | 1.28 s | 4.32 s |
-| Move 10,000 files to the trash (all selected in one folder) | 1.60 s | 1.90 s |
-| Empty the trash (those 10,000 files) | 0.44 s | 8.56 s |
-| Peak memory (startup / 600-image folder open) | 141 / 151 MB | 192 / 300 MB |
-| Memory with 5 folders opened from other apps | 107 MB (48 MB as tabs) | 134 MB |
-| CPU time used in 30 s with a folder open, idle | 150 ms (0.50% of a core) | 10 ms (0.03% of a core) |
+| Startup (launch to window shown) | 0.39 s | 0.40 s |
+| Open a 600-image folder (launch to the first 12 thumbnails) | 0.40 s | 1.22 s |
+| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.75 s | 7.87 s |
+| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.73 s | 0.86 s |
+| Copy 20,000 small files + 5 × 50 MB | 1.02 s | 2.25 s |
+| Move the same to another drive | 1.26 s | 4.41 s |
+| Move 10,000 files to the trash (all selected in one folder) | 1.59 s | 1.85 s |
+| Empty the trash (those 10,000 files) | 0.41 s | 8.54 s |
+| Peak memory (startup / 600-image folder open) | 143 / 153 MB | 194 / 302 MB |
+| Memory with 5 folders opened from other apps | 105 MB (51 MB as tabs) | 99 MB |
+| CPU time used in 30 s with a folder open, idle | 10 ms (0.03% of a core) | 5 ms (0.02% of a core) |
 
 Kestrel compared with GNOME Files:
-- startup: 1.1× faster;
-- first thumbnails in a 600-image folder: 2.9× faster;
-- first video thumbnails: 4.3× faster;
-- first PDF thumbnails: 1.1× faster;
+- startup: about the same;
+- first thumbnails in a 600-image folder: 3.1× faster;
+- first video thumbnails: 4.5× faster;
+- first PDF thumbnails: 1.2× faster;
 - copying: 2.2× faster;
-- moving to another drive: 3.4× faster;
+- moving to another drive: 3.5× faster;
 - moving to the trash: 1.2× faster;
-- emptying the trash: about 20× faster.
+- emptying the trash: about 21× faster.
 
 **Limits of this comparison:**
 - **Opening a folder:** the two apps don't do the same amount of work.
-  - GNOME Files makes thumbnails for the whole folder in the background. It finished all 600 images 10.64 s after launch.
+  - GNOME Files makes thumbnails for the whole folder in the background. It finished all 600 images 10.46 s after launch.
   - Kestrel makes them only for what's on screen (40 images here), and the rest as you scroll.
-  - To thumbnail a whole folder at once, Kestrel has "Generate Previews": 4.88 s for these 600 images (table below).
+  - To thumbnail a whole folder at once, Kestrel has "Generate Previews": 4.87 s for these 600 images (table below).
 - **File operations:** GNOME Files' D-Bus service returns straight away, so its times were measured by watching the files until the operation had finished, to within about 50 ms.
 - **Memory:** GNOME Files makes thumbnails in separate sandboxed helper processes, whose memory isn't counted in its figures. Kestrel makes them inside the app.
 - **Search:** GNOME Files' search can't be timed from outside without its file indexer, so it isn't compared.
@@ -59,10 +81,10 @@ These are measured inside the app, because GNOME Files has no equivalent ("Gener
 
 | Test | Kestrel |
 |---|---|
-| Thumbnail all 600 images ("Generate Previews") | 4.88 s |
-| Build 150 folder mosaics | 6.22 s |
-| Recursive search over 50,000 files | 0.12 s |
-| Read EXIF / image-generation prompts for 400 images | 0.041 s |
+| Thumbnail all 600 images ("Generate Previews") | 4.87 s |
+| Build 150 folder mosaics | 6.20 s |
+| Recursive search over 50,000 files | 0.10 s |
+| Read EXIF / image-generation prompts for 400 images | 0.038 s |
 | Peak memory (background jobs) | 40–45 MB |
 
 ## Performance: Kestrel vs Nemo
@@ -130,3 +152,67 @@ These are measured inside the app, because Nemo has no equivalent ("Generate Pre
 | Recursive search over 50,000 files | 0.17 s |
 | Read EXIF / image-generation prompts for 400 images | 0.046 s |
 | Peak memory (background jobs) | 27–31 MB |
+
+## Performance: Kestrel vs Dolphin
+
+Kestrel Explorer is compared here with Dolphin 25.12.3, KDE's file manager.
+
+**Test machine:** AMD Ryzen Threadripper 2950X 16-Core Processor (32 threads), Ubuntu 26.04.1 LTS. The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
+
+**How it was measured:** each test ran 3 times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. Both apps ran on a headless X server with software rendering (Qt's raster engine, both being Qt apps), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start, so no file indexer ran. The benchmark is in [bench/](../bench) and is run with `bench/run.sh`.
+
+### Compared with Dolphin
+
+Both apps are measured in the same way:
+- **Startup:** timed until the window is on screen.
+- **Opening a folder:** timed from launch until the first 12 files' thumbnails are in the shared thumbnail cache.
+- **File operations:** Kestrel runs them with its own copy and trash code, the same code its menus use. Dolphin has no D-Bus file-operations service, so its own commands are used, with keys pressed in its window: Copy or Cut, then Paste in the destination (typed into its location bar), and Select All, then Delete (Move to Trash). Its Empty Trash runs KDE's empty-trash job, which `ktrash6 --empty` runs too; that was used for this step.
+- **"Peak memory":** the app's highest memory use.
+- **Several folders opened from other apps:** the 5 folders are opened one after another, as from a browser's "Show in folder". The figure is the private memory of everything the app then runs: what closing it would give back, not counting the libraries it shares with other apps. Kestrel normally starts a new process for each window (6 processes here, counting the tower that keeps them in sync); with "open folders as tabs" on, they become tabs in one window.
+- **CPU while idle:** the CPU time all the app's processes use in 30 s with a folder open and nothing happening. It's counted in 10 ms steps.
+
+| Test | Kestrel | Dolphin |
+|---|---|---|
+| Startup (launch to window shown) | 0.39 s | 0.41 s |
+| Open a 600-image folder (launch to the first 12 thumbnails) | 0.40 s | 0.86 s |
+| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.75 s | — |
+| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.73 s | 1.22 s |
+| Copy 20,000 small files + 5 × 50 MB | 1.02 s | 28.58 s |
+| Move the same to another drive | 1.26 s | 40.88 s |
+| Move 10,000 files to the trash (all selected in one folder) | 1.59 s | 187.65 s |
+| Empty the trash (those 10,000 files) | 0.41 s | 5.45 s |
+| Peak memory (startup / 600-image folder open) | 143 / 153 MB | 182 / 194 MB |
+| Memory with 5 folders opened from other apps | 105 MB (51 MB as tabs) | 130 MB |
+| CPU time used in 30 s with a folder open, idle | 10 ms (0.03% of a core) | 0 ms (0.00% of a core) |
+
+Kestrel compared with Dolphin:
+- startup: about the same;
+- first thumbnails in a 600-image folder: 2.2× faster;
+- first PDF thumbnails: 1.7× faster;
+- copying: about 28× faster;
+- moving to another drive: about 33× faster;
+- moving to the trash: about 118× faster;
+- emptying the trash: about 13× faster.
+
+**Limits of this comparison:**
+- **Opening a folder:** the two apps don't do the same amount of work.
+  - Dolphin made 500 thumbnails in all, the last 1.85 s after launch.
+  - Kestrel makes them only for what's on screen (40 images here), and the rest as you scroll.
+  - To thumbnail a whole folder at once, Kestrel has "Generate Previews": 4.87 s for these 600 images (table below).
+- **File operations:** Dolphin runs a paste or a move to the trash in the background, so its times were measured from the key press, by watching the files until the operation had finished, to within about 50 ms. Its window was given 2 s to list the folder first, which isn't counted.
+- **Videos not timed:** its default settings leave video previews off, so Dolphin makes no thumbnails for them in a fresh home folder, and that row shows —.
+- **Measured once:** Dolphin took over 2 minutes for the trash test, so it was run once instead of 3 times.
+- **Memory:** Dolphin makes thumbnails in separate KIO worker processes, whose memory isn't counted in its figures. Kestrel makes them inside the app.
+- **Search:** Dolphin's search can't be timed from outside without its file indexer (Baloo), so it isn't compared.
+
+### Kestrel's own features
+
+These are measured inside the app, because Dolphin's nearest equivalents (its folder previews and Information panel) can't be timed from outside, nor can its search.
+
+| Test | Kestrel |
+|---|---|
+| Thumbnail all 600 images ("Generate Previews") | 4.87 s |
+| Build 150 folder mosaics | 6.20 s |
+| Recursive search over 50,000 files | 0.10 s |
+| Read EXIF / image-generation prompts for 400 images | 0.038 s |
+| Peak memory (background jobs) | 40–45 MB |

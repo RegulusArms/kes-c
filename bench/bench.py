@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-"""Benchmark Kestrel Explorer (C++) against GNOME Files, or Nemo on Linux Mint. See bench/README.md; the results go in docs/performance.md.
+"""Benchmark Kestrel Explorer (C++) against GNOME Files, Nemo (on Linux Mint) and Dolphin, whichever are installed. See
+bench/README.md; the results go in docs/performance.md.
 
   bench/run.sh                      build, generate the data (first time), run everything, print the tables
   bench/run.sh --runs 5             more runs per measurement (medians are reported)
@@ -31,25 +32,39 @@ DATA = os.environ.get("KESTREL_BENCH_DATA", "/tmp/kestrel-bench-data")
 CMAKE = "/usr/bin/cmake" if os.access("/usr/bin/cmake", os.X_OK) else "cmake"
 BUILD = os.environ.get("KESTREL_BUILD_DIR", "build")  # build folder name (another machine sharing these folders)
 # The file managers Kestrel is compared with; the ones installed are measured (GNOME Files on Ubuntu, Nemo on Linux
-# Mint). File operations go through each one's D-Bus file-operations service, as other apps use it: "service" starts
-# it, "ops" is (bus name, object path, interface), and "settings" are set in the throwaway home first (gsettings).
+# Mint, Dolphin where KDE's is installed). File operations go through each one's D-Bus file-operations service, as
+# other apps use it: "service" starts it, "ops" is (bus name, object path, interface), and "settings" are set in the
+# throwaway home first (gsettings). Dolphin has no such service ("ops": None): its operations are keys pressed in its
+# window (UiOps). "files" are config files written into the throwaway home first.
 # "thumbnails": False skips the FOLDER_TESTS: Nemo makes no thumbnails in the sandbox, so each run would only wait
-# out the 2-minute timeout.
+# out the 2-minute timeout. "skip" names folder tests skipped for that app alone, with the reason (Dolphin's default
+# settings leave video previews off).
 OTHERS = {
     "nautilus": {"label": "GNOME Files", "cmd": ["nautilus"], "service": ["nautilus", "--gapplication-service"],
                  "ops": ("org.gnome.Nautilus", "/org/gnome/Nautilus/FileOperations2",
                          "org.gnome.Nautilus.FileOperations2"),
-                 "settings": [],
-                 "heading": "## Performance: Kestrel vs GNOME Files",
+                 "settings": [], "files": {}, "skip": {},
+                 "heading": "## Performance: Kestrel vs GNOME Files", "intro": "the file manager it replaces", "gtk": True,
                  "helpers": "separate sandboxed helper processes", "search": " without its file indexer",
                  "whole_folder": True,   # thumbnails the whole folder in the background
                  "thumbnails": True},
     "nemo": {"label": "Nemo", "cmd": ["nemo"], "service": ["nemo", "--no-default-window"],
              "ops": ("org.Nemo", "/org/Nemo", "org.Nemo.FileOperations"),
              "settings": [("org.nemo.preferences", "confirm-trash", "false")],   # Empty Trash would ask first
-             "heading": "## Performance: Kestrel vs Nemo",
+             "files": {}, "skip": {},
+             "heading": "## Performance: Kestrel vs Nemo", "intro": "the file manager it replaces", "gtk": True,
              "helpers": "separate helper processes", "search": "", "whole_folder": False,
              "thumbnails": False},
+    "dolphin": {"label": "Dolphin", "cmd": ["dolphin"], "service": None, "ops": None, "settings": [],
+                "files": {".config/kiorc": "[Confirmations]\nConfirmTrash=false\nConfirmEmptyTrash=false\n",
+                          ".config/dolphinrc": "[General]\nRememberOpenedTabs=false\n"},
+                "skip": {"videos": "its default settings leave video previews off"},
+                "heading": "## Performance: Kestrel vs Dolphin", "intro": "KDE's file manager", "gtk": False,
+                # its nearest equivalents of Kestrel's own features, which can't be timed from outside
+                "features": "Dolphin's nearest equivalents (its folder previews and Information panel) can't be timed "
+                            "from outside, nor can its search",
+                "helpers": "separate KIO worker processes", "search": " without its file indexer (Baloo)",
+                "whole_folder": False, "thumbnails": True},
 }
 APPS = ("kestrel",) + tuple(OTHERS)
 # measured the same way for every app
@@ -61,6 +76,8 @@ FIRST = 12          # "open a folder": time until the first FIRST files (by name
 WINDOWS = 5         # "several windows": folders opened from outside, one after another
 IDLE_SECONDS = 30   # "idle": CPU used in this long with a folder open and nothing happening
 EMPTY_TIMEOUT = 600 # emptying the trash through a D-Bus service: Nemo's deletes about 50 files a second (3+ min)
+UI_SETTLE = 2.0     # Dolphin: time for its window to list a folder and select, before keys are pressed in it
+UI_TRASH_TIMEOUT = 600   # Dolphin moves 10,000 files to the trash at about 100 a second, slowing as it goes
 SLOW = 120          # a measurement that takes longer than this is run once: its median wouldn't tell more
 THUMB_FLAVORS = ("normal", "large", "x-large", "xx-large")
 
@@ -148,9 +165,13 @@ def cpu_ticks(pid):
         return None
 
 
-def windows_of(pid):
+def window_ids(pid):
     r = subprocess.run(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], capture_output=True, text=True)
-    return len(r.stdout.split())
+    return r.stdout.split()
+
+
+def windows_of(pid):
+    return len(window_ids(pid))
 
 
 def wait_for(cond, timeout, what):
@@ -302,18 +323,58 @@ class FileOps:
         stop(self.p)
 
 
+class UiOps:
+    """Dolphin, which has no file-operations service: a window of it, and keys pressed in it with xdotool (XTEST), as
+    a user would. Like a service's calls, a paste returns at once (KIO runs it as a job), so it's timed by watching
+    the files. `folder` is opened, or with `select`, that item's folder with it selected."""
+
+    def __init__(self, app, folder=None, select=None):
+        self.app = app
+        args = ["--select", select] if select else [folder]
+        self.p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  start_new_session=True)
+        wait_for(lambda: window_ids(self.p.pid) or self.p.poll() is not None, 60, f"{app}: no window")
+        self.win = window_ids(self.p.pid)[0]
+        time.sleep(UI_SETTLE)
+
+    def keys(self, *keys):
+        subprocess.run(["xdotool", "windowfocus", "--sync", self.win], capture_output=True)
+        subprocess.run(["xdotool", "key", "--clearmodifiers", *keys], check=True, capture_output=True)
+
+    def go(self, folder):
+        """Into another folder, through the location bar (Ctrl+L)."""
+        self.keys("ctrl+l")
+        subprocess.run(["xdotool", "type", "--delay", "2", "--", folder], check=True, capture_output=True)
+        self.keys("Return")
+        time.sleep(UI_SETTLE)
+
+    wait = FileOps.wait
+    sample = FileOps.sample
+    peak = FileOps.peak
+    peak_seen = None
+
+    def close(self):
+        stop(self.p)
+
+
 def measure_copy_other(app):
     src = f"{DATA}/copysrc"
     want = tree_size(src)
     dst_parent = os.path.join(home(), "copydst")
     os.makedirs(dst_parent)
     dst = os.path.join(dst_parent, "copysrc")
-    n = FileOps(app)
+    n = UiOps(app, select=src) if OTHERS[app]["ops"] is None else FileOps(app)
     try:
-        if not n.has("CopyURIs"):
+        if isinstance(n, UiOps):   # Copy, then Paste in the destination
+            n.keys("ctrl+c")
+            n.go(dst_parent)
+            t0 = time.monotonic()
+            n.keys("ctrl+v")
+        elif not n.has("CopyURIs"):
             return {"s": None}
-        t0 = time.monotonic()
-        n.call("CopyURIs", [f"file://{src}"], f"file://{dst_parent}")
+        else:
+            t0 = time.monotonic()
+            n.call("CopyURIs", [f"file://{src}"], f"file://{dst_parent}")
         n.wait(lambda: os.path.isdir(dst) and count_files(dst) == want[0] and tree_size(dst) == want)
         return {"s": time.monotonic() - t0, "rss_mb": n.peak()}
     finally:
@@ -332,12 +393,18 @@ def measure_move_xdev(app):
         if app not in OTHERS:
             r = harness(app, "move_xdev", dst)
         else:
-            n = FileOps(app)
+            n = UiOps(app, select=src) if OTHERS[app]["ops"] is None else FileOps(app)
             try:
-                if not n.has("MoveURIs"):   # Nemo's service can only copy
+                if isinstance(n, UiOps):   # Cut, then Paste on the other drive
+                    n.keys("ctrl+x")
+                    n.go(dst_parent)
+                    t0 = time.monotonic()
+                    n.keys("ctrl+v")
+                elif not n.has("MoveURIs"):   # Nemo's service can only copy
                     return {"s": None}
-                t0 = time.monotonic()
-                n.call("MoveURIs", [f"file://{src}"], f"file://{dst_parent}")
+                else:
+                    t0 = time.monotonic()
+                    n.call("MoveURIs", [f"file://{src}"], f"file://{dst_parent}")
                 n.wait(lambda: not os.path.exists(src) and os.path.isdir(dst) and count_files(dst) == want[0]
                        and tree_size(dst) == want)
                 r = {"s": time.monotonic() - t0, "rss_mb": n.peak()}
@@ -362,6 +429,8 @@ def measure_trash(app):
         if r.get("n") != total or r.get("empty_left"):
             raise RuntimeError(f"{app}: trash {r}")
         return r
+    if OTHERS[app]["ops"] is None:
+        return measure_trash_ui(app, victim, total, trash)
     n = FileOps(app)
     try:
         uris = [f"file://{victim}/{name}" for name in sorted(os.listdir(victim))]
@@ -388,6 +457,33 @@ def measure_trash(app):
         n.close()
 
 
+def measure_trash_ui(app, victim, total, trash):
+    """Dolphin: Select All and Delete (Move to Trash) in its window; then Empty Trash. Dolphin's Empty Trash (in the
+    trash's own view) runs KIO's empty-trash job; ktrash6 --empty runs that same job, so it's used for that step."""
+    n = UiOps(app, victim)
+    try:
+        n.keys("ctrl+a")
+        t0 = time.monotonic()
+        n.keys("Delete")
+        n.wait(lambda: not listing(victim) and len(listing(f"{trash}/files")) == total
+               and len(listing(f"{trash}/info")) == total, UI_TRASH_TIMEOUT)
+        s = time.monotonic() - t0
+        ktrash = shutil.which("ktrash6") or shutil.which("ktrash5")
+        if not ktrash:
+            return {"s": s, "rss_mb": n.peak()}
+        t0 = time.monotonic()
+        empty = subprocess.Popen([ktrash, "--empty"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            n.wait(lambda: not listing(f"{trash}/files") and not listing(f"{trash}/info"), EMPTY_TIMEOUT)
+        except Stuck as e:
+            return {"s": s, "rss_mb": n.peak(), "stuck_empty": str(e)}
+        finally:
+            empty.wait()
+        return {"s": s, "empty_s": time.monotonic() - t0, "rss_mb": n.peak()}
+    finally:
+        n.close()
+
+
 def measure_windows(app, tabs=False):
     """Open WINDOWS folders from outside, one after another (as from a browser's "Show in folder" or a terminal),
     then measure the memory of everything the app is running for them."""
@@ -405,9 +501,8 @@ def measure_windows(app, tabs=False):
             wait_for(lambda: windows_of(p.pid) or p.poll() is not None, 60, "no window")
             if i == 0:
                 time.sleep(1.0)   # the first one also starts the tower (Kestrel) or the other app's service
-        first = procs[0].pid
-        if app in OTHERS:   # one process: the later launches hand their folder to it
-            wait_for(lambda: windows_of(first) >= WINDOWS, 30, "not all windows opened")
+        if app in OTHERS:   # GNOME Files and Nemo: one process, the later launches hand their folder to it
+            wait_for(lambda: sum(windows_of(pid) for pid in app_pids(app)) >= WINDOWS, 30, "not all windows opened")
         elif not tabs:
             wait_for(lambda: all(windows_of(p.pid) for p in procs), 30, "not all windows opened")
         time.sleep(2.0)
@@ -459,6 +554,11 @@ def start_desktop_services():
 
 
 def measure(app, test):
+    for name, text in (OTHERS[app]["files"] if app in OTHERS else {}).items():
+        path = os.path.join(home(), name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
     start_desktop_services()
     if test == "startup":
         return measure_startup(app)
@@ -575,6 +675,7 @@ def tables(res, other):
     apps = ("kestrel", other)
     if not OTHERS[other]["thumbnails"]:   # also drops results saved before its folder tests were skipped
         res = {k: v for k, v in res.items() if not (k[0] == other and k[1] in FOLDER_TESTS)}
+    res = {k: v for k, v in res.items() if not (k[0] == other and k[1] in OTHERS[other]["skip"])}
 
     def med(app, test, key="s"):
         vals = [r[key] for r in res.get((app, test), []) if r.get(key) is not None]
@@ -671,7 +772,7 @@ def machine(other):
             distro = next((ln.split("=", 1)[1].strip().strip('"') for ln in f if ln.startswith("PRETTY_NAME=")), "")
     except OSError:
         pass
-    version = version.replace("GNOME nautilus", "GNOME Files").replace("nemo", "Nemo")
+    version = version.replace("GNOME nautilus", "GNOME Files").replace("nemo", "Nemo").replace("dolphin", "Dolphin")
     return cpu, os.cpu_count(), version or OTHERS[other]["label"], distro
 
 
@@ -680,6 +781,7 @@ def section(t1, t2, summary, runs, other):
     label = OTHERS[other]["label"]
     bench_link = "https://github.com/RegulusArms/kes-c/tree/main/bench"
     owns = label + ("'" if label.endswith("s") else "'s")   # GNOME Files', Nemo's
+    ui = OTHERS[other]["ops"] is None   # Dolphin: no file-operations service, keys pressed in its window
     if not OTHERS[other]["thumbnails"]:
         thumbs = f"{label} wasn't timed on this (see below)."
     elif "images" in summary["no_thumbs"]:
@@ -694,6 +796,10 @@ def section(t1, t2, summary, runs, other):
         untimed += (f"\n- **Opening a folder not timed:** {label} makes no thumbnails in this setup (a fresh home folder "
                     f"with its default settings), so the folder tests are skipped for it and those rows show —, as does "
                     f"its peak memory with the 600-image folder open.")
+    kinds = {"open_gallery": "images", "videos": "videos", "pdfs": "PDFs"}
+    for test, why in OTHERS[other]["skip"].items():
+        untimed += (f"\n- **{kinds[test].capitalize()} not timed:** {why}, so {label} makes no thumbnails for them in a fresh "
+                    f"home folder, and that row shows —.")
     if summary["no_thumbs"]:
         untimed += (f"\n- **No thumbnails:** {label} made none for the {' or '.join(summary['no_thumbs'])} within 2 minutes "
                     f"in this setup (a fresh home folder with its default settings), so those rows show —.")
@@ -711,23 +817,38 @@ def section(t1, t2, summary, runs, other):
         untimed += (f"\n- **Measured once:** {label} took over {SLOW // 60} minutes for {' and '.join(summary['once'])}, "
                     f"so it was run once instead of {runs} times.")
     if summary["stuck"]:
-        untimed += (f"\n- **Didn't finish:** asked through its D-Bus service to {' or '.join(summary['stuck'])}, "
-                    f"{label} didn't finish within the time limit (2 minutes; {EMPTY_TIMEOUT // 60} for emptying the trash), so those "
-                    f"rows show —.")
+        untimed += (f"\n- **Didn't finish:** asked {'in its window' if ui else 'through its D-Bus service'} to {' or '.join(summary['stuck'])}, "
+                    f"{label} didn't finish within the time limit (2 minutes; {EMPTY_TIMEOUT // 60} for emptying the trash"
+                    f"{f', and for moving to it' if ui else ''}), so those rows show —.")
+    if ui:
+        ops_how = (f"{label} has no D-Bus file-operations service, so its own commands are used, with keys pressed in its "
+                   f"window: Copy or Cut, then Paste in the destination (typed into its location bar), and Select All, "
+                   f"then Delete (Move to Trash). Its Empty Trash runs KDE's empty-trash job, which `ktrash6 --empty` "
+                   f"runs too; that was used for this step.")
+        ops_limit = (f"{label} runs a paste or a move to the trash in the background, so its times were measured from "
+                     f"the key press, by watching the files until the operation had finished, to within about 50 ms. "
+                     f"Its window was given {UI_SETTLE:.0f} s to list the folder first, which isn't counted.")
+    else:
+        ops_how = f"{label} receives them through its D-Bus file-operations service, as when another app asks it to."
+        ops_limit = (f"{owns} D-Bus service returns straight away, so its times were measured by watching the files "
+                     f"until the operation had finished, to within about 50 ms.")
+    renderers = "Qt's raster engine, GTK's cairo renderer" if OTHERS[other]["gtk"] else "Qt's raster engine, both being Qt apps"
+    features = OTHERS[other].get("features") or (f"{label} has no equivalent (\"Generate Previews\", folder mosaics, "
+                                                 f"metadata panels) or can't be timed from outside (search)")
     return f"""{OTHERS[other]["heading"]}
 
-Kestrel Explorer is compared here with {version}, the file manager it replaces.
+Kestrel Explorer is compared here with {version}, {OTHERS[other]["intro"]}.
 
 **Test machine:** {cpu} ({threads} threads), {distro}. The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 
-**How it was measured:** each test ran {runs} times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. Both apps ran on a headless X server with software rendering (Qt's raster engine, GTK's cairo renderer), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start, so no file indexer ran. The benchmark is in [bench/]({bench_link}) and is run with `bench/run.sh`.
+**How it was measured:** each test ran {runs} times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. Both apps ran on a headless X server with software rendering ({renderers}), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start, so no file indexer ran. The benchmark is in [bench/]({bench_link}) and is run with `bench/run.sh`.
 
 ### Compared with {label}
 
 Both apps are measured in the same way:
 - **Startup:** timed until the window is on screen.
 - **Opening a folder:** timed from launch until the first {FIRST} files' thumbnails are in the shared thumbnail cache.
-- **File operations:** Kestrel runs them with its own copy and trash code, the same code its menus use. {label} receives them through its D-Bus file-operations service, as when another app asks it to.
+- **File operations:** Kestrel runs them with its own copy and trash code, the same code its menus use. {ops_how}
 - **"Peak memory":** the app's highest memory use.
 - **Several folders opened from other apps:** the {WINDOWS} folders are opened one after another, as from a browser's "Show in folder". The figure is the private memory of everything the app then runs: what closing it would give back, not counting the libraries it shares with other apps. Kestrel normally starts a new process for each window ({summary['procs']} processes here, counting the tower that keeps them in sync); with "open folders as tabs" on, they become tabs in one window.
 - **CPU while idle:** the CPU time all the app's processes use in {IDLE_SECONDS} s with a folder open and nothing happening. It's counted in 10 ms steps.
@@ -742,13 +863,13 @@ Kestrel compared with {label}:
   - {thumbs}
   - Kestrel makes them only for what's on screen ({summary['kestrel_n']} images here), and the rest as you scroll.
   - To thumbnail a whole folder at once, Kestrel has "Generate Previews": {summary['kestrel_all']} for these 600 images (table below).
-- **File operations:** {owns} D-Bus service returns straight away, so its times were measured by watching the files until the operation had finished, to within about 50 ms.{untimed}
+- **File operations:** {ops_limit}{untimed}
 - **Memory:** {label} makes thumbnails in {OTHERS[other]['helpers']}, whose memory isn't counted in its figures. Kestrel makes them inside the app.
 - **Search:** {owns} search can't be timed from outside{OTHERS[other]['search']}, so it isn't compared.
 
 ### Kestrel's own features
 
-These are measured inside the app, because {label} has no equivalent ("Generate Previews", folder mosaics, metadata panels) or can't be timed from outside (search).
+These are measured inside the app, because {features}.
 
 {chr(10).join(t2)}
 """
@@ -841,7 +962,8 @@ def main():
             for app in apps:
                 if app in OTHERS and test in KESTREL_ONLY:
                     continue
-                if app in OTHERS and test in FOLDER_TESTS and not OTHERS[app]["thumbnails"]:
+                if app in OTHERS and test in FOLDER_TESTS and (not OTHERS[app]["thumbnails"]
+                                                               or test in OTHERS[app]["skip"]):
                     res.pop((app, test), None)   # --only keeps saved results: drop any from before
                     continue
                 if test == "videos" and not os.path.isdir(f"{DATA}/videos"):

@@ -160,7 +160,7 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
 | `tests/` | The test suite (see [Tests](#tests)) |
-| `bench/` | The benchmark against GNOME Files and Nemo (see Performance: [vs GNOME Files](performance.md#performance-kestrel-vs-gnome-files), [vs Nemo](performance.md#performance-kestrel-vs-nemo)) |
+| `bench/` | The benchmark against GNOME Files, Nemo and Dolphin (see Performance: [vs GNOME Files](performance.md#performance-kestrel-vs-gnome-files), [vs Nemo](performance.md#performance-kestrel-vs-nemo), [vs Dolphin](performance.md#performance-kestrel-vs-dolphin)) |
 | `CMakeLists.txt` | Build configuration, and the .deb (CPack) |
 | `kes-setup` | Makes Kestrel the default file manager for the current user, and puts things back (run by `install.sh`; also in the .deb) |
 | `data/` | The app icon (`icons/hicolor`, built into `kes` through `kestrel.qrc`), the .deb's app menu entry and file chooser portal files, and the GNOME Shell drop focus extension |

@@ -2,7 +2,14 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.10
+## 0.3.2-alpha.11
+
+- **The benchmark now compares Kestrel with Dolphin too** (KDE's file manager): see
+  [Performance: Kestrel vs Dolphin](docs/performance.md#performance-kestrel-vs-dolphin). Dolphin has no service for
+  other apps to ask for file operations, so its own Copy, Paste and Move to Trash are used, with keys pressed in its
+  window. The GNOME Files figures are from a new run too.
+
+## 0.3.2-alpha.10 (2026-10-24)
 
 - **Fixed: an image put back with Ctrl+Z could show "Cannot display this image"** in the viewer, if it was deleted (or
   moved) while the viewer was still reading it: the read, failing once the file had gone, was kept for it. Reads that

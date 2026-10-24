@@ -1,6 +1,6 @@
 # Benchmark
 
-Compares Kestrel Explorer (this C++ version) with GNOME Files, or with Nemo on Linux Mint, on the same data and in the same conditions. The results are the sections of [docs/performance.md](../docs/performance.md). Each run writes them to `bench/results.md`: "Kestrel vs GNOME Files" and/or "Kestrel vs Nemo", depending on which of the two are installed, ready to paste into docs/performance.md in place of the old section (a run on Mint gives the Nemo section; the GNOME one stays as it is). docs/performance.md is never changed by the benchmark itself.
+Compares Kestrel Explorer (this C++ version) with GNOME Files, Nemo (on Linux Mint) and Dolphin, whichever are installed, on the same data and in the same conditions. The results are the sections of [docs/performance.md](../docs/performance.md). Each run writes them to `bench/results.md`: "Kestrel vs GNOME Files", "Kestrel vs Nemo" and/or "Kestrel vs Dolphin", depending on which are installed, ready to paste into docs/performance.md in place of the old section (a run on Mint gives the Nemo section; the GNOME one stays as it is). docs/performance.md is never changed by the benchmark itself.
 
 ```bash
 bench/run.sh                       # build, generate the data the first time, run everything, print the tables
@@ -10,7 +10,7 @@ bench/run.sh --only startup,copy   # re-run some measurements and keep the rest 
 bench/run.sh --report             # rebuild the tables (and results.md) from the last results without running anything
 ```
 
-A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is slow), plus about a minute and a half the first time to generate the data. Raw results are saved in `bench/results.json`, and the docs/performance.md sections in `bench/results.md`.
+A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is slow, and about 12 more with Dolphin, whose copies and Move to Trash are slow), plus about a minute and a half the first time to generate the data. Raw results are saved in `bench/results.json`, and the docs/performance.md sections in `bench/results.md`.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is 
 - `ffmpeg`, for the video test data;
 - `dbus-run-session`;
 - the build tools, since Kestrel and its benchmark harness are built Release;
-- `nautilus` and/or `nemo`: each one installed is measured and gets its own table. Without either, only Kestrel's own tables are made.
+- `nautilus`, `nemo` and/or `dolphin`: each one installed is measured and gets its own table. Without any, only Kestrel's own tables are made. Dolphin also needs `ktrash6` (part of KDE's KIO, installed with it) for Empty Trash.
 
 ## How it's measured
 
@@ -30,7 +30,9 @@ A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is 
 - **RAM disk:** the data is in `/tmp/kestrel-bench-data`, so disk speed doesn't count. Set `KESTREL_BENCH_DATA` to use another place. `KESTREL_BUILD_DIR` builds Kestrel and the harness into another folder name than `build` (for a machine that shares these folders with another).
 - **Medians:** each measurement runs several times, and the tables show the median.
 
-### Compared with GNOME Files or Nemo (measured from outside)
+### Compared with GNOME Files, Nemo or Dolphin (measured from outside)
+
+Dolphin has no D-Bus file-operations service, so its own commands are used, with keys pressed in its window (`xdotool`, as a user would): for a copy, `dolphin --select` opens the source's folder with it selected, then Ctrl+C, the destination typed into its location bar (Ctrl+L), and Ctrl+V; a move between drives is the same with Ctrl+X; the trash test is Ctrl+A, then Delete (Move to Trash) in the folder of 10,000 files. Its window gets 2 s to list the folder before the keys, which isn't timed; the clock starts at the key that starts the operation, and the files are watched as for the others. Its Empty Trash runs KDE's empty-trash job (KIO), which `ktrash6 --empty` runs too, and that's used for that step. Confirmations are off in the throwaway home (`kiorc`). Dolphin moves 10,000 files to the trash at about 100 a second, slowing as it goes, so that test gets 10 minutes. Its default settings leave video previews off, so the video folder isn't timed for it. Its thumbnails are made in KIO worker processes, which aren't counted in its memory.
 
 Nemo is measured exactly like GNOME Files below, through its own D-Bus service (`org.Nemo.FileOperations`). Nemo is a fork of an older GNOME Files, and its service offers fewer operations: the benchmark asks the service which ones it has, and an operation it doesn't have shows "—" with a note under the table. Emptying the trash then starts from files put there with `gio trash`. Nemo's "confirm before emptying the trash" setting is turned off in the throwaway home, so Empty Trash doesn't wait for a click. Its service empties the trash one file at a time, about 50 files a second, so that test takes several minutes with 10,000 files: it gets 10 minutes, the other operations 2. A measurement that takes over 2 minutes is run only once (a median of several wouldn't tell more), and the docs/performance.md section says so. Nemo makes no thumbnails in this setup, so "Open a folder" isn't measured for it: each run would only wait out the 2-minute timeout. Those rows, and its peak memory with the 600-image folder open, show "—".
 
