@@ -92,6 +92,30 @@ into.
   - Test: `jobs` / `fileops` (a job queued behind another, its destination moved meanwhile: it follows it or fails
     once with the clear message; the log header names the source, destination and the wait).
 
+- [ ] **A drive or mount sometimes doesn't show up in the sidebar right after it's mounted.** It comes later (on
+  some other refresh). Not because Kestrel polls and misses it. Nothing is polled, and it should stay that way. The
+  sidebar already listens to what the OS says:
+  - The kernel's mount table: `drives::MountWatch` (src/drives.cpp) uses GIO's `GUnixMountMonitor`, which waits on
+    `/proc/self/mountinfo`, and the kernel wakes it on every mount and unmount. `Sidebar` (src/widgets.cpp) restarts
+    `phone_timer` on that, then `refresh()` 300 ms later reads `drives::mounts()` afresh (`mounts_stale`).
+  - GIO's `GVolumeMonitor` (volume/mount added/removed/changed) for phones and network shares (gvfs, which gets them
+    from udisks2 over D-Bus, as GNOME Files does).
+  - So the event comes, and the gap must be in what happens after it. To find out first: **which kind of mount** was
+    late (a USB stick or disk under /media, a network share, a FUSE mount in the home folder, a tape, a phone), and
+    whether it was missing entirely or just named wrong.
+  - Leads: (1) the refresh runs 300 ms after the *first* event, and a mount can come in steps (udisks2 mounts, then
+    the udev symlinks such as /dev/disk/by-label appear, gvfs adds its mount object later still). If the last step
+    arrives after the timer has fired and nothing else fires, the sidebar shows an in-between state.
+    (2) `drives::mounts()` keeps its list for a second unless `mounts_stale` is set, and that flag is shared by every
+    caller (thumbnails, jobs, `drive_ids` on other threads). Check that one caller using up the flag can't leave the
+    sidebar with an older copy. (3) `g_unix_mount_monitor_get()` belongs to the GLib main context of the thread that
+    first calls it. If `MountWatch::instance()` is ever first made on a worker thread, its signal never comes.
+  - If the kernel's table really isn't enough: udisks2's D-Bus objects (`org.freedesktop.UDisks2`, `InterfacesAdded`
+    and the `MountPoints` property changing on a `Filesystem`) are the service that already knows each drive. They
+    send signals and don't need polling, but they only cover drives udisks2 manages.
+  - Test: `MountWatch::mounts_changed()` followed by a mount that only appears in `KESTREL_TEST_MOUNTS` a moment
+    later: the sidebar lists it without any other event.
+
 ## New features
 
 ### Jobs
