@@ -249,6 +249,8 @@ std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts)
         setup(opts.in, pin[0], 0);
         setup(opts.out, pout[1], 1);
         setup(opts.err, perr[1], 2);
+        if (opts.fd3 >= 0)   // after 0-2: a pipe end at 3 has been copied there by now
+            setup(opts.fd3, -1, 3);
         ::signal(SIGPIPE, SIG_DFL);
         if (!cwd.isEmpty() && ::chdir(cwd.constData()) != 0) {
             int e = errno;

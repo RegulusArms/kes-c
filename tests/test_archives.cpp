@@ -1,7 +1,8 @@
 // Extracting archives through the window (archive_ui.h): Extract All for several archives (one job, one summary, a
 // split set counted once), the password typed once being tried on the archives after it, the quick password test
 // (archive::password_opens), and remembered passwords in the keyring (keyring.h) with a real gnome-keyring-daemon on
-// the test's private session bus (skipped where it isn't installed).
+// the test's private session bus (skipped where it isn't installed). Also tar archives with a password (through gpg):
+// made, read back by gpg itself, opened, listed, tested and extracted by Kestrel, refused with a wrong password.
 #include "common.h"
 
 #include "archive_ui.h"
@@ -10,7 +11,9 @@
 #include "keyring.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialog>
+#include <QGroupBox>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -142,6 +145,193 @@ int main(int argc, char **argv)
           "a split set selected whole is one archive: Extract Here and Extract To…, not Extract All");
     check(!mixed.contains("Extract All Here") && !mixed.contains("Extract Here"),
           "archives selected with other files: no Extract");
+
+    // ---- tar archives with a password: piped through gpg (name.tar.gz.gpg)
+    if (archive::tool("gpg").isEmpty()) {
+        skip("password-encrypted tar archives (gpg isn't installed)");
+    } else {
+        QString g = home_path("gpg");
+        makedirs(join(g, "src/inner"), true);
+        write_text(join(g, "src/inner/a.txt"), "hello");
+        write_text(join(g, "src/top.txt"), "hello");
+        const QString pw = "pw 'one' \"two\"";
+        auto fmt_of = [](const QString &id) {
+            for (const archive::Format &f : archive::formats())
+                if (f.id == id)
+                    return f;
+            return archive::Format{};
+        };
+        Task gt("gpg", [](Task *) { return QVariant(); });
+        auto spec_of = [&](const QString &id, const QString &name, const QStringList &rels) {
+            archive::Spec sp;
+            sp.format = fmt_of(id);
+            sp.tool = sp.format.available.value(0);
+            if (id != "tar")
+                sp.level = 1;
+            sp.base = join(g, "src");
+            sp.rels = rels;
+            sp.out = join(g, name);
+            sp.password = pw;
+            sp.total = 1 << 20;
+            return sp;
+        };
+        QString gz = join(g, "sealed.tar.gz.gpg"), plain = join(g, "plain.tar.gpg");
+        QString preview = archive::command_preview(spec_of("tar.gz", "sealed.tar.gz.gpg", {"inner", "top.txt"})) + "\n" +
+                          archive::command_preview(spec_of("tar", "plain.tar.gpg", {"inner", "top.txt"}));
+        bool made = fmt_of("tar.gz").password && fmt_of("tar").password;
+        try {
+            made = made && archive::compress(&gt, spec_of("tar.gz", "sealed.tar.gz.gpg", {"inner", "top.txt"})) == gz &&
+                   archive::compress(&gt, spec_of("tar", "plain.tar.gpg", {"inner", "top.txt"})) == plain;
+        } catch (const std::exception &e) {
+            made = false;
+            std::printf("  (compress: %s)\n", e.what());
+        }
+        // gpg itself, with the password on its own command line (the test's, not Kestrel's)
+        auto gpg_names = [&](const QString &path, const QString &pass, const QString &unpack) {
+            proc::Result r = proc::run({"sh", "-c",
+                                        "gpg --batch --quiet --pinentry-mode loopback --no-symkey-cache --passphrase \"$1\" "
+                                        "-d -- \"$2\" | " + unpack + " | tar tf -",
+                                        "sh", pass, path},
+                                       60000);
+            QStringList names = QString::fromUtf8(r.out).split('\n', Qt::SkipEmptyParts);
+            names.sort();
+            return r.rc == 0 ? names : QStringList();
+        };
+        QStringList want{"inner/", "inner/a.txt", "top.txt"};
+        check(made && gpg_names(gz, pw, "gzip -dc") == want && gpg_names(plain, pw, "cat") == want &&
+                  gpg_names(gz, "wrong", "gzip -dc").isEmpty() && !read_file(plain).contains("top.txt"),
+              "a tar.gz and a tar made with a password are gpg-encrypted (name.tar.gz.gpg): gpg opens them with that "
+              "password only, and no file name can be read from them");
+        check(preview.contains(" -c -1 | gpg --symmetric --cipher-algo AES256 -z 0 > sealed.tar.gz.gpg") &&
+                  preview.contains("tar -cf - -- inner top.txt | gpg --symmetric") && preview.contains("password passed on a pipe") &&
+                  !preview.contains("one"),
+              "the command shown for a tar with a password pipes it through gpg, without the password (" +
+                  preview.replace('\n', " ; ") + ")");
+
+        auto [k, suf] = archive::kind(gz);
+        bool kinds = k == "tar" && suf == "gz" && archive::gpg_encrypted(gz) && archive::gpg_encrypted(plain) &&
+                     archive::archive_stem(gz) == "sealed" && archive::kind(join(g, "notes.txt.gpg")).first.isEmpty() &&
+                     !archive::gpg_encrypted(join(g, "x.tar.gz")) && archive::probe(gz).encrypted && archive::opens_as_archive(gz);
+        bool right = false, wrong = true;
+        try {
+            right = archive::password_opens(&gt, gz, pw);
+            wrong = archive::password_opens(&gt, gz, "wrong");
+        } catch (const std::exception &) {
+        }
+        check(kinds && right && !wrong,
+              "a .tar.gz.gpg is a tar archive that is encrypted (a .txt.gpg isn't an archive), and the quick test tells "
+              "its password from a wrong one");
+
+        bool list_asks = false, extract_refuses = false, test_refuses = false;
+        QStringList listed;
+        bool all_marked = true;
+        archive::TestResult tested;
+        QString out = join(g, "out"), bad = join(g, "bad");
+        makedirs(out, true);
+        makedirs(bad, true);
+        try {
+            archive::list(&gt, gz, QString());
+        } catch (const archive::WrongPassword &) {
+            list_asks = true;
+        } catch (const std::exception &) {
+        }
+        try {
+            archive::extract(&gt, gz, bad, "wrong");
+        } catch (const archive::WrongPassword &) {
+            extract_refuses = true;
+        } catch (const std::exception &) {
+        }
+        try {
+            archive::test(&gt, plain, "wrong");
+        } catch (const archive::WrongPassword &) {
+            test_refuses = true;
+        } catch (const std::exception &) {
+        }
+        try {
+            for (const archive::Entry &e : archive::list(&gt, gz, pw)) {
+                listed << e.path;
+                all_marked = all_marked && e.encrypted;
+            }
+            archive::extract(&gt, plain, out, pw);
+            tested = archive::test(&gt, gz, pw);
+        } catch (const std::exception &e) {
+            std::printf("  (reading: %s)\n", e.what());
+        }
+        listed.sort();
+        check(list_asks && listed == want && all_marked && read_file(join(out, "inner/a.txt")) == "hello" &&
+                  read_file(join(out, "top.txt")) == "hello" && tested.ok,
+              "Kestrel lists (only with the password), extracts and tests a tar through gpg (" + listed.join(", ") + ")");
+        check(extract_refuses && test_refuses && listdir(bad).isEmpty(),
+              "a wrong password for a tar through gpg is reported as a wrong password (extract and test), and extracts "
+              "nothing");
+
+        // a write that fails part-way (a full disk): the archive of that name is kept, and nothing half-made is left
+        {
+            QFile f(join(g, "src/noise.bin"));
+            QFile rnd("/dev/urandom");
+            if (f.open(QIODevice::WriteOnly) && rnd.open(QIODevice::ReadOnly))
+                f.write(rnd.read(3 << 20));
+        }
+        QByteArray before = read_file(gz);
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        bool threw = false;
+        try {
+            archive::compress(&gt, spec_of("tar.gz", "sealed.tar.gz.gpg", {"noise.bin"}));
+        } catch (const std::exception &) {
+            threw = true;
+        }
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QStringList parts;
+        for (const QString &n : listdir(g))
+            if (n.startsWith(".kes-"))
+                parts << n;
+        check(threw && read_file(gz) == before && parts.isEmpty(),
+              "a tar through gpg that fails part-way (a full disk) keeps the archive of that name as it was, and no "
+              "half-made one (" + parts.join(", ") + ")");
+
+        // the windows: Compress… names it .gpg; Open as Archive and Extract Here ask for its password
+        {
+            CompressDialog cd(w, {join(g, "src/top.txt")});
+            QComboBox *fmt = cd.findChild<QComboBox *>();
+            fmt->setCurrentIndex(fmt->findData("tar.gz"));
+            auto *enc = cd.findChild<QGroupBox *>();   // the first: "Encrypt with a password"
+            auto shows = [&](const QString &text) {
+                for (QLabel *l : cd.findChildren<QLabel *>())
+                    if (l->text() == text)
+                        return true;
+                return false;
+            };
+            bool offered = enc && enc->title().contains("password") && !enc->isHidden() && enc->isEnabled();
+            bool plain_ext = shows(".tar.gz");
+            if (enc)
+                enc->setChecked(true);
+            check(offered && plain_ext && shows(".tar.gz.gpg"),
+                  "Compress… offers a password for tar.gz, and the archive's name then ends in .tar.gz.gpg");
+        }
+        ArchiveWindow *gw = ArchiveWindow::open(w, gz);
+        Asked ga = drive({{pw}}, [&]() { return gw->loaded() ? QString("loaded") : QString(); });
+        int shown = gw->tree->topLevelItemCount();
+        gw->close();
+        check(ga.prompts.size() == 1 && ga.prompts.value(0).contains("is encrypted") && shown == 2,
+              "Open as Archive on a tar through gpg asks for its password, then shows what's inside");
+        w->statusBar()->clearMessage();
+        archive_ui::extract_here(w, gz);
+        ga = drive({{"wrong"}, {pw}}, [&]() {
+            QString m = w->statusBar()->currentMessage();
+            return m.startsWith("Extracted") ? m : QString();
+        });
+        check(ga.prompts.size() == 2 && ga.prompts.value(1).contains("Wrong password") &&
+                  read_file(join(g, "sealed/inner/a.txt")) == "hello",
+              "Extract Here on a tar through gpg asks for its password (again when wrong) and extracts it into a "
+              "folder named without .tar.gz.gpg");
+        proc::run({"gpgconf", "--kill", "gpg-agent"}, 10000);   // the one gpg started for the test's home
+    }
 
     QString z7 = archive::tool("7z");
     if (z7.isEmpty()) {

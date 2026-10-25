@@ -318,9 +318,14 @@ void CompressDialog::format_changed()
     tool->blockSignals(false);
     show_row(tool_row, f.available.size() > 1);
     enc->setVisible(f.password);
-    no_enc->setVisible(!f.password);
-    no_enc->setText(QString("%1 can't be encrypted. Use 7z, zip, rar or zpaq for a password-protected archive.")
-                        .arg(f.label.section(' ', 0, 0)));
+    bool no_gpg = archive::via_gpg(f) && archive::tool("gpg").isEmpty();   // the tar formats' password needs gpg
+    enc->setEnabled(!no_gpg);
+    if (no_gpg)
+        enc->setChecked(false);
+    no_enc->setVisible(!f.password || no_gpg);
+    no_enc->setText(no_gpg ? QString("A password for a tar archive needs gpg. Install it with:  sudo apt install gnupg")
+                           : QString("%1 can't be encrypted. Use 7z, zip, rar, zpaq or tar for a password-protected "
+                                     "archive.").arg(f.label.section(' ', 0, 0)));
     split->setVisible(f.volumes);
     solid->setVisible(f.solid);
     show_row(recovery_row, f.recovery);
@@ -365,9 +370,14 @@ void CompressDialog::tool_changed()
     zip_enc_lbl->setVisible(zip7);
     split->setVisible(f.volumes && !(f.id == "zip" && t == "zip"));
     static const QMap<QString, QString> names = {{"7z", "7-Zip"}, {"rar", "rar"}, {"zip", "zip"}};
-    enc_note->setText(t == "zpaq" ? QString(ARGV_NOTE).arg(t)
-                                  : "The password is passed to " + names.value(t, t) +
-                                        " privately (not on its command line).");
+    if (archive::via_gpg(f))
+        enc_note->setText("The archive is encrypted whole with gpg (AES-256) and saved as “" + f.ext.mid(1) +
+                          ".gpg”: nothing in it can be listed without the password. The password is passed to gpg "
+                          "privately (not on its command line).");
+    else
+        enc_note->setText(t == "zpaq" ? QString(ARGV_NOTE).arg(t)
+                                      : "The password is passed to " + names.value(t, t) +
+                                            " privately (not on its command line).");
     level_changed();
 }
 
@@ -421,7 +431,11 @@ archive::Spec CompressDialog::spec() const
         ex.clear();
     qint64 v = vol->value() * (vol_unit->currentText() == "GB" ? 1024 : 1);
     QString n = name->text().trimmed();
-    if (n.endsWith(f.ext))
+    QString pass = f.password && enc->isEnabled() && enc->isChecked() ? pw->text() : QString();
+    QString full_ext = f.ext + (archive::via_gpg(f) && !pass.isEmpty() ? ".gpg" : "");
+    if (n.endsWith(f.ext + ".gpg") && archive::via_gpg(f))
+        n.chop(f.ext.size() + 4);
+    else if (n.endsWith(f.ext))
         n.chop(f.ext.size());
     QString d = dest->text().trimmed();
     archive::Spec sp;
@@ -429,12 +443,12 @@ archive::Spec CompressDialog::spec() const
     sp.tool = t;
     sp.base = base;
     sp.rels = rels;
-    sp.out = join(expanduser(d.isEmpty() ? base : d), n + f.ext);
+    sp.out = join(expanduser(d.isEmpty() ? base : d), n + full_ext);
     if (lv)
         sp.level = level->value();
     sp.method = method->currentText();
     sp.threads = archive::tool_threads(f, t) ? threads->value() : 0;
-    sp.password = f.password && enc->isChecked() ? pw->text() : QString();
+    sp.password = pass;
     sp.encrypt_names = f.encrypt_names ? enc_names->isChecked() : false;
     sp.zip_encryption = zip_enc->currentData().toString();
     sp.volume_mb = split->isVisible() && split->isChecked() ? v : 0;
@@ -448,6 +462,8 @@ archive::Spec CompressDialog::spec() const
 
 void CompressDialog::update_preview()
 {
+    const archive::Format &f = format();   // a tar archive with a password is name.tar….gpg
+    ext->setText(f.ext + (archive::via_gpg(f) && enc->isEnabled() && enc->isChecked() ? ".gpg" : ""));
     if (loading || tool->currentData().toString().isEmpty())
         return;
     try {
@@ -473,7 +489,7 @@ void CompressDialog::ok()
         warn(this, "Compress", "The passwords don't match.");
         return;
     }
-    if (enc->isVisible() && enc->isChecked() && sp.password.isEmpty()) {
+    if (enc->isVisible() && enc->isEnabled() && enc->isChecked() && sp.password.isEmpty()) {
         warn(this, "Compress", "Enter a password, or turn off encryption.");
         return;
     }

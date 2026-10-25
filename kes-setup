@@ -41,9 +41,10 @@ BLEACHBIT_CLEANER="$HOME/.config/bleachbit/cleaners/kestrel-explorer.xml"
 BLEACHBIT_MARK="Kestrel Explorer's cleaner, written by kes-setup"   # in an XML comment: no "--"
 # --install-optional: the packages the .deb suggests, and the extra archive tools; Kestrel hides or works around what's
 # missing (exiftool: the Metadata tab and editing; ffmpeg: video thumbnails; bleachbit: shredding; rar: making .rar;
-# pbzip2, lbzip2, plzip, lz4: multi-core .bz2 and .lz, and .lz4; libjpeg-turbo-progs: the image viewer's Straighten).
+# pbzip2, lbzip2, plzip, lz4: multi-core .bz2 and .lz, and .lz4; libjpeg-turbo-progs: the image viewer's Straighten;
+# gnupg: tar archives with a password).
 # zfsutils-linux too when a ZFS file system is mounted.
-OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs)
+OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg)
 # The system's gsettings (an Anaconda copy earlier on PATH can't see the desktop's settings)
 GSETTINGS=/usr/bin/gsettings
 

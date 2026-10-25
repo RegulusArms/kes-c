@@ -1,14 +1,16 @@
 // Archive engine: create and extract archives with the system's command-line tools.
 //
-// Creating: 7z, zip, rar, tar (plain, or piped through pigz/gzip, pbzip2/lbzip2/bzip2, xz, zstd, plzip/lzip, lz4),
-// zpaq, and single-file gz/bz2/xz/zst/lz/lz4. Extracting: all of those plus iso/cab/deb/rpm/... through 7z.
+// Creating: 7z, zip, rar, tar (plain, or piped through pigz/gzip, pbzip2/lbzip2/bzip2, xz, zstd, plzip/lzip, lz4; with
+// a password, then through gpg: name.tar.zst.gpg), zpaq, and single-file gz/bz2/xz/zst/lz/lz4. Extracting: all of
+// those plus iso/cab/deb/rpm/... through 7z.
 //
 // Each job runs on a Task thread: tools are started detached from any terminal with stdin closed (so nothing can
 // sit waiting on a password prompt), progress is read from their "NN%" output or counted from the bytes Kestrel
 // pipes through them, Cancel kills the whole process group, and partial output is removed.
 //
-// Passwords go to 7z, rar and unrar on stdin, and to zip and unzip in an environment variable. zpaq only accepts
-// them as a command-line switch, which other local users could read from the process list while the job runs.
+// Passwords go to 7z, rar and unrar on stdin, to gpg on a pipe of its own, and to zip and unzip in an environment
+// variable. zpaq only accepts them as a command-line switch, which other local users could read from the process list
+// while the job runs.
 #pragma once
 
 #include "util.h"
@@ -51,6 +53,8 @@ QList<Format> formats();   // formats you can create, in menu order
 std::optional<Levels> tool_levels(const Format &fmt, const QString &tool_name);
 bool tool_threads(const Format &fmt, const QString &tool_name);
 QString install_hint(const QString &name);
+// The tar formats: a password encrypts them through gpg, and the archive's name gets ".gpg" after the format's ext
+bool via_gpg(const Format &fmt);
 
 // What a Compress dialog asks for (see archive_ui).
 struct Spec {
@@ -74,6 +78,7 @@ struct Spec {
 // (kind, stream suffix) for an archive path; kind is rar, 7z, tar, single or zpaq, or empty
 QPair<QString, QString> kind(const QString &path);
 QString first_volume(const QString &path);
+bool gpg_encrypted(const QString &path);   // a tar archive through gpg (name.tar.gpg, name.tar.zst.gpg, name.tgz.gpg…)
 QString extract_tool(const QString &path);
 bool can_extract(const QString &path);
 QString missing_extract_tool(const QString &path);   // package to install, or empty if a tool is available

@@ -2,7 +2,16 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.11
+## 0.3.2-alpha.12
+
+- **Tar archives can have a password.** In Compress…, tar and every tar.* format (tar.gz, tar.zst, tar.xz…) now offer
+  **Encrypt with a password**: the archive is encrypted whole with gpg (AES-256), names and all, and saved as
+  `name.tar.gz.gpg`. Kestrel opens, lists, tests and extracts these like its other encrypted archives (asking for the
+  password, trying saved ones, asking again when it's wrong), and they open anywhere with `gpg -d`. The password goes
+  to gpg privately, never on its command line. Needs `gnupg` (almost always installed; now among the optional
+  packages).
+
+## 0.3.2-alpha.11 (2026-10-24)
 
 - **The benchmark now compares Kestrel with Dolphin too** (KDE's file manager): see
   [Performance: Kestrel vs Dolphin](docs/performance.md#performance-kestrel-vs-dolphin). Dolphin has no service for

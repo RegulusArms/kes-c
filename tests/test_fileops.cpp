@@ -1329,7 +1329,8 @@ int main(int argc, char **argv)
     sigaction(SIGPIPE, &saved, nullptr);
     check(!r.failed && !r.timed_out && r.rc == 0, "writing to a program that exits without reading its input doesn't kill Kestrel");
 
-    // -- archive passwords: never on a tool's command line (where every user can see it), apart from zpaq's
+    // -- archive passwords: never on a tool's command line (where every user can see it), apart from zpaq's; a tar's
+    // goes to gpg (tar.gz: tar | gzip | gpg)
     const QString pw = "Kestrel-pw-7731 \"quoted\"";
     QDir().mkpath(P("pwsrc"));
     {
@@ -1339,32 +1340,36 @@ int main(int argc, char **argv)
         rnd.open(QIODevice::ReadOnly);
         f.write(rnd.read(30 << 20));   // big enough that the tool runs a while, for the watcher to see it
     }
-    for (const QString &t : QStringList{"rar", "zip"}) {
-        QString label = t + ": a password-protected archive is made and opened, and the password is never on a "
-                            "command line";
-        if (archive::tool(t).isEmpty() || archive::tool(t == "rar" ? "unrar" : "7z").isEmpty()) {
-            skip(label + " (" + t + " isn't installed)");
+    for (const QString &id : QStringList{"rar", "zip", "tar.gz"}) {
+        bool gpg = id == "tar.gz";
+        QString t = gpg ? "gzip" : id;   // the tool that makes it, and the one that opens it
+        QString reader = id == "rar" ? "unrar" : gpg ? "gpg" : "7z";
+        QString label = id + (gpg ? " (through gpg)" : "") +
+                        ": a password-protected archive is made and opened, and the password is never on a command line";
+        if (archive::tool(t).isEmpty() || archive::tool(reader).isEmpty()) {
+            skip(label + " (" + (archive::tool(t).isEmpty() ? t : reader) + " isn't installed)");
             continue;
         }
         archive::Format fmt;
         for (const archive::Format &f : archive::formats())
-            if (f.id == t)
+            if (f.id == id)
                 fmt = f;
-        QString out = P("secret." + t);
+        QString out = P("secret." + id + (gpg ? ".gpg" : ""));
         std::atomic<bool> watching{true};
         std::atomic<int> seen{0}, leaked{0};
         std::thread watcher([&]() {   // every command line on the system, while the jobs run
-            QByteArray needle = pw.left(15).toUtf8(), name = QByteArray("secret.") + t.toUtf8();
+            // seen: the tool opening it was caught running; leaked: the password in any command line (also one
+            // naming only the hidden part the archive is made under)
+            QByteArray needle = pw.left(15).toUtf8(), name = QByteArray("secret.") + id.toUtf8();
             while (watching) {
                 for (const QString &pid : QDir("/proc").entryList(QDir::Dirs)) {
                     QFile f("/proc/" + pid + "/cmdline");
                     if (pid.at(0).isDigit() && f.open(QIODevice::ReadOnly)) {
                         QByteArray line = f.readAll();
-                        if (line.contains(name)) {
+                        if (line.contains(name))
                             seen++;
-                            if (line.contains(needle))
-                                leaked++;
-                        }
+                        if (line.contains(needle))
+                            leaked++;
                     }
                 }
             }

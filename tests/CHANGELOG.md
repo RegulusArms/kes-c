@@ -4,6 +4,23 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.12
+
+Added:
+- `archives`: tar archives with a password (through gpg), the new feature: a tar and a tar.gz made with a password are
+  gpg-encrypted (gpg itself opens them with that password only, and no file name is readable in them); the command
+  shown pipes through gpg without the password; `.tar.gz.gpg` is recognised as an encrypted tar (a `.txt.gpg` isn't an
+  archive); the quick password test, listing (only with the password), extracting and testing them; a wrong password
+  is reported as one and extracts nothing; one failing part-way (a file-size limit) keeps the archive of that name and
+  leaves no part; Compress… offers the password and names the archive `.tar.gz.gpg`; Open as Archive and Extract Here
+  ask for its password (again when wrong). Skipped where gpg isn't installed.
+- `fileops`: the "password never on a command line" check also covers a tar.gz through gpg.
+
+Changed:
+- `fileops`: that check's watcher now counts the password in any command line, not only ones naming the archive: a
+  tool making the archive names only its hidden part file, so a password leaked there went unseen.
+- `installer`: `kes-setup --install-optional` now also installs `gnupg` (tar archives with a password).
+
 ## 0.3.2-alpha.11
 
 No test changes.

@@ -22,6 +22,7 @@ struct Options {
     bool new_session = true;   // start_new_session=True: no controlling terminal, its own process group
     bool c_utf8 = false;       // LC_ALL=C.UTF-8: English messages, UTF-8 file names
     QStringList env;           // extra variables, "NAME=value" (replacing the environment's own)
+    int fd3 = -1;              // given to the program as its fd 3 (gpg's --passphrase-fd 3), or none
 };
 
 // A running program. Destroying it while the program still runs stops it, with its process group, and reaps it;
