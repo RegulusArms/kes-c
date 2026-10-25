@@ -2,6 +2,7 @@
 
 #include "app.h"
 #include "fileops.h"
+#include "hashcheck.h"
 #include "keyring.h"
 #include "windows.h"
 
@@ -11,6 +12,7 @@
 #include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -215,6 +217,27 @@ CompressDialog::CompressDialog(QWidget *parent, const QStringList &paths_) : QDi
     no_enc = small("");
     lay->addWidget(no_enc);
 
+    // checksums of the archive, made from its bytes as they're written (tar formats)
+    sums = new QGroupBox("Create a checksum file");
+    sums->setCheckable(true);
+    auto *sl_grid = new QGridLayout(sums);
+    QStringList saved_algos = settings().value("checksum_algorithms", "sha256").toString().split(',', Qt::SkipEmptyParts);
+    int ai = 0;
+    for (const QString &a : hashcheck::create_algorithms()) {
+        auto *b = new QCheckBox(a == "crc32" ? QString("CRC32 (SFV)") : hashcheck::algo_label(a));
+        b->setChecked(saved_algos.contains(a));
+        sum_boxes[a] = b;
+        sl_grid->addWidget(b, ai / 3, ai % 3);
+        ai++;
+    }
+    sum_one = new QCheckBox("One file with every algorithm (BSD tags)");
+    sum_one->setChecked(settings().value("checksum_one_file", false).toBool());
+    sl_grid->addWidget(sum_one, (ai + 2) / 3, 0, 1, 3);
+    sl_grid->addWidget(small("Made from the archive as it's written, so it's ready when the archive is, without "
+                             "reading it again."),
+                       (ai + 2) / 3 + 1, 0, 1, 3);
+    lay->addWidget(sums);
+
     // splitting and archive structure
     split = new QGroupBox("Split into volumes");
     split->setCheckable(true);
@@ -276,7 +299,9 @@ CompressDialog::CompressDialog(QWidget *parent, const QStringList &paths_) : QDi
         connect(w, &QLineEdit::textChanged, this, &CompressDialog::update_preview);
     for (QGroupBox *w : {enc, split})
         connect(w, &QGroupBox::toggled, this, &CompressDialog::update_preview);
-    for (QCheckBox *w : {enc_names, solid})
+    for (QGroupBox *w : {sums})
+        connect(w, &QGroupBox::toggled, this, &CompressDialog::update_preview);
+    for (QCheckBox *w : QList<QCheckBox *>{enc_names, solid, sum_one} + sum_boxes.values())
         connect(w, &QCheckBox::toggled, this, &CompressDialog::update_preview);
     for (QSpinBox *w : {vol, threads, recovery})
         connect(w, &QSpinBox::valueChanged, this, &CompressDialog::update_preview);
@@ -318,7 +343,7 @@ void CompressDialog::format_changed()
     tool->blockSignals(false);
     show_row(tool_row, f.available.size() > 1);
     enc->setVisible(f.password);
-    bool no_gpg = archive::via_gpg(f) && archive::tool("gpg").isEmpty();   // the tar formats' password needs gpg
+    bool no_gpg = archive::is_tar(f) && archive::tool("gpg").isEmpty();   // the tar formats' password needs gpg
     enc->setEnabled(!no_gpg);
     if (no_gpg)
         enc->setChecked(false);
@@ -328,6 +353,8 @@ void CompressDialog::format_changed()
                                      "archive.").arg(f.label.section(' ', 0, 0)));
     split->setVisible(f.volumes);
     solid->setVisible(f.solid);
+    sums->setVisible(archive::is_tar(f));
+    sums->setChecked(s.value(key("checksum"), false).toBool());
     show_row(recovery_row, f.recovery);
     enc_names->setVisible(f.encrypt_names);
     // restore this format's last options
@@ -370,7 +397,7 @@ void CompressDialog::tool_changed()
     zip_enc_lbl->setVisible(zip7);
     split->setVisible(f.volumes && !(f.id == "zip" && t == "zip"));
     static const QMap<QString, QString> names = {{"7z", "7-Zip"}, {"rar", "rar"}, {"zip", "zip"}};
-    if (archive::via_gpg(f))
+    if (archive::is_tar(f))
         enc_note->setText("The archive is encrypted whole with gpg (AES-256) and saved as “" + f.ext.mid(1) +
                           ".gpg”: nothing in it can be listed without the password. The password is passed to gpg "
                           "privately (not on its command line).");
@@ -432,8 +459,8 @@ archive::Spec CompressDialog::spec() const
     qint64 v = vol->value() * (vol_unit->currentText() == "GB" ? 1024 : 1);
     QString n = name->text().trimmed();
     QString pass = f.password && enc->isEnabled() && enc->isChecked() ? pw->text() : QString();
-    QString full_ext = f.ext + (archive::via_gpg(f) && !pass.isEmpty() ? ".gpg" : "");
-    if (n.endsWith(f.ext + ".gpg") && archive::via_gpg(f))
+    QString full_ext = f.ext + (archive::is_tar(f) && !pass.isEmpty() ? ".gpg" : "");
+    if (n.endsWith(f.ext + ".gpg") && archive::is_tar(f))
         n.chop(f.ext.size() + 4);
     else if (n.endsWith(f.ext))
         n.chop(f.ext.size());
@@ -457,13 +484,19 @@ archive::Spec CompressDialog::spec() const
     sp.recovery = f.recovery ? recovery->value() : 0;
     sp.extra = ex;
     sp.trash_originals = trash_after->isChecked();
+    if (archive::is_tar(f) && sums->isChecked()) {
+        for (const QString &a : hashcheck::create_algorithms())
+            if (sum_boxes[a]->isChecked())
+                sp.checksums << a;
+        sp.checksum_one_file = sum_one->isChecked();
+    }
     return sp;
 }
 
 void CompressDialog::update_preview()
 {
     const archive::Format &f = format();   // a tar archive with a password is name.tar….gpg
-    ext->setText(f.ext + (archive::via_gpg(f) && enc->isEnabled() && enc->isChecked() ? ".gpg" : ""));
+    ext->setText(f.ext + (archive::is_tar(f) && enc->isEnabled() && enc->isChecked() ? ".gpg" : ""));
     if (loading || tool->currentData().toString().isEmpty())
         return;
     try {
@@ -493,6 +526,10 @@ void CompressDialog::ok()
         warn(this, "Compress", "Enter a password, or turn off encryption.");
         return;
     }
+    if (sums->isVisible() && sums->isChecked() && sp.checksums.isEmpty()) {
+        warn(this, "Compress", "Choose an algorithm for the checksum file, or turn it off.");
+        return;
+    }
     if (!extra->text().trimmed().isEmpty()) {
         bool parsed = false;
         QString err;
@@ -502,8 +539,14 @@ void CompressDialog::ok()
             return;
         }
     }
-    if (exists(sp.out))
-        ask_yes(this, "Compress", QString("“%1” already exists. Replace it?").arg(out_name), [this, sp]() { save(sp); });
+    QStringList taken;   // the archive, and its checksum files
+    for (const QString &p : QStringList{sp.out} + archive::checksum_paths(sp))
+        if (exists(p))
+            taken << "“" + basename(p) + "”";
+    if (!taken.isEmpty())
+        ask_yes(this, "Compress",
+                taken.join(" and ") + (taken.size() == 1 ? " already exists. Replace it?" : " already exist. Replace them?"),
+                [this, sp]() { save(sp); });
     else
         save(sp);
 }
@@ -525,6 +568,13 @@ void CompressDialog::save(const archive::Spec &sp)
     s.setValue(key("split"), split->isChecked());
     s.setValue(key("volume"), vol->value());
     s.setValue(key("volume_unit"), vol_unit->currentText());
+    if (sums->isVisible()) {
+        s.setValue(key("checksum"), sums->isChecked());
+        if (sums->isChecked()) {   // the algorithms are Create Checksum File's too
+            s.setValue("checksum_algorithms", sp.checksums.join(','));
+            s.setValue("checksum_one_file", sp.checksum_one_file);
+        }
+    }
     accept();
 }
 
@@ -1353,7 +1403,8 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
         return out;
     };
     QPointer<MainWindow> w(win);
-    auto done = [w, name](const QVariant &r) {
+    bool with_sums = !archive::checksum_paths(spec_in).isEmpty();
+    auto done = [w, name, with_sums](const QVariant &r) {
         if (!w)
             return;
         if (!r.isValid()) {
@@ -1361,7 +1412,7 @@ void run_compress(MainWindow *win, const archive::Spec &spec_in)
             return;
         }
         QString out = r.toString();
-        w->statusBar()->showMessage("Created " + basename(out), 6000);
+        w->statusBar()->showMessage("Created " + basename(out) + (with_sums ? " and its checksum file" : ""), 6000);
         if (w->pane() && w->pane()->dir() == dirname(out))
             w->pane()->select_later(out);
     };

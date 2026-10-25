@@ -4,6 +4,7 @@
 #include "archive.h"
 
 #include <QDialog>
+#include <QMap>
 #include <QPointer>
 
 #include <functional>
@@ -46,8 +47,9 @@ private:
     QComboBox *fmt, *tool, *method, *zip_enc, *vol_unit;
     QSlider *level;
     QSpinBox *threads, *vol, *recovery;
-    QGroupBox *enc, *split;
-    QCheckBox *enc_names, *solid, *trash_after;
+    QGroupBox *enc, *split, *sums;   // sums: a checksum file made as it's written (tar formats)
+    QMap<QString, QCheckBox *> sum_boxes;   // by algorithm
+    QCheckBox *enc_names, *solid, *trash_after, *sum_one;
     QPlainTextEdit *preview;
     QList<QWidget *> tool_row, level_row, method_row, threads_row, recovery_row;
 };

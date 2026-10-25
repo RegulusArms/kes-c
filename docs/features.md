@@ -100,7 +100,7 @@
 - **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong. In Extract All the first password typed is tried on the rest, and you're asked again only when it doesn't open one.
 - **Remember this password** (opt-in) saves an archive's password in your login keyring (GNOME Keyring, KWallet); a saved password is found again even after the archive is renamed or moved. Preferences can forget them all.
 - **Compress…** on any files or folders: 7z, zip, rar, zpaq, tar, tar.gz/bz2/xz/zst/lz/lz4 or a single compressed file, using pigz, gzip, zpaq, zstd, xz, bzip2, lzip, 7-Zip, rar and the other tools you have installed.
-- Every option the format supports: program, level, method, CPU threads, password (AES-256; tar archives through gpg, as `name.tar.gz.gpg`), encrypted file names, split volumes, solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
+- Every option the format supports: program, level, method, CPU threads, password (AES-256; tar archives through gpg, as `name.tar.gz.gpg`), a checksum file made as a tar archive is written, encrypted file names, split volumes, solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
 - **Compress to “name.ext”** repeats your last settings in one click.
 - Progress, elapsed time and Cancel in the status bar; cancelling removes partial output (extracting straight into an existing folder may leave what was already written).
 

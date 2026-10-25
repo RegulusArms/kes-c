@@ -2,11 +2,13 @@
 // split set counted once), the password typed once being tried on the archives after it, the quick password test
 // (archive::password_opens), and remembered passwords in the keyring (keyring.h) with a real gnome-keyring-daemon on
 // the test's private session bus (skipped where it isn't installed). Also tar archives with a password (through gpg):
-// made, read back by gpg itself, opened, listed, tested and extracted by Kestrel, refused with a wrong password.
+// made, read back by gpg itself, opened, listed, tested and extracted by Kestrel, refused with a wrong password. And
+// checksum files made while a tar archive is compressed.
 #include "common.h"
 
 #include "archive_ui.h"
 #include "archivewin.h"
+#include "hashcheck.h"
 #include "prefswin.h"
 #include "keyring.h"
 
@@ -21,6 +23,9 @@
 #include <QTreeWidget>
 
 #include <sys/resource.h>
+
+#include <atomic>
+#include <thread>
 
 using namespace test;
 
@@ -331,6 +336,173 @@ int main(int argc, char **argv)
               "Extract Here on a tar through gpg asks for its password (again when wrong) and extracts it into a "
               "folder named without .tar.gz.gpg");
         proc::run({"gpgconf", "--kill", "gpg-agent"}, 10000);   // the one gpg started for the test's home
+    }
+
+    // ---- checksum files made while a tar archive is compressed
+    {
+        QString c = home_path("sums");
+        makedirs(join(c, "src/inner"), true);
+        write_text(join(c, "src/inner/a.txt"), "hello");
+        write_text(join(c, "src/top.txt"), "hello");
+        {
+            QFile f(join(c, "src/noise.bin"));
+            QFile rnd("/dev/urandom");
+            if (f.open(QIODevice::WriteOnly) && rnd.open(QIODevice::ReadOnly))
+                f.write(rnd.read(3 << 20));
+        }
+        auto fmt_of = [](const QString &id) {
+            for (const archive::Format &f : archive::formats())
+                if (f.id == id)
+                    return f;
+            return archive::Format{};
+        };
+        auto spec_of = [&](const QString &id, const QString &name, const QStringList &algos, bool one = false,
+                           const QStringList &rels = {"inner", "top.txt", "noise.bin"}) {
+            archive::Spec sp;
+            sp.format = fmt_of(id);
+            sp.tool = sp.format.available.value(0);
+            if (id != "tar")
+                sp.level = 1;
+            sp.base = join(c, "src");
+            sp.rels = rels;
+            sp.out = join(c, name);
+            sp.checksums = algos;
+            sp.checksum_one_file = one;
+            sp.total = 3 << 20;
+            return sp;
+        };
+        // what the tools say the archive's hash is (the test's own reading of the finished file)
+        auto tool_sum = [](const QString &tool, const QString &path) {
+            return QString::fromUtf8(proc::run({tool, "--", path}, 60000).out).section(' ', 0, 0);
+        };
+        // every entry of a checksum file checks out against the archive beside it, by its name there
+        auto verifies = [](const QString &sumfile, const QString &archive_name, int entries) {
+            QList<hashcheck::Entry> es = hashcheck::parse(sumfile);
+            bool ok = es.size() == entries;
+            for (const hashcheck::Entry &e : es)
+                ok = ok && e.name == archive_name && hashcheck::verify(e).status == "ok";
+            return ok;
+        };
+        Task ct("sums", [](Task *) { return QVariant(); });
+        QString gz = join(c, "s.tar.gz"), plain = join(c, "p.tar");
+        QString preview = archive::command_preview(spec_of("tar.gz", "s.tar.gz", {"crc32", "sha256"}));
+        bool made = true;
+        try {
+            archive::compress(&ct, spec_of("tar.gz", "s.tar.gz", {"crc32", "sha256"}));
+            archive::compress(&ct, spec_of("tar", "p.tar", {"md5", "sha512"}, true));
+        } catch (const std::exception &e) {
+            made = false;
+            std::printf("  (compress: %s)\n", e.what());
+        }
+        QString sha = read_file(gz + ".sha256");
+        check(made && sha == tool_sum("sha256sum", gz) + "  s.tar.gz\n" && verifies(gz + ".sha256", "s.tar.gz", 1) &&
+                  verifies(gz + ".sfv", "s.tar.gz", 1) && read_file(gz + ".sfv").contains("s.tar.gz "),
+              "a tar.gz compressed with checksums gets s.tar.gz.sha256 and s.tar.gz.sfv beside it, with the hashes of "
+              "the finished archive (sha256sum's own) under its name (" + sha.trimmed() + ")");
+        QString bsd = read_file(join(c, "p.tar-CHECKSUM"));
+        check(made && bsd.contains("MD5 (p.tar) = " + tool_sum("md5sum", plain)) &&
+                  bsd.contains("SHA512 (p.tar) = " + tool_sum("sha512sum", plain)) &&
+                  verifies(join(c, "p.tar-CHECKSUM"), "p.tar", 2),
+              "a plain tar compressed with checksums in one file gets p.tar-CHECKSUM with each algorithm as a BSD tag");
+        check(preview.contains("(and s.tar.gz.sfv, s.tar.gz.sha256, made from the archive as it's written)"),
+              "the command shown names the checksum files that will be made (" + preview.replace('\n', " ; ") + ")");
+
+        if (!archive::tool("gpg").isEmpty()) {
+            archive::Spec sp = spec_of("tar.gz", "e.tar.gz.gpg", {"sha256"});
+            sp.password = "pw";
+            QString e = join(c, "e.tar.gz.gpg");
+            bool ok = true;
+            try {
+                archive::compress(&ct, sp);
+            } catch (const std::exception &) {
+                ok = false;
+            }
+            check(ok && read_file(e + ".sha256") == tool_sum("sha256sum", e) + "  e.tar.gz.gpg\n",
+                  "a tar.gz through gpg gets the checksum of the encrypted file, e.tar.gz.gpg.sha256");
+            proc::run({"gpgconf", "--kill", "gpg-agent"}, 10000);
+        } else {
+            skip("checksums of a tar through gpg (gpg isn't installed)");
+        }
+
+        auto parts = [&]() {
+            QStringList out;
+            for (const QString &n : listdir(c))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        // a write that fails part-way (a full disk): the archive and its old checksum file are kept, the error said.
+        // 3 MB: the programs end on their own; 64 MB: they're still being fed when the file stops taking more.
+        {
+            QFile f(join(c, "src/big.bin"));
+            QFile rnd("/dev/urandom");
+            if (f.open(QIODevice::WriteOnly) && rnd.open(QIODevice::ReadOnly))
+                for (int i = 0; i < 8; ++i)
+                    f.write(rnd.read(8 << 20));
+        }
+        for (const QString &rel : {"noise.bin", "big.bin"}) {
+            QByteArray before = read_file(gz), sum_before = read_file(gz + ".sha256");
+            struct rlimit old_lim, lim;
+            ::getrlimit(RLIMIT_FSIZE, &old_lim);
+            lim = old_lim;
+            lim.rlim_cur = 1 << 20;
+            auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+            QString said;
+            try {
+                archive::compress(&ct, spec_of("tar.gz", "s.tar.gz", {"crc32", "sha256"}, false, {rel}));
+            } catch (const std::exception &e) {
+                said = QString::fromStdString(e.what());
+            }
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+            check(said.contains("File too large") && read_file(gz) == before && read_file(gz + ".sha256") == sum_before &&
+                      parts().isEmpty(),
+                  rel + ": a tar.gz with checksums that fails part-way (a full disk) says why, and keeps the archive "
+                        "and its checksum file as they were, with nothing half-made (" + said + ")");
+        }
+
+        // ✕ part-way: no archive, no checksum file, no part
+        Task cancel_task("sums", [](Task *) { return QVariant(); });
+        std::atomic<bool> stopped{false};
+        std::thread job([&]() {
+            try {
+                archive::compress(&cancel_task, spec_of("tar.gz", "c.tar.gz", {"sha256"}, false, {"big.bin"}));
+            } catch (const Cancelled &) {
+                stopped = true;
+            } catch (const std::exception &) {
+            }
+        });
+        bool started = wait_for([&]() { return !parts().isEmpty(); }, 30000);
+        cancel_task.cancelled = true;
+        job.join();
+        check(started && stopped && !lexists(join(c, "c.tar.gz")) && !lexists(join(c, "c.tar.gz.sha256")) && parts().isEmpty(),
+              "a tar.gz with checksums cancelled part-way leaves no archive, no checksum file and no part");
+
+        // Compress…: offered for the tar formats only
+        CompressDialog cd(w, {join(c, "src/top.txt")});
+        QComboBox *fmt = cd.findChild<QComboBox *>();
+        fmt->setCurrentIndex(fmt->findData("tar.zst"));
+        QGroupBox *sums = nullptr;
+        for (QGroupBox *b : cd.findChildren<QGroupBox *>())
+            if (b->title() == "Create a checksum file")
+                sums = b;
+        bool shown = sums && !sums->isHidden();
+        if (sums)
+            sums->setChecked(true);
+        archive::Spec on = cd.spec();
+        QString other;
+        for (const archive::Format &f : archive::formats())
+            if (!archive::is_tar(f) && !f.single && !f.available.isEmpty() && other.isEmpty())
+                other = f.id;
+        bool hidden_other = true;
+        if (!other.isEmpty()) {
+            fmt->setCurrentIndex(fmt->findData(other));
+            hidden_other = sums && sums->isHidden() && cd.spec().checksums.isEmpty();
+        }
+        check(shown && on.format.id == "tar.zst" && !on.checksums.isEmpty() && hidden_other,
+              "Compress… offers a checksum file for tar formats (with the algorithms chosen), and not for " +
+                  (other.isEmpty() ? QString("other formats") : other));
     }
 
     QString z7 = archive::tool("7z");

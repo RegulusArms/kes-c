@@ -1,6 +1,7 @@
 #include "archive.h"
 
 #include "fileops.h"
+#include "hashcheck.h"
 #include "proc.h"
 #include "stats.h"
 
@@ -219,7 +220,7 @@ QPair<QString, QString> kind(const QString &path)
     return {"", ""};
 }
 
-bool via_gpg(const Format &fmt) { return fmt.id == "tar" || fmt.id.startsWith("tar."); }
+bool is_tar(const Format &fmt) { return fmt.id == "tar" || fmt.id.startsWith("tar."); }
 
 bool gpg_encrypted(const QString &path) { return path.toLower().endsWith(".gpg") && kind(path).first == "tar"; }
 
@@ -523,8 +524,10 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
     return {p->returncode, QString::fromUtf8(out)};
 }
 
-// Copy bytes from fd src to fd dst, reporting progress against `total`. Returns bytes copied.
-static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &label, qint64 done = 0)
+// Copy bytes from fd src to fd dst, reporting progress against `total`, and hashing them when given a hasher. Returns
+// bytes copied.
+static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &label, qint64 done = 0,
+                    hashcheck::Hasher *hasher = nullptr)
 {
     std::vector<char> buf(1 << 20);
     for (;;) {
@@ -537,6 +540,8 @@ static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &l
         if (n == 0)
             return done;
         write_all(dst, buf.data(), n);
+        if (hasher)
+            hasher->add(buf.data(), n);
         done += n;
         task->report(double(done), double(total),
                      QString("%1 — %2 of %3").arg(label, human_size(done), human_size(total)));
@@ -571,7 +576,7 @@ static const QStringList GPG_OPTS = {"--batch", "--no-tty", "--quiet", "--pinent
 // AES-256; no compression of gpg's own (the stream is compressed already, or was meant not to be)
 static const QStringList GPG_ENCRYPT = {"--symmetric", "--cipher-algo", "AES256", "-z", "0", "-o", "-"};
 
-static bool gpg_spec(const Spec &spec) { return via_gpg(spec.format) && !spec.password.isEmpty(); }
+static bool gpg_spec(const Spec &spec) { return is_tar(spec.format) && !spec.password.isEmpty(); }
 
 static std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
 {
@@ -737,7 +742,20 @@ static QStringList stream_compressor(const Spec &spec)
     return argv + spec.extra;
 }
 
+static QString command_text(const Spec &spec);
+
 QString command_preview(const Spec &spec)
+{
+    QString text = command_text(spec);
+    QStringList sums;
+    for (const QString &c : checksum_paths(spec))
+        sums << basename(c);
+    if (!sums.isEmpty())
+        text += "\n(and " + sums.join(", ") + ", made from the archive as it's written)";
+    return text;
+}
+
+static QString command_text(const Spec &spec)
 {
     const Format &fmt = spec.format;
     if (!fmt.stream.isEmpty()) {
@@ -794,12 +812,84 @@ static QStringList volume_files(const QString &out)
 static void wait_finishing(Task *task, proc::Process *p, const QString &label, const QString &name,
                            const QString &doing = "compressing");
 
-// password: when given, tar's output goes through gpg (see GPG_OPTS) on its way to `out`
+// Checksums made while compressing: the last program in the pipe (the compressor, or gpg) writes to this pipe instead
+// of the archive's file, and a thread copies what comes into the file, hashing it on the way. A write that fails (a
+// full disk) closes the pipe, which stops the programs; finish() then throws that error.
+class HashingSink {
+public:
+    HashingSink(int file, const QString &path, const QStringList &algos) : path(path), hasher(algos)
+    {
+        fd = ::fcntl(file, F_DUPFD_CLOEXEC, 0);
+        if (fd < 0)
+            throw_errno();
+        if (::pipe2(p, O_CLOEXEC) != 0) {
+            int e = errno;
+            ::close(fd);
+            throw_errno(QString(), e);
+        }
+        th = std::thread([this]() { run(); });
+    }
+    ~HashingSink()
+    {
+        close_write();
+        if (th.joinable())
+            th.join();
+    }
+    int write_end() const { return p[1]; }
+    void close_write()   // once the program writing to it has its copy
+    {
+        if (p[1] >= 0)
+            ::close(p[1]);
+        p[1] = -1;
+    }
+    // After the programs writing to it have ended: the hashes (in algos' order). Throws the file's write error.
+    QStringList finish()
+    {
+        close_write();
+        if (th.joinable())
+            th.join();
+        if (err)
+            throw_errno(path, err);
+        return hasher.results();
+    }
+
+private:
+    void run()
+    {
+        std::vector<char> buf(1 << 20);
+        for (;;) {
+            ssize_t n = ::read(p[0], buf.data(), buf.size());
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
+            try {
+                write_all(fd, buf.data(), n);
+            } catch (const OSError &e) {
+                err = e.code;
+                break;
+            }
+            hasher.add(buf.data(), n);
+        }
+        ::close(p[0]);
+        ::close(fd);
+    }
+    QString path;   // the file's, for its error
+    hashcheck::Hasher hasher;
+    int fd = -1, p[2] = {-1, -1}, err = 0;
+    std::thread th;
+};
+
+// password: when given, tar's output goes through gpg (see GPG_OPTS) on its way to `out`. sums: when given, the
+// archive's bytes are hashed with `algos` as they're written (by relay(), or a HashingSink after gpg).
 static void compress_tar_plain(Task *task, const QStringList &argv, const QString &cwd, const QString &out,
-                               qint64 total, const QString &label, const QString &password)
+                               qint64 total, const QString &label, const QString &password, const QStringList &algos,
+                               QStringList *sums)
 {
     auto p = spawn_logged(argv, tool_opts(cwd));
     std::unique_ptr<proc::Process> gpg;
+    std::unique_ptr<HashingSink> sink;
+    std::unique_ptr<hashcheck::Hasher> hasher;
     try {
         int fo = ::open(enc(out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
         if (fo < 0)
@@ -810,6 +900,10 @@ static void compress_tar_plain(Task *task, const QStringList &argv, const QStrin
             o.out = fo;
             o.err = proc::PIPE;
             try {
+                if (sums) {
+                    sink = std::make_unique<HashingSink>(fo, out, algos);
+                    o.out = sink->write_end();
+                }
                 gpg = spawn_gpg(GPG_ENCRYPT, password, o);
             } catch (...) {
                 ::close(fo);
@@ -817,9 +911,13 @@ static void compress_tar_plain(Task *task, const QStringList &argv, const QStrin
             }
             ::close(fo);
             fo = -1;
+            if (sink)
+                sink->close_write();
+        } else if (sums) {
+            hasher = std::make_unique<hashcheck::Hasher>(algos);
         }
         try {
-            relay(task, p->out, gpg ? gpg->in : fo, total, label);
+            relay(task, p->out, gpg ? gpg->in : fo, total, label, 0, hasher.get());
         } catch (...) {
             if (fo >= 0)
                 ::close(fo);
@@ -834,8 +932,14 @@ static void compress_tar_plain(Task *task, const QStringList &argv, const QStrin
         }
     } catch (...) {
         kill_all({p.get(), gpg.get()});
+        if (sink)
+            sink->finish();   // throws its write error, when that's what stopped gpg
         throw;
     }
+    if (sink)
+        *sums = sink->finish();
+    else if (hasher)
+        *sums = hasher->results();
     if (p->returncode != 0 && p->returncode != 1)
         throw Error(QString("tar failed (exit code %1)").arg(p->returncode));
     if (gpg)
@@ -857,7 +961,8 @@ static void wait_finishing(Task *task, proc::Process *p, const QString &label, c
     }
 }
 
-static void compress_stream(Task *task, const Spec &spec, const QString &label)
+// sums: when given, the archive's bytes are hashed with spec.checksums as they're written (a HashingSink)
+static void compress_stream(Task *task, const Spec &spec, const QString &label, QStringList *sums)
 {
     QStringList comp_argv = stream_compressor(spec);
     int fo = ::open(enc(spec.out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
@@ -869,11 +974,18 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
     co.err = proc::PIPE;
     co.c_utf8 = true;
     std::unique_ptr<proc::Process> comp, src, gpg;   // gpg: tar | compressor | gpg > out, with a password
+    std::unique_ptr<HashingSink> sink;                // between the last of them and the file
     try {
+        int last_out = fo;
+        if (sums) {
+            sink = std::make_unique<HashingSink>(fo, spec.out, spec.checksums);
+            last_out = sink->write_end();
+        }
+        co.out = last_out;
         if (gpg_spec(spec)) {
             proc::Options go;
             go.in = proc::PIPE;
-            go.out = fo;
+            go.out = last_out;
             go.err = proc::PIPE;
             gpg = spawn_gpg(GPG_ENCRYPT, spec.password, go);
             co.out = gpg->in;
@@ -888,6 +1000,8 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
     ::close(fo);
     if (gpg)
         gpg->close_in();   // the compressor has it: gpg's input ends when the compressor's output does
+    if (sink)
+        sink->close_write();   // the last program has it
     try {
         if (spec.format.single) {
             QString in_path = join(spec.base, spec.rels.first());
@@ -912,8 +1026,12 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
             wait_finishing(task, gpg.get(), label, "gpg", "encrypting");
     } catch (...) {
         kill_all({src.get(), comp.get(), gpg.get()});
+        if (sink)
+            sink->finish();   // throws its write error, when that's what stopped the programs
         throw;
     }
+    if (sink)   // first: a write that failed (a full disk) is why the programs stopped
+        *sums = sink->finish();
     if (src && src->returncode != 0 && src->returncode != 1)
         throw Error(QString("tar failed (exit code %1)").arg(src->returncode));
     if (comp->returncode != 0) {
@@ -945,13 +1063,16 @@ QString compress(Task *task, const Spec &spec_in)
     spec.out = join(dir, part_name() + ext);
     const QString out = spec.out;
     QString label = "Compressing " + basename(final_out);
+    bool hashing = !checksum_paths(spec_in).isEmpty();
+    QStringList sums;
     try {
         if (!spec.format.stream.isEmpty()) {
-            compress_stream(task, spec, label);
+            compress_stream(task, spec, label, hashing ? &sums : nullptr);
         } else {
             Command c = compress_command(spec);
             if (spec.format.id == "tar") {
-                compress_tar_plain(task, c.argv, c.cwd, out, spec.total, label, gpg_spec(spec) ? spec.password : QString());
+                compress_tar_plain(task, c.argv, c.cwd, out, spec.total, label, gpg_spec(spec) ? spec.password : QString(),
+                                   spec.checksums, hashing ? &sums : nullptr);
             } else {
                 QString read_phase =
                     spec.tool == "zpaq" ? "compressing (zpaq reports no progress for this step)" : QString();
@@ -1001,7 +1122,28 @@ QString compress(Task *task, const Spec &spec_in)
     for (const QString &o : old)
         if (!placed.contains(o))
             ::unlink(enc(o).constData());
-    return placed.isEmpty() ? final_out : placed.first();
+    QString made_out = placed.isEmpty() ? final_out : placed.first();
+    // the checksum files once the archive is in place (each in one step), so they never describe one that isn't there;
+    // if they can't be written, the old ones (an older archive's) are deleted rather than left wrong
+    if (hashing) {
+        try {
+            hashcheck::write_checksums(dir, basename(made_out), {{basename(made_out), sums}}, spec_in.checksums,
+                                       spec_in.checksum_one_file);
+        } catch (const std::exception &e) {
+            for (const QString &c : checksum_paths(spec_in))
+                ::unlink(enc(c).constData());
+            throw Error("“" + basename(made_out) + "” was made, but its checksum file couldn't be written: " +
+                        QString::fromStdString(e.what()));
+        }
+    }
+    return made_out;
+}
+
+QStringList checksum_paths(const Spec &spec)
+{
+    if (!is_tar(spec.format) || spec.checksums.isEmpty())
+        return {};
+    return hashcheck::output_paths(dirname(spec.out), basename(spec.out), spec.checksums, spec.checksum_one_file);
 }
 
 // ---------------------------------------------------------------- extract

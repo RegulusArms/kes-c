@@ -104,8 +104,10 @@ static QList<Pref> build()
         "a drive's menu → Show Previews on This Drive");
 
     // -- Files
-    add("Files", "Checksums", "checksum_algorithms", "Algorithms", CUSTOM, "sha256", "Create Checksum File…");
-    add("Files", "Checksums", "checksum_one_file", "Checksum files", CHOICE, false, "Create Checksum File…")
+    add("Files", "Checksums", "checksum_algorithms", "Algorithms", CUSTOM, "sha256",
+        "Create Checksum File…, Compress… (tar formats)");
+    add("Files", "Checksums", "checksum_one_file", "Checksum files", CHOICE, false,
+        "Create Checksum File…, Compress… (tar formats)")
         .choices = {{"One file for each algorithm", false}, {"One file with every algorithm", true}};
     add("Files", "Jobs", "jobs_mode", "Run jobs", CHOICE, "drive", "the Jobs window (Ctrl+Shift+J)")
         .choices = {{"By drive (jobs on different drives side by side)", "drive"}, {"One at a time", "one"}};

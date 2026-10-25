@@ -53,8 +53,9 @@ QList<Format> formats();   // formats you can create, in menu order
 std::optional<Levels> tool_levels(const Format &fmt, const QString &tool_name);
 bool tool_threads(const Format &fmt, const QString &tool_name);
 QString install_hint(const QString &name);
-// The tar formats: a password encrypts them through gpg, and the archive's name gets ".gpg" after the format's ext
-bool via_gpg(const Format &fmt);
+// The tar formats: a password encrypts them through gpg (the archive's name gets ".gpg" after the format's ext), and
+// checksums can be made as the archive is written
+bool is_tar(const Format &fmt);
 
 // What a Compress dialog asks for (see archive_ui).
 struct Spec {
@@ -73,7 +74,13 @@ struct Spec {
     QStringList extra;
     bool trash_originals = false;
     qint64 total = 1;
+    // tar formats: checksum files made from the archive's bytes as they're written (hashcheck's algorithms; one file
+    // per algorithm, name.tar.zst.sha256…, or with checksum_one_file a single name.tar.zst-CHECKSUM)
+    QStringList checksums;
+    bool checksum_one_file = false;
 };
+// The checksum files compress() writes beside the archive for spec.checksums (none if it has none or isn't a tar)
+QStringList checksum_paths(const Spec &spec);
 
 // (kind, stream suffix) for an archive path; kind is rar, 7z, tar, single or zpaq, or empty
 QPair<QString, QString> kind(const QString &path);
@@ -88,7 +95,7 @@ bool opens_as_archive(const QString &path);
 QString archive_stem(const QString &path);
 
 QString command_preview(const Spec &spec);   // shell-like text of what will run (password masked)
-QString compress(Task *task, const Spec &spec);   // returns the output path
+QString compress(Task *task, const Spec &spec);   // returns the output path (checksum files: checksum_paths())
 
 struct ProbeResult {
     bool encrypted = false;

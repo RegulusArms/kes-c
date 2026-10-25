@@ -46,6 +46,7 @@ Select files and/or folders, right-click and choose **Compress…**. The dialog 
 | Method | 7z: LZMA2, LZMA, PPMd, BZip2, Deflate or Copy. zip with 7-Zip: Deflate, Deflate64, BZip2, LZMA, PPMd or Copy. |
 | CPU threads | Auto uses all cores. Shown for tools that support threads. |
 | Encrypt with a password | 7z (AES-256), zip (AES-256 or the weaker but universally readable ZipCrypto), rar, zpaq, and tar with any compression (through `gpg`, AES-256: the whole archive is encrypted, names and all, and saved as `name.tar.gz.gpg`). **Also encrypt file names** (7z, rar) hides even the list of files. |
+| Create a checksum file | tar formats (also through gpg): `name.tar.zst.sha256` (or `.sfv`, `.md5`…, one per algorithm, or one `name.tar.zst-CHECKSUM` with every algorithm), made from the archive's bytes as they're written, so it's ready the moment the archive is, without reading it again. It's written once the archive is in place; a failed or cancelled job leaves neither. Not offered for 7z, zip, rar and zpaq, which go back and rewrite parts of the file as they finish. Use **Create Checksum File…** on those. |
 | Split into volumes | Parts of a chosen size in MB or GB: `.7z.001`, `.zip.001`, `.part1.rar`, …. |
 | Solid archive | 7z and rar: compress files together for a smaller archive, at the cost of slower single-file extraction. |
 | Recovery record | rar: extra data (1–10%) that lets `rar` repair a damaged archive. |

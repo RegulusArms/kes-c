@@ -10,6 +10,11 @@ What changed in each version of Kestrel Explorer, newest first.
   password, trying saved ones, asking again when it's wrong), and they open anywhere with `gpg -d`. The password goes
   to gpg privately, never on its command line. Needs `gnupg` (almost always installed; now among the optional
   packages).
+- **A checksum file made while a tar archive is compressed.** Compress… has **Create a checksum file** for tar and
+  every tar.* format (with a password too): the archive's bytes are hashed as they're written (SHA-256, SHA-512, MD5,
+  SHA-1, BLAKE2b or CRC32; one file per algorithm or one with all of them), so `name.tar.zst.sha256` is there the
+  moment the archive is, with no second read of it, which saves a pass over a big archive or a tape. A failed or
+  cancelled job leaves no checksum file, and an older one for the archive it would have replaced is kept.
 
 ## 0.3.2-alpha.11 (2026-10-24)
 

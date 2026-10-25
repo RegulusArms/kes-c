@@ -15,6 +15,12 @@ Added:
   leaves no part; Compress… offers the password and names the archive `.tar.gz.gpg`; Open as Archive and Extract Here
   ask for its password (again when wrong). Skipped where gpg isn't installed.
 - `fileops`: the "password never on a command line" check also covers a tar.gz through gpg.
+- `archives`: checksum files made while a tar archive is compressed, the new feature: a tar.gz's `.sha256` and `.sfv`
+  and a plain tar's `-CHECKSUM` hold the finished archive's hashes (compared with sha256sum's, md5sum's and
+  sha512sum's, and checked with Verify Checksums' own code); the command shown names them; a tar.gz through gpg gets
+  the encrypted file's hash; a full disk part-way (a file-size limit, with a 3 MB file and with a 64 MB one, where the
+  programs are still being fed) says "File too large" and keeps the old archive and checksum file and no part; ✕
+  part-way leaves no archive, checksum file or part; Compress… offers it for tar formats and not for others.
 
 Changed:
 - `fileops`: that check's watcher now counts the password in any command line, not only ones naming the archive: a

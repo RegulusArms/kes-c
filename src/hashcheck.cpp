@@ -198,23 +198,46 @@ QString algo_label(const QString &algo)
     return algo == "blake2b" ? QString("BLAKE2b") : algo.toUpper();
 }
 
-QStringList hash_files(const QString &path, const QStringList &algos,
-                       const std::function<void(qint64, qint64)> &progress, const std::function<void()> &check)
+Hasher::Hasher(const QStringList &algos)
 {
     static const QMap<QString, QCryptographicHash::Algorithm> ALGOS = {
         {"md5", QCryptographicHash::Md5},       {"sha1", QCryptographicHash::Sha1},
         {"sha224", QCryptographicHash::Sha224}, {"sha256", QCryptographicHash::Sha256},
         {"sha384", QCryptographicHash::Sha384}, {"sha512", QCryptographicHash::Sha512},
         {"blake2b", QCryptographicHash::Blake2b_512}};
+    for (const QString &a : algos)
+        hashes.emplace_back(a == "crc32" ? nullptr : new QCryptographicHash(ALGOS.value(a, QCryptographicHash::Md5)));
+}
+
+Hasher::~Hasher() = default;
+
+void Hasher::add(const char *data, qint64 n)
+{
+    for (auto &h : hashes) {
+        if (h)
+            h->addData(QByteArrayView(data, n));
+        else
+            crc = crc32_update(crc, data, n);
+    }
+}
+
+QStringList Hasher::results()
+{
+    QStringList out;
+    for (auto &h : hashes)
+        out << (h ? QString::fromLatin1(h->result().toHex()) : QString("%1").arg(crc, 8, 16, QChar('0')));
+    return out;
+}
+
+QStringList hash_files(const QString &path, const QStringList &algos,
+                       const std::function<void(qint64, qint64)> &progress, const std::function<void()> &check)
+{
     int fd = ::open(enc(path).constData(), O_RDONLY | O_CLOEXEC);
     if (fd < 0)
         throw_errno(path);
     struct stat st;
     qint64 size = ::fstat(fd, &st) == 0 ? st.st_size : 0;
-    std::vector<std::unique_ptr<QCryptographicHash>> hashes;   // nullptr for CRC32
-    for (const QString &a : algos)
-        hashes.emplace_back(a == "crc32" ? nullptr : new QCryptographicHash(ALGOS.value(a, QCryptographicHash::Md5)));
-    quint32 crc = 0;
+    Hasher hasher(algos);
     QByteArray buf(4 << 20, Qt::Uninitialized);
     qint64 done = 0;
     for (;;) {
@@ -230,21 +253,13 @@ QStringList hash_files(const QString &path, const QStringList &algos,
         }
         if (n == 0)
             break;
-        for (auto &h : hashes) {
-            if (h)
-                h->addData(QByteArrayView(buf.constData(), n));
-            else
-                crc = crc32_update(crc, buf.constData(), n);
-        }
+        hasher.add(buf.constData(), n);
         done += n;
         if (progress)
             progress(done, size);
     }
     ::close(fd);
-    QStringList out;
-    for (auto &h : hashes)
-        out << (h ? QString::fromLatin1(h->result().toHex()) : QString("%1").arg(crc, 8, 16, QChar('0')));
-    return out;
+    return hasher.results();
 }
 
 QString hash_file(const QString &path, const QString &algo, const std::function<void(qint64, qint64)> &progress,
@@ -620,6 +635,13 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
     if (hashed.isEmpty())
         throw Error("None of the files could be read.");
     check();
+    return write_checksums(dir, stem, hashed, algos, one_file);
+}
+
+QStringList write_checksums(const QString &dir, const QString &stem, const QList<QPair<QString, QStringList>> &hashed,
+                            const QStringList &algos, bool one_file)
+{
+    QStringList outputs = output_paths(dir, stem, algos, one_file);
     if (one_file) {
         QString text;
         for (const auto &[name, h] : hashed)
