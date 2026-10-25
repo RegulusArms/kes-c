@@ -33,7 +33,8 @@ public:
 private:
     ArchiveWindow(MainWindow *owner, const QString &path);
     void load();
-    void show_entries(const QList<archive::Entry> &entries);
+    struct Listing;
+    void show_listing(Listing &listing);
     void apply_filter();
     void selection_changed();
     void context_menu(const QPoint &pos);

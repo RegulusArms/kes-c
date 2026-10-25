@@ -572,11 +572,19 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
     int i = tabs->addTab(p, p->title());
     connect(p, &Pane::path_changed, this, [this, p]() { pane_path_changed(p); });
     connect(p, &Pane::selection_changed, this, [this, p]() {
-        if (p == pane()) {
-            update_status();
-            if (chooser)
-                chooser->selection_changed();
+        if (p != pane())
+            return;
+        // the status line once for a burst: moving 800 selected folders away deselects them one by one, and counting
+        // the whole selection for each held the window for seconds
+        if (!status_pending) {
+            status_pending = true;
+            QTimer::singleShot(30, this, [this]() {
+                status_pending = false;
+                update_status();
+            });
         }
+        if (chooser)   // at once: its OK button follows the selection
+            chooser->selection_changed();
     });
     if (activate) {
         tabs->setCurrentIndex(i);

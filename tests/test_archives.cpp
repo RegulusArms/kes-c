@@ -16,6 +16,7 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -23,6 +24,7 @@
 #include <QTreeWidget>
 
 #include <sys/resource.h>
+#include <sys/time.h>
 
 #include <atomic>
 #include <thread>
@@ -907,6 +909,53 @@ int main(int argc, char **argv)
           "an archive with encrypted files but visible names opens without asking, asks when an encrypted file is "
           "extracted, and not again while the window is open");
     fw->close();
+
+    // a big archive: its items are made in the job, so showing them doesn't hold up the window (it froze for 1–2 s
+    // per 100,000 items), in order and with their times
+    {
+        QString big = home_path("bigsrc/big");
+        for (int d = 0; d < 300; ++d) {
+            QString dir = join(big, QString("d%1").arg(d, 3, 10, QChar('0')));
+            makedirs(dir, true);
+            for (int f = 0; f < 200; ++f)
+                write_text(join(dir, QString("f%1").arg(f, 3, 10, QChar('0'))), "");
+        }
+        write_text(join(big, "a.txt"), "x");
+        QDateTime when(QDate(2021, 3, 4), QTime(5, 6, 7));
+        struct timeval tv[2] = {{when.toSecsSinceEpoch(), 0}, {when.toSecsSinceEpoch(), 0}};
+        ::utimes(join(big, "a.txt").toUtf8().constData(), tv);
+        QString tar = home_path("big.tar");
+        auto res = proc::run({"tar", "-cf", tar, "-C", home_path("bigsrc"), "big"}, 120000);
+        QElapsedTimer gap;
+        qint64 worst = 0;
+        QTimer tick;
+        QObject::connect(&tick, &QTimer::timeout, [&]() { worst = std::max(worst, gap.restart()); });
+        ArchiveWindow *bw = ArchiveWindow::open(w, tar);
+        gap.start();
+        tick.start(10);
+        drive({}, [&]() { return bw->loaded() ? QString("loaded") : QString(); }, 300000);
+        QElapsedTimer after;   // the stall would come once it's loaded
+        after.start();
+        while (after.elapsed() < 500)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        tick.stop();
+        QTreeWidgetItem *top = bw->tree->topLevelItemCount() == 1 ? bw->tree->topLevelItem(0) : nullptr;
+        auto name = [](QTreeWidgetItem *it) { return it ? it->text(0) : QString("none"); };
+        QTreeWidgetItem *first = top ? top->child(0) : nullptr, *last = top ? top->child(top->childCount() - 1) : nullptr;
+        bool ordered = top && top->isExpanded() && top->childCount() == 301 && name(first) == "d000" &&
+                       name(last) == "a.txt" && first->childCount() == 200 && name(first->child(0)) == "f000" &&
+                       name(first->child(199)) == "f199";
+        check(res.rc == 0 && bw->loaded() && worst < 500 && ordered &&
+                  last->data(0, Qt::UserRole + 4).toDateTime() == when && bw->status->text().startsWith("60001 files in 301 folders"),
+              QString("a big archive (60,000 files) opens without holding up the window (longest pause %1 ms), folders "
+                      "first, by name, with the files' times (%2, %3 … %4)")
+                  .arg(QString::number(worst), name(first), name(first ? first->child(0) : nullptr), name(last)));
+        bw->tree->header()->setSortIndicator(0, Qt::DescendingOrder);   // a click on the Name column
+        check(top && name(top->child(0)) == "d299" && name(top->child(300)) == "a.txt" &&
+                  name(top->child(0)->child(0)) == "f199",
+              "clicking a column's header sorts by it (folders still first)");
+        bw->close();
+    }
 
     // ---- the keyring
     QString daemon = archive::tool("gnome-keyring-daemon");

@@ -2,7 +2,7 @@
 // Usage: kestrel_cpp TEST DATA_DIR [ARG]. Prints {"s": seconds, "n": items, "rss_mb": peak memory}.
 //
 //   trash      move every file in ~/victim to the trash with the window's Move to Trash, then Empty Trash ("empty_s")
-//   move_xdev  move ~/movesrc to ARG (on another drive)
+//   move_xdev  move ~/move/movesrc to ARG (on another drive)
 #include "app.h"
 #include "fileops.h"
 #include "metadata.h"
@@ -109,7 +109,7 @@ int main(int argc, char **argv)
         empty_left = isdir(trash_files) ? listdir(trash_files).size() : 0;
     } else if (test == "move_xdev") {
         bool fin = false;
-        fileops::start_ops(nullptr, {{"move", join(HOME(), "movesrc"), ARG}}, "Moving", [&] { fin = true; });
+        fileops::start_ops(nullptr, {{"move", join(HOME(), "move/movesrc"), ARG}}, "Moving", [&] { fin = true; });
         wait_for([&] { return fin; });
     } else if (test == "metadata") {
         QStringList files = listdir(D + "/meta");

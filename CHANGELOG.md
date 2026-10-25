@@ -2,7 +2,22 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.12
+## 0.3.2-alpha.13
+
+- **Fixed: Kestrel froze for a while when Open as Archive finished reading a big archive.** The window's list was
+  built all at once on the UI thread, which held up every Kestrel window for 1–2 seconds per 100,000 files. It's now
+  built while the archive is read, and opening the window doesn't pause anything.
+- **Fixed: dragging hundreds of selected items into another folder froze the window for seconds.** As each item
+  left the folder, the status line counted the whole selection again (slowly), so 800 folders held the window long
+  enough for the desktop to offer to force quit. It's now counted once, and the move no longer holds the window.
+- **Open as Archive reads big archives up to 10× faster.** Reading the files' dates took most of the time (about
+  40 s for an archive of 200,000 files, now about 5 s), and listings are read in blocks instead of line by line.
+- **The benchmark now compares Kestrel with Thunar, Krusader and PCManFM too** (see
+  [Performance](docs/performance.md)), and every file manager is timed opening a folder of 10,000 files, until its
+  whole list is shown. That's how Krusader and PCManFM are compared on opening a folder, as they make no thumbnails
+  the benchmark can time; Kestrel lists those 10,000 files in 0.55 s, ahead of all but PCManFM (0.48 s).
+
+## 0.3.2-alpha.12 (2026-10-25)
 
 - **Tar archives can have a password.** In Compress…, tar and every tar.* format (tar.gz, tar.zst, tar.xz…) now offer
   **Encrypt with a password**: the archive is encrypted whole with gpg (AES-256), names and all, and saved as

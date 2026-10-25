@@ -1574,10 +1574,13 @@ QStringList Pane::selected_paths() const
     if (!sm)
         return {};
     QList<QPair<int, QModelIndex>> rows;
+    QSet<QPair<int, QModelIndex>> seen;   // (a set: each row comes once per column, and 800 rows made a list slow)
     for (const QModelIndex &i : sm->selectedIndexes()) {
         QPair<int, QModelIndex> key(i.row(), i.parent());
-        if (!rows.contains(key))
+        if (!seen.contains(key)) {
+            seen.insert(key);
             rows << key;
+        }
     }
     std::stable_sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     QAbstractItemModel *m = view()->model();

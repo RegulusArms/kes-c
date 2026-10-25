@@ -68,6 +68,30 @@ into.
   - To change: the panel keeps every wheel event over it (scrolling when it can, otherwise nothing), so only the
     wheel over the picture or the filmstrip changes images.
 
+- [ ] **A job queued behind another fails when its destination is moved while it waits, and its log looks like part
+  of the other job.** Seen: a copy of two files onto a tape ("Copying with dd") ran; a move on another drive ran;
+  then a "Copying" job of the *same two source files* into an unrelated folder failed with
+  `[Errno 2] No such file or directory: '<the folder>'` for each file. Investigated (2026-10-25): the jobs didn't mix.
+  The third was a job of its own, made while the tape copy ran, most likely **Paste Into Folder** on that folder's
+  right-click menu: the clipboard still held the files copied for the tape copy, and Paste Into Folder sits right
+  above Move To… (a misclick there is easy, and there's no confirmation). It read from the same drive as the tape copy,
+  so the queue held it ("Waiting for its turn"). Meanwhile the folder was moved into another folder (its parent's
+  time matches), so when its turn came the destination wasn't there. Kestrel does what it was told. What's wrong:
+  - **Nothing says what a job is or where it came from.** Both were titled "Copying", and the logs have no header.
+    The log should start with what started it (Paste Into Folder / drop / Copy To… / Move To…, which window),
+    when, from where to where, and how long it waited and for which job ("Waited 2 min for: Copying with dd onto
+    the tape"). The title should name the destination ("Copying 2 items to <folder>").
+  - **A destination that's gone when the job starts gives one error per file.** Check it when the turn comes and fail
+    once, clearly: "The folder it was copying into was moved or deleted while this job waited." Option: hold the
+    destination open (`O_PATH` fd) when the job is queued and copy with `openat`, so a job follows its folder when
+    it's moved (it ends up where the user put the folder), and fails clearly only when the folder is deleted.
+    Choose: follow the folder, or stop?
+  - **Paste Into Folder is easy to hit by mistake, and the paste may be stale.** Ideas: move it below Move To… /
+    Copy To… (or only in the empty space's menu), show what it would paste ("Paste 2 Items Into Folder"), and/or
+    forget a copy from the clipboard once it has been pasted somewhere.
+  - Test: `jobs` / `fileops` (a job queued behind another, its destination moved meanwhile: it follows it or fails
+    once with the clear message; the log header names the source, destination and the wait).
+
 ## New features
 
 ### Jobs
@@ -243,6 +267,22 @@ into.
   - Test: `fileops` or `ui` (a remembered entry shows without counting; Recalculate replaces it; a cancelled count
     stores nothing).
 
+- [ ] **New folder from the selection.** With two or more files and/or folders selected, right-click →
+  **New Folder with Selection…**: a window asks for the new folder's name (prefilled with a free "New Folder" name,
+  selected for typing over); on OK the folder is made in the folder the items were selected in and every selected item
+  is moved into it.
+  - A menu entry for the several-items menu (`menus::SEVERAL`): an id in `build_menu` (`menus::tag`), a place in
+    `menus::defaults()` near Move To… (`src/menus.cpp`; `prefs` test checks they match). Maybe also for one item.
+  - The name window is free (`ask_text()`, no modal). Re-read the selection's state in the callback: items moved or
+    deleted meanwhile are left out (said in the summary), and the name re-checked when OK is pressed.
+  - Claim the name without replacing anything (`mkdirat`, which fails on a taken name); a taken name asks again with
+    the name kept. Then the moves are an ordinary queued move job (same drive: renames), so Undo puts the items back
+    and removes the folder if Kestrel made it and it's empty. Each item moved whole; a failure or cancel leaves the
+    rest where they were and the folder with what got moved (said in the job's log, not deleted).
+  - Admin windows go through the helper; tapes and floppies work like any move on that drive.
+  - Test: `fileops` / `ui` (the items end up inside, the folder in the right place, a taken name isn't replaced, Undo
+    restores, a move failing part-way keeps everything).
+
 ### Images, video and audio
 
 - [ ] **Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen then:
@@ -378,6 +418,8 @@ into.
 
 ## Done
 
+- [x] **Dragging 800+ selected folders into another folder froze the window for several seconds** (fixed in 0.3.2-alpha.13; not grouped, same drive, the desktop offered to force quit). Cause: each folder leaving the view deselects it, and every selection change ran `MainWindow::update_status`, which counted the whole selection through `Pane::selected_paths()`, whose duplicate check was a list search over every row × column index (quadratic per call, so cubic in all). Now `selected_paths` uses a set, and the status line is updated once per burst (30 ms single-shot); the file chooser's update stays immediate (its OK button follows it). Measured in a CI-like container with 1,500 folders: the window held 5.7 s before, about 0.4 s now. Not changed: date grouping's full regroup per removed row (`DateGroupProxy::after`), still quadratic for big grouped folders. Test: `ui`.
+- [x] **Kestrel froze when Open as Archive finished reading a big archive** (fixed in 0.3.2-alpha.13). Cause: `show_entries` built the QTreeWidget items (icons, dates, sorting) on the UI thread, about 1.9 s per 100,000 files. Now `ArchiveWindow::Listing::build` makes them in the reading job, sorted there (QCollator sort keys), icons looked up in `EntryItem::data` only for drawn rows; the tree isn't kept sorted (the header's clicks sort it) so adding them doesn't re-sort. The listing itself was slow too: `QDateTime::fromString` (~0.2 ms each) replaced by a hand parser in `archive.cpp` `parse_time`, and listings no longer run under `stdbuf -o0`. Test: `archives`.
 - [x] **Password-encrypted tar archives (through gpg)** (0.3.2-alpha.12). Compress… offers a password for tar and every tar.*: the stream goes on through `gpg --symmetric` (AES-256, `-z 0`) to `name.tar.zst.gpg`, the password on gpg's fd 3 (`proc::Options::fd3`), `--no-symkey-cache`. `archive::kind` / `gpg_encrypted` recognise `.tar…gpg`; `tar_pipe` reads through `gpg -d` for listing, testing and extracting; probe calls them encrypted, `password_opens` waits for gpg's first byte or "Bad session key", which is a WrongPassword. gnupg in Suggests, OPTIONAL_PACKAGES and docs/dependencies.md; the password is greyed out with an install hint without gpg. Test: `archives`, `fileops`.
 - [x] **Open as Archive left out part of a big archive's contents** (0.3.2-alpha.9). `run_reporting()` (src/archive.cpp) kept only the last 1–2 MB of a tool's output, and `archive::list()` and the quick password test read listings through it. Now they pass an `on_line` callback that gets every line as it's printed, and parse as they go (`SmallestEncrypted` for the password test); the returned text keeps the cap, for messages. 7z and rar failures are judged by whether the listing started, not by text near its top. Found along the way: `tar_pipe()` read tar's output only after feeding it the whole archive, so a listing (or `-tf` test, or many errors) over a pipe's worth hung; it's read on a thread now. Test: `archives`.
 - [x] **Copies onto an LTO tape slowed to about a quarter of the drive's speed for long stretches** (0.3.2-alpha.7). Found by elimination: a raw dd to the drive, dd through LTFS with 512 KB and with 16 MB writes, and with reading and writing overlapped all held full speed; Kestrel's writer only writes (strace), each write waiting on LTFS; the page cache wasn't it. The cause: other programs asking every mount for its free space. GNOME System Monitor (its File Systems tab, every few seconds) caused the long slow stretches; GNOME's low-disk-space check (gsd-housekeeping, once a minute) caused shorter drops. On LTFS each such question is commands to the drive, which then leaves streaming (as Kestrel's own polling did before 0.3.2-alpha.6). Fixed in Kestrel: while a job writes to a tape, the tape's mount point is on GNOME's check's ignore list (`drives::quiet_tape`, taken off after if Kestrel put it there), and a system monitor that's running is named in the job's log (`drives::free_space_pollers`). Left: "Tape copies: short dips left" above. Test: `slow`.

@@ -410,7 +410,8 @@ static std::unique_ptr<proc::Process> spawn_logged(const QStringList &argv, cons
 // busy bar. Percentages never go backwards, and a number split across two reads isn't misread.
 //
 // The tool runs under stdbuf so its progress lines arrive as they're printed: in a pipe, programs like zpaq
-// otherwise hold their output back until a buffer fills or they exit, which freezes the bar. Long jobs show the
+// otherwise hold their output back until a buffer fills or they exit, which freezes the bar. Not a listing (on_line,
+// no progress): unbuffered, its millions of lines would arrive one by one, which doubled a big archive's listing time. Long jobs show the
 // elapsed time so it's clear they're still working when a tool goes quiet.
 //
 // read_phase: for tools whose percentage only counts input *read* (zpaq add), the text to show once it reaches
@@ -426,7 +427,7 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
     static const QRegularExpression percent_re("(\\d{1,3})(?:\\.\\d+)?%");
     static const QRegularExpression zip_count_re("(\\d+)/\\s*(\\d+) ");
     QString stdbuf = tool("stdbuf");
-    if (!stdbuf.isEmpty())
+    if (!stdbuf.isEmpty() && !(on_line && progress.isEmpty()))   // a listing has no progress to show: read in blocks
         argv = QStringList{stdbuf, "-o0", "-e0"} + argv;
     proc::Options o = tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL);
     o.env = env;
@@ -1857,9 +1858,29 @@ static bool says_wrong_password(const QString &text)
            l.contains("incorrect password") || l.contains("wrong password :") || l.contains("specified password is incorrect");
 }
 
+// A listing's time, in `format` (only digits for y, M, d, H, m and s, and the other characters as they are). Read by
+// hand: QDateTime::fromString takes about 0.2 ms, which was most of a big archive's listing time (40 s for 200,000
+// files); anything else is left to it.
 static QDateTime parse_time(const QString &text, const QString &format, bool utc = false)
 {
-    QDateTime t = QDateTime::fromString(text, format);
+    QDateTime t;
+    if (text.size() == format.size()) {
+        int v[128] = {};
+        bool ok = true;
+        for (int i = 0; ok && i < text.size(); ++i) {
+            QChar f = format[i], c = text[i];
+            if (!QStringView(u"yMdHms").contains(f))
+                ok = c == f;
+            else if ((ok = c >= '0' && c <= '9'))
+                v[f.unicode()] = v[f.unicode()] * 10 + (c.unicode() - '0');
+        }
+        QDate d(v['y'], v['M'], v['d']);
+        QTime tm(v['H'], v['m'], v['s']);
+        if (ok && d.isValid() && tm.isValid())
+            t = QDateTime(d, tm);
+    }
+    if (!t.isValid())
+        t = QDateTime::fromString(text, format);
     if (utc && t.isValid()) {
         t.setTimeSpec(Qt::UTC);
         t = t.toLocalTime();

@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.12.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.2-alpha.13.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -85,7 +85,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
-| [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo and Dolphin |
+| [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo, Dolphin, Thunar, Krusader and PCManFM |
 | [Bugs found elsewhere](docs/bugs-elsewhere.md) | Problems in the desktop and other programs that get in Kestrel's way, how they were found, and how to work around them |
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
 | [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |

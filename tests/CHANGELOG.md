@@ -4,6 +4,18 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.13
+
+Added:
+- `archives`: Open as Archive on a big tar (60,000 files), the freeze fix: the longest pause of the UI thread while
+  it's read and shown stays under 0.5 s (it was about 4 s in a CI-like container, as the list was built on the UI
+  thread); the items are folders first, by name, at every level; a file's time is read right (the new date parsing);
+  the status counts every file and folder; and a click on a column's header still sorts (the tree no longer keeps
+  itself sorted).
+- `ui`: 1,500 selected folders dropped onto a sibling folder (a move on one drive), the freeze fix: they all move, and
+  the window is never held for more than 2.5 s (about 0.4 s now; 5.7 s before in a CI-like container, as each folder
+  leaving the view deselected it and the status line counted the whole selection again).
+
 ## 0.3.2-alpha.12
 
 Added:

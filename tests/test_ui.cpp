@@ -11,6 +11,7 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDropEvent>
+#include <QElapsedTimer>
 #include <QScrollBar>
 #include <QFile>
 #include <QHeaderView>
@@ -285,6 +286,77 @@ int main(int argc, char **argv)
     check(grid_r.isEmpty() && list_r.isEmpty() && grouped_r.isEmpty(),
           "dropping items into a subfolder leaves the view where it was (grid: " + (grid_r.isEmpty() ? "ok" : grid_r) +
               "; list: " + (list_r.isEmpty() ? "ok" : list_r) + "; grouped: " + (grouped_r.isEmpty() ? "ok" : grouped_r) + ")");
+
+    // -- many selected folders dropped into a sibling don't hold the window. Each one leaving the view deselects it, and
+    // the status line counted the whole selection again for each (with a list search for duplicates in it): 800
+    // folders froze the window for seconds. A timer ticking every 10 ms measures the longest the window was held.
+    {
+        QString dir = home_path("many");
+        const int n = 1500;
+        makedirs(join(dir, "aa-target"), true);
+        QStringList moving;
+        for (int i = 0; i < n; ++i) {
+            moving << join(dir, QString("d%1").arg(i, 4, 10, QChar('0')));
+            makedirs(moving.last(), true);
+        }
+        Pane *own = w->new_tab(dir);
+        struct Closer {
+            MainWindow *w;
+            Pane *p;
+            ~Closer() { w->close_tab(w->tabs->indexOf(p)); }
+        } closer{w, own};
+        w->set_view("grid");
+        w->pane()->set_grouping(groups::NONE, groups::MODIFIED);
+        QAbstractItemView *v = w->pane()->view();
+        QString r;
+        if (!wait_for([&]() { return w->pane()->all_paths().size() == n + 1; }, 15000))
+            r = "folder not shown";
+        QModelIndex target;
+        if (r.isEmpty()) {
+            w->pane()->select_paths(moving);
+            spin(100);
+            for (int row = 0; row < v->model()->rowCount(v->rootIndex()); row++) {
+                QModelIndex i = v->model()->index(row, 0, v->rootIndex());
+                if (i.data(PathRole).toString() == join(dir, "aa-target"))
+                    target = i;
+            }
+            if (w->pane()->selected_paths().size() != n || !target.isValid())
+                r = "not selected";
+        }
+        if (r.isEmpty()) {
+            QElapsedTimer clock;
+            qint64 last = 0, longest = 0;
+            QTimer tick;
+            QObject::connect(&tick, &QTimer::timeout, [&]() {
+                longest = std::max(longest, clock.elapsed() - last);
+                last = clock.elapsed();
+            });
+            QWidget *dropw = v->viewport();
+            QPointF pos = v->visualRect(target).center();
+            QMimeData data;
+            QList<QUrl> urls;
+            for (const QString &m : moving)
+                urls << QUrl::fromLocalFile(m);
+            data.setUrls(urls);
+            QDragEnterEvent enter(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(dropw, &enter);
+            QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(dropw, &move);
+            QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+            clock.start();
+            tick.start(10);
+            QApplication::sendEvent(dropw, &drop);
+            bool moved = wait_for([&]() { return w->pane()->all_paths().size() == 1; }, 60000);
+            spin(300);   // the status line's update after the burst
+            tick.stop();
+            if (!moved || !exists(join(dir, "aa-target/d1499")))
+                r = "not moved";
+            else if (longest > 2500)
+                r = QString("the window was held for %1 ms").arg(longest);
+        }
+        check(r.isEmpty(), QString::number(n) + " selected folders dropped into a sibling move without holding the window" +
+                               (r.isEmpty() ? QString() : " (" + r + ")"));
+    }
 
     // -- going back with the mouse's back button: the hand moving a little while the button is still down mustn't drag
     // anything. It used to drag the folder just left (selected again in the folder above), and the drag going nowhere
