@@ -337,6 +337,45 @@ into.
   - A whole folder at once, keeping its subfolders in the output folder.
   - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
 
+### Desktops
+
+- [ ] **Kubuntu 26.04 (KDE Plasma) support.** The .deb already installs on 26.04 (CI's `package` job), and Kubuntu
+  uses the same archive, so this is desktop integration: everywhere Kestrel assumes GNOME or Cinnamon. Kubuntu 26.04
+  is Wayland-only. Test in a Kubuntu VM, the way Mint was done.
+  - **Probably fine already, to confirm:** Breeze colours and fonts come through KDE's Qt integration
+    (plasma-integration), dark mode through the portal's colour scheme (`desktop_prefers_dark`), cut/paste with Dolphin
+    (`application/x-kde-cutselection`), trash (`g_file_trash`), the shared thumbnail cache, `recently-used.xbel`
+    (KDE Frameworks write it too), archive passwords in KWallet (Secret Service).
+  - **File chooser portal (kes-setup):** `PORTAL_DESKTOP` becomes `kde` (right), but the FileChooser line falls back
+    to `kestrel;gnome;gtk;`. On KDE the fallback should be `kestrel;kde;`. Check `restart_portal` and `--undo` with
+    xdg-desktop-portal-kde.
+  - **Default file manager:** remember and restore Dolphin (`org.kde.dolphin.desktop`), not Nautilus. Today that's
+    `prev:-org.gnome.Nautilus.desktop` and the `pgrep nautilus`/`nemo` handling. A running Dolphin takes
+    `org.freedesktop.FileManager1` ("Show in folder"), so `--default` has to deal with it the way it quits Nautilus.
+  - **`--dock`:** Plasma's taskbar pins (launchers in `plasma-org.kde.plasma.desktop-appletsrc`). Change them through
+    plasmashell's `evaluateScript` over D-Bus, not by editing the file. This is the same open item as Cinnamon's panel.
+  - **Drag focus on Wayland:** the GNOME Shell extension does nothing under KWin. The equivalent is a small KWin
+    script loaded through `org.kde.KWin /Scripting` that activates the window under the pointer (a new path in
+    src/focus.cpp). It may not need a log-out.
+  - **gsettings-only desktop settings** (`desktop_schema()` only maps Cinnamon):
+    - wallpaper: `set_wallpaper()` → `plasma-apply-wallpaperimage`;
+    - File History privacy switch: KDE keeps it in its activity manager settings, not `org.gnome.desktop.privacy`;
+    - icon theme: `setup_icon_theme()` reads gsettings, which KDE's GTK-config module usually fills in. Reading
+      `kdeglobals` `[Icons] Theme=` is safer.
+  - **Drives, network shares and phones without gvfs:** src/overview.cpp uses GIO's volume monitor, and the udisks2
+    and MTP monitors come from gvfs, which Kubuntu may not install. Without it, unmounted USB drives, `smb://`/`sftp://`
+    and phones wouldn't appear or mount. Either add gvfs-backends/gvfs-daemons to Recommends (and install.sh's
+    RECOMMENDED) or add a udisks2 path. Check this first; it's the item most likely to change the plan.
+  - **Terminal:** `konsole` is in `open_terminal()` but comes after ptyxis and gnome-terminal. Try the desktop's own
+    terminal first.
+  - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
+    `~/.config/baloofilerc`). Without it, Kestrel falls back to its own search, which is fine.
+  - **Tests:** a `XDG_CURRENT_DESKTOP=KDE` case in `installer` (portal fallback, Dolphin restore, dock script), plus
+    unit checks for the wallpaper and icon-theme choice. No new CI job: the 26.04 package check covers installing.
+  - **Docs:** a Kubuntu section in docs/install.md, like the Mint one.
+  - Order: walk through the app in the VM (drives first), then kes-setup (portal, Dolphin, FileManager1), then the
+    wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
+
 ## Done
 
 - [x] **Password-encrypted tar archives (through gpg)** (0.3.2-alpha.12). Compress… offers a password for tar and every tar.*: the stream goes on through `gpg --symmetric` (AES-256, `-z 0`) to `name.tar.zst.gpg`, the password on gpg's fd 3 (`proc::Options::fd3`), `--no-symkey-cache`. `archive::kind` / `gpg_encrypted` recognise `.tar…gpg`; `tar_pipe` reads through `gpg -d` for listing, testing and extracting; probe calls them encrypted, `password_opens` waits for gpg's first byte or "Bad session key", which is a WrongPassword. gnupg in Suggests, OPTIONAL_PACKAGES and docs/dependencies.md; the password is greyed out with an install hint without gpg. Test: `archives`, `fileops`.
