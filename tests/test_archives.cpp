@@ -151,6 +151,24 @@ int main(int argc, char **argv)
     check(!mixed.contains("Extract All Here") && !mixed.contains("Extract Here"),
           "archives selected with other files: no Extract");
 
+    // ---- no keyring: the Secret Service's name is held here, so the bus doesn't start one (where gnome-keyring is
+    // installed it would) and calls to it fail. Taken before anything looks for a saved password (the gpg checks'
+    // Open as Archive and Extract Here do): that would have the bus start a gnome-keyring, which the keyring checks
+    // further down then can't replace with their own.
+    GDBusConnection *holder = nullptr;
+    {
+        gchar *addr = g_dbus_address_get_for_bus_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+        holder = g_dbus_connection_new_for_address_sync(
+            addr,
+            GDBusConnectionFlags(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT | G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+            nullptr, nullptr, nullptr);
+        g_free(addr);
+        if (GVariant *v = g_dbus_connection_call_sync(holder, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                                      "org.freedesktop.DBus", "RequestName",
+                                                      g_variant_new("(su)", "org.freedesktop.secrets", 4u), nullptr,
+                                                      G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, nullptr))
+            g_variant_unref(v);
+    }
     // ---- tar archives with a password: piped through gpg (name.tar.gz.gpg)
     if (archive::tool("gpg").isEmpty()) {
         skip("password-encrypted tar archives (gpg isn't installed)");
@@ -544,22 +562,6 @@ int main(int argc, char **argv)
         check(ok, QString("...and for %1 archives").arg(t));
     }
 
-    // ---- no keyring: the Secret Service's name is held here, so the bus doesn't start one (where gnome-keyring is
-    // installed it would) and calls to it fail
-    GDBusConnection *holder = nullptr;
-    {
-        gchar *addr = g_dbus_address_get_for_bus_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
-        holder = g_dbus_connection_new_for_address_sync(
-            addr,
-            GDBusConnectionFlags(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT | G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
-            nullptr, nullptr, nullptr);
-        g_free(addr);
-        if (GVariant *v = g_dbus_connection_call_sync(holder, "org.freedesktop.DBus", "/org/freedesktop/DBus",
-                                                      "org.freedesktop.DBus", "RequestName",
-                                                      g_variant_new("(su)", "org.freedesktop.secrets", 4u), nullptr,
-                                                      G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, nullptr))
-            g_variant_unref(v);
-    }
     check(!keyring::available(), "with no Secret Service answering, Kestrel sees no keyring");
 
     // ---- Extract All: one password typed is tried on the rest
@@ -726,14 +728,23 @@ int main(int argc, char **argv)
                       "folder too (" + QString::number(files.size()) + " listed" + (error.isEmpty() ? "" : "; " + error) + ")");
         }
         // the quick password test finds a file to test in a big listing (finding none, it takes any password)
+        QElapsedTimer took;
+        took.start();
         bool made = make({z7, "a", "-t7z", "-mx0", "-psecret", join(look, "big-enc.7z"), "tree"}, many);
+        qint64 make_ms = took.restart();
         bool right = false, wrong = true;
+        QString error;
         try {
             right = archive::password_opens(&look_task, join(look, "big-enc.7z"), "secret");
             wrong = archive::password_opens(&look_task, join(look, "big-enc.7z"), "nope");
-        } catch (const std::exception &) {
+        } catch (const std::exception &e) {
+            error = QString::fromStdString(e.what());
         }
-        check(made && right && !wrong, "big encrypted 7z: the quick password test takes the right password and refuses a wrong one");
+        check(made && right && !wrong,
+              QString("big encrypted 7z: the quick password test takes the right password and refuses a wrong one "
+                      "(made: %1 in %2 ms; right: %3, wrong: %4 in %5 ms%6)")
+                  .arg(made ? "yes" : "no", QString::number(make_ms), right ? "opens" : "doesn't open",
+                       wrong ? "opens" : "doesn't open", QString::number(took.elapsed()), error.isEmpty() ? "" : "; " + error));
     }
 
     // a write that fails part-way (a full disk): nothing half-made, no part folder

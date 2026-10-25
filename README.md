@@ -86,6 +86,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
 | [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo and Dolphin |
+| [Bugs found elsewhere](docs/bugs-elsewhere.md) | Problems in the desktop and other programs that get in Kestrel's way, how they were found, and how to work around them |
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
 | [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |
 | [Changelog](CHANGELOG.md) | What changed in each version |

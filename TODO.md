@@ -72,6 +72,22 @@ into.
 
 ### Jobs
 
+- [ ] **Thumbnailing is a job in the Jobs window.** Making thumbnails and folder previews (mosaics) shows up in the
+  Jobs window like any other job, instead of running unseen in `g_thumbs` (src/thumbs.cpp: `pool`, `dir_pool`).
+  - One job per pane and folder that asked (e.g. "Thumbnails: Pictures/2024, 312 of 840"), with the window and
+    folder it's for, progress, and Pause / Stop like other jobs. Stopping it leaves the thumbnails made so far.
+  - Ties in with the bug "A closed window's folder previews keep being made": requests get an owner (the pane), so
+    a pane closing or its window closing ends its own jobs, and `cancel_pending()` no longer empties every other
+    window's and tab's requests.
+  - Decided: leaving a folder doesn't end its job, it lowers its priority: the folder being shown comes first, and the
+    jobs of folders left behind run only when nothing newer is waiting (going back to a folder raises its job again).
+    A lowered job times out after a few minutes (Preferences, default 3 minutes) and stops, keeping what it made, so
+    while browsing deeper the old low-priority jobs fall away on their own. The timer counts from when it was lowered.
+  - Decided: they follow the job queue's per-drive rules like any other job (a drive's one-job-at-a-time, physical
+    disks, tapes and floppies; previews there still need permission as today).
+  - Decided: the Jobs window's list is split in two: normal jobs on top (75% of the height), thumbnailing below (25%),
+    so browsing doesn't flood the list of copies, moves and extractions.
+
 - [ ] **Jobs run in the background, apart from the Kestrel windows.** Jobs (copies, moves, extractions, checksums,
   preview builds…) run in a background process of their own, like the tower, instead of inside the window that
   started them. The Jobs window is a view onto that process: it can be opened at any time and closed without
@@ -207,6 +223,25 @@ into.
   - Trust in plain terms: a valid signature from a key you haven't marked as trusted is still "valid, but this key
     isn't verified by you", not a scary wall of gpg output.
   - Optional, later: **Encrypt / Decrypt** with gpg (to a recipient or with a password).
+
+- [ ] **Remember folder sizes for Properties.** Kestrel's cache gets a section for folder sizes and counts it has
+  already worked out (size, files, folders, and when it was measured). When Properties opens on a folder that's in it,
+  the remembered figures show at once instead of "Calculating…", with a **Recalculate** button beside them;
+  Recalculate runs the count again and stores the new result.
+  - It says how old the figures are: "Calculated 3 days ago (2026-10-21 14:05)", in plain words (minutes, hours,
+    days, months ago) with the exact date and time after. A freshly counted size says "Calculated just now".
+  - Today Properties always counts from scratch (`fileops::dir_stats` on a worker, src/dialogs.cpp `PropertiesDialog`,
+    shown by `show_dir_size`), which takes a long time on big trees and is slow on tapes and floppies.
+  - Stored after every finished count (not a cancelled or failed one), keyed by the folder's path (plus the device
+    and inode, so a different folder later under the same name isn't shown the old figures). For a selection of several
+    items, each folder's own entry is used where there is one and only the rest is counted.
+  - Whether to also recalculate on its own when the entry looks stale (the folder's modification time is newer than
+    the entry; that only catches changes directly in it, not deeper down), or only when asked. Kestrel's own copies,
+    moves and deletes into a folder could drop the entries of it and its parents.
+  - Written with `util::write_atomic()` under ~/.cache/kestrel-explorer; old entries trimmed (count or age). Added to
+    the BleachBit cleaner (kes-setup `bleachbit_cleaner`, tests/test_installer.sh) and to Clear Cache if there is one.
+  - Test: `fileops` or `ui` (a remembered entry shows without counting; Recalculate replaces it; a cancelled count
+    stores nothing).
 
 ### Images, video and audio
 

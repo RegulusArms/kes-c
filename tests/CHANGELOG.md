@@ -23,6 +23,12 @@ Added:
   part-way leaves no archive, checksum file or part; Compress… offers it for tar formats and not for others.
 
 Changed:
+- `archives`: the Secret Service's name is taken (for the "no keyring" checks) before the gpg checks, not after. Their
+  Open as Archive and Extract Here look for a saved password, which had the test's bus start a gnome-keyring on CI;
+  the 6 keyring checks after them then failed.
+- `archives`: "big encrypted 7z" now says which part failed (making the archive, and how long it took; the right
+  password; the wrong one; an error), since it failed once in a full run in a CI-like container and couldn't be
+  reproduced in 11 runs after.
 - `fileops`: that check's watcher now counts the password in any command line, not only ones naming the archive: a
   tool making the archive names only its hidden part file, so a password leaked there went unseen.
 - `installer`: `kes-setup --install-optional` now also installs `gnupg` (tar archives with a password).
