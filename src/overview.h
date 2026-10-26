@@ -157,6 +157,7 @@ Q_SIGNALS:
     void sidebar_changed();
     void add_bookmark(const QString &target);
     void properties(const QString &target);
+    void find_duplicates(const QString &root);
 
 protected:
     void showEvent(QShowEvent *ev) override;

@@ -177,6 +177,12 @@ QList<Entry> defaults(Kind k)
           << item("test_archives", "Test Archives", "when all are archives");
     l << item("compress_quick", "Compress to “name.ext”", "once you've compressed something")
       << item("compress", "Compress…") << item("checksum_create", "Create Checksum File…");
+    if (folder || several)
+        l << item("find_duplicates", "Find Duplicates…", several ? "when all are folders" : QString());
+    if (folder)
+        l << item("compare_with", "Compare With…") << item("sync_to", "Sync To…");
+    if (file)
+        l << item("verify_signature", "Verify Signature", "for signatures (.sig, .asc, .gpg, .sign)");
     if (file)
         l << item("uwp_add", "Add to Selected UWP Monitor", "images and videos, while UWP's editor is open")
           << item("wallpaper", "Set as Wallpaper", "for videos, with UWP")

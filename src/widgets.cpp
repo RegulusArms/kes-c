@@ -743,6 +743,57 @@ QStringList GridDelegate::lines(const QFontMetrics &fm, const QString &text, int
     return {text.left(cut), fm.elidedText(text.mid(cut), Qt::ElideMiddle, width)};
 }
 
+GridDelegate::Layout GridDelegate::layout(const QStyleOptionViewItem &option, const QModelIndex &index, bool paint) const
+{
+    Layout l;
+    l.r = option.rect.adjusted(3, 3, -3, -3);
+    int s = icon_size;
+    l.icon_rect = QRect(l.r.x() + (l.r.width() - s) / 2, l.r.y() + 6, s, s);
+    l.drawn = l.icon_rect;
+    QString path = index.data(PathRole).toString();
+    bool is_dir = index.data(KindRole).toInt() & KIND_DIR;
+    QVariant thumb = index.data(ThumbRole);
+    l.anim = paint && animator && !is_dir ? animator->frame(path, index, s) : QPixmap();   // GIF / WebM playing
+    l.pm = !l.anim.isNull() ? l.anim : thumb.isValid() ? thumbs->scaled(thumb.value<QPixmap>(), s) : QPixmap();
+    if (!l.pm.isNull()) {
+        double dpr = l.pm.devicePixelRatio();
+        double w = l.pm.width() / dpr, h = l.pm.height() / dpr;
+        l.drawn = QRectF(l.icon_rect.x() + (s - w) / 2, l.icon_rect.y() + (s - h), w, h);
+    }
+    l.font = option.font;
+    if (option.state & QStyle::State_Selected)
+        l.font.setWeight(QFont::DemiBold);
+    QFontMetrics fm(l.font);
+    l.text_rect = QRect(l.r.x() + 4, l.icon_rect.bottom() + 6, l.r.width() - 8, fm.height() * 2 + 2);
+    QString name = index.data(Qt::DisplayRole).toString();
+    l.lines = lines(fm, name.isEmpty() ? basename(path) : name, l.text_rect.width());
+    return l;
+}
+
+QPainterPath GridDelegate::shape(const Layout &l) const
+{
+    QPainterPath out;
+    out.setFillRule(Qt::WindingFill);   // the parts overlap: filled once
+    out.addRoundedRect(l.drawn.adjusted(-4, -4, 4, 4), 6, 6);
+    QFontMetrics fm(l.font);
+    for (int i = 0; i < l.lines.size(); ++i) {   // each line as wide as its text, joining the one above
+        double w = std::min<double>(fm.horizontalAdvance(l.lines[i]) + 12, l.r.width());
+        double y = l.text_rect.y() + i * fm.height();
+        out.addRoundedRect(QRectF(l.r.x() + (l.r.width() - w) / 2, y - 2, w, fm.height() + 4), 6, 6);
+    }
+    return out;
+}
+
+QPainterPath GridDelegate::shape(const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+    if (index.data(GroupRole).isValid()) {
+        QPainterPath whole;
+        whole.addRect(option.rect);
+        return whole;
+    }
+    return shape(layout(option, index, false));
+}
+
 void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     if (index.data(GroupRole).isValid()) {
@@ -752,16 +803,16 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
     p->save();
     p->setRenderHint(QPainter::Antialiasing);
     p->setRenderHint(QPainter::SmoothPixmapTransform);
-    QRect r = option.rect.adjusted(3, 3, -3, -3);
+    Layout l = layout(option, index, true);
     const QPalette &pal = option.palette;
     bool selected = option.state & QStyle::State_Selected;
     bool hover = option.state & QStyle::State_MouseOver;
-    if (selected || hover) {
+    if (selected || hover) {   // around the icon and the name only: the rest of the cell is empty space
         QColor c = pal.color(QPalette::Highlight);
         c.setAlpha(selected ? 110 : 40);
         p->setPen(Qt::NoPen);
         p->setBrush(c);
-        p->drawRoundedRect(QRectF(r), 8, 8);
+        p->drawPath(shape(l));
     }
     QString path = index.data(PathRole).toString();
     QString name = index.data(Qt::DisplayRole).toString();
@@ -773,30 +824,25 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
     if (dim)
         p->setOpacity(0.5);
     int s = icon_size;
-    QRect icon_rect(r.x() + (r.width() - s) / 2, r.y() + 6, s, s);
-    QVariant thumb = index.data(ThumbRole);
-    QPixmap anim = animator && !is_dir ? animator->frame(path, index, s) : QPixmap();   // GIF / WebM playing
+    QRect icon_rect = l.icon_rect;
     QRectF badge_box(icon_rect);   // where the star goes: the corner of what's drawn
-    if (!anim.isNull() || thumb.isValid()) {
-        QPixmap spm = !anim.isNull() ? anim : thumbs->scaled(thumb.value<QPixmap>(), s);
-        double dpr = spm.devicePixelRatio();
-        double w = spm.width() / dpr, h = spm.height() / dpr;
-        QRectF target(icon_rect.x() + (s - w) / 2, icon_rect.y() + (s - h), w, h);
+    if (!l.pm.isNull()) {
+        QRectF target = l.drawn;
         badge_box = target;
         if (!is_dir) {
             QPainterPath clip;
             clip.addRoundedRect(target, 4, 4);
             p->save();
             p->setClipPath(clip);
-            p->drawPixmap(target, spm, QRectF(spm.rect()));
+            p->drawPixmap(target, l.pm, QRectF(l.pm.rect()));
             p->restore();
             p->setPen(QColor(0, 0, 0, 50));
             p->setBrush(Qt::NoBrush);
             p->drawRoundedRect(target, 4, 4);
-            if (is_video(path) && anim.isNull())
+            if (is_video(path) && l.anim.isNull())
                 play_badge(p, target);
         } else {
-            p->drawPixmap(target, spm, QRectF(spm.rect()));
+            p->drawPixmap(target, l.pm, QRectF(l.pm.rect()));
         }
     } else {
         QVariant icon = index.data(Qt::DecorationRole);
@@ -815,19 +861,11 @@ void GridDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         pin_badge(p, QRectF(badge_box.left() - bs * 0.25, badge_box.top() - bs * 0.25, bs, bs));
     // text
     p->setPen(pal.color(QPalette::Text));
-    if (selected) {
-        QFont f = option.font;
-        f.setWeight(QFont::DemiBold);
-        p->setFont(f);
-    } else {
-        p->setFont(option.font);
-    }
+    p->setFont(l.font);
     QFontMetrics fm = p->fontMetrics();
-    QRect text_rect(r.x() + 4, icon_rect.bottom() + 6, r.width() - 8, fm.height() * 2 + 2);
-    QStringList ls = lines(fm, name, text_rect.width());
-    for (int i = 0; i < ls.size(); ++i) {
-        QRect lr(text_rect.x(), text_rect.y() + i * fm.height(), text_rect.width(), fm.height());
-        p->drawText(lr, Qt::AlignHCenter | Qt::AlignVCenter, ls[i]);
+    for (int i = 0; i < l.lines.size(); ++i) {
+        QRect lr(l.text_rect.x(), l.text_rect.y() + i * fm.height(), l.text_rect.width(), fm.height());
+        p->drawText(lr, Qt::AlignHCenter | Qt::AlignVCenter, l.lines[i]);
     }
     p->restore();
 }
@@ -1611,6 +1649,7 @@ void Sidebar::menu(const QPoint &pos)
         if (which("bleachbit"))   // fileops::can_shred
             m.addAction("Empty Trash with BleachBit…", this, [this]() { Q_EMIT shred_trash_requested(); });
     } else if (kind == "mount") {
+        m.addAction("Find Duplicates…", this, [this, path]() { Q_EMIT find_duplicates(path); });
         drives::Slow slow = drives::slow_kind(path);
         if (slow != drives::Slow::None) {
             m.addSeparator();

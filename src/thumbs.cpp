@@ -1005,11 +1005,13 @@ void ThumbnailManager::drop(const std::shared_ptr<ThumbRequest> &req)
 
 bool ThumbnailManager::held(const ThumbRequest &req) const
 {
+    if (thumb_mode == "paused")   // all of it: also what no job asked for
+        return true;
     if (req.shared || req.jobs.isEmpty())
         return false;
     for (quint64 id : req.jobs) {
         auto j = jobs.constFind(id);
-        if (j != jobs.constEnd() && !j->paused && !j->waiting)
+        if (j != jobs.constEnd() && !j->paused && !j->waiting && !j->behind)
             return false;
     }
     return true;
@@ -1032,6 +1034,7 @@ void ThumbnailManager::place(ThumbRequest &req)
 
 void ThumbnailManager::release_jobs(const QString &k, const std::shared_ptr<ThumbRequest> &req, bool done)
 {
+    bool ended = false;
     for (quint64 id : std::as_const(req->jobs)) {
         auto j = jobs.find(id);
         if (j == jobs.end())
@@ -1042,9 +1045,12 @@ void ThumbnailManager::release_jobs(const QString &k, const std::shared_ptr<Thum
         if (j->keys.isEmpty()) {   // all made (or no longer wanted): the job is over
             job_ids.remove(qMakePair(j->owner, j->folder));
             jobs.erase(j);
+            ended = true;
         }
     }
     req->jobs.clear();
+    if (ended)   // the next on its drive may start
+        update_holds();
     jobs_said();
 }
 
@@ -1074,10 +1080,13 @@ ThumbJob *ThumbnailManager::job_for(const QObject *owner, const QString &folder)
     j.folder = folder;
     j.window = window_of(owner);
     j.prio = ++job_prio;
-    j.waiting = jobs::Queue::instance()->busy(folder);
+    QStringList ids = drives::drive_ids(folder);
+    j.drive = ids.value(0);
     job_ids.insert(qMakePair(owner, folder), j.id);
+    jobs.insert(j.id, j);
+    update_holds();   // (it has no requests yet: only its own flags, and no one else's, change)
     jobs_said();
-    return &*jobs.insert(j.id, j);
+    return &jobs[j.id];
 }
 
 void ThumbnailManager::set_prio(ThumbJob &job, int p)
@@ -1112,6 +1121,7 @@ void ThumbnailManager::lower(const QObject *owner)
             j.lowered_at = now;
             set_prio(j, j.prio - 1000000000 / 2);   // below every job that isn't lowered, still newest first
         }
+    update_holds();   // "drive": a job still shown takes over its drive
     jobs_said();
 }
 
@@ -1128,11 +1138,13 @@ void ThumbnailManager::pause_job(quint64 id, bool on)
     if (j == jobs.end() || j->paused == on)
         return;
     j->paused = on;
-    QMutexLocker l(&run_lock);
-    for (const QString &k : std::as_const(j->keys))
-        if (auto req = pending.value(k))
-            place(*req);
-    l.unlock();
+    {
+        QMutexLocker l(&run_lock);
+        for (const QString &k : std::as_const(j->keys))
+            if (auto req = pending.value(k))
+                place(*req);
+    }
+    update_holds();   // "drive": a paused job lets the next on its drive run
     jobs_said();
 }
 
@@ -1167,27 +1179,75 @@ void ThumbnailManager::end_job(quint64 id, bool by_user)
         batch_total = std::max(batch_done, batch_total - n);
         schedule_progress();
     }
+    update_holds();   // "drive": the next on its drive may start
     jobs_said();
+}
+
+QString ThumbnailManager::known_mode(const QString &m) { return m == "drive" || m == "paused" ? m : QString("wait"); }
+
+void ThumbnailManager::set_mode(const QString &m)
+{
+    QString now = known_mode(m);
+    if (now == thumb_mode)
+        return;
+    thumb_mode = now;
+    update_holds();
+    QMutexLocker l(&run_lock);   // held or let go: also what no job asked for ("paused" holds that too)
+    for (const auto &req : std::as_const(pending))
+        place(*req);
+    l.unlock();
+    jobs_said();
+}
+
+void ThumbnailManager::update_holds()
+{
+    bool wait = thumb_mode == "wait", per_drive = thumb_mode == "drive", all = thumb_mode == "paused";
+    // "drive": each drive's runner keeps it while it runs (the others wait behind it, as in the job queue); a new one
+    // is the newest job not paused, one still shown before a lowered one
+    QHash<QString, quint64> pick;
+    if (per_drive) {
+        for (const ThumbJob &j : std::as_const(jobs)) {
+            if (j.paused)
+                continue;
+            auto cur = pick.constFind(j.drive);
+            quint64 had = runners.value(j.drive);
+            auto better = [&](const ThumbJob &a, const ThumbJob &b) {   // a before b
+                if (a.lowered != b.lowered)
+                    return !a.lowered;
+                if ((a.id == had) != (b.id == had))
+                    return a.id == had;
+                return a.prio > b.prio;
+            };
+            if (cur == pick.constEnd() || better(j, *jobs.constFind(*cur)))
+                pick[j.drive] = j.id;
+        }
+    }
+    runners = pick;
+    for (ThumbJob &j : jobs) {
+        bool waiting = wait && jobs::Queue::instance()->busy(j.folder);   // another job on its drive
+        bool behind = per_drive && !j.paused && pick.value(j.drive) != j.id;
+        if (waiting == j.waiting && behind == j.behind && all == j.held_all)
+            continue;
+        j.waiting = waiting;
+        j.behind = behind;
+        j.held_all = all;
+        QMutexLocker l(&run_lock);
+        for (const QString &k : std::as_const(j.keys))
+            if (auto req = pending.value(k))
+                place(*req);
+        l.unlock();
+        jobs_said();
+    }
 }
 
 void ThumbnailManager::check_jobs()
 {
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     QList<quint64> timed_out;
-    for (ThumbJob &j : jobs) {
+    for (ThumbJob &j : jobs)
         if (j.lowered && now - j.lowered_at > qint64(job_minutes) * 60000)
             timed_out << j.id;
-        bool busy = jobs::Queue::instance()->busy(j.folder);   // another job on its drive: it waits
-        if (busy != j.waiting) {
-            j.waiting = busy;
-            QMutexLocker l(&run_lock);
-            for (const QString &k : std::as_const(j.keys))
-                if (auto req = pending.value(k))
-                    place(*req);
-            l.unlock();
-            jobs_said();
-        }
-    }
+    update_holds();
     for (quint64 id : timed_out)   // left behind long enough: stopped, what it made kept
         end_job(id, false);
 }
@@ -1207,7 +1267,12 @@ QString ThumbJob::title() const
 
 QString ThumbJob::state() const
 {
-    return paused ? "Paused" : waiting ? "Waiting for the drive" : lowered ? "Lowered (folder left)" : "Running";
+    return paused     ? "Paused"
+           : held_all ? "Paused (all thumbnailing)"
+           : waiting  ? "Waiting for the drive"
+           : behind   ? "Waiting for another thumbnail job on its drive"
+           : lowered  ? "Lowered (folder left)"
+                      : "Running";
 }
 
 void ThumbnailManager::cancel_for(const QObject *owner)

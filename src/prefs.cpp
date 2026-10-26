@@ -113,6 +113,13 @@ static QList<Pref> build()
               "Its thumbnail job in the Jobs window waits behind the folder you're in, and stops after this long. "
               "What it made is kept."),
           1, 240, " min");
+    add("Images & Videos", "", "thumb_mode", "Making thumbnails and folder previews", CHOICE, "wait",
+        "the Jobs window (Ctrl+Shift+J), under its thumbnail jobs",
+        "Each folder you look at has a thumbnail job in the Jobs window. Tapes and floppies only get previews where "
+        "allowed (a drive's menu → Show Previews on This Drive).")
+        .choices = {{"One per drive, even while the drive is in use by other jobs", "drive"},
+                    {"Wait until the drive is free of other jobs", "wait"},
+                    {"Paused: none made until this is changed", "paused"}};
     add("Images & Videos", "", "slow_previews", "Previews on tapes and floppies", CUSTOM, QStringList(),
         "a drive's menu → Show Previews on This Drive");
 
@@ -126,6 +133,13 @@ static QList<Pref> build()
         .choices = {{"By drive (jobs on different drives side by side)", "drive"}, {"One at a time", "one"},
                     {"All at once (every job starts as it's queued, even on a drive in use)", "all"}};
     add("Files", "Jobs", "jobs_start_paused", "Start new jobs paused", BOOL, false, "the Jobs window (Ctrl+Shift+J)");
+
+    const QString dupes = "Find Duplicates";
+    const QString in_dupes = "the Find Duplicates window (a folder's menu → Find Duplicates…)";
+    range(add("Files", dupes, "dupes_min_kb", "Only files of at least", INT, 1, in_dupes), 0, 100000000, " KB");
+    add("Files", dupes, "dupes_recursive", "Look in subfolders", BOOL, true, in_dupes);
+    add("Files", dupes, "dupes_hidden", "Include hidden files", BOOL, false, in_dupes);
+    add("Files", dupes, "dupes_skip_hardlinks", "Skip hard links (they're the same file, not copies)", BOOL, true, in_dupes);
 
     const QString tapes = "Tapes (copying onto an LTFS tape)";
     add("Files", tapes, "tape_writer", "Write files with", CHOICE, "ask", "asked when a copy onto a tape starts",

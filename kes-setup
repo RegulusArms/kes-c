@@ -42,9 +42,9 @@ BLEACHBIT_MARK="Kestrel Explorer's cleaner, written by kes-setup"   # in an XML 
 # --install-optional: the packages the .deb suggests, and the extra archive tools; Kestrel hides or works around what's
 # missing (exiftool: the Metadata tab and editing; ffmpeg: video thumbnails; bleachbit: shredding; rar: making .rar;
 # pbzip2, lbzip2, plzip, lz4: multi-core .bz2 and .lz, and .lz4; libjpeg-turbo-progs: the image viewer's Straighten;
-# gnupg: tar archives with a password).
+# gnupg: tar archives with a password, Verify Signature; rsync: Sync To…).
 # zfsutils-linux too when a ZFS file system is mounted.
-OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg)
+OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg rsync)
 # The system's gsettings (an Anaconda copy earlier on PATH can't see the desktop's settings)
 GSETTINGS=/usr/bin/gsettings
 
@@ -132,6 +132,12 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <description>Delete the folders kept for other apps' Save windows (shown first on their Overview)</description>
     <warning>A Save window's Overview no longer lists those folders.</warning>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="chooser_places"/>
+  </option>
+  <option id="sync_pairs">
+    <label>Saved sync pairs</label>
+    <description>Delete the folder pairs saved in Sync Folders, with their paths</description>
+    <warning>Sync Folders no longer lists them.</warning>
+    <action command="delete" search="file" path="$conf/sync-pairs.json"/>
   </option>
   <option id="folder_looks">
     <label>Folder covers, colours and sorts</label>

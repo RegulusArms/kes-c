@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.2-alpha.16")
+set(KES_VERSION "0.3.2-alpha.17")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -59,6 +59,9 @@ add_executable(kes
     src/archive.cpp
     src/archive_ui.cpp
     src/hashcheck.cpp
+    src/dupes.cpp
+    src/compare.cpp
+    src/signature.cpp
     src/app.cpp
     src/actions.cpp
     src/opening.cpp
@@ -108,7 +111,7 @@ set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.
 # install.sh's RECOMMENDED list
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
 # kes-setup's OPTIONAL_PACKAGES and the Optional table in docs/dependencies.md
-set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit, rar, pbzip2 | lbzip2, plzip, lz4, ripgrep, libjpeg-turbo-progs, gnupg, zfsutils-linux")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit, rar, pbzip2 | lbzip2, plzip, lz4, ripgrep, libjpeg-turbo-progs, gnupg, rsync, zfsutils-linux")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_STRIP_FILES ON)
 set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS

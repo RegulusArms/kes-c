@@ -3,6 +3,7 @@
 #include "atc.h"
 #include "fileops.h"
 #include "jobs.h"
+#include "prefs.h"
 #include "thumbs.h"
 #include "util.h"
 #include "windows.h"
@@ -144,7 +145,33 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     connect(list, &QTreeWidget::currentItemChanged, this, &JobsWindow::show_details);
     lists = new QSplitter(Qt::Vertical);
     lists->setChildrenCollapsible(false);
-    lists->addWidget(list);
+    auto *jbox = new QWidget;   // the jobs and their buttons
+    auto *jl = new QVBoxLayout(jbox);
+    jl->setContentsMargins(0, 0, 0, 0);
+    jl->addWidget(list, 1);
+    auto *controls = new QHBoxLayout;
+    pause_btn = new QPushButton("Pause");
+    connect(pause_btn, &QPushButton::clicked, this, [this]() {
+        const Row *r = selected_row();
+        act(r && r->state == "paused" ? "resume" : "pause");
+    });
+    stop_btn = new QPushButton("Stop");
+    stop_btn->setToolTip("Cancel the job (Delete)");
+    connect(stop_btn, &QPushButton::clicked, this, [this]() { act("cancel"); });
+    now_btn = new QPushButton("Start Now");
+    now_btn->setToolTip("Start it without waiting for its turn");
+    connect(now_btn, &QPushButton::clicked, this, [this]() { act("start_now"); });
+    up_btn = new QPushButton("Up");
+    connect(up_btn, &QPushButton::clicked, this, [this]() { act("up"); });
+    down_btn = new QPushButton("Down");
+    connect(down_btn, &QPushButton::clicked, this, [this]() { act("down"); });
+    auto *clear = new QPushButton("Clear Finished");
+    connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
+    for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
+        controls->addWidget(b);
+    controls->addStretch(1);
+    jl->addLayout(controls);
+    lists->addWidget(jbox);
     auto *tbox = new QWidget;
     auto *tl = new QVBoxLayout(tbox);
     tl->setContentsMargins(0, 0, 0, 0);
@@ -156,7 +183,7 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     thumb_list->header()->setStretchLastSection(false);
     thumb_list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     thumb_list->setColumnWidth(1, 150);
-    thumb_list->setColumnWidth(2, 150);
+    thumb_list->setColumnWidth(2, 190);
     thumb_list->setColumnWidth(3, 130);
     thumb_list->setItemDelegateForColumn(3, new ProgressDelegate(thumb_list));
     tl->addWidget(thumb_list, 1);
@@ -180,34 +207,31 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     connect(thumb_list, &QTreeWidget::currentItemChanged, this, &JobsWindow::refresh_thumbs);
     tc->addWidget(thumb_pause);
     tc->addWidget(thumb_stop);
+    tc->addSpacing(12);
+    tc->addWidget(new QLabel("Thumbnailing:"));
+    thumb_mode = new QComboBox;
+    thumb_mode->setAccessibleName("How thumbnailing runs");
+    for (const auto &[label, value] : prefs::find("thumb_mode")->choices)
+        thumb_mode->addItem(label, value);
+    thumb_mode->setToolTip(prefs::find("thumb_mode")->tip + "\nFor every Kestrel window (also Preferences → Images & Videos).");
+    auto show_mode = [this]() {
+        QSignalBlocker quiet(thumb_mode);
+        thumb_mode->setCurrentIndex(thumb_mode->findData(ThumbnailManager::known_mode(prefs::get("thumb_mode").toString())));
+    };
+    show_mode();
+    connect(thumb_mode, &QComboBox::currentIndexChanged, this,
+            [this]() { prefs::set("thumb_mode", thumb_mode->currentData()); });
+    connect(prefs::Notifier::instance(), &prefs::Notifier::changed, this, [show_mode](const QStringList &keys) {
+        if (keys.contains("thumb_mode"))
+            show_mode();
+    });
+    tc->addWidget(thumb_mode);
     tc->addStretch(1);
     tl->addLayout(tc);
     lists->addWidget(tbox);
     lists->setStretchFactor(0, 3);   // three quarters: the jobs; a quarter: the thumbnails
     lists->setStretchFactor(1, 1);
     ll->addWidget(lists, 1);
-    auto *controls = new QHBoxLayout;
-    pause_btn = new QPushButton("Pause");
-    connect(pause_btn, &QPushButton::clicked, this, [this]() {
-        const Row *r = selected_row();
-        act(r && r->state == "paused" ? "resume" : "pause");
-    });
-    stop_btn = new QPushButton("Stop");
-    stop_btn->setToolTip("Cancel the job (Delete)");
-    connect(stop_btn, &QPushButton::clicked, this, [this]() { act("cancel"); });
-    now_btn = new QPushButton("Start Now");
-    now_btn->setToolTip("Start it without waiting for its turn");
-    connect(now_btn, &QPushButton::clicked, this, [this]() { act("start_now"); });
-    up_btn = new QPushButton("Up");
-    connect(up_btn, &QPushButton::clicked, this, [this]() { act("up"); });
-    down_btn = new QPushButton("Down");
-    connect(down_btn, &QPushButton::clicked, this, [this]() { act("down"); });
-    auto *clear = new QPushButton("Clear Finished");
-    connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
-    for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
-        controls->addWidget(b);
-    controls->addStretch(1);
-    ll->addLayout(controls);
     split->addWidget(left);
 
     auto *right = new QWidget;

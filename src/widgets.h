@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMutex>
+#include <QPainterPath>
 #include <QScrollArea>
 #include <QSortFilterProxyModel>
 #include <QStandardItemModel>
@@ -169,6 +170,12 @@ public:
     QSize cell_size() const;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    // What counts as the item in its cell (option.rect; State_Selected: its name is drawn bold): the icon as drawn (a
+    // thumbnail's own size, for a wide or tall image less than the icon's square) and the name's lines as wrapped,
+    // each centred. The highlight (selected, hovered, a drag's target) fills it, and the grid's hit tests ask it
+    // (Pane's grid: indexAt, the rubber band), so the rest of the cell is the folder's empty space. A group header:
+    // its whole line.
+    QPainterPath shape(const QStyleOptionViewItem &option, const QModelIndex &index) const;
     int icon_size = 128;
     Animator *animator = nullptr;   // GIF / WebM playing in place of thumbnails
     // grouped (groups.h): the grid has no fixed cells (a header takes a line of its own), so each item is given this size
@@ -177,6 +184,17 @@ public:
     int header_width = 0;
 
 private:
+    struct Layout {
+        QRect r, icon_rect, text_rect;   // the cell less its margin; the icon's square; the name's lines
+        QRectF drawn;                    // the picture as drawn: a thumbnail's own size, else the icon's square
+        QPixmap pm;                      // the thumbnail or animation frame (null: the theme's icon, in icon_rect)
+        QPixmap anim;                    // (the frame, when one plays)
+        QFont font;
+        QStringList lines;
+    };
+    // paint: the animation's frame too (asking for it starts it playing); a hit test goes by the thumbnail
+    Layout layout(const QStyleOptionViewItem &option, const QModelIndex &index, bool paint) const;
+    QPainterPath shape(const Layout &l) const;
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
     static void play_badge(QPainter *p, const QRectF &rect);
     static void star_badge(QPainter *p, const QRectF &rect);
@@ -272,6 +290,7 @@ Q_SIGNALS:
     void dropped(const QStringList &sources, const QString &target);
     void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
+    void find_duplicates(const QString &root);   // a drive's Find Duplicates…
     void shred_trash_requested();   // Empty Trash with BleachBit
 
 protected:

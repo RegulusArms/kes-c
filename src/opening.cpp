@@ -10,6 +10,7 @@
 #include "dialogs.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "signature.h"
 #include "places.h"
 #include "proc.h"
 #include "undo.h"
@@ -60,6 +61,32 @@ static bool open_at_line(const QString &path, int line)
     return proc::start_detached(argv);
 }
 
+// A checksum file: with a signature beside it (SHA256SUMS.gpg…), the signature is checked first, then the files it
+// lists; otherwise Verify Checksums (one that lists nothing opens as an ordinary file). Looked for on a worker: the
+// folder may be on a tape busy seeking.
+void MainWindow::open_checksums(const QString &f)
+{
+    QPointer<MainWindow> self(this);
+    fileops::run_task(
+        this, "Reading " + basename(f), [f]() { return QVariant(signature::signature_for(f)); },
+        [self, f](const QVariant &sig) {
+            if (!self)
+                return;
+            auto plain = [self, f]() {
+                if (self && !self->open_file(f))
+                    warn(self, "Open", "Could not open " + f);
+            };
+            if (sig.toString().isEmpty())
+                hashcheck::open_dialog(self, f, plain);
+            else
+                signature::open_window(self, sig.toString(), [self, f]() {
+                    if (self)
+                        hashcheck::open_dialog(self, f, nullptr);
+                });
+        },
+        true);
+}
+
 void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
 {
     QStringList paths;
@@ -99,11 +126,13 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     for (const QString &f : files) {
         if (archive::opens_as_archive(f))
             archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
-        else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
-            hashcheck::open_dialog(this, f, [self = QPointer<MainWindow>(this), f]() {
+        else if (signature::is_signature_name(f))   // Verify Signature (a key or an encrypted file opens as usual)
+            signature::open_window(this, f, [self = QPointer<MainWindow>(this), f]() {
                 if (self && !self->open_file(f))
                     warn(self, "Open", "Could not open " + f);
             });
+        else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
+            open_checksums(f);
         else if (is_image(f))
             images << f;
         else if (is_video(f))

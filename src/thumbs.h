@@ -87,19 +87,24 @@ struct ThumbRequest {
 
 // A thumbnail job: what one view asked for in one folder (its thumbnails and folder previews), listed in the Jobs
 // window's lower part with Pause and Stop. Leaving the folder lowers it: what's newer runs first, coming back raises
-// it, and a lowered job stops after a few minutes (Preferences: thumb_job_minutes). It waits while another job uses
-// its drive (the job queue), and goes on once that's done.
+// it, and a lowered job stops after a few minutes (Preferences: thumb_job_minutes). When it runs is the thumbnailing
+// mode's (thumb_mode, ThumbnailManager::set_mode): "wait" (the default): while another job uses its drive (the job
+// queue) it waits, and goes on once that's done; "drive": one thumbnail job per drive runs, also beside other jobs
+// there, the others on that drive waiting behind it; "paused": none runs until the mode changes.
 struct ThumbJob {
     quint64 id = 0;
     const QObject *owner = nullptr;
     QString folder, window;          // the folder, and the window it's for (its title then)
+    QString drive;                   // the drive it's on (drives::drive_ids), for "drive"
     int done = 0, total = 0;
     bool lowered = false, paused = false, waiting = false;   // waiting: another job uses its drive
+    bool behind = false;             // "drive": another thumbnail job on its drive runs first
+    bool held_all = false;           // "paused": all thumbnailing is
     qint64 lowered_at = 0;           // ms since the epoch
     int prio = 0;
     QSet<QString> keys;              // its requests still pending
     QString title() const;           // "Thumbnails: Pictures/2024"
-    QString state() const;           // "Running", "Paused", "Waiting for the drive", "Lowered (left)"
+    QString state() const;           // "Running", "Paused", "Waiting for the drive", "Lowered (left)"…
 };
 
 class ThumbnailManager : public QObject {
@@ -126,6 +131,10 @@ public:
     void pause_job(quint64 id, bool on);
     void stop_job(quint64 id);            // its thumbnails made so far stay
     int job_minutes = 3;                  // a lowered job stops after this long (Preferences)
+    // when thumbnail jobs run (ThumbJob): "drive", "wait" or "paused" (known_mode); applied to the jobs at once
+    void set_mode(const QString &mode);
+    QString mode() const { return thumb_mode; }
+    static QString known_mode(const QString &mode);   // mode when it's one of them, else "wait"
     void invalidate(const QString &path, bool disk = true);   // disk=false keeps the cached mosaic on disk
     void clear_memory();
     void reload_styles();   // re-read covers and folder styles (another Kestrel changed them)
@@ -172,6 +181,7 @@ private:
     void release_jobs(const QString &key, const std::shared_ptr<ThumbRequest> &req, bool done);   // it's done or gone
     void end_job(quint64 id, bool by_user);   // by_user: Stop (not started again while its view shows the folder)
     void check_jobs();                          // drives in use, lowered jobs timed out
+    void update_holds();                        // each job's waiting, behind and held_all, as the mode says
     void jobs_said();
     void schedule_progress();
     void emit_progress();
@@ -194,6 +204,8 @@ private:
     QHash<QPair<const QObject *, QString>, quint64> job_ids;   // (owner, folder) → its job
     QSet<QPair<const QObject *, QString>> stopped;            // jobs stopped (Stop) while their view is still there
     int job_prio = 0;                // the newest job's priority
+    QString thumb_mode = "wait";
+    QHash<QString, quint64> runners;   // "drive": the thumbnail job running on each drive
     QTimer jobs_timer, said_timer;
     int prio = 0;
     QHash<QPair<qint64, int>, QPixmap> scaled_cache;

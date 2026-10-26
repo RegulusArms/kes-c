@@ -18,7 +18,10 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPushButton>
 #include <QRegularExpression>
+#include <QTabBar>
+#include <QTreeWidget>
 
 using namespace test;
 
@@ -172,6 +175,162 @@ int main(int argc, char **argv)
     check(in_grid && in_list, "a file dropped onto a folder goes into it, in the grid and the list view, and the folder is highlighted "
                                   "while the file is over it" +
                                   QString(in_grid ? "" : " (not in the grid view)") + QString(in_list ? "" : " (not in the list view)"));
+
+    // -- files dragged onto another tab: resting on the tab shows it (after a moment), so the drag goes on into a
+    // folder there; dropped onto the tab itself, they go into its folder (the Trash's: Move to Trash). The tab is
+    // highlighted while it would take them; a tab with no one folder (the Overview) is still shown, but takes none
+    {
+        w->set_view("grid");
+        QString dst = home_path("tab-dst");
+        makedirs(join(dst, "sub"), true);
+        makedirs(join(TRASH_DIR(), "files"), true);
+        makedirs(join(TRASH_DIR(), "info"), true);
+        Pane *from = w->pane();
+        Pane *to = w->new_tab(dst, false), *ov = w->new_tab(OVERVIEW, false), *trash = w->new_tab(join(TRASH_DIR(), "files"), false);
+        QTabBar *bar = w->tabs->tabBar();
+        spin(200);
+        auto send = [&](QWidget *target, QEvent::Type type, const QPoint &pos, const QMimeData &data) {
+            if (type == QEvent::Drop) {
+                QDropEvent e(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(target, &e);
+            } else if (type == QEvent::DragLeave) {
+                QDragLeaveEvent e;
+                QApplication::sendEvent(target, &e);
+            } else {
+                QDragMoveEvent e(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier, type);
+                QApplication::sendEvent(target, &e);
+            }
+        };
+        auto over_tab = [&](Pane *p, const QMimeData &data) {   // the drag comes onto p's tab and rests there
+            QPoint at = bar->tabRect(w->tabs->indexOf(p)).center();
+            send(bar, QEvent::DragEnter, at, data);
+            send(bar, QEvent::DragMove, at, data);
+            return at;
+        };
+        QStringList res;
+        // onto a tab, dropped there: into its folder
+        write_text(home_path("tab-1.txt"), "1");
+        QMimeData d1;
+        d1.setUrls({QUrl::fromLocalFile(home_path("tab-1.txt"))});
+        QPoint at = over_tab(to, d1);
+        bool lit = bar->property("drop_tab").toInt() == w->tabs->indexOf(to);
+        bool shown = wait_for([&]() { return w->pane() == to; }, 3000);
+        send(bar, QEvent::Drop, at, d1);
+        bool unlit = bar->property("drop_tab").toInt() == -1;
+        if (!lit)
+            res << "the tab isn't highlighted";
+        if (!shown)
+            res << "resting on the tab doesn't show it";
+        if (!unlit)
+            res << "the highlight stays after the drop";
+        if (!wait_for([&]() { return exists(join(dst, "tab-1.txt")) && !exists(home_path("tab-1.txt")); }))
+            res << "the file dropped onto the tab isn't in its folder";
+        // onto a tab, then on into a subfolder shown there
+        w->tabs->setCurrentWidget(from);
+        write_text(home_path("tab-2.txt"), "2");
+        QMimeData d2;
+        d2.setUrls({QUrl::fromLocalFile(home_path("tab-2.txt"))});
+        at = over_tab(to, d2);
+        wait_for([&]() { return w->pane() == to; }, 3000);
+        send(bar, QEvent::DragLeave, at, d2);
+        QAbstractItemView *v = to->view();
+        QModelIndex sub;
+        wait_for([&]() {
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++)
+                if (v->model()->index(r, 0, v->rootIndex()).data(PathRole).toString() == join(dst, "sub"))
+                    sub = v->model()->index(r, 0, v->rootIndex());
+            return sub.isValid() && !v->visualRect(sub).isEmpty();
+        });
+        if (sub.isValid()) {
+            QPoint p = v->visualRect(sub).center();
+            send(v->viewport(), QEvent::DragEnter, p, d2);
+            send(v->viewport(), QEvent::DragMove, p, d2);
+            send(v->viewport(), QEvent::Drop, p, d2);
+        }
+        if (!wait_for([&]() { return exists(join(dst, "sub/tab-2.txt")) && !exists(home_path("tab-2.txt")); }))
+            res << "the drag can't go on into a subfolder in the tab it showed";
+        // the Overview's tab: shown, not highlighted, and a drop onto it does nothing
+        w->tabs->setCurrentWidget(from);
+        write_text(home_path("tab-3.txt"), "3");
+        QMimeData d3;
+        d3.setUrls({QUrl::fromLocalFile(home_path("tab-3.txt"))});
+        at = over_tab(ov, d3);
+        bool ov_lit = bar->property("drop_tab").toInt() != -1;
+        bool ov_shown = wait_for([&]() { return w->pane() == ov; }, 3000);
+        send(bar, QEvent::Drop, at, d3);
+        spin(300);
+        if (ov_lit || !ov_shown || !exists(home_path("tab-3.txt")))
+            res << "the Overview's tab takes the drop or isn't shown";
+        // the Trash's tab: Move to Trash
+        w->tabs->setCurrentWidget(from);
+        at = over_tab(trash, d3);
+        send(bar, QEvent::Drop, at, d3);
+        if (!wait_for([&]() {
+                return !exists(home_path("tab-3.txt")) && exists(join(TRASH_DIR(), "files/tab-3.txt")) &&
+                       exists(join(TRASH_DIR(), "info/tab-3.txt.trashinfo"));
+            }))
+            res << "a drop onto the Trash's tab doesn't move it to the trash";
+        check(res.isEmpty(), "files dragged onto a tab: resting there shows it, highlighted, and the drag goes on into a "
+                             "folder there; dropped onto it, into its folder (the Trash's: Move to Trash); the "
+                             "Overview's tab is shown but takes none" +
+                                 (res.isEmpty() ? QString() : " (" + res.join("; ") + ")"));
+        for (Pane *p : {to, ov, trash})
+            w->close_tab(w->tabs->indexOf(p));
+        w->tabs->setCurrentWidget(from);
+    }
+
+    // -- in the grid, an item is its icon and name, not its whole cell: a right-click elsewhere in the cell gives the
+    // folder's own menu (empty space's: New Folder…), on the icon or the name the item's (Open); the rest of what asks
+    // what's under the pointer (clicks, hover, drops) goes through the same indexAt
+    {
+        QString dir = home_path("cells");
+        makedirs(dir, true);
+        write_text(join(dir, "a.txt"), "a");   // a short name: one line, narrower than the cell
+        w->navigate(dir);
+        w->set_view("grid");
+        Pane *p = w->pane();
+        p->set_sizes(128, p->list_size);
+        QAbstractItemView *v = p->view();
+        QModelIndex item;
+        wait_for([&]() {
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++)
+                if (v->model()->index(r, 0, v->rootIndex()).data(PathRole).toString() == join(dir, "a.txt"))
+                    item = v->model()->index(r, 0, v->rootIndex());
+            return item.isValid() && !v->visualRect(item).isEmpty();
+        });
+        auto menu_has = [&](const QPoint &pos, const QString &text) {
+            v->clearSelection();
+            QMenu *m = w->menu_at(p, v, pos);
+            bool has = false;
+            for (QAction *a : m->actions())
+                has = has || label(a) == text;
+            delete m;
+            return has;
+        };
+        QRect cell = v->visualRect(item);
+        int fh = v->fontMetrics().height();
+        QPoint on_icon(cell.center().x(), cell.top() + 3 + 6 + 128 / 2);
+        QPoint on_name(cell.center().x(), cell.top() + 3 + 6 + 128 + 6 + fh / 2);
+        QPoint corner(cell.left() + 6, cell.bottom() - 4), beside_name(cell.left() + 6, on_name.y());
+        QStringList res;
+        if (!item.isValid())
+            res << "not shown";
+        if (!menu_has(on_icon, "Open"))
+            res << "the icon gives no item menu";
+        if (!menu_has(on_name, "Open"))
+            res << "the name gives no item menu";
+        if (!menu_has(corner, "New Folder…") || menu_has(corner, "Open"))
+            res << "the cell's empty corner gives the item's menu";
+        if (!menu_has(beside_name, "New Folder…") || menu_has(beside_name, "Open"))
+            res << "the space beside a short name gives the item's menu";
+        if (v->indexAt(beside_name).isValid() || !v->indexAt(on_icon).isValid())
+            res << "indexAt doesn't follow the box";
+        check(res.isEmpty(), "in the grid, a right-click outside an item's icon and name (in its cell) gives the folder's "
+                             "menu, on the icon or the name the item's" +
+                                 (res.isEmpty() ? QString() : " (" + res.join("; ") + ")"));
+        w->navigate(home);
+        wait_for([&]() { return w->pane()->path == home; });
+    }
 
     // -- a drag that starts in the view itself, grouped by period or by day: what it carries is what the view's own
     // model gives for the selected items (as startDrag asks it), with the drag actions it offers. Grouped, that model
@@ -657,6 +816,25 @@ int main(int argc, char **argv)
     QWidget *last = w->tabs->widget(tabs_before - 1);
     tab_action(tabs_before - 1, "Close Tab");
     check(w->tabs->count() == tabs_before - 1 && w->tabs->indexOf(last) < 0, "Close Tab in the tab menu closes that tab");
+
+    // -- the Jobs window: each list with its own controls. The job buttons right under the jobs list, above the
+    // thumbnail jobs; the thumbnail ones (and how thumbnailing runs) under the thumbnail list
+    {
+        JobsWindow *jw = JobsWindow::open(w);
+        jw->resize(1000, 600);
+        spin(200);
+        auto top = [jw](QWidget *x) { return x->mapTo(jw, QPoint(0, 0)).y(); };
+        auto bottom = [jw, top](QWidget *x) { return top(x) + x->height(); };
+        bool jobs_ok = true, thumbs_ok = true;
+        for (QWidget *b : std::initializer_list<QWidget *>{jw->pause_btn, jw->stop_btn, jw->now_btn, jw->up_btn, jw->down_btn})
+            jobs_ok = jobs_ok && top(b) >= bottom(jw->list) && bottom(b) <= top(jw->thumb_list);
+        for (QWidget *b : std::initializer_list<QWidget *>{jw->thumb_pause, jw->thumb_stop, jw->thumb_mode})
+            thumbs_ok = thumbs_ok && top(b) >= bottom(jw->thumb_list);
+        check(jobs_ok && thumbs_ok, QString("the Jobs window's job buttons are right under the jobs list, the thumbnail "
+                                            "jobs' controls under the thumbnail list") +
+                                        (jobs_ok ? "" : " (the job buttons aren't)") + (thumbs_ok ? "" : " (the thumbnail ones aren't)"));
+        jw->close();
+    }
 
     QString dump = qEnvironmentVariable("KESTREL_UI_DUMP");
     if (!dump.isEmpty()) {

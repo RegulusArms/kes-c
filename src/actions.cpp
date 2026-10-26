@@ -150,6 +150,10 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
 {
     if (paths.isEmpty())
         return;
+    if (target == join(TRASH_DIR(), "files")) {   // onto the Trash (its tab, its place in the sidebar): trashed properly
+        trash_paths(paths);
+        return;
+    }
     Qt::KeyboardModifiers mods = QGuiApplication::keyboardModifiers();
     bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier, alt = mods & Qt::AltModifier;
     if (alt) {

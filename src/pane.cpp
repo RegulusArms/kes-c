@@ -16,6 +16,7 @@
 #include "util.h"
 #include "archivewin.h"
 #include "widgets.h"
+#include "dupes.h"
 #include "windows.h"
 
 #include <QComboBox>
@@ -150,6 +151,69 @@ protected:
         View::mousePressEvent(ev);
     }
 
+public:
+    // The grid: an item is its icon and name (GridDelegate::shape), not its whole cell. A point elsewhere in its cell
+    // is the folder's empty space, for whatever asks what's under the pointer (clicks, middle-click, the right-click
+    // menu, hover, tooltips, drops). The list: the whole row, as Qt has it.
+    QModelIndex indexAt(const QPoint &pos) const override
+    {
+        QModelIndex i = View::indexAt(pos);
+        if constexpr (std::is_base_of_v<QListView, View>)
+            if (i.isValid() && !item_shape(i).contains(QPointF(pos) + QPointF(0.5, 0.5)))
+                return QModelIndex();
+        return i;
+    }
+
+    QPainterPath item_shape(const QModelIndex &i) const
+    {
+        QRect cell = this->visualRect(i);
+        auto *d = qobject_cast<GridDelegate *>(this->itemDelegate());
+        if (!d) {
+            QPainterPath whole;
+            whole.addRect(cell);
+            return whole;
+        }
+        QStyleOptionViewItem opt;
+        this->initViewItemOption(&opt);
+        opt.rect = cell;
+        if (this->selectionModel() && this->selectionModel()->isSelected(i))
+            opt.state |= QStyle::State_Selected;   // (its name bold: a little wider)
+        return d->shape(opt, i);
+    }
+
+protected:
+    // Selecting by position (QListView's setSelection takes the cells): a press selects the item under it as
+    // indexAt has it, and the rubber band selects the items it touches the shape of. Shift and Ctrl ranges (from item
+    // to item) stay Qt's.
+    void setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags command) override
+    {
+        if constexpr (std::is_base_of_v<QListView, View>) {
+            bool press = rect.width() <= 1 && rect.height() <= 1;   // QRect(pos, pos)
+            if ((press || this->state() == QAbstractItemView::DragSelectingState) && this->selectionModel()) {
+                QItemSelection sel;
+                if (press) {
+                    QModelIndex i = indexAt(rect.topLeft());
+                    if (i.isValid() && (this->model()->flags(i) & Qt::ItemIsSelectable))
+                        sel.select(i, i);
+                } else {
+                    QRectF band = QRectF(rect.normalized());
+                    QAbstractItemModel *m = this->model();
+                    for (int row = 0, n = m->rowCount(this->rootIndex()); row < n; ++row) {
+                        QModelIndex i = m->index(row, 0, this->rootIndex());
+                        QRect cell = this->visualRect(i);
+                        if (!cell.intersects(rect.normalized()) || !(m->flags(i) & Qt::ItemIsSelectable))
+                            continue;
+                        if (item_shape(i).intersects(band))
+                            sel.select(i, i);
+                    }
+                }
+                this->selectionModel()->select(sel, command);
+                return;
+            }
+        }
+        View::setSelection(rect, command);
+    }
+
     // Only the left button drags. Qt starts a drag on a move with any button held once an item was pressed: with the
     // mouse's back button still down as the hand moves (going back to the folder above), it dragged the folder just
     // left (selected there again) and, the drag going nowhere, showed its picture sliding back. Other buttons' moves
@@ -210,20 +274,18 @@ protected:
         if (!drop_target.isValid())
             return;
         QRectF r = this->visualRect(drop_target);
-        qreal radius = 8;   // as the grid's selection
-        if constexpr (std::is_base_of_v<QTreeView, View>) {
-            r = QRectF(0, r.top(), this->viewport()->width(), r.height());   // the whole row
-            radius = 4;
-        } else {
-            r = r.adjusted(3, 3, -3, -3);
-        }
+        QPainterPath shape;
+        if constexpr (std::is_base_of_v<QTreeView, View>)
+            shape.addRoundedRect(QRectF(0, r.top(), this->viewport()->width(), r.height()).adjusted(1, 1, -1, -1), 4, 4);   // the whole row
+        else
+            shape = item_shape(drop_target).simplified();   // as the grid's selection
         QPainter p(this->viewport());
         p.setRenderHint(QPainter::Antialiasing);
         QColor c = this->palette().color(QPalette::Highlight);
         p.setPen(QPen(c, 2));
         c.setAlpha(70);
         p.setBrush(c);
-        p.drawRoundedRect(r.adjusted(1, 1, -1, -1), radius, radius);
+        p.drawPath(shape);
     }
 
     void startDrag(Qt::DropActions supported) override
@@ -459,6 +521,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(overview, &OverviewPage::sidebar_changed, win, [win]() { win->sidebar->refresh(); });
     connect(overview, &OverviewPage::add_bookmark, win, [win](const QString &t) { win->sidebar->add_bookmark(t); });
     connect(overview, &OverviewPage::properties, win, [win](const QString &t) { win->properties({t}); });
+    connect(overview, &OverviewPage::find_duplicates, win, [win](const QString &t) { dupes::open_window(win, {t}); });
     stack->addWidget(overview);
     lay->addWidget(stack);
     empty = new QLabel("Folder is empty", stack);

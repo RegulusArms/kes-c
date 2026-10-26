@@ -1151,6 +1151,7 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             Q_EMIT add_bookmark(target);
             refresh();
         });
+        m.addAction("Find Duplicates…", this, [this, target]() { Q_EMIT find_duplicates(target); });
         m.addAction("Properties", this, [this, target]() { Q_EMIT properties(target); });
     }
     if (info.kind == "tape" || info.kind == "floppy") {

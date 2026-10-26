@@ -27,10 +27,13 @@ public:
     static bool is_open();
     void refresh();
     QTreeWidget *list;   // one row per job: its key in Qt::UserRole ("flight/id", or "done:<n>" for a finished one)
-    // Below it (a quarter of the height), this Kestrel's thumbnail jobs (ThumbJob): browsing doesn't flood the list of
-    // copies, moves and extractions. Their id in Qt::UserRole.
+    QPushButton *pause_btn, *stop_btn, *now_btn, *up_btn, *down_btn;   // right under it: for its jobs
+    // Below them (a quarter of the height), this Kestrel's thumbnail jobs (ThumbJob): browsing doesn't flood the list
+    // of copies, moves and extractions. Their id in Qt::UserRole. Under it, their own Pause and Stop, and how
+    // thumbnailing runs (thumb_mode, every Kestrel's).
     QTreeWidget *thumb_list;
     QPushButton *thumb_pause, *thumb_stop;
+    QComboBox *thumb_mode;
     QSplitter *lists;
     void refresh_thumbs();
 
@@ -54,7 +57,6 @@ private:
     QTimer timer;
     QComboBox *mode;
     QCheckBox *start_paused;
-    QPushButton *pause_btn, *stop_btn, *now_btn, *up_btn, *down_btn;
     QLabel *head;
     QListWidget *steps;
     QPlainTextEdit *log;

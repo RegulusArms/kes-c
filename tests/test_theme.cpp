@@ -2,6 +2,7 @@
 // and the desktop's own settings (Cinnamon's on Linux Mint).
 #include "common.h"
 
+#include <QComboBox>
 #include <QLabel>
 #include <QMenu>
 #include <QSplitter>
@@ -461,6 +462,49 @@ int main(int argc, char **argv)
         check(stop_at < 250 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
               QString("Stop ends a thumbnail job: the view drawing the folder again doesn't start it again (%1 made at "
                       "the stop, %2 now)").arg(stop_at).arg(made(many3)));
+
+        // the thumbnailing modes (thumb_mode, under the thumbnail list and in Preferences), with a job holding the
+        // drive: paused, nothing is made; "wait", it waits for the drive; "drive", it runs beside that job, and a
+        // second folder's job on the drive waits for the first
+        {
+            QStringList m1 = make_tree(home_path("own/mode1"), 300), m2 = make_tree(home_path("own/mode2"), 300);
+            QString m1_dir = home_path("own/mode1"), m2_dir = home_path("own/mode2");
+            auto hold2 = std::make_shared<std::atomic<bool>>(true);
+            QPointer<Task> holder2 = fileops::queue_job(w1, "Holding the drive", {m1_dir}, [hold2](Task *t) {
+                while (*hold2) {
+                    t->check();
+                    QThread::msleep(20);
+                }
+                return QVariant();
+            });
+            wait_for([&]() { return jobs::Queue::instance()->busy(m1_dir); }, 5000);
+            prefs::set("thumb_mode", "paused");
+            bool shown = jw->thumb_mode->currentData().toString() == "paused";
+            ask(m1, w1->pane()->thumb_owner());
+            spin(1000);
+            check(shown && made(m1) == 0 && job_of(m1_dir).state() == "Paused (all thumbnailing)",
+                  "thumbnailing paused: a thumbnail job makes nothing and is listed as paused (" +
+                      job_of(m1_dir).state() + ", " + QString::number(made(m1)) + " made)");
+            prefs::set("thumb_mode", "wait");
+            spin(1000);
+            check(made(m1) == 0 && job_of(m1_dir).state() == "Waiting for the drive",
+                  "thumbnailing waits for the drive: a job on a drive another job uses waits (" + job_of(m1_dir).state() + ")");
+            prefs::set("thumb_mode", "drive");
+            check(wait_for([&]() { return made(m1) > 2; }, 10000) && job_of(m1_dir).state() == "Running" &&
+                      jw->thumb_mode->currentData().toString() == "drive",
+                  "one thumbnail job per drive: it runs beside the job using its drive");
+            ask(m2, w2->pane()->thumb_owner());
+            spin(800);
+            bool behind = job_of(m2_dir).state() == "Waiting for another thumbnail job on its drive" && made(m2) == 0 &&
+                          job_of(m1_dir).id;
+            g_thumbs->stop_job(job_of(m1_dir).id);
+            check(behind && wait_for([&]() { return made(m2) > 2; }, 10000),
+                  "...and a second folder's thumbnail job on that drive waits for the first (" + job_of(m2_dir).state() + ")");
+            g_thumbs->stop_job(job_of(m2_dir).id);
+            prefs::set("thumb_mode", QVariant());
+            *hold2 = false;
+            wait_for([&]() { return !holder2; });
+        }
         jw->close();
 
         QStringList few2 = make_tree(home_path("own/few2"), 3), many2 = make_tree(home_path("own/many2"), 300);

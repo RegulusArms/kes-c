@@ -43,25 +43,6 @@ into.
 
 ### Jobs
 
-- [ ] **The Jobs window: each list with its own controls, and choices for thumbnailing.**
-  - Layout: the job buttons (Pause, Stop, Start Now, Up, Down, Clear Finished) go right under the jobs list, above
-    the thumbnail jobs. Today they sit below both lists (src/jobswin.cpp: `controls`, after the splitter `lists`), so
-    they look like they're for the thumbnails too. The thumbnail jobs' controls go below the thumbnail list: its
-    Pause and Stop (already there), and the new choices below.
-  - **Thumbnailing**, a choice of three (a setting in src/prefs.cpp, Preferences → Images & Videos, also shown under
-    the thumbnail list, like Run jobs above the jobs list):
-    - **One per drive, even while it's in use:** one thumbnail job runs on each drive alongside the copies, moves and
-      extractions there; the others on that drive wait behind it.
-    - **Wait until the drive is free** (today's behaviour, and the default): a thumbnail job waits while another job
-      uses its drive (ThumbnailManager::check_jobs in src/thumbs.cpp, `jobs::Queue::busy`).
-    - **Paused:** no thumbnailing at all until switched back. What's already made still shows, and the jobs stay listed
-      as paused, carrying on where they were when it's switched back.
-  - Applies to every Kestrel, as Run jobs does (it goes through the tower).
-  - Tapes and floppies keep their own rule: no previews unless allowed for that drive (Show Previews on This Drive).
-  - Test: `theme` (thumbnail jobs are tested there): with each choice, a thumbnail job on a drive a copy is using
-    runs, waits, or stays paused; with "one per drive", a second folder's job on that drive waits for the first.
-    `ui`: the job buttons are under the jobs list, the thumbnail ones under the thumbnail list.
-
 ### Archives
 
 ### Drives, the sidebar and the Overview
@@ -113,67 +94,12 @@ into.
 
 ### Views and search
 
-- [ ] **Drag files and folders from one tab to another.** Dragging items over a tab in the tab bar switches to that
-  tab (after a short hover, as browsers and GNOME Files do), so the drag can go on into its folder, a subfolder there,
-  or empty space (its folder). Dropping straight onto the tab itself drops into that tab's folder.
-  - The same rules as any other drop: with no key held, a move on the same drive and a copy to another drive; Ctrl
-    copies, Shift moves, Ctrl+Shift links, Alt asks. The folder or tab under the pointer is highlighted.
-  - Today the tab bar takes no drops at all (src/app.cpp: `tabs`, its `tabBar()` has only the tab menu). It also hides
-    itself with a single tab, so this is for windows with two or more.
-  - Not onto a tab showing the Overview, Starred, Recent or search results (no one folder to drop into): it still
-    switches, and the drop goes where the pointer then is. Onto the Trash: Move to Trash.
-  - Test: `ui`, as the drops onto folders are tested there (the drag events where a real drag sends them).
-
-- [ ] **A selection box only as big as the item.** In the grid, the highlight around a selected (or hovered) file or
-  folder fills its whole cell, and the whole cell counts as the item, so in a full folder there's little empty space
-  left to right-click for the folder's own menu (New Folder, Paste…). Make the box fit just around the icon and its
-  name, and make a click outside it count as empty space.
-  - Today: GridDelegate::paint (src/widgets.cpp) draws the highlight over the cell less 3 px on each side
-    (`option.rect.adjusted(3, 3, -3, -3)`), and the view's indexAt() takes the whole cell. Both need the same, smaller
-    shape: the icon as drawn (a thumbnail's real size, not the icon size, for wide or tall images) and the name's lines
-    as wrapped, each centred. Probably one helper in GridDelegate that both paint and the pane's hit test ask.
-  - Everything that asks "which item is under the pointer?" should use it: clicks, middle-click (a folder in a new
-    tab), the right-click menu
-    (MainWindow::context_menu), drops onto folders (dragMoveEvent's drop target), hover, and the rubber band, which
-    should select an item only when it touches the box.
-  - The list view stays as it is (a whole row is the item there).
-  - Test: `ui`: a right-click in a cell outside the box gives empty space's menu, on the icon or the name the item's.
-
 ### File tools
 
-- [ ] **Find duplicate files.** Right-click a folder (or several, or a drive) → **Find Duplicates…**: lists groups of
-  identical files and lets the user choose which copies to keep and move the rest to the trash.
-  - Fast: group by size first, then hash only same-size files (Kestrel already hashes for checksums), with byte-by-byte
-    comparison or a strong hash to be sure. Runs on a thread with progress and ✕. Optionally `jdupes`/`rmlint` when
-    installed, but not needed.
-  - Options: minimum size, include hidden files, skip hard links (already the same file), follow into subfolders.
-  - Results: each group with thumbnails, path, date and size; "keep the oldest / newest / in this folder" helpers;
-    Move to Trash (undoable) or replace duplicates with hard links (same drive only, asking first). Space to be freed
-    shown at the top.
-  - Later: similar images (not identical bytes), e.g. the same photo at another size.
+- [ ] **Find similar images** (the part of Find Duplicates left for later): the same photo at another size or quality,
+  not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates window.
 
-- [ ] **Compare and sync folders.** Right-click a folder → **Compare With…** and **Sync To…**.
-  - **Compare:** two folders side by side, the differences listed: only on the left, only on the right, newer on one
-    side, same name but different contents (by size and date, or by contents for a deep compare). Open, copy across
-    or trash from the list.
-  - **Sync:** make a destination match a source (one way, e.g. Pictures → backup drive): a preview of exactly what will
-    be copied, replaced and (optionally) deleted, then run it. With `rsync` when installed (resumes interrupted
-    copies, only sends changes), else Kestrel's own copy engine. Deleting on the destination is off by default and
-    asks again.
-  - Saved sync pairs ("Pictures → Backup HDD") to run again in one click, recognising the drive by its id (see the
-    friendly drive names item).
-  - Every replacement still goes through part files (nothing half-copied over a good file).
-
-- [ ] **Verify signatures.** Double-click a `.sig` / `.asc` / `.gpg` signature (or `SHA256SUMS.gpg`, `*.asc` next to a
-  download) → **Verify Signature**: checks it with `gpg --verify` against the file it signs (the same name without
-  the extension, or the one inside a clearsigned file) and says plainly: valid, signed by *name / key ID*, on *date*;
-  or bad signature; or the signer's key isn't in your keyring (with its key ID and fingerprint, and a button to fetch
-  it from a keyserver, asking first).
-  - Ties in with the checksum files Kestrel already verifies: a signed `SHA256SUMS` (+ `.gpg`/`.asc`) checks the
-    signature first, then every file it lists.
-  - Trust in plain terms: a valid signature from a key you haven't marked as trusted is still "valid, but this key
-    isn't verified by you", not a scary wall of gpg output.
-  - Optional, later: **Encrypt / Decrypt** with gpg (to a recipient or with a password).
+- [ ] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
 
 ### Images, video and audio
 
@@ -309,6 +235,16 @@ into.
     wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
 
 ## Done
+
+- [x] **Find duplicate files** (0.3.2-alpha.17). `src/dupes.cpp`: `dupes::find` groups by size, then the first 64 KB (SHA-256), then the whole file (`hashcheck::hash_file`, SHA-256), each root on its own drive, symlinks never followed; hard links collapsed to one name unless asked (then `freed` counts each inode once). `DupesWindow` (a free window; a queued job, so it waits for its drive): options as prefs (`dupes_*`, Files → Find Duplicates), thumbnails through `ThumbnailManager::get_icon` (owner: the window), Keep boxes, keep oldest / newest / in a folder, Move the Others to Trash (`MainWindow::trash_paths`: undoable), Replace with Hard Links (`link_over`: a link under a part name renamed over the file; size, date and inode checked again first). A group with no copy kept is skipped. In the menus of folders, several folders, sidebar drives and Overview cards. Not done: jdupes / rmlint (not needed), similar images (its own item). Test: `tools`.
+- [x] **Compare and sync folders** (0.3.2-alpha.17). `src/compare.cpp`: `compare::diff` (parallel walk; a folder on one side is one item; dates within 1 s are the same; deep: byte by byte; Kestrel's part files and rsync's partial folder ignored), `plan` (copies, replacements, then deletes), `jobs_for` (Kestrel's `start_ops`, replacing through parts) or `run_rsync` (`rsync -a --modify-window=1 --partial-dir=.kes-rsync-partial --info=progress2`, no `--inplace`; its output in the job's log). `CompareWindow` (Copy across asks before replacing; Trash per side), `SyncWindow` (Preview, deleting off and asked again, Sync Now). Saved pairs in `sync-pairs.json` (write_atomic; in BleachBit's cleaner) with each folder's file system UUID (`fs_uuid`, from /dev/disk/by-uuid) and path inside it, `resolve`d wherever the drive is mounted. ☰ → Sync Folders… opens the window for the saved pairs. rsync is an optional package. Test: `tools`, `installer`.
+- [x] **Verify signatures** (0.3.2-alpha.17). `src/signature.cpp`: `kind_of` (clearsigned, detached, inline, or not a signature: keys and encrypted files open as usual), `verify` (`gpg --batch --status-fd 1 --verify`), `parse_status` (GOODSIG / BADSIG / EXPKEYSIG / REVKEYSIG / ERRSIG rc 9 / NO_PUBKEY / VALIDSIG / TRUST_*), `headline` and `plain` texts; `SignatureWindow` with Fetch Key… (asks, then `--recv-keys` from keyserver.ubuntu.com, which keeps user IDs) and gpg's output. Opening a signature or a checksum file with one beside it (`signature_for`) checks the signature, then `hashcheck::open_dialog`. Right-click entry `verify_signature` for files with a signature's name (not encrypted tar archives). Not done: Encrypt / Decrypt (its own item). Test: `tools`.
+
+- [x] **A selection box only as big as the item** (0.3.2-alpha.17). `GridDelegate::shape` (src/widgets.cpp): the icon as drawn (`layout`: a thumbnail's scaled size, else the icon square) padded 4 px, and each name line as wide as its text, centred, as one path (WindingFill). `paint` fills it for selected / hovered, the grid's drop target is drawn with it, and the grid's `FileView::indexAt` (src/pane.cpp) returns nothing outside it, which covers clicks, middle-click, hover, tooltips, `MainWindow::context_menu` (split into `menu_at`, which the test uses) and drops. `setSelection`: a press selects only by `indexAt`; the rubber band (DragSelectingState) selects the items whose shape it touches (a pass over the rows, cells first); Shift ranges stay Qt's. The list view is unchanged. Test: `ui`.
+
+- [x] **Drag files and folders from one tab to another** (0.3.2-alpha.17). `TabDrop` (src/app.cpp), an event filter on the tab bar (which now takes drops): resting on a tab for 500 ms shows it; a drop onto a tab goes through `handle_drop` (the same keys as any drop), an archive window's items through `ArchiveWindow::drop_members`. A tab takes a drop when its pane has one folder (`Pane::dir()`, not search results; the Trash, listed as results, does) and the items aren't all in it already; that tab is highlighted (a `Light` widget over its rect; the tab bar's `drop_tab` property for the tests). Found along the way: a drop onto the sidebar's Trash moved files into `Trash/files` without a .trashinfo; `handle_drop` now sends any drop onto the Trash to `trash_paths`. Test: `ui`.
+
+- [x] **The Jobs window: each list with its own controls, and choices for thumbnailing** (0.3.2-alpha.17). The job buttons are in a box with the jobs list (the upper part of the `lists` splitter), the thumbnail list's Pause, Stop and a **Thumbnailing** choice below it. `thumb_mode` (src/prefs.cpp, Images & Videos; applied by `apply_settings` without the rest of `apply_preferences`, so the previews made stay; other Kestrels through the "settings" message, no new tower message): "wait" (default: `jobs::Queue::busy`, as before), "drive" (`ThumbnailManager::update_holds`: per drive (`ThumbJob::drive`, `drives::drive_ids`), the running job keeps it until it ends or is paused; a new runner is the newest job still shown, before a lowered one; the rest `behind`), "paused" (`held()` holds every request, also those without a job; jobs listed "Paused (all thumbnailing)"). Tapes and floppies still need Show Previews on This Drive (`drives::reads_allowed`, before any request). Test: `theme`, `ui`.
 
 - [x] **Thumbnailing is a job in the Jobs window** (0.3.2-alpha.15). Each view and folder that asks for thumbnails and folder previews is a `ThumbJob` (src/thumbs.h), listed in the Jobs window's lower part (a vertical splitter, 3:1, `jobs_window_lists`) as "Thumbnails: Pictures/2024, 312 of 840", with the window it's for, its state, progress, Pause and Stop. A request (`ThumbRequest`) takes its pool priority from its highest job; leaving a folder (`ThumbnailManager::lower`, from `Pane::set_path`) puts its jobs below every other, coming back (the view asking again) raises them, and a lowered job stops after `thumb_job_minutes` (Preferences → Images & Videos, default 3). Pause, and another job using the drive (`jobs::Queue::busy`, checked every 2 s and on the queue's changes), hold its queued requests out of the pool (`place`, `tryTake`); Stop drops them and isn't undone by the view drawing the folder again (until it leaves it). Its view closing still stops them (0.3.2-alpha.14). Decided along the way: thumbnail jobs wait for other jobs on their drive, but not the other way round (browsing would otherwise hold up copies); they're this Kestrel's only (not in the tower's shared queue). Test: `theme`.
 - [x] **Jobs run in the background, apart from the Kestrel windows** (0.3.2-alpha.15). Decided: the Kestrel process stays alive rather than a separate jobs process. A job the user sees holds a `QEventLoopLocker` (`Task::keeps_running`), so Kestrel quits only once its last window and its jobs are gone; quiet helper tasks don't. Closing a window that isn't the last doesn't ask: its jobs go on in another window's status bar. The last window asks (`MainWindow::closeEvent`: Exit and Open the Jobs Window / Stop All Jobs and Exit / Cancel) unless the Jobs window is open; Quit (Ctrl+Q) closes every window that way. The Jobs window is a window of its own (no parent). `start_ops` finishes without its window (undo, the tape's index, what failed: `queue_job`'s `outlives_parent`), and a job's error is shown with no parent when its window is gone. Not done: a password question that's open on a window that then closes goes with it (the job takes it as cancelled). Test: `jobs`.

@@ -40,10 +40,11 @@ jobs:
         # gnome-keyring, p7zip-full: remembered archive passwords and Extract All (skipped without them)
         # libimage-exiftool-perl, libjpeg-turbo-progs: the image viewer's rotation and Straighten checks (skipped without them)
         # unzip: the archives test of the unzip path (used only without 7-Zip; skipped without it)
+        # rsync, gnupg: the tools test's sync with rsync and its signature checks (skipped without them)
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
             dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full \
-            libimage-exiftool-perl libjpeg-turbo-progs unzip
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg
 
       - name: Run the tests
         run: tests/run.sh
@@ -57,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
             dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full \
-            libimage-exiftool-perl libjpeg-turbo-progs unzip
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg
 
       - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
         # GCC 13's sanitizers can't start with the kernel's 32-bit address randomisation ("unexpected memory mapping")

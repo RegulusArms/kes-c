@@ -2,7 +2,49 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.16
+## 0.3.2-alpha.17
+
+- **Find Duplicates…** (right-click a folder, several folders, or a drive in the sidebar or on the Overview): finds the
+  files with the same contents, quickly (only files of the same size are read: their beginnings, then the whole file),
+  as a job with progress and Stop. Options: the smallest size, subfolders, hidden files, skipping hard links. The
+  groups show each file's thumbnail, folder, date and size, and the space that can be freed; keep the oldest, the
+  newest or those in a folder, then **Move the Others to Trash** (undoable) or **Replace the Others with Hard Links…**
+  (same drive, asking first). A group with no copy kept, or a file changed since the search, is never touched.
+- **Compare With…** (right-click a folder): lists what differs between two folders, through their subfolders: only on
+  one side, newer on one side, or other contents (by size and date, or byte by byte). Open, copy across (asking before
+  replacing) or trash from the list.
+- **Sync To…** (right-click a folder, or ☰ → Sync Folders…): makes a destination match a source, one way, after a
+  preview of exactly what will be copied, replaced and (if chosen) deleted. With rsync when it's installed (it resumes
+  an interrupted sync and only sends what changed), or Kestrel's own copy; a file being replaced is kept until its new
+  copy is complete. Deleting on the destination is off by default and asks again. Save a pair ("Pictures → Backup
+  HDD") to run it again in one click; a pair on a removable drive is found wherever the drive is mounted. `kes-setup
+  --bleachbit`'s cleaner has a new option for the saved pairs, and `rsync` is among the optional packages.
+- **Verify Signature.** Double-click a `.sig`, `.asc`, `.gpg` or `.sign` signature (or right-click → Verify
+  Signature): gpg checks it against the file it signs, and Kestrel says plainly what that means: valid, signed by whom
+  and when (and, if you haven't verified that key, that anyone can make a key with that name, with its fingerprint to
+  compare); a bad signature; or the signer's key isn't in your keyring, with **Fetch Key…** (asking first). A signed
+  checksum file (`SHA256SUMS` with `SHA256SUMS.gpg`) is checked first, then every file it lists.
+- **Choose when thumbnails are made.** Under the Jobs window's thumbnail list (and in Preferences → Images & Videos),
+  **Thumbnailing**: wait until the drive is free of other jobs (as before, the default); one per drive, even while
+  it's in use (a folder's previews come during a long copy on that drive, one folder at a time); or paused (no
+  thumbnailing until switched back; what's made still shows, and the folders' jobs carry on afterwards). It applies to
+  every Kestrel window.
+- **Drag files from one tab to another.** Hold them over a tab for a moment and it opens, so the drag can go on into
+  its folder or a folder there; drop them onto the tab itself to put them in its folder. The same keys as any drop
+  (none: move on the same drive, copy to another; Ctrl copies, Shift moves, Ctrl+Shift links, Alt asks), and the tab
+  is highlighted while it would take them. The Overview, Starred, Recent and search results open but take no drop.
+- **A selection box only as big as the item.** In the grid, the highlight of a selected or hovered file fits around
+  its icon (a wide or tall picture's own shape) and its name, instead of filling the whole cell; and only that counts
+  as the item. So a full folder still has empty space to right-click for its own menu (New Folder, Paste…), click to
+  clear the selection, or drop files into. A selection rectangle picks the items whose icon or name it touches.
+- **Dropping files onto the Trash moves them to the trash** (its tab or the sidebar's Trash), so they can be restored
+  and undone. A drop onto the sidebar's Trash used to move them into the trash's folder without the record of where
+  they came from.
+- **The Jobs window's buttons are where they belong**: Pause, Stop, Start Now, Up, Down and Clear Finished right under
+  the jobs list, the thumbnail jobs' Pause and Stop under theirs. They used to sit below both lists, as if they were
+  for the thumbnails too.
+
+## 0.3.2-alpha.16 (2026-10-26)
 
 - **Wipe Metadata…** in the right-click menu of one or more images: takes out all of their metadata (camera details,
   GPS location, dates, comments, image-generation prompts) without touching the pixels, as a job in the Jobs window.

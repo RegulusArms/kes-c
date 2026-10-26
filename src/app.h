@@ -80,10 +80,12 @@ public:
     void toggle_hidden(bool on);
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
+    void open_checksums(const QString &path);   // Verify Checksums, its signature first when one is beside it
     bool open_file(const QString &path);
     void quick_view(Pane *pane, const QStringList &paths);
     void open_viewer(Pane *pane, const QStringList &images, int idx);
     void context_menu(Pane *pane, QAbstractItemView *view, const QPoint &pos);
+    QMenu *menu_at(Pane *pane, QAbstractItemView *view, const QPoint &pos);   // what context_menu shows (and selects)
     QMenu *build_menu(Pane *pane, const QStringList &paths);
     void reveal(const QString &path);
     void copy_text(const QStringList &items);

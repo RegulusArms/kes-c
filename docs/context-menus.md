@@ -73,6 +73,7 @@ The shared entries, plus:
 |---|---|---|
 | **View Image** | Opens the image in Kestrel's own viewer, whatever app images open with | Images |
 | **Open With ▸** | The apps that can open it (up to 8), and **Other Application…** to pick any | Always |
+| **Verify Signature** | Checks the signature with `gpg` against the file it signs (the same name without the extension; a clearsigned file against itself) and says plainly what it means: valid and by whom (and whether that's a key you've verified), a bad signature, or the signer's key missing (with **Fetch Key…**, asking first). A signed checksum file's files are checked next | Signatures (`.sig`, `.asc`, `.gpg`, `.sign`), not encrypted archives |
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
 | **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
@@ -89,6 +90,9 @@ The shared entries, plus:
 | **Open in (code editor)** | Opens the folder in VS Code, VSCodium, Cursor, Zed or Sublime Text | Each one that's installed |
 | **Open With ▸** | Other apps that open folders (not file managers), and **Other Application…** | Always |
 | **Paste Into Folder** | Pastes the clipboard's files into this folder | Enabled when files are on the clipboard |
+| **Find Duplicates…** | Finds the files with the same contents in the folder (and its subfolders), to keep some and move the others to the trash or replace them with hard links (see [Features](features.md)) | Always |
+| **Compare With…** | Asks for another folder and lists what differs between the two: only on one side, newer on one side, other contents; copy across or trash from the list | Always |
+| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again | Always |
 | **Folder Colour ▸** | Gives the folder's icon one of 10 colours, or **Default** | Always |
 | **Show Image Previews** | Turns the mosaic of images on the folder's icon on or off for this folder | Always |
 | **Reset Folder Cover** | Removes the cover image you chose, back to the automatic mosaic | When it has a chosen cover |
@@ -141,6 +145,7 @@ The shared entries, plus:
 | **Extract Here** / **Extract To…** / **Open as Archive** / **Test Archive** | As for one archive | A split set selected whole |
 | **Extract All Here** / **Extract All To…** | Extracts each archive, one after another | When all are archives |
 | **Test Archives** | Tests each archive | When all are archives |
+| **Find Duplicates…** | As for one folder, in all of them together | When all are folders |
 | **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
 | **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
 | **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
@@ -221,6 +226,7 @@ Right-click a tab's title.
 |---|---|---|
 | **Open** / **Open in New Tab** | Opens the place here or in a new tab | Every entry |
 | **Open in Terminal** | Opens a terminal there | Folders, drives and mounted shares (not phones or servers) |
+| **Find Duplicates…** | Finds the files with the same contents on the drive (as for a folder) | Drives |
 | **Edit Bookmark…** | Changes the bookmark's name and location | Bookmarks |
 | **Remove Bookmark** | Removes the bookmark (the folder stays) | Bookmarks |
 | **Move Up** / **Move Down** | Moves the bookmark in the list | Bookmarks |
@@ -241,6 +247,7 @@ On the Overview page.
 | **Open in Terminal** | Opens a terminal at the drive | Mounted drives |
 | **Add to Bookmarks** | Bookmarks the drive | Mounted drives |
 | **Properties** | The drive's Properties | Mounted drives |
+| **Find Duplicates…** | As in the sidebar | Mounted drives |
 | **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
 | **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |
 | **Edit Bookmark…** / **Remove Bookmark** | As in the sidebar | Bookmarks |
@@ -272,7 +279,7 @@ Right-click a row on the Metadata tab of the Properties window.
 
 ## Dropping with Alt held
 
-Not a right-click, but a menu of its own: drop files while holding **Alt** to choose.
+Not a right-click, but a menu of its own: drop files while holding **Alt** to choose (onto a folder, empty space, the sidebar or a tab).
 
 | Entry | What it does |
 |---|---|

@@ -148,6 +148,9 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/prefswin.cpp` | The Preferences window, built from that list: tabs, search, resets |
 | `src/menus.cpp` | The right-click menus as the user lays them out: entry ids, the default layouts, rearranging a built menu, and the editor (Preferences → Menus) |
 | `src/hashcheck.cpp` | Checksum files: Verify Checksums, Create Checksum File…, and checking one file in Properties |
+| `src/signature.cpp` | Verify Signature: checking `.sig` / `.asc` / `.gpg` signatures with gpg, said plainly; fetching a missing key |
+| `src/dupes.cpp` | Find Duplicates…: grouping identical files (by size, then their beginnings, then SHA-256), the window, trashing or hard-linking the copies not kept |
+| `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |

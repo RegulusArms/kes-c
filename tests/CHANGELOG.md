@@ -4,6 +4,41 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.17
+
+Added:
+- `tools`, a new test for the file tools. Find Duplicates: identical files are grouped through subfolders, not a file
+  of the same size and beginning that differs further on, a symlink, hidden files (unless asked), a second name of one
+  file (unless asked: then it frees nothing), or subfolders when told not to; the oldest first, and keeping the oldest,
+  the newest or those in a folder; Replace with Hard Links makes a link to the copy kept, and one that fails part-way
+  (its folder takes no new name) is left whole with no part file; nothing is replaced when the copy kept changed since;
+  the window from a folder's menu searches, keeps the oldest and trashes the rest (undoable); the entry is only in
+  folders' menus. Compare: each kind of difference (a folder on one side as one row), a deep compare finds the same size
+  and date with other bytes, a second's slack in dates; the window lists the differences and Copy to Right asks before
+  replacing. Sync: the plan (copies, replacements, deletes only when asked and after the copies); the window's preview,
+  a sync with Kestrel's copy, deleting asked again and nothing deleted before the answer, saved pairs run again; with
+  rsync, a sync that fails part-way (RLIMIT_FSIZE) leaves the destination's file as it was, and a second run completes
+  it. Verify Signature: gpg's status lines (valid, missing key, bad); the plain words for a key you haven't verified and
+  a missing key; with real gpg keys: detached and clearsigned signatures, your own key trusted, an imported key not, no
+  key, a changed file, a missing file, a key that isn't a signature; opening a signature shows the window, a signed
+  SHA256SUMS is checked and then its files; the menu entry only for signatures.
+- `installer`: the BleachBit cleaner's new option for the saved sync pairs (in the dry run and the clean), and rsync
+  among the optional packages.
+- CI's test and sanitizer jobs install rsync and gnupg (the `tools` test's rsync and signature checks; the runner
+  image has them, so this only makes it explicit).
+- `theme`: the thumbnailing modes (thumb_mode), with a job holding the drive: paused, a thumbnail job makes nothing and
+  is listed as paused (and the Jobs window's choice follows the setting); "wait", it waits for the drive; "one per
+  drive", it runs beside that job, and a second folder's job on the drive waits until the first ends.
+- `ui`: files dragged onto a tab (the drag events sent to the tab bar, where a real drag sends them): resting there
+  shows the tab, highlighted (the tab bar's `drop_tab`), and a drop onto it goes into its folder; the drag can go on
+  into a subfolder in the tab it showed; the Overview's tab is shown but takes no drop; a drop onto the Trash's tab
+  moves the file to the trash (with its .trashinfo).
+- `ui`: in the grid, a right-click on an item's icon or name gives its menu, and one elsewhere in its cell (the
+  corner, beside a short name) the folder's own (New Folder…); indexAt follows the same box.
+- `ui`: ui_actions.txt lists the new entries: ☰ → Sync Folders…, and a folder's Find Duplicates…, Compare With… and Sync To….
+- `ui`: the Jobs window's job buttons are right under the jobs list (above the thumbnail list), the thumbnail jobs'
+  controls under the thumbnail list.
+
 ## 0.3.2-alpha.16
 
 Added:
