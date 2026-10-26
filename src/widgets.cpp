@@ -21,6 +21,7 @@
 #include <QCompleter>
 #include <QDir>
 #include <QDrag>
+#include <QGraphicsOpacityEffect>
 #include <QDragEnterEvent>
 #include <QFocusEvent>
 #include <QGuiApplication>
@@ -159,9 +160,58 @@ bool FSModel::dropMimeData(const QMimeData *data, Qt::DropAction, int, int, cons
         if (u.isLocalFile())
             paths << u.toLocalFile();
     auto handler = drop_handler;
-    QTimer::singleShot(0, this, [handler, paths, target]() { handler(paths, target); });
+    bool copy_only = data->hasFormat(COPY_ONLY_MIME);
+    QTimer::singleShot(0, this, [handler, paths, target, copy_only]() { handler(paths, target, copy_only); });
     return true;
 }
+
+// ---------------------------------------------------------------- drag picture (widgets.h)
+
+DragGhost::DragGhost(const QPixmap &pm, const QPoint &hot) : pm(pm), hot(hot) { qApp->installEventFilter(this); }
+DragGhost::~DragGhost() { delete label; }
+
+bool DragGhost::eventFilter(QObject *obj, QEvent *ev)
+{
+    auto *w = qobject_cast<QWidget *>(obj);
+    if (!w)
+        return false;
+    switch (ev->type()) {
+    case QEvent::DragEnter:
+    case QEvent::DragMove: {
+        QWidget *top = w->window();
+        QPoint pos = w->mapTo(top, static_cast<QDropEvent *>(ev)->position().toPoint());
+        if (!label || label->parentWidget() != top) {   // into another Kestrel window
+            delete label;
+            label = new QLabel(top);
+            label->setAttribute(Qt::WA_TransparentForMouseEvents);   // drops go to what's under it
+            label->setPixmap(pm);
+            auto *fade = new QGraphicsOpacityEffect(label);
+            fade->setOpacity(0.8);
+            label->setGraphicsEffect(fade);
+            label->resize(pm.deviceIndependentSize().toSize());
+        }
+        label->move(pos - hot);
+        label->show();
+        label->raise();
+        break;
+    }
+    case QEvent::DragLeave:   // out of one widget, maybe into the next: hidden unless the next one moves it
+        if (label && w->window() == label->parentWidget())
+            QTimer::singleShot(30, label, [l = label, seen = label->pos()]() {
+                if (l && l->pos() == seen)
+                    l->hide();
+            });
+        break;
+    case QEvent::Drop:
+        if (label)
+            label->hide();
+        break;
+    default:
+        break;
+    }
+    return false;
+}
+
 
 PinSortProxy::PinSortProxy(FSModel *source) : QSortFilterProxyModel(source), fs(source)
 {
@@ -1903,8 +1953,9 @@ void Sidebar::dropEvent(QDropEvent *ev)
         if (u.isLocalFile())
             paths << u.toLocalFile();
     QString target = it->data(PathRole).toString();
+    bool copy_only = ev->mimeData()->hasFormat(COPY_ONLY_MIME);
     ev->acceptProposedAction();
-    QTimer::singleShot(0, this, [this, paths, target]() { Q_EMIT dropped(paths, target); });
+    QTimer::singleShot(0, this, [this, paths, target, copy_only]() { Q_EMIT dropped(paths, target, copy_only); });
 }
 
 void Sidebar::paintEvent(QPaintEvent *ev)

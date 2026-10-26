@@ -84,6 +84,22 @@ static QList<Pref> build()
     add("Sidebar", "", "sidebar_sections", "Sections", CUSTOM, QStringList(),
         "drag a section's heading in the sidebar; click it to collapse it");
 
+    // -- Overview
+    add("Overview", "", "overview_sections", "Sections", CUSTOM, QStringList(), "",
+        "Ticked sections show on the Overview, in this order");
+    add("Overview", "", "overview_card_size", "Card size", CHOICE, "normal")
+        .choices = {{"Small", "small"}, {"Normal", "normal"}, {"Large", "large"}};
+    add("Overview", "Drives", "overview_system", "System drives", CHOICE, "root")
+        .choices = {{"The system drive only", "root"},
+                    {"The system drive and its other mounts (/boot, /boot/efi…)", "all"},
+                    {"None", "none"}};
+    add("Overview", "Drives", "overview_usage_bar", "Show the usage bar", BOOL, true);
+    add("Overview", "Drives", "overview_free_as", "Free space as", CHOICE, "size")
+        .choices = {{"A size (120 GB free of 1 TB)", "size"}, {"A percentage (12% free of 1 TB)", "percent"}};
+    add("Overview", "Drives", "overview_health", "Show each drive's health (S.M.A.R.T.)", BOOL, true, "",
+        "From udisks: healthy, bad sectors or failing, the temperature and the time powered on. A failing drive is "
+        "also told once as a notification. Drives in USB enclosures often don't report it.");
+
     // -- Images & Videos
     range(add("Images & Videos", "", "slideshow_secs", "Slideshow interval", INT, 4, "the image viewer"), 1, 120, " s");
     add("Images & Videos", "Image viewer", "viewer_filmstrip", "Show the filmstrip", BOOL, true, "T in the image viewer");

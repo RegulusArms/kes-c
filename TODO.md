@@ -63,24 +63,6 @@ into.
   - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
     guessing.~~
 
-- [ ] **Overview page improvements, chosen in Preferences.** Let the user pick what the Overview shows, in
-  Preferences → Overview. Today it always shows the same four sections: Drives, Phones & Cameras, Network, Bookmarks.
-  - Show or hide each section, and put them in any order (as the sidebar's sections can be).
-  - New sections to choose from (ideas to settle when this is picked up): Starred, Recent files, Pinned folders,
-    frequently used folders, and the drives' friendly names (see the item above).
-  - Per section: card size, and for Drives whether to show system and hidden drives, the usage bar, free space as
-    a number or a percentage, and unmounted drives.
-  - Details still to decide with the user: which new sections and options are actually wanted.
-
-- [ ] **Drive health on the Overview.** Each drive card (and Properties of a drive) shows its health from S.M.A.R.T.:
-  "Healthy", or a warning such as "3 bad sectors" or "failing", plus its temperature and power-on time.
-  - Read through udisks (`org.freedesktop.UDisks2.Drive.Ata`: SmartFailing, SmartTemperature, SmartPowerOnSeconds,
-    SmartNumBadSectors), which works without root for ATA/SATA drives; NVMe through udisks' NVMe interface where the
-    installed udisks has it. `smartctl` needs root, so it isn't used. USB enclosures often don't pass S.M.A.R.T.
-    through: show "health not available" rather than nothing.
-  - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
-  - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
-
 - [ ] ~~**LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
   floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index
   sync, the Overview card and safer unmounting. Still to do:~~ *Struck for now.*
@@ -112,92 +94,6 @@ into.
   - ~~**Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default
     app), with play/pause and a seek bar.~~
   - ~~**Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.~~
-
-- [ ] **Drag an image out of the viewer.** With an image open in Kestrel's image viewer, drag it out and drop a copy
-  anywhere that takes files: the desktop, another Kestrel or GNOME Files window, a browser's upload field, a chat or
-  mail app.
-  - What's dragged: the file itself (`text/uri-list`, the `file://` URL, as the file views drag it), offered as a
-    **copy** (never a move: the original stays), plus the image data (`image/png` or the original's type) for apps that
-    only take pasted pixels. The drag shows the image's thumbnail under the pointer (Kestrel's own drag picture on
-    Wayland, as the file views do), and the app it's dropped into gets the focus (the drop focus extension), as for
-    drags from the file views.
-  - Telling a drag-out from panning: left-drag pans the image today. Options: start a drag-out when the image fits the
-    window (nothing to pan) and pan when zoomed in; or drag-out with a modifier (Alt or Ctrl) or the middle button; or
-    from a small handle / the filmstrip thumbnail (see the viewer improvements item). To decide; maybe the first plus a
-    modifier for zoomed images.
-  - A rotated or flipped view that hasn't been saved: drag the file as it is on disk (and say so), or the image as
-    shown (a temporary copy). (Saving a rotation is in the viewer now: R / L / H, then Save or Ctrl+S.)
-  - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
-    folder pastes a copy of the file.
-
-- [ ] **Rotate images losslessly.** Right-click one image or a selection → **Rotate** → **90° clockwise**, **180°**,
-  **90° counter-clockwise (270°)**, and **Flip horizontally / vertically**, saved to the files. Today rotating only
-  exists in the image viewer (R / L / H, saved through the orientation tag: `imgedit::save_rotation`, reusable here).
-  - JPEG: lossless (`jpegtran -rotate 90 -perfect -copy all`, or `exiftran`; package `libjpeg-turbo-progs` /
-    `exiftran`): the picture data is turned without re-compressing, so no quality is lost. Where a JPEG's size isn't a
-    multiple of its block size, `-perfect` refuses; then offer either trimming the odd edge pixels (`-trim`) or, as an
-    option, just setting the EXIF orientation flag instead.
-  - **Or only change the orientation flag** (EXIF Orientation, through exiftool or by rewriting the tag): instant,
-    changes nothing else, and every modern viewer honours it. Possibly the default for JPEGs that already have one.
-  - Other formats: PNG, WebP (lossless), TIFF are re-saved losslessly (Qt or the format's tool); lossy WebP, HEIC and
-    AVIF re-encoding loses a little quality, so say so (or only set the orientation where the format has one).
-  - Keeps the metadata (EXIF, dates) and resets the orientation flag to "normal" after turning the pixels, so the photo
-    isn't turned twice. Written under a hidden part name and renamed over the original when done (fsync first, as it
-    replaces data); a batch in the status bar with ✕. Thumbnails and folder mosaics refresh.
-  - The viewer's R / L could then offer to save the rotation too.
-
-- [ ] **Convert images.** Right-click one or more images → **Convert Image…**: to JPEG, PNG, WebP, AVIF, HEIC or TIFF
-  (only formats something installed can write), e.g. iPhone HEIC photos to JPEG.
-  - Options in plain terms: quality slider for lossy formats, resize (keep, a longest side, a percentage), keep or strip
-    the metadata (EXIF, location), and what to do with transparency when the target has none (a background colour).
-  - Decoding: Qt's image plugins first (Kestrel already reads HEIC, AVIF, JPEG XL and camera RAW through
-    `kimageformat6-plugins`); ffmpeg where Qt can't. Encoding: Qt's writers where they exist, ffmpeg (or the
-    format's own tool) for the rest. Offer only the targets that can actually be written on this system.
-  - Keep the photo's orientation right (apply the EXIF rotation, or carry it over), and its colour profile where the
-    target supports one.
-  - Output beside the originals (or a chosen folder), never replacing a file; part names; progress and ✕ in the status
-    bar for a batch; optionally move the originals to the trash afterwards.
-
-- [ ] **Convert videos with ffmpeg.** Right-click one or more video files → **Convert Video…** (shown only when `ffmpeg`
-  is installed, like the other tool-dependent entries) opens a settings window with the options in plain terms, the
-  way Compress… presents an archive tool's options.
-  - **Presets first:** e.g. "MP4 (H.264), plays everywhere", "Smaller file (H.265)", "WebM for the web", "Audio only
-    (MP3 / M4A / Opus)", "GIF", "Same format, just smaller". Choosing one fills in the options below; changing any
-    option makes it "Custom".
-  - **Options, in an easy form:** container (MP4, MKV, WebM, MOV, GIF, audio-only), video codec (H.264, H.265, VP9,
-    AV1, copy as is), quality as a slider from "smaller file" to "better quality" (CRF underneath) or a target size,
-    resolution (keep, 4K, 1080p, 720p, 480p, or a width), frame rate (keep, 60, 30, 24), audio (keep, re-encode with a
-    bitrate, remove), speed vs. size (ffmpeg's preset), trim (start and end time), rotate/flip, and **Extra options**
-    passed straight to ffmpeg for anything else.
-  - Only what the installed ffmpeg can do is offered (ask it for its encoders: `ffmpeg -encoders`); hardware encoding
-    (VAAPI / NVENC) when available, off by default.
-  - Shows the source's details (`ffprobe`: length, resolution, codecs, size) and a rough estimate of the new size
-    where it can.
-  - **Command preview** at the bottom showing exactly what will run, as the Compress dialog does; the last settings are
-    remembered (per preset).
-  - Output: beside the original as `name.converted.mp4` (or a chosen folder and name), never replacing the original
-    unless asked; written under a hidden part name and renamed when finished, so a cancel or failure leaves no
-    half-made video. Optionally move the original to the trash afterwards.
-  - Runs in the status bar with a real percentage (ffmpeg's `-progress` output against the length from ffprobe), the
-    time left, and ✕ to cancel. Several files are converted one after another as one job, with one summary at the end.
-
-- [ ] **Extract audio from videos.** Right-click one or more videos → **Extract Audio…** (shown when `ffmpeg` is
-  installed).
-  - **Keep the original audio** (default when it fits a common container): the audio stream copied out unchanged
-    (`-vn -c:a copy`), instant and lossless, into the matching file type (AAC → `.m4a`, Opus → `.opus`/`.ogg`, MP3 →
-    `.mp3`, anything else → `.mka`).
-  - **Or convert it:** MP3, M4A (AAC), Opus, FLAC or WAV, with a quality choice in plain terms (e.g. "Good (192 kbps)").
-  - A video with several audio tracks: choose which (language/title from `ffprobe`), or all of them.
-  - Same handling as Convert Video: written under a hidden part name, beside the video by default, never replacing a
-    file, progress and ✕ in the status bar, several files as one job.
-
-- [ ] **Convert audio files.** Right-click one or more audio files → **Convert Audio…** (with `ffmpeg`): FLAC, WAV,
-  ALAC, MP3, M4A (AAC), Opus or OGG, e.g. a FLAC album to MP3 or Opus for a phone or music player.
-  - Quality in plain terms (bitrate or VBR level), sample rate and channels (keep, or 44.1/48 kHz, stereo/mono).
-  - Tags and cover art kept (title, artist, album, track number; embedded cover where the target supports it).
-  - Optional **loudness normalisation** (ffmpeg's `loudnorm`, two passes) so a batch plays at the same volume.
-  - A whole folder at once, keeping its subfolders in the output folder.
-  - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
 
 ### Desktops
 
@@ -298,6 +194,14 @@ into.
     `%1`/`%n` check from the item above over the real files.
 
 ## Done
+- [x] **Drag an image out of the viewer** (0.3.2-alpha.18). `ViewerCanvas::fits()`: with the whole image in view a left-drag drags out (`drag_out`), zoomed in it pans and Alt+drag drags out (chosen with the user). `ImageViewer::image_data`: the file's URL, its own bytes and PNG made on request (`ImageMime`), marked `COPY_ONLY_MIME` so Kestrel's drop targets (`handle_drop`, the folder model, tabs, sidebar) copy, never move; turned or edited and not saved, a copy as shown in `~/.cache/kestrel-explorer/viewer-copies` (chosen with the user; a day old: deleted). Kestrel's drag picture on Wayland (`DragGhost`, moved to widgets.h), the focus given to the app dropped into. Ctrl+C now puts the file on the clipboard too (copied files). Test: `viewer`.
+- [x] **Rotate images losslessly** (0.3.2-alpha.18). Rotate ▸ (`rotate`, `rotate_cw`, `rotate_180`, `rotate_ccw`, `flip_horizontal`, `flip_vertical`) → `convert::rotate` (a queued job) → `imgedit::rotate_file`: JPEG through jpegtran `-perfect -copy all` from how it's shown (`compose` with its tag), the tag set to 1 (chosen with the user over the tag only; without jpegtran: the tag); `NotWholeBlocks` asks once (Trim the Edge / Set the Orientation Tag); PNG, BMP, TIFF, lossless WebP written again (`save_edit` with `keep_meta`: exiftool copies EXIF/XMP); HEIC, AVIF, lossy WebP asked first (`reencode`). Part files, fsynced. Not done: the viewer's R/L still save through the tag. Test: `media`.
+- [x] **Convert images** (0.3.2-alpha.18). Convert Image… (`convert_image`, `convert::ImageDialog`, `media::convert_image`): targets Qt can write plus heif-enc (libheif-examples, new optional package) for HEIC/AVIF; ffmpeg reads what Qt can't; quality, resize (longest side, percentage), metadata kept (`imgedit::with_metadata`: exiftool, or a JPEG's APP1) or stripped, a background for transparency; upright by orientation, colour space kept. Beside or into a folder, never replacing (`write_parts` new_only), trash afterwards. Test: `media`.
+- [x] **Convert videos with ffmpeg** (0.3.2-alpha.18). Convert Video… (`convert_video`, `convert::VideoDialog`): presets (`media::video_presets`), Custom on any change, the last preset and Custom's settings remembered (`convert/video`); options as listed (container, codec from `ffmpeg -encoders`, quality → CRF or a target size, resolution, frame rate, audio, speed → preset, trim, rotate/flip, VAAPI/NVENC when a device is there, extra options); ffprobe details, a rough size (`estimate_mb`), the command shown. `media::run`: ffmpeg `-progress pipe:1` into a part file (`-f` from `muxer`), `put_new`, percentage and time left, ✕. One job for several, one summary (`run_batch`). Test: `media`.
+- [x] **Extract audio from videos** (0.3.2-alpha.18). Extract Audio… (`extract_audio`, `convert::AudioDialog` from_video): kept as it is (`-c:a copy`, `audio_ext`: AAC → .m4a, Opus → .opus, MP3, FLAC, others → .mka) or converted; one track (named with language/title) or every track (a file each). Test: `media`.
+- [x] **Convert audio files** (0.3.2-alpha.18). Convert Audio… (`convert_audio`, files or folders): FLAC, WAV (24-bit kept), ALAC, MP3, M4A, Opus, OGG; quality, sample rate, channels; tags and cover (`attached_pic`) kept where the format takes them; loudnorm in two passes (`measure_loudness`, `loudnorm_filter`); a folder into "<name> (converted)" with its subfolders. Test: `media`.
+- [x] **Overview page improvements, chosen in Preferences** (0.3.2-alpha.18). Preferences → Overview: `overview_sections` (the sections in order, a hidden one as `-id`; `overview::section_order`), `overview_card_size` (small / normal / large: `CardLook`, also bookmark and save-location cards), `overview_system` (the system drive only, with /boot and /efi mounts, or none: `scan_filesystems(system_mounts)`), `overview_usage_bar`, `overview_free_as`. New sections, off at first: Starred (`places::starred()`; a file opens in its app through `open_file`, Unstar) and Frequent Folders (`places::visit_folder` from `Pane::set_path`, not in choosers or the trash, only with File History on; `frequent.json`, merged with the file when written 5 s later, 200 kept; 12 shown that still exist; Remove from Frequent Folders; in BleachBit's History). Chosen with the user: Starred and Frequent Folders (not Recent files or pinned items); card size, system drives and the usage display (not hiding single drives). Not done: friendly names (struck). A rescan asked during a scan now runs after it (`scan_again`). Test: `overview`, `prefs`, `installer`.
+- [x] **Drive health on the Overview** (0.3.2-alpha.18). `src/health.cpp`: udisks' GetManagedObjects on the system bus (worker, in `scan_filesystems(with_health)`), each device matched to its drive (a block's Drive, a LUKS volume's backing device, a dm device's /sys slaves on one drive; a ZFS pool through `zpool list -vHP`, its worst disk), `from_ata` / `from_nvme` (failing, bad sectors, values past their limit, a failed self-test; NVMe critical warnings), the card's line (red with a red border when failing), Drive Health… (free window, `SmartGetAttributes` in plain words), Properties' Health row, a notification once per drive id (`health_warned`). `overview_health` turns it off. Not done: health for unmounted drives' cards. Test: `overview`.
 
 - [x] **Find duplicate files** (0.3.2-alpha.17). `src/dupes.cpp`: `dupes::find` groups by size, then the first 64 KB (SHA-256), then the whole file (`hashcheck::hash_file`, SHA-256), each root on its own drive, symlinks never followed; hard links collapsed to one name unless asked (then `freed` counts each inode once). `DupesWindow` (a free window; a queued job, so it waits for its drive): options as prefs (`dupes_*`, Files → Find Duplicates), thumbnails through `ThumbnailManager::get_icon` (owner: the window), Keep boxes, keep oldest / newest / in a folder, Move the Others to Trash (`MainWindow::trash_paths`: undoable), Replace with Hard Links (`link_over`: a link under a part name renamed over the file; size, date and inode checked again first). A group with no copy kept is skipped. In the menus of folders, several folders, sidebar drives and Overview cards. Not done: jdupes / rmlint (not needed), similar images (its own item). Test: `tools`.
 - [x] **Compare and sync folders** (0.3.2-alpha.17). `src/compare.cpp`: `compare::diff` (parallel walk; a folder on one side is one item; dates within 1 s are the same; deep: byte by byte; Kestrel's part files and rsync's partial folder ignored), `plan` (copies, replacements, then deletes), `jobs_for` (Kestrel's `start_ops`, replacing through parts) or `run_rsync` (`rsync -a --modify-window=1 --partial-dir=.kes-rsync-partial --info=progress2`, no `--inplace`; its output in the job's log). `CompareWindow` (Copy across asks before replacing; Trash per side), `SyncWindow` (Preview, deleting off and asked again, Sync Now). Saved pairs in `sync-pairs.json` (write_atomic; in BleachBit's cleaner) with each folder's file system UUID (`fs_uuid`, from /dev/disk/by-uuid) and path inside it, `resolve`d wherever the drive is mounted. ☰ → Sync Folders… opens the window for the saved pairs. rsync is an optional package. Test: `tools`, `installer`.

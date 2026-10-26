@@ -4,6 +4,8 @@
 #include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "health.h"
+#include "prefs.h"
 #include "undo.h"
 #include "thumbs.h"
 #include "uwp.h"
@@ -461,10 +463,10 @@ QWidget *PropertiesDialog::general_tab()
     }
     // the drive's size from drives::Sizes (statfs can wait on a slow drive): filled in when it comes
     QString root = drives::mount_root(path);
-    QString fstype;
+    QString fstype, device;
     for (const drives::Mount &mt : drives::mounts())
         if (mt.root == root)
-            fstype = mt.fstype;
+            fstype = mt.fstype, device = mt.source;
     QLabel *vol = sel_label(root);
     form->addRow("Volume:", vol);
     QPointer<QLabel> vp(vol);
@@ -481,6 +483,29 @@ QWidget *PropertiesDialog::general_tab()
         if (r == root)
             show_vol();
     });
+    // a drive's own Properties (its top folder): its health, from udisks on a worker (health.h)
+    if (paths.size() == 1 && path == root && device.startsWith("/dev/") && prefs::get("overview_health").toBool()) {
+        QLabel *hl = sel_label("Reading…");
+        hl->setObjectName("health");
+        form->addRow("Health:", hl);
+        QPointer<QLabel> hp(hl);
+        QString name = basename(root).isEmpty() ? root : basename(root);
+        run([device]() { return QVariant::fromValue(health::read({device}).value(device, health::Info{})); },
+            [this, hp, name, device](const QVariant &v) {
+                if (!hp)
+                    return;
+                health::Info h = v.value<health::Info>();
+                if (h.drive.isEmpty()) {   // (udisks doesn't know it, or can't be reached)
+                    hp->setText("Not available");
+                    return;
+                }
+                hp->setTextFormat(Qt::RichText);
+                hp->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+                hp->setText("<a href=\"health\">" + health::line(h).toHtmlEscaped() + "</a>");
+                hp->setToolTip("Drive Health… (what the drive reports about itself)");
+                connect(hp, &QLabel::linkActivated, this, [this, name, h]() { health::open_window(this, name, h); });
+            });
+    }
     return w;
 }
 

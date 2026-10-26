@@ -1,6 +1,6 @@
 // The image viewer and saving its changes: lossless rotations, Straighten, crop and resize, GPS and the info panel,
-// screen-size decoding, the filmstrip, zoom, compare, quick actions, remembered state, and the order it shows a
-// selection in.
+// screen-size decoding, the filmstrip, zoom, compare, quick actions, remembered state, the order it shows a
+// selection in, and dragging an image out (and Ctrl+C).
 #include "common.h"
 #include "imgedit.h"
 #include "menus.h"
@@ -9,11 +9,13 @@
 #include "viewer.h"
 
 #include <QBuffer>
+#include <QClipboard>
 #include <QComboBox>
 #include <QMenu>
 #include <QTreeWidget>
 #include <QImageWriter>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QWheelEvent>
@@ -813,6 +815,77 @@ int main(int argc, char **argv)
         check(wait_for([&]() { return lexists(d) && v3->paths.contains(d) && v3->current() == d; }),
               "...and Ctrl+Z in the viewer puts it back where it was");
         v3->close();
+    }
+
+    // ---- dragging an image out of the viewer, and Ctrl+C
+    {
+        QString pic = join(vdir, "drag.jpg");
+        write_bytes(pic, jpeg_of(q));
+        QPointer<ImageViewer> dv = open({pic}, 0);
+        wait_for([&]() { return dv && !dv->canvas->pix.isNull(); });
+        ViewerCanvas *cv = dv->canvas;
+        QObject::disconnect(cv, &ViewerCanvas::drag_out, dv, nullptr);   // (the test takes the drag instead of a QDrag)
+        int drags = 0;
+        QObject::connect(cv, &ViewerCanvas::drag_out, [&]() { ++drags; });
+        auto drag = [&](Qt::KeyboardModifiers mods) {
+            QPointF from(cv->width() / 2.0, cv->height() / 2.0), to = from + QPointF(40, 30);
+            QMouseEvent press(QEvent::MouseButtonPress, from, cv->mapToGlobal(from), Qt::LeftButton, Qt::LeftButton, mods);
+            QMouseEvent move(QEvent::MouseMove, to, cv->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, mods);
+            QMouseEvent release(QEvent::MouseButtonRelease, to, cv->mapToGlobal(to), Qt::LeftButton, Qt::NoButton, mods);
+            QApplication::sendEvent(cv, &press);
+            QApplication::sendEvent(cv, &move);
+            QApplication::sendEvent(cv, &release);
+        };
+        drag(Qt::NoModifier);
+        check(cv->fits() && drags == 1, "with the whole image in view, a left-drag takes it out of the viewer");
+        cv->set_zoom(30);
+        QPointF before = cv->offset;
+        drag(Qt::NoModifier);
+        bool panned = drags == 1 && cv->offset != before;
+        drag(Qt::AltModifier);
+        check(!cv->fits() && panned && drags == 2, "zoomed in, a left-drag pans the image and Alt+drag takes it out");
+        cv->fit();
+        QString file;
+        std::unique_ptr<QMimeData> md(dv->image_data(cv, false, &file));
+        QImage png = md ? QImage::fromData(md->data("image/png"), "PNG") : QImage();
+        check(md && file == pic && md->urls() == QList<QUrl>{QUrl::fromLocalFile(pic)} && md->hasFormat(COPY_ONLY_MIME) &&
+                  md->data("image/jpeg") == read_file(pic) && png.size() == QSize(64, 48),
+              "what's dragged: the file (to be copied, never moved), its own JPEG bytes, and PNG for apps that take pixels");
+        cv->rotate(90);
+        QString turned;
+        std::unique_ptr<QMimeData> md2(dv->image_data(cv, false, &turned));
+        check(md2 && turned != pic && turned.startsWith(join(APP_CACHE(), "viewer-copies")) && basename(turned) == "drag.jpg" &&
+                  shown(turned).size() == QSize(48, 64) && shown(pic).size() == QSize(64, 48) &&
+                  md2->urls() == QList<QUrl>{QUrl::fromLocalFile(turned)},
+              "turned and not saved, a copy as shown is dragged (in Kestrel's cache, by its name), and the file stays as it was");
+        cv->reset_view();
+        dv->copy_image();
+        const QMimeData *clip = QGuiApplication::clipboard()->mimeData();
+        check(clip && clip->urls() == QList<QUrl>{QUrl::fromLocalFile(pic)} && clip->hasFormat("x-special/gnome-copied-files") &&
+                  clip->hasImage() && !clip->hasFormat(COPY_ONLY_MIME),
+              "Ctrl+C puts both the picture and the file on the clipboard (Ctrl+V in a folder pastes a copy)");
+        dv->close();
+        wait_for([&]() { return !dv; });
+
+        // dropped into a folder on the same drive, it's copied (a drop from Kestrel's views would move it)
+        QString into = home_path("dropped");
+        makedirs(into);
+        auto *drop = new QMimeData;
+        drop->setUrls({QUrl::fromLocalFile(pic)});
+        drop->setData(COPY_ONLY_MIME, "1");
+        FSModel folder_model(g_thumbs);
+        int calls = 0;
+        bool told_copy = false;
+        folder_model.drop_handler = [&](const QStringList &paths, const QString &target, bool copy_only) {
+            ++calls;
+            told_copy = copy_only && paths == QStringList{pic} && target == into;
+            w->handle_drop(paths, target, copy_only);
+        };
+        folder_model.setRootPath(vdir);
+        folder_model.dropMimeData(drop, Qt::CopyAction, -1, -1, folder_model.index(into));
+        delete drop;
+        check(wait_for([&]() { return lexists(join(into, "drag.jpg")); }) && lexists(pic) && calls == 1 && told_copy,
+              "an image dragged from the viewer into a folder on the same drive is copied there, and stays where it was");
     }
     finish();
 }

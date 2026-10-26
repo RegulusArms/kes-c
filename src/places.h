@@ -7,6 +7,11 @@
 // Pinned items (~/.config/kestrel-explorer/pinned.json, {folder: [names]}) aren't listed anywhere: "Pinned & Starred
 // First" sorts them to the top of their folder.
 //
+// Frequent folders (~/.config/kestrel-explorer/frequent.json, {folder: [visits, last visit]}): the folders opened in
+// Kestrel's windows (not in file choosers), counted while the desktop's File History switch is on, as Recent is. The
+// Overview can show the most used. Counted in memory and written a few seconds later, merged with the file as it is
+// then (so another Kestrel's visits stay); the 200 most used are kept.
+//
 // Folder sorts (~/.config/kestrel-explorer/sorts.json, {folder: [column, order, group, group_by]}): each folder keeps
 // the sort it was last given, and its grouping (groups.h: none, by period or by day, of the date modified, created or
 // taken); folders without one use the default (the "sort_col", "sort_order", "sort_group" and "sort_group_by" view
@@ -58,6 +63,12 @@ void reload_sorts();   // re-read them (another Kestrel changed them); emit sort
 
 // (path, original path) for a place, as util::trashed_items() gives for the trash (here both the same)
 QList<QPair<QString, QString>> items(const QString &place);
+
+bool remembers_history();   // the desktop's File History privacy switch (on when the desktop has none)
+void visit_folder(const QString &dir);
+QStringList frequent_folders(int limit);           // the most visited first (then the latest)
+void forget_frequent(const QStringList &dirs);     // Remove from Frequent Folders
+void save_frequent();                              // write the visits counted so far (also done on its own)
 
 QStringList recent_files(int limit = 500);   // local files from the recently-used list, newest first
 void add_recent(const QStringList &paths);   // files opened from Kestrel (as GNOME Files does)

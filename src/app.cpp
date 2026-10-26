@@ -9,6 +9,7 @@
 #include "dialogs.h"
 #include "drives.h"
 #include "compare.h"
+#include "convert.h"
 #include "dupes.h"
 #include "fileops.h"
 #include "hashcheck.h"
@@ -172,9 +173,10 @@ protected:
                 });
             } else {
                 QStringList paths = local_paths(e->mimeData());
-                QTimer::singleShot(0, w, [win, paths, dir]() {   // after the drag has finished
+                bool copy_only = e->mimeData()->hasFormat(COPY_ONLY_MIME);
+                QTimer::singleShot(0, w, [win, paths, dir, copy_only]() {   // after the drag has finished
                     if (win)
-                        win->handle_drop(paths, dir);
+                        win->handle_drop(paths, dir, copy_only);
                 });
             }
             return true;
@@ -1490,6 +1492,31 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
           "image_copy");
     }
+    auto all = [&paths](bool (*f)(const QString &)) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
+    if (all(&is_image)) {
+        QMenu *rm = m->addMenu(icon({"object-rotate-right", "image-x-generic"}), "Rotate");
+        T(rm->menuAction(), "rotate");
+        auto turn = [this, paths](int deg, bool flip) { return [this, paths, deg, flip]() { convert::rotate(this, paths, deg, flip); }; };
+        T(rm->addAction(icon({"object-rotate-right"}), "Rotate 90° Clockwise", this, turn(90, false)), "rotate_cw");
+        T(rm->addAction("Rotate 180°", this, turn(180, false)), "rotate_180");
+        T(rm->addAction(icon({"object-rotate-left"}), "Rotate 90° Counter-clockwise", this, turn(270, false)), "rotate_ccw");
+        rm->addSeparator();
+        T(rm->addAction(icon({"object-flip-horizontal"}), "Flip Horizontally", this, turn(0, true)), "flip_horizontal");
+        T(rm->addAction(icon({"object-flip-vertical"}), "Flip Vertically", this, turn(180, true)), "flip_vertical");
+        T(m->addAction(icon({"image-x-generic"}), "Convert Image…", this, [this, paths]() { convert::image_dialog(this, paths); }),
+          "convert_image");
+    }
+    bool ffmpeg = media::have_ffmpeg();
+    if (ffmpeg && all(&is_video)) {
+        T(m->addAction(icon({"video-x-generic"}), "Convert Video…", this, [this, paths]() { convert::video_dialog(this, paths); }),
+          "convert_video");
+        T(m->addAction(icon({"audio-x-generic"}), "Extract Audio…", this,
+                       [this, paths]() { convert::extract_audio_dialog(this, paths); }),
+          "extract_audio");
+    }
+    if (ffmpeg && (all(&convert::is_audio) || all([](const QString &x) { return isdir(x); })))
+        T(m->addAction(icon({"audio-x-generic"}), "Convert Audio…", this, [this, paths]() { convert::audio_dialog(this, paths); }),
+          "convert_audio");
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return metadata::can_wipe(x); })) {
         if (metadata::can_edit()) {
             T(m->addAction(icon({"edit-clear-all", "edit-clear"}), "Wipe Metadata…", this,
@@ -1676,6 +1703,8 @@ void apply_settings(const QStringList &keys)
             // read when a Save window opens; a Save window's Overview follows chooser_places itself (prefs::Notifier)
         } else if (key.startsWith("dupes_")) {
             // read when a Find Duplicates window opens
+        } else if (key.startsWith("overview_")) {
+            // each Overview page follows them itself (prefs::Notifier)
         } else if (key == "thumb_mode") {   // (not the rest of apply_preferences: the previews made stay)
             g_thumbs->set_mode(v.toString());
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {

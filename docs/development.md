@@ -130,8 +130,10 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
 | `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
-| `src/viewer.cpp` | Image viewer: decoding ahead at screen size, zoom, the filmstrip, the info panel, compare, quick actions |
-| `src/imgedit.cpp` | Saving the viewer's changes to image files: rotations through the orientation tag, Straighten, crop and resize |
+| `src/viewer.cpp` | Image viewer: decoding ahead at screen size, zoom, the filmstrip, the info panel, compare, quick actions, dragging an image out and Ctrl+C |
+| `src/imgedit.cpp` | Saving the viewer's changes to image files: rotations through the orientation tag, Straighten, crop and resize; turning files from the menu (Rotate ▸: jpegtran, lossless formats); keeping metadata in an image made from another |
+| `src/media.cpp` | Converting media: ffprobe's details, ffmpeg's options built from the settings (videos, audio), running ffmpeg with progress into a part file; converting images |
+| `src/convert.cpp` | The menu's Rotate ▸, Convert Image…, Convert Video…, Extract Audio… and Convert Audio…: their windows and jobs |
 | `src/fileops.cpp` | Background tasks and the status-bar task panel; copy, move and delete (retrying denied ones as administrator); conflict handling; links |
 | `src/places.cpp` | Starred and Recent: places that list files from anywhere; pinned items; each folder's sort and grouping (`sorts.json`) |
 | `src/undo.cpp` | Undo for file operations, shared by a Kestrel's windows (or every Kestrel's) |
@@ -152,7 +154,8 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/dupes.cpp` | Find Duplicates…: grouping identical files (by size, then their beginnings, then SHA-256), the window, trashing or hard-linking the copies not kept |
 | `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
-| `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks |
+| `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |
+| `src/health.cpp` | Drive health (S.M.A.R.T.) from udisks over D-Bus: the cards' health line, the Drive Health window, the failing-drive notification |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |

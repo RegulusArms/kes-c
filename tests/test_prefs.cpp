@@ -126,7 +126,7 @@ int main(int argc, char **argv)
         static const QStringList STATE = {"geometry", "splitter", "recent_servers", "chooser_folder", "jobs_window_geometry",
                                           "jobs_window_split", "jobs_window_lists", "sidebar_places_order", "sidebar_devices_order",
                                           "sidebar_mounts_order", "sidebar_collapsed", "tower_window_geometry",
-                                          "viewer_geometry", "viewer_recent_folders"};
+                                          "viewer_geometry", "viewer_recent_folders", "health_warned"};
         QStringList missing;
         // settings().value("key"), view_value("key"), and s.value("key") where s is the settings (QSettings &s)
         static const QRegularExpression re(R"(settings\(\)\.value\("([^"]+)\"|view_value\("([^"]+)\")");
@@ -167,7 +167,7 @@ int main(int argc, char **argv)
         if (!pd || !pd->editor(p.key))
             no_editor << p.key;
     check(pd && is_free_window(pd) &&
-              tab_texts == QStringList({"General", "Views", "Sidebar", "Images & Videos", "Files", "Archives", "Windows", "Menus"}) &&
+              tab_texts == QStringList({"General", "Views", "Sidebar", "Overview", "Images & Videos", "Files", "Archives", "Windows", "Menus"}) &&
               no_editor.isEmpty(),
           "Preferences is a free window with tabs (" + tab_texts.join(", ") + ") and a control for every setting" +
               (no_editor.isEmpty() ? QString() : " (none for: " + no_editor.join(", ") + ")"));

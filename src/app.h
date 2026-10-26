@@ -92,7 +92,7 @@ public:
     void clip(bool cut, const QStringList &paths);
     QPair<QString, QStringList> read_clipboard() const;
     void paste(const QString &target = QString(), bool as_link = false);
-    void handle_drop(const QStringList &paths, const QString &target);
+    void handle_drop(const QStringList &paths, const QString &target, bool copy_only = false);   // COPY_ONLY_MIME
     void transfer_to(const QStringList &paths, const QString &op);
     void duplicate(const QStringList &paths);
     void new_folder();

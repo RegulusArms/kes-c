@@ -2,7 +2,42 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.17
+## 0.3.2-alpha.18
+
+- **Choose what the Overview shows** (Preferences → Overview): tick the sections to show and put them in any order;
+  the card size (small, normal, large); whether the system drive is shown alone (as before), with its other mounts
+  (`/boot`, `/boot/efi`), or not at all; the usage bar; and free space as a size or a percentage.
+- **Two new Overview sections**, off until chosen: **Starred** (your starred files and folders; click a file to open
+  it, right-click to unstar) and **Frequent Folders** (the 12 folders you open most in Kestrel, counted while the
+  desktop's File History switch is on; right-click one to remove it). `kes-setup --bleachbit`'s History option now
+  deletes that count too.
+- **Drive health on the Overview.** Each drive's card shows its health from S.M.A.R.T., as udisks reports it (no root
+  needed): "Healthy", or a warning such as "3 bad sectors", with its temperature and how long it has been powered on.
+  A failing drive's card turns red, and a notification says so the first time Kestrel sees it. Click the health line
+  (or right-click → Drive Health…) for what the drive reports, in plain words. NVMe drives are read too; drives in USB
+  enclosures that don't pass it through say "Health not available"; a ZFS pool shows its worst disk. A drive's
+  Properties shows the same line.
+- Bookmarks on a tape or floppy no longer ask the drive anything to draw their Overview card.
+- **Drag an image out of the image viewer** and drop a copy anywhere that takes files: the desktop, a folder, a
+  browser's upload field, a chat or mail app (apps that only take pictures get its pixels). With the whole image in
+  view just drag it; zoomed in, hold Alt (a plain drag pans). It's always a copy, never a move, even into a folder on
+  the same drive; turned or edited and not saved, a copy as shown is dragged. **Ctrl+C** in the viewer now copies the
+  file too, so Ctrl+V in a folder pastes it.
+- **Rotate ▸** in an image's right-click menu (one or several): 90° either way, 180°, or flipped, saved in the files.
+  JPEGs are turned without re-compressing them (jpegtran), keeping their metadata; one whose size isn't whole JPEG
+  blocks asks whether to trim its edge or only set its orientation. PNG, BMP, TIFF and lossless WebP are saved again
+  losslessly; HEIC, AVIF and lossy WebP ask first.
+- **Convert Image…**: to JPEG, PNG, WebP, AVIF, HEIC or TIFF (what's installed can write), with a quality, a new
+  size, the metadata kept or not, and a background for transparency; e.g. iPhone photos to JPEG.
+- **Convert Video…**, **Extract Audio…** and **Convert Audio…** (with ffmpeg installed): presets and every option in
+  plain terms, the exact command shown, the video's details and a rough size; a real percentage and time left in the
+  status bar with ✕; several files as one job with one summary. Extract Audio keeps the sound as it is (instant,
+  lossless) or converts it, from one track or each. Convert Audio keeps tags and cover art, can even out the volume
+  across a batch, and converts a whole folder with its subfolders. Nothing half-made is ever left, and no file is
+  replaced; the originals can go to the trash afterwards. `libheif-examples` (HEIC and AVIF output) is a new optional
+  package.
+
+## 0.3.2-alpha.17 (2026-10-26)
 
 - **Find Duplicates…** (right-click a folder, several folders, or a drive in the sidebar or on the Overview): finds the
   files with the same contents, quickly (only files of the same size are read: their beginnings, then the whole file),

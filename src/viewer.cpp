@@ -1,6 +1,7 @@
 #include "viewer.h"
 
 #include "drives.h"
+#include "focus.h"
 #include "fileops.h"
 #include "imgedit.h"
 #include "menus.h"
@@ -11,11 +12,16 @@
 #include "undo.h"
 #include "util.h"
 #include "uwp.h"
+#include "widgets.h"
 #include "windows.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QBuffer>
 #include <QClipboard>
 #include <QContextMenuEvent>
+#include <QDateTime>
+#include <QDrag>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QImageReader>
@@ -23,11 +29,13 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QScreen>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -268,6 +276,14 @@ void ViewerCanvas::wheelEvent(QWheelEvent *ev)
     set_zoom(scale() * (dy > 0 ? 1.15 : 1 / 1.15), ev->position());
 }
 
+bool ViewerCanvas::fits() const
+{
+    if (pix.isNull())
+        return false;
+    QSizeF s = img_size() * scale();
+    return s.width() <= width() + 0.5 && s.height() <= height() + 0.5;
+}
+
 void ViewerCanvas::mousePressEvent(QMouseEvent *ev)
 {
     if (ev->button() != Qt::LeftButton) {
@@ -275,6 +291,7 @@ void ViewerCanvas::mousePressEvent(QMouseEvent *ev)
         return;
     }
     dragging = true;
+    drag_out_armed = !cropping && !pix.isNull() && (fits() || (ev->modifiers() & Qt::AltModifier));
     if (cropping) {
         QSizeF t = img_size();
         QPointF q = to_image(ev->position());
@@ -301,6 +318,13 @@ void ViewerCanvas::mouseMoveEvent(QMouseEvent *ev)
         update();
         return;
     }
+    if (drag_out_armed) {   // nothing to pan (or Alt held): the image goes out as a file
+        if ((ev->position() - drag_start).manhattanLength() >= QApplication::startDragDistance()) {
+            dragging = drag_out_armed = false;
+            Q_EMIT drag_out();
+        }
+        return;
+    }
     setCursor(Qt::ClosedHandCursor);
     if (!zoom)
         zoom = fit_scale();
@@ -312,7 +336,7 @@ void ViewerCanvas::mouseMoveEvent(QMouseEvent *ev)
 
 void ViewerCanvas::mouseReleaseEvent(QMouseEvent *)
 {
-    dragging = false;
+    dragging = drag_out_armed = false;
     setCursor(cropping ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
@@ -700,6 +724,7 @@ ImageViewer::ImageViewer(const QStringList &paths_, int idx, Callbacks callbacks
             if (isFullScreen())
                 hide_cursor.start();
         });
+        connect(c, &ViewerCanvas::drag_out, this, [this, c]() { drag_out(c); });
     }
     hide_cursor.setSingleShot(true);
     hide_cursor.setInterval(2000);
@@ -1547,20 +1572,139 @@ void ImageViewer::toggle_slideshow()
     update_overlay();
 }
 
+namespace {
+
+// A file's data for a drag or the clipboard: the file (its URL), and its picture for apps that only take pixels: its
+// own bytes in its own type, and PNG (or a QImage, in Kestrel) made only when an app asks for it.
+class ImageMime : public QMimeData {
+public:
+    explicit ImageMime(const QString &path) : path(path), type(mime_for(path, 0).name()) {}
+    QStringList formats() const override
+    {
+        QStringList f = QMimeData::formats();
+        for (const QString &t : {type, QString("image/png"), QString("application/x-qt-image")})
+            if (t.startsWith("image/") || t == "application/x-qt-image")
+                if (!f.contains(t))
+                    f << t;
+        return f;
+    }
+
+protected:
+    QVariant retrieveData(const QString &fmt, QMetaType t) const override
+    {
+        if (fmt == type && type.startsWith("image/") && fmt != "image/png")
+            return read_file(path);
+        if (fmt == "image/png" || fmt == "application/x-qt-image") {
+            if (type == "image/png" && fmt == "image/png")
+                return read_file(path);
+            QImageReader reader(path);
+            reader.setAutoTransform(true);
+            QImage img = reader.read();
+            if (fmt == "application/x-qt-image")
+                return img;
+            QByteArray png;
+            QBuffer buf(&png);
+            buf.open(QIODevice::WriteOnly);
+            img.save(&buf, "PNG");
+            return png;
+        }
+        return QMimeData::retrieveData(fmt, t);
+    }
+
+private:
+    QString path, type;
+};
+
+}  // namespace
+
+QMimeData *ImageViewer::image_data(ViewerCanvas *c, bool clipboard, QString *file)
+{
+    QString path = c == pinned ? pinned_path : shown;
+    if (path.isEmpty())
+        return nullptr;
+    QList<imgedit::Edit> edits = c == pinned ? QList<imgedit::Edit>() : steps;
+    if (c->rotation || c->flip_h)
+        edits << imgedit::Edit{c->rotation, c->flip_h, QRect(), QSize()};
+    QString handed = path;
+    if (!edits.isEmpty()) {
+        // not saved: a copy as shown, in a folder of its own (its name as the original's) in Kestrel's cache; copies
+        // a day old go
+        QString root = join(APP_CACHE(), "viewer-copies");
+        try {
+            for (const QString &n : listdir(root)) {
+                struct stat st;
+                if (stat_(join(root, n), st) && ::time(nullptr) - st.st_mtime > 86400)
+                    rmtree(join(root, n));
+            }
+        } catch (const OSError &) {
+        }
+        QString dir = join(root, QString::number(QDateTime::currentMSecsSinceEpoch(), 36) + "-" +
+                                     QString::number(QRandomGenerator::global()->generate(), 36));
+        auto [stem, ext] = split_ext(basename(path));
+        handed = join(dir, imgedit::can_write(path) ? basename(path) : stem + ".jpg");
+        try {
+            makedirs(dir, true);
+            QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+            imgedit::save_edit(path, handed, edits);
+            QGuiApplication::restoreOverrideCursor();
+        } catch (const std::exception &e) {
+            QGuiApplication::restoreOverrideCursor();
+            c->show_osd(QString("Couldn't make a copy as shown: %1").arg(QString::fromUtf8(e.what())));
+            return nullptr;
+        }
+    }
+    auto *md = new ImageMime(handed);
+    md->setUrls({QUrl::fromLocalFile(handed)});
+    if (clipboard) {
+        md->setData("x-special/gnome-copied-files", ("copy\n" + file_uri(handed)).toUtf8());
+        md->setData("application/x-kde-cutselection", "0");
+        md->setText(handed);
+    } else {
+        md->setData(COPY_ONLY_MIME, "1");
+    }
+    if (file)
+        *file = handed;
+    return md;
+}
+
+void ImageViewer::drag_out(ViewerCanvas *c)
+{
+    QString file;
+    QMimeData *md = image_data(c, false, &file);
+    if (!md)
+        return;
+    if (file != (c == pinned ? pinned_path : shown))
+        c->show_osd("Dragging a copy as shown (not saved)");
+    // its picture: the image as shown, small, under the pointer (Kestrel's own on Wayland, as the file views')
+    QPixmap pm = c->pix.isNull() ? QPixmap() : c->pix.scaled(160, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (!pm.isNull() && (c->rotation || c->flip_h)) {
+        QTransform t;
+        t.rotate(c->rotation);
+        pm = pm.transformed(c->flip_h ? QTransform(-1, 0, 0, 1, 0, 0) * t : t, Qt::SmoothTransformation);
+    }
+    auto *drag = new QDrag(c);
+    drag->setMimeData(md);
+    QPoint hot(pm.width() / 2, pm.height() / 2);
+    std::unique_ptr<DragGhost> ghost;
+    if (QGuiApplication::platformName() == "wayland")
+        ghost = std::make_unique<DragGhost>(pm, hot);
+    else if (!pm.isNull())
+        drag->setPixmap(pm);
+    drag->setHotSpot(hot);
+    QPointer<QDrag> d(drag);
+    drag->exec(Qt::CopyAction, Qt::CopyAction);   // a copy only: the original stays
+    ghost.reset();
+    if (d && !d->target())   // dropped into another app: it gets the focus (focus.h)
+        focus::activate_at_pointer();
+}
+
 void ImageViewer::copy_image()
 {
-    auto it = cache.constFind(shown);
-    if (it == cache.constEnd() || it->pix.isNull())
-        return;
-    if (it->is_full) {
-        QGuiApplication::clipboard()->setPixmap(it->pix);
-        return;
+    // the picture for image apps, and the file for file managers (Ctrl+V pastes a copy of it)
+    if (QMimeData *md = image_data(canvas, true)) {
+        QGuiApplication::clipboard()->setMimeData(md);
+        canvas->show_osd("Copied");
     }
-    QImageReader reader(shown);   // the whole image, not the screen-size copy
-    reader.setAutoTransform(true);
-    QImage img = reader.read();
-    if (!img.isNull())
-        QGuiApplication::clipboard()->setImage(img);
 }
 
 // ------------------------------------------------------------ input

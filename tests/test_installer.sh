@@ -180,14 +180,15 @@ cleaner_actions() {   # each action as "command path [parameter]", sorted
         sed 's/ *$//' | LC_ALL=C sort | tr '\n' ';'
 }
 EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CONFIG_HOME/kestrel-explorer/covers.json;'
-EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/frequent.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sorts.json;delete $XDG_CONFIG_HOME/kestrel-explorer/starred.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sync-pairs.json;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_folder;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_places;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf recent_servers;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf viewer_recent_folders;'
-check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 11 ]]' \
+check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 12 ]]' \
     "the cleaner only deletes Kestrel's cache and lists, and only the history and save locations keys from its settings"
 BLEACHBIT_XSD=/usr/share/doc/bleachbit/examples/cleaner_markup_language.xsd
 if command -v xmllint >/dev/null && [[ -f "$BLEACHBIT_XSD" ]]; then
@@ -222,7 +223,7 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n' >> "$KCONF/kestrel-explorer.conf"
     printf 'viewer_recent_folders=/home/someone/Photos/Keep, /home/someone/Photos/Print\n\n[archive]\nformat=7z\n' \
         >> "$KCONF/kestrel-explorer.conf"
-    for f in starred.json pinned.json covers.json folder_styles.json sorts.json; do echo '{}' > "$KCONF/$f"; done
+    for f in starred.json pinned.json covers.json folder_styles.json sorts.json frequent.json; do echo '{}' > "$KCONF/$f"; done
     echo '[]' > "$KCONF/sync-pairs.json"
     echo "chooser_conf=created" > "$KCONF/install-state"
     cp "$KCONF/kestrel-explorer.conf" "$WORK/conf.before"
@@ -238,7 +239,8 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folder-sizes.json"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders .cache/kestrel-explorer/folders/1a2b-256.png"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked .config/kestrel-explorer/covers.json"
-    EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/kestrel-explorer.conf"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/frequent.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/kestrel-explorer.conf"
     EXPECTED_LISTED+=" .config/kestrel-explorer/pinned.json .config/kestrel-explorer/sorts.json"
     EXPECTED_LISTED+=" .config/kestrel-explorer/starred.json .config/kestrel-explorer/sync-pairs.json "
     check '[[ "$(listed)" == "$EXPECTED_LISTED" ]]' \
@@ -251,7 +253,8 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
         bleachbit_cli --clean "${BB_OPTIONS[@]}" >"$WORK/bb-clean" 2>&1
         check '[[ -d "$KC" && -z "$(ls -A "$KC")" && ! -e "$KCONF/starred.json" && ! -e "$KCONF/covers.json" &&
                ! -e "$KCONF/folder_styles.json" && ! -e "$KCONF/pinned.json" && ! -e "$KCONF/sorts.json" &&
-               ! -e "$KCONF/sync-pairs.json" ]]' "BleachBit's clean empties Kestrel's cache and deletes its lists"
+               ! -e "$KCONF/sync-pairs.json" && ! -e "$KCONF/frequent.json" ]]' \
+            "BleachBit's clean empties Kestrel's cache and deletes its lists"
         check '[[ "$(cat "$HOME/Documents/notes.txt")" == "my own file" && -f "$HOME/.cache/thumbnails/normal/3c4d.png" &&
                -f "$HOME/.cache/other-app/data" && -f "$KCONF/install-state" && -f "$CLEANER" ]]' \
             "...and leaves everything else (a folder linked from the cache, GNOME's thumbnails, other apps' caches)"

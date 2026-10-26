@@ -190,6 +190,20 @@ QList<Entry> defaults(Kind k)
                      {item("image_wallpaper", "Set as Wallpaper"), item("image_cover", "Use as Folder Cover"),
                       item("image_copy", "Copy Image to Clipboard")},
                      "for images");
+    if (file || several) {
+        QString all = several ? "when all are " : "for ";
+        l << submenu("rotate", "Rotate",
+                     {item("rotate_cw", "Rotate 90° Clockwise"), item("rotate_180", "Rotate 180°"),
+                      item("rotate_ccw", "Rotate 90° Counter-clockwise"), sep(), item("flip_horizontal", "Flip Horizontally"),
+                      item("flip_vertical", "Flip Vertically")},
+                     all + "images")
+          << item("convert_image", "Convert Image…", all + "images")
+          << item("convert_video", "Convert Video…", all + "videos, with ffmpeg installed")
+          << item("extract_audio", "Extract Audio…", all + "videos, with ffmpeg installed");
+    }
+    if (file || several || folder)
+        l << item("convert_audio", "Convert Audio…",
+                  folder ? QString("with ffmpeg installed") : several ? QString("when all are audio files or all are folders, with ffmpeg installed") : QString("for audio files, with ffmpeg installed"));
     if (file || several)
         l << item("wipe_metadata", "Wipe Metadata…", several ? "when images are selected" : "for images");
     if (folder || several) {

@@ -77,6 +77,11 @@ The shared entries, plus:
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
 | **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
+| **Rotate ▸** | **Rotate 90° Clockwise**, **Rotate 180°**, **Rotate 90° Counter-clockwise**, **Flip Horizontally**, **Flip Vertically**: turns the picture in the file. A JPEG is turned without re-compressing it (jpegtran; with only its orientation tag when jpegtran isn't installed), one that isn't whole JPEG blocks asks first (trim the odd edge pixels, or set the orientation tag only); PNG, BMP, TIFF and lossless WebP are written again losslessly; HEIC, AVIF and lossy WebP ask first, since saving them again loses a little quality. Metadata kept, the orientation set to normal | Images |
+| **Convert Image…** | Converts it to JPEG, PNG, WebP, AVIF, HEIC or TIFF (the formats something installed can write), with a quality, a new size, the metadata kept or not, and a background for transparency; beside it or into a folder, never replacing a file (see [Features](features.md)) | Images |
+| **Convert Video…** | Converts it with ffmpeg: presets (MP4, smaller H.265, WebM, sound only, GIF, the same format smaller) and every option in plain terms, the command shown (see [Features](features.md)) | Videos, with ffmpeg installed |
+| **Extract Audio…** | Saves the video's sound: as it is (instant, lossless) or converted to MP3, M4A, Opus, OGG, FLAC, WAV or ALAC; one track or every track | Videos, with ffmpeg installed |
+| **Convert Audio…** | Converts it to MP3, M4A, Opus, OGG, FLAC, WAV or ALAC, with a quality, sample rate and channels, tags and cover kept, and the volume evened out if chosen | Audio files, with ffmpeg installed |
 | **Wipe Metadata…** | Takes out all of the image's metadata (camera details, GPS location, dates, comments, image-generation prompts), the pixels untouched: by default as a copy beside it (`photo (no metadata).jpg`; Undo trashes the copy), or from the original with no backup (asks first), as set in Preferences → Images & Videos. Greyed out as **Wipe Metadata (install exiftool)** without exiftool | Images (JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, GIF, TIFF; not camera raw files) |
 | **Send To ▸** | **Email…** (attaches it in your mail app) or **Bluetooth Device…** | With `xdg-email` or `bluetooth-sendto` installed |
 
@@ -100,6 +105,7 @@ The shared entries, plus:
 | **Regenerate Preview** | Rebuilds this folder's mosaic | Always |
 | **Previews ▸** | Builds thumbnails and folder previews ahead of time, as a job (see [Previews](#previews)) | Always |
 | **Open in Terminal** | Opens a terminal in the folder | Always |
+| **Convert Audio…** | Converts every audio file in the folder and its subfolders, into a folder beside it (`Music (converted)`) with the same subfolders, or beside each file | With ffmpeg installed |
 
 Folders have no Send To.
 
@@ -146,6 +152,9 @@ The shared entries, plus:
 | **Extract All Here** / **Extract All To…** | Extracts each archive, one after another | When all are archives |
 | **Test Archives** | Tests each archive | When all are archives |
 | **Find Duplicates…** | As for one folder, in all of them together | When all are folders |
+| **Rotate ▸** / **Convert Image…** | As for one image, for each of them, as one job | When all are images |
+| **Convert Video…** / **Extract Audio…** | As for one video, for each of them, one after another as one job with one summary | When all are videos, with ffmpeg installed |
+| **Convert Audio…** | As for one audio file or one folder, for all of them | When all are audio files or all are folders, with ffmpeg installed |
 | **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
 | **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
 | **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
@@ -185,7 +194,7 @@ Right-click the picture in Kestrel's image viewer. The keys are shown in the men
 | **Show in Folder** | Shows the image in its folder in a Kestrel window (G) | When opened from Kestrel |
 | **Open With Default Application** | Opens the image in the system's image app | Always |
 | **Open With…** | Picks an app to open it with (O) | When opened from Kestrel |
-| **Copy Image** | Copies the picture to the clipboard (Ctrl+C) | Always |
+| **Copy Image** | Copies the picture and the file to the clipboard (Ctrl+C): image apps paste the picture, a folder pastes a copy of the file. Turned or edited and not saved, a copy as shown | Always |
 | **Copy Path** | Copies the image's full path as text | Always |
 | **Set as Wallpaper** | Sets it as the wallpaper (through UWP when installed) | Always |
 | **Add to Selected UWP Monitor** | Puts it on the monitors selected in UWP's editor | While UWP's editor is open |
@@ -243,16 +252,20 @@ On the Overview page.
 
 | Entry | What it does | Works on |
 |---|---|---|
-| **Open** / **Open in New Tab** | Opens it here or in a new tab | Drives, bookmarks, save locations |
+| **Open** / **Open in New Tab** | Opens it here or in a new tab | Drives, bookmarks, save locations, frequent folders, starred folders |
+| **Open** / **Show in Folder** | Opens the file in its app, or shows it selected in its folder | Starred files |
 | **Open in Terminal** | Opens a terminal at the drive | Mounted drives |
-| **Add to Bookmarks** | Bookmarks the drive | Mounted drives |
+| **Add to Bookmarks** | Bookmarks the drive or folder | Mounted drives, frequent folders |
 | **Properties** | The drive's Properties | Mounted drives |
 | **Find Duplicates…** | As in the sidebar | Mounted drives |
+| **Drive Health…** | What the drive reports about itself (S.M.A.R.T., through udisks), in plain words; also opened by clicking the card's health line | Drives with a health line (Preferences → Overview → Show each drive's health) |
 | **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
 | **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |
 | **Edit Bookmark…** / **Remove Bookmark** | As in the sidebar | Bookmarks |
 | **Move Earlier** / **Move Later** | Reorders the save locations | Save locations (a Save window's Overview) |
 | **Remove from Save Locations** | Takes the folder off the list (the folder stays) | Save locations |
+| **Unstar** | Takes it off the Starred list | Starred items |
+| **Remove from Frequent Folders** | Forgets how often the folder was opened, so it leaves the section until it's opened often again | Frequent folders |
 
 ## Open as Archive window
 
@@ -283,6 +296,6 @@ Not a right-click, but a menu of its own: drop files while holding **Alt** to ch
 
 | Entry | What it does |
 |---|---|
-| **Move Here** | Moves the files to where they're dropped |
+| **Move Here** | Moves the files to where they're dropped (not offered for an image dragged out of the image viewer, which is only ever copied) |
 | **Copy Here** | Copies them |
 | **Link Here** | Makes symbolic links to them |

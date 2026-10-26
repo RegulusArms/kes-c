@@ -64,6 +64,7 @@ namespace util {
 
 const char *APP_NAME = "Kestrel Explorer";
 const char *APP_ID = "kestrel-explorer";
+const char *COPY_ONLY_MIME = "application/x-kestrel-copy-only";
 const char *APP_COMMAND = "kes";
 const QStringList LEGACY_NAMES = {"Folder Explorer"};
 const char *LEGACY_ID = "folder-explorer";

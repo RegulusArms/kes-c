@@ -9,6 +9,7 @@
 #include <QFileSystemModel>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPointer>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMutex>
@@ -57,6 +58,24 @@ private:
     mutable QMutex mutex;
 };
 
+// The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
+// drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
+// over any of its windows, following the drag events Qt delivers to them (watched on the whole application). Made for
+// the length of a drag (QDrag::exec) by the file views and the image viewer.
+class DragGhost : public QObject {
+public:
+    DragGhost(const QPixmap &pm, const QPoint &hot);
+    ~DragGhost() override;
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override;
+
+private:
+    QPixmap pm;
+    QPoint hot;
+    QPointer<QLabel> label;
+};
+
 // QFileSystemModel that serves thumbnails and folder previews.
 class FSModel : public QFileSystemModel {
     Q_OBJECT
@@ -69,7 +88,7 @@ public:
 
     int thumb_size = 128;
     bool folder_previews = true;
-    std::function<void(const QStringList &, const QString &)> drop_handler;
+    std::function<void(const QStringList &, const QString &, bool)> drop_handler;   // (paths, folder, copy only)
     // items dragged out of Open as Archive, dropped into target (ArchiveWindow::drop_members)
     std::function<void(const QMimeData *, const QString &)> members_handler;
 
@@ -287,7 +306,7 @@ public:
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
-    void dropped(const QStringList &sources, const QString &target);
+    void dropped(const QStringList &sources, const QString &target, bool copy_only);
     void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
     void find_duplicates(const QString &root);   // a drive's Find Duplicates…

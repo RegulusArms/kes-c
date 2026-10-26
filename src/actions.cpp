@@ -146,7 +146,7 @@ void MainWindow::paste(const QString &target_in, bool as_link)
     }
 }
 
-void MainWindow::handle_drop(const QStringList &paths, const QString &target)
+void MainWindow::handle_drop(const QStringList &paths, const QString &target, bool copy_only)
 {
     if (paths.isEmpty())
         return;
@@ -158,8 +158,9 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
     bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier, alt = mods & Qt::AltModifier;
     if (alt) {
         QMenu m(this);
-        m.addAction("Move Here", this,
-                    [this, paths, target]() { fileops::transfer(this, paths, target, "move", nullptr, "Drop (Move Here)"); });
+        if (!copy_only)
+            m.addAction("Move Here", this,
+                        [this, paths, target]() { fileops::transfer(this, paths, target, "move", nullptr, "Drop (Move Here)"); });
         m.addAction("Copy Here", this,
                     [this, paths, target]() { fileops::transfer(this, paths, target, "copy", nullptr, "Drop (Copy Here)"); });
         m.addAction("Link Here", this, [this, paths, target]() { make_links(paths, target, "sym"); });
@@ -171,7 +172,7 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
         return;
     }
     QString op;
-    if (ctrl) {
+    if (ctrl || copy_only) {
         op = "copy";
     } else if (shift) {
         op = "move";

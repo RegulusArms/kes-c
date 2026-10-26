@@ -55,6 +55,9 @@ namespace util {
 
 extern const char *APP_NAME;
 extern const char *APP_ID;
+// In a drag's data: the files may only be copied, never moved (a drag out of the image viewer). Kestrel's drop targets
+// (folders, tabs, the sidebar) then copy whatever the keys held would do.
+extern const char *COPY_ONLY_MIME;
 extern const char *APP_COMMAND;
 extern const QStringList LEGACY_NAMES;   // previous name: thumbnails/settings may carry it
 extern const char *LEGACY_ID;

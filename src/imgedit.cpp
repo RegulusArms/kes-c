@@ -172,6 +172,84 @@ void save_rotation(const QString &path, int rotation, bool flip)
     }
 }
 
+static const QMap<int, QStringList> &jpegtran_ops()
+{
+    // what turns a JPEG's stored pixels into what EXIF orientation n shows
+    static const QMap<int, QStringList> OPS = {{2, {"-flip", "horizontal"}}, {3, {"-rotate", "180"}},
+                                               {4, {"-flip", "vertical"}},   {5, {"-transpose"}},
+                                               {6, {"-rotate", "90"}},       {7, {"-transverse"}},
+                                               {8, {"-rotate", "270"}}};
+    return OPS;
+}
+
+// A JPEG's pixels turned as orientation n shows them (jpegtran, lossless; trim: the odd edge cut off), its metadata
+// kept with the orientation tag set to 1; replacing the file (part file, fsynced)
+static void turn_jpeg(const QString &path, int n, bool trim)
+{
+    QByteArray data;
+    if (n == 1) {
+        data = read_file(path);   // already as shown: only the tag
+    } else {
+        QStringList argv = {"jpegtran", "-copy", "all", trim ? "-trim" : "-perfect"};
+        auto r = proc::run(argv + jpegtran_ops().value(n) + QStringList{path}, 120000);
+        if (r.rc != 0 || r.out.isEmpty()) {
+            QString err = QString::fromUtf8(r.err).trimmed();
+            if (err.contains("perfect", Qt::CaseInsensitive))
+                throw NotWholeBlocks(QString("%1: its width or height isn't a whole number of JPEG blocks, so turning "
+                                             "it exactly would lose a strip at the edge")
+                                         .arg(basename(path)));
+            throw Error(QString("Couldn't turn %1: %2").arg(basename(path), err.isEmpty() ? QString("jpegtran failed") : err));
+        }
+        data = r.out;
+    }
+    metadata::OrientationTag t = metadata::orientation_tag_in(data);   // copied with -copy all
+    if (t.offset >= 0)
+        data.replace(int(t.offset), 2, tag_value(1, t.little_endian));
+    write_parts(path, [&](int fd) { write_all(fd, data.constData(), data.size(), path); }, false, true);
+}
+
+static bool lossless_webp(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    QByteArray head = f.read(64);
+    return head.startsWith("RIFF") && head.mid(8, 4) == "WEBP" && head.contains("VP8L");
+}
+
+QString rotate_method(const QString &path)
+{
+    static const QSet<QString> LOSSLESS = {".png", ".bmp", ".ppm", ".pgm", ".pbm", ".tif", ".tiff"};
+    static const QSet<QString> LOSSY = {".webp", ".heic", ".heif", ".hif", ".avif", ".jxl"};
+    QString ext = ext_of(path);
+    if (is_jpeg(path))
+        return which("jpegtran") ? "jpegtran" : rotation_method(path).isEmpty() ? QString() : "tag";
+    if (!can_write(path))
+        return QString();
+    if (LOSSLESS.contains(ext) || (ext == ".webp" && lossless_webp(path)))
+        return "pixels";
+    return LOSSY.contains(ext) ? "reencode" : QString();
+}
+
+void rotate_file(const QString &path, int rotation, bool flip, const QString &how, bool reencode)
+{
+    QString method = rotate_method(path);
+    if (method == "jpegtran" && how != "tag") {
+        metadata::OrientationTag tag = metadata::orientation_tag(path);
+        turn_jpeg(path, compose(tag.offset >= 0 ? tag.value : 1, rotation, flip), how == "trim");
+    } else if (method == "jpegtran" || method == "tag") {
+        save_rotation(path, rotation, flip);
+    } else if (method == "pixels") {
+        save_edit(path, path, {Edit{rotation, flip, QRect(), QSize()}}, ext_of(path) == ".webp" ? 100 : -1, true);
+    } else if (method == "reencode") {
+        if (!reencode)
+            throw Error(QString("%1: turning it means saving it again, which loses a little quality.").arg(basename(path)));
+        save_edit(path, path, {Edit{rotation, flip, QRect(), QSize()}}, 92, true);
+    } else {
+        throw Error(QString("%1: Kestrel can't turn images in this format.").arg(basename(path)));
+    }
+}
+
 bool can_straighten(const QString &path)
 {
     metadata::OrientationTag tag = metadata::orientation_tag(path);
@@ -258,7 +336,38 @@ QImage preview(const QImage &src, QSize full, const QList<Edit> &steps, QSize *r
     return img;
 }
 
-void save_edit(const QString &src, const QString &dst, const QList<Edit> &steps)
+// An image Qt wrote (`data`, a file of type ext) with src's EXIF, XMP and IPTC copied in, its orientation tag set to 1
+// (its pixels are already turned): exiftool on a copy in Kestrel's cache. Without exiftool, or if it fails: as it was.
+static QByteArray with_meta(const QString &src, const QByteArray &data, const QString &ext)
+{
+    if (!which("exiftool"))
+        return data;
+    QString dir = join(APP_CACHE(), "edit-meta");
+    QString tmp = join(dir, part_name() + ext);
+    QByteArray out = data;
+    try {
+        makedirs(dir, true);
+        write_text(tmp, data, true);
+        auto r = proc::run({"exiftool", "-q", "-q", "-m", "-overwrite_original", "-tagsFromFile", src, "-all:all",
+                            "-Orientation#=1", tmp},
+                           120000);
+        if (r.rc == 0)
+            out = read_file(tmp);
+    } catch (const OSError &) {
+    }
+    ::unlink(enc(tmp).constData());
+    return out.isEmpty() ? data : out;
+}
+
+QByteArray with_metadata(const QString &src, const QByteArray &data, const QString &ext)
+{
+    bool jpeg_out = ext == ".jpg" || ext == ".jpeg";
+    if (is_jpeg(src) && jpeg_out && !which("exiftool"))
+        return with_app1(data, app1_segments(src));
+    return with_meta(src, data, ext);
+}
+
+void save_edit(const QString &src, const QString &dst, const QList<Edit> &steps, int quality, bool keep_meta)
 {
     bool replace = dst == src;
     QByteArray fmt = writer_format(dst);
@@ -274,13 +383,17 @@ void save_edit(const QString &src, const QString &dst, const QList<Edit> &steps)
     QBuffer buf;
     buf.open(QIODevice::WriteOnly);
     QImageWriter w(&buf, fmt);
-    if (fmt == "jpg" || fmt == "jpeg" || fmt == "webp")
+    if (quality >= 0)
+        w.setQuality(quality);
+    else if (fmt == "jpg" || fmt == "jpeg" || fmt == "webp")
         w.setQuality(95);
     if (!w.write(img))
         throw Error(QString("Couldn't write %1: %2").arg(basename(dst), w.errorString()));
     QByteArray data = buf.data();
     if (is_jpeg(src) && (fmt == "jpg" || fmt == "jpeg"))
         data = with_app1(data, app1_segments(src));
+    else if (keep_meta)
+        data = with_metadata(src, data, ext_of(dst));
     write_parts(dst, [&](int fd) { write_all(fd, data.constData(), data.size(), dst); }, !replace, replace);
 }
 

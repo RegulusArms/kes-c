@@ -4,6 +4,34 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.18
+
+Added:
+- `overview`, a new test for the Overview's choices, its Starred and Frequent Folders sections, and drive health:
+  the sections' saved order; health read from udisks' properties (a JSON file stands in for udisks,
+  `KESTREL_TEST_HEALTH`) for ATA and NVMe drives, a pool, an encrypted volume and a drive with none; with drives added
+  to the mount table, the cards' health lines, the failing-drive notification sent once, the Drive Health window (free)
+  and Properties' health row; the usage bar, free space as a percentage, the system drives' choice and the card sizes;
+  Starred opening files and folders; Frequent Folders counting visits, keeping another Kestrel's counts when saving, a
+  save that fails part-way (RLIMIT_FSIZE) keeping the old file, and nothing counted with File History off; the
+  Preferences list hiding and moving sections. It found that a setting changed while the drives were being scanned was
+  ignored until the next scan (fixed: the scan runs again).
+
+- `media`, a new test for rotating image files (Rotate ▸), Convert Image…, and with ffmpeg Convert Video…, Extract
+  Audio… and Convert Audio…: the ffmpeg options built from each setting, ffprobe's and ffmpeg's answers read, and real
+  conversions of small files the test makes, including one stopped part-way and one failing part-way (RLIMIT_FSIZE),
+  which must leave no half-made file; JPEG rotations through jpegtran (the tag reset, the not-whole-blocks question).
+- `viewer`: dragging an image out (a left-drag when it fits, Alt+drag when zoomed; the data dragged; a copy as shown
+  when turned and not saved), Ctrl+C putting the file on the clipboard too, and a copy-only drop being copied into a
+  folder on the same drive rather than moved.
+- CI's test and sanitizer jobs install ffmpeg, for the media test's conversions (skipped without it).
+
+Changed:
+- `ui`: tests/ui_actions.txt lists Convert Audio… in a folder's menu (shown with ffmpeg installed, as CI now has it).
+- `prefs`: the Overview tab is in the list of Preferences' tabs, and `health_warned` (the drives already notified as
+  failing) is kept state, not a setting.
+- `installer`: BleachBit's cleaner also deletes `frequent.json` (in the expected actions, the dry run and the clean).
+
 ## 0.3.2-alpha.17
 
 Added:

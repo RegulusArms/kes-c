@@ -55,63 +55,6 @@ using namespace util;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
-// The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
-// drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
-// over any of its windows, following the drag events Qt delivers to them (watched on the whole application).
-class DragGhost : public QObject {
-public:
-    DragGhost(const QPixmap &pm, const QPoint &hot) : pm(pm), hot(hot) { qApp->installEventFilter(this); }
-    ~DragGhost() override { delete label; }
-
-protected:
-    bool eventFilter(QObject *obj, QEvent *ev) override
-    {
-        auto *w = qobject_cast<QWidget *>(obj);
-        if (!w)
-            return false;
-        switch (ev->type()) {
-        case QEvent::DragEnter:
-        case QEvent::DragMove: {
-            QWidget *top = w->window();
-            QPoint pos = w->mapTo(top, static_cast<QDropEvent *>(ev)->position().toPoint());
-            if (!label || label->parentWidget() != top) {   // into another Kestrel window
-                delete label;
-                label = new QLabel(top);
-                label->setAttribute(Qt::WA_TransparentForMouseEvents);   // drops go to what's under it
-                label->setPixmap(pm);
-                auto *fade = new QGraphicsOpacityEffect(label);
-                fade->setOpacity(0.8);
-                label->setGraphicsEffect(fade);
-                label->resize(pm.deviceIndependentSize().toSize());
-            }
-            label->move(pos - hot);
-            label->show();
-            label->raise();
-            break;
-        }
-        case QEvent::DragLeave:   // out of one widget, maybe into the next: hidden unless the next one moves it
-            if (label && w->window() == label->parentWidget())
-                QTimer::singleShot(30, label, [l = label, seen = label->pos()]() {
-                    if (l && l->pos() == seen)
-                        l->hide();
-                });
-            break;
-        case QEvent::Drop:
-            if (label)
-                label->hide();
-            break;
-        default:
-            break;
-        }
-        return false;
-    }
-
-private:
-    QPixmap pm;
-    QPoint hot;
-    QPointer<QLabel> label;
-};
-
 // The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h),
 // highlighting the folder a drag is over (where the files will go), and what a drag that starts here does in the view
 // itself: it can only go into a folder. Over empty space or a file it's refused (Qt's grid would otherwise move the
@@ -522,6 +465,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(overview, &OverviewPage::add_bookmark, win, [win](const QString &t) { win->sidebar->add_bookmark(t); });
     connect(overview, &OverviewPage::properties, win, [win](const QString &t) { win->properties({t}); });
     connect(overview, &OverviewPage::find_duplicates, win, [win](const QString &t) { dupes::open_window(win, {t}); });
+    connect(overview, &OverviewPage::open_file, win, [win](const QString &t) { win->open_file(t); });
     stack->addWidget(overview);
     lay->addWidget(stack);
     empty = new QLabel("Folder is empty", stack);
@@ -650,7 +594,9 @@ FSModel *Pane::make_model()
     proxy = new PinSortProxy(m);
     proxy->set_pinned_first(win->view_value("pinned_first", false).toBool());
     MainWindow *w = win;
-    m->drop_handler = [w](const QStringList &paths, const QString &target) { w->handle_drop(paths, target); };
+    m->drop_handler = [w](const QStringList &paths, const QString &target, bool copy_only) {
+        w->handle_drop(paths, target, copy_only);
+    };
     m->members_handler = [w](const QMimeData *data, const QString &target) { ArchiveWindow::drop_members(w, data, target); };
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
     if (win->show_hidden)
@@ -1109,6 +1055,8 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     if (in_search || search_bar->isVisible())
         close_search(false, true);
     path = p;
+    if (p != prev && !win->chooser && !is_trash())   // (a chooser's folders are the other app's choice)
+        places::visit_folder(p);
     stack->setCurrentWidget(mode_view);
     // the folder left: its thumbnail jobs wait behind what's shown now (and stop after a while), not stopped at once
     thumbs->lower(model);

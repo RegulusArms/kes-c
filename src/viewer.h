@@ -22,6 +22,7 @@
 
 class QLabel;
 class QMenu;
+class QMimeData;
 class QVBoxLayout;
 
 // One image on screen with its own zoom, pan, rotation and flip. The pixmap may be a screen-size decode of a bigger
@@ -49,6 +50,8 @@ public:
     QRect crop_rect() const;
     QPointF to_image(QPointF widget_pos) const;   // a point on the canvas → the turned image's pixels
     void clamp();
+    // the whole image is in view (nothing to pan): a left-drag then drags the file out, as Alt+drag does when zoomed
+    bool fits() const;
 
     QPixmap pix;
     QSize full;
@@ -66,6 +69,7 @@ public:
 Q_SIGNALS:
     void view_changed();   // zoomed or panned
     void pointer_moved();
+    void drag_out();       // a drag started that takes the image out (fits(), or Alt held)
 
 protected:
     void paintEvent(QPaintEvent *ev) override;
@@ -80,6 +84,7 @@ protected:
 private:
     QPointF center() const;
     bool dragging = false;
+    bool drag_out_armed = false;   // this press drags the image out once it moves far enough
     QPointF drag_start, drag_offset, crop_anchor;
     QString osd;
     QTimer osd_timer;
@@ -198,6 +203,13 @@ public:
     QList<imgedit::Edit> steps;   // the current image's crops and resizes not saved yet (each after its rotation)
 
     QMenu *build_menu();   // the right-click menu, laid out as Preferences → Menus says (the caller deletes it)
+    // What a drag out of the viewer or Ctrl+C hands over for the image c shows: the file (as a copy, never a move), its
+    // own bytes and PNG for apps that only take pixels. Turned, flipped, cropped or resized and not saved: a copy as
+    // shown, made in Kestrel's cache, instead of the file. *file: the file handed over. clipboard: also as copied
+    // files (pasted as a copy in a file manager); otherwise marked copy-only (COPY_ONLY_MIME).
+    QMimeData *image_data(ViewerCanvas *c, bool clipboard, QString *file = nullptr);
+    void drag_out(ViewerCanvas *c);
+    void copy_image();   // Ctrl+C: image_data() on the clipboard
     static QStringList recent_folders();
     QStringList paths;
     int index = 0;
@@ -258,7 +270,6 @@ private:
     void movie_frame();
     void add_shortcuts();
     void escape();
-    void copy_image();
     int screen_side() const;
     void ask(QWidget *box);
 
