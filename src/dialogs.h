@@ -77,6 +77,10 @@ private:
     void run(std::function<QVariant()> fn, std::function<void(const QVariant &)> cb, const QString &title = QString());
     QWidget *general_tab();
     void show_dir_size(const QVariant &res);
+    // The size row: remembered sizes shown at once with when they were worked out (fileops::dirsizes), the rest
+    // counted; recalc (Recalculate) counts everything again, as a job of its own in the Jobs window
+    QWidget *size_row();
+    void start_size(bool recalc);
     void change_app();
     void folder_style_rows(QFormLayout *form);
     void apply_folder_style();
@@ -116,6 +120,12 @@ private:
     QTabWidget *tabs;
     QLineEdit *name_edit = nullptr;
     QLabel *size_label = nullptr;
+
+public:
+    QLabel *size_age = nullptr;          // "Calculated 3 days ago (…)"
+    QPushButton *recalc = nullptr;       // Recalculate
+
+private:
     QLabel *app_label = nullptr;
     QComboBox *style_color = nullptr;
     QCheckBox *style_previews = nullptr;

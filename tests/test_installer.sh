@@ -206,10 +206,11 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     # what Kestrel writes, and what must stay: GNOME's thumbnails, another app's cache, a folder a link in the cache
     # points to, Kestrel's other settings and its install state
     KC="$HOME/.cache/kestrel-explorer" KCONF="$HOME/.config/kestrel-explorer"
-    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$HOME/.cache/thumbnails/normal" \
+    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$KC/archive-files/1a2b" "$HOME/.cache/thumbnails/normal" \
              "$HOME/.cache/other-app" "$HOME/Documents" "$KCONF"
     for f in "$KC/folders/1a2b-256.png" "$KC/animated/clip.webm" "$KC/device-files/phone/IMG_0001.MOV" \
-             "$KC/exiftool-tagdb-13.50.json" "$HOME/.cache/thumbnails/normal/3c4d.png" "$HOME/.cache/other-app/data"; do
+             "$KC/exiftool-tagdb-13.50.json" "$KC/folder-sizes.json" "$KC/archive-files/1a2b/readme.txt" \
+             "$HOME/.cache/thumbnails/normal/3c4d.png" "$HOME/.cache/other-app/data"; do
         echo data > "$f"
     done
     echo "my own file" > "$HOME/Documents/notes.txt"
@@ -228,8 +229,11 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     bleachbit_cli --preview "${BB_OPTIONS[@]}" >"$WORK/bb-preview" 2>&1
     listed() { sed -nE 's/^(Delete|Clean file) [^ ]+ //p' "$WORK/bb-preview" | sed "s#^$HOME/##" | LC_ALL=C sort -u | tr '\n' ' '; }
     EXPECTED_LISTED=".cache/kestrel-explorer/animated .cache/kestrel-explorer/animated/clip.webm"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/archive-files .cache/kestrel-explorer/archive-files/1a2b"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/archive-files/1a2b/readme.txt"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/device-files .cache/kestrel-explorer/device-files/phone"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/device-files/phone/IMG_0001.MOV .cache/kestrel-explorer/exiftool-tagdb-13.50.json"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/folder-sizes.json"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders .cache/kestrel-explorer/folders/1a2b-256.png"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked .config/kestrel-explorer/covers.json"
     EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/kestrel-explorer.conf"

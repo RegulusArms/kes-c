@@ -1,6 +1,7 @@
 #include "widgets.h"
 
 #include "animate.h"
+#include "archive.h"
 #include "atc.h"
 #include "dialogs.h"
 #include "drives.h"
@@ -132,13 +133,27 @@ void FSModel::thumb_ready(const QString &path)
         Q_EMIT dataChanged(idx, idx, {Qt::DecorationRole, ThumbRole});
 }
 
+QStringList FSModel::mimeTypes() const { return QFileSystemModel::mimeTypes() << archive::MEMBERS_MIME; }
+
 bool FSModel::dropMimeData(const QMimeData *data, Qt::DropAction, int, int, const QModelIndex &parent)
 {
-    if (!data->hasUrls() || !drop_handler)
-        return false;
     QString target = parent.isValid() ? filePath(parent) : rootPath();
     if (!isdir(target))
         target = dirname(target);
+    // from Open as Archive: extracted straight into the folder (checked first: the file list it also offers would
+    // extract them to a temporary folder)
+    if (data->hasFormat(archive::MEMBERS_MIME) && members_handler) {
+        auto handler = members_handler;
+        auto *copy = new QMimeData;   // the drag's data goes when the drag ends
+        copy->setData(archive::MEMBERS_MIME, data->data(archive::MEMBERS_MIME));
+        QTimer::singleShot(0, this, [handler, copy, target]() {
+            handler(copy, target);
+            delete copy;
+        });
+        return true;
+    }
+    if (!data->hasUrls() || !drop_handler)
+        return false;
     QStringList paths;
     for (const QUrl &u : data->urls())
         if (u.isLocalFile())
@@ -1781,7 +1796,7 @@ void Sidebar::dragEnterEvent(QDragEnterEvent *ev)
 {
     if (ev->mimeData()->hasFormat(SIDEBAR_MIME) && ev->source() == this)
         ev->acceptProposedAction();
-    else if (ev->mimeData()->hasUrls())
+    else if (ev->mimeData()->hasUrls() || ev->mimeData()->hasFormat(archive::MEMBERS_MIME))
         ev->acceptProposedAction();
 }
 
@@ -1837,6 +1852,13 @@ void Sidebar::dropEvent(QDropEvent *ev)
     QListWidgetItem *it = itemAt(ev->position().toPoint());
     if (!it || it->data(PathRole).toString().isEmpty())
         return;
+    if (ev->mimeData()->hasFormat(archive::MEMBERS_MIME)) {   // from Open as Archive (before urls(): see FSModel)
+        QByteArray members = ev->mimeData()->data(archive::MEMBERS_MIME);
+        QString target = it->data(PathRole).toString();
+        ev->acceptProposedAction();
+        QTimer::singleShot(0, this, [this, members, target]() { Q_EMIT dropped_members(members, target); });
+        return;
+    }
     QStringList paths;
     for (const QUrl &u : ev->mimeData()->urls())
         if (u.isLocalFile())

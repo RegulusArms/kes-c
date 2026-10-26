@@ -57,6 +57,17 @@ QString install_hint(const QString &name);
 // checksums can be made as the archive is written
 bool is_tar(const Format &fmt);
 
+// what items dragged out of Open as Archive carry (ArchiveWindow::MEMBERS_MIME): {"archive", "members"}
+inline constexpr const char *MEMBERS_MIME = "application/x-kestrel-archive-members";
+
+// The volume sizes Compress… offers, named by what they fit: id (saved), label, bytes. A disc's size is what it holds,
+// less 4 MiB for its file system, so a volume really fits on it.
+struct VolumeSize {
+    QString id, label;
+    qint64 bytes;
+};
+const QList<VolumeSize> &volume_sizes();
+
 // What a Compress dialog asks for (see archive_ui).
 struct Spec {
     Format format;
@@ -68,7 +79,7 @@ struct Spec {
     QString password;
     bool encrypt_names = false;
     QString zip_encryption;
-    qint64 volume_mb = 0;
+    qint64 volume_bytes = 0;   // split into volumes of this many bytes (0: one file); exact, passed as -v<n>b
     std::optional<bool> solid;
     int recovery = 0;
     QStringList extra;

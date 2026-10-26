@@ -30,6 +30,7 @@
 #include "uwp.h"
 #include "viewer.h"
 #include "windiag.h"
+#include "archivewin.h"
 #include "widgets.h"
 #include "windows.h"
 
@@ -91,6 +92,11 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     sidebar = new Sidebar;
     connect(sidebar, &Sidebar::open_path, this, [this](const QString &p, bool nt) { open_location(p, nt); });
     connect(sidebar, &Sidebar::dropped, this, &MainWindow::handle_drop);
+    connect(sidebar, &Sidebar::dropped_members, this, [this](const QByteArray &members, const QString &target) {
+        QMimeData md;
+        md.setData(archive::MEMBERS_MIME, members);
+        ArchiveWindow::drop_members(this, &md, target);
+    });
     connect(sidebar, &Sidebar::empty_trash_requested, this, &MainWindow::empty_trash);
     connect(sidebar, &Sidebar::shred_trash_requested, this, &MainWindow::empty_trash_with_bleachbit);
     tabs = new QTabWidget;
@@ -454,7 +460,15 @@ void MainWindow::build_actions()
       },
       fm);
     fm->addSeparator();
-    A("Quit", {"Ctrl+Q"}, []() { QApplication::quit(); }, fm);
+    A("Quit", {"Ctrl+Q"}, [this]() {
+        // every window closes (the last asks first while jobs run: they can go on without one)
+        for (MainWindow *m : QList<MainWindow *>(WINDOWS))
+            if (m != this)
+                m->close();
+        close();
+        if (!isVisible() && TaskBoard::instance()->keeping().isEmpty())
+            QApplication::quit();   // the Jobs window and anything else too
+    }, fm);
 
     QMenu *em = menu->addMenu("Edit");
     a_undo = A("Undo", {"Ctrl+Z"}, [this]() { undo::undo(this); }, em, {"edit-undo"});
@@ -1159,6 +1173,8 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(m->addAction("Move To…", this, [this, paths]() { transfer_to(paths, "move"); }), "move_to");
     T(m->addAction("Copy To…", this, [this, paths]() { transfer_to(paths, "copy"); }), "copy_to");
     T(m->addAction("Duplicate", this, [this, paths]() { duplicate(paths); }), "duplicate");
+    T(m->addAction(icon({"folder-new"}), "New Folder with Selection…", this, [this, paths]() { new_folder_with(paths); }),
+      "new_folder_with");
     T(m->addAction(icon({"edit-rename"}), !single.isEmpty() ? QString("Rename…") : QString("Rename %1 Items…").arg(paths.size()),
                    this, [this, paths]() { rename(paths); }),
       "rename");
@@ -1577,36 +1593,54 @@ void MainWindow::show_shortcuts()
 
 void MainWindow::closeEvent(QCloseEvent *ev)
 {
-    QList<Task *> tasks = task_panel->tasks;
-    if (!tasks.isEmpty()) {
-        // the worker threads report to this window; closing now would drop their results mid-operation
-        QStringList names;
-        for (int i = 0; i < std::min<qsizetype>(5, tasks.size()); ++i)
-            names << "• " + tasks[i]->title;
+    // Jobs belong to Kestrel, not to the window that started them: they go on when it closes. Only the last window
+    // asks, while jobs run and the Jobs window (where they can still be watched) isn't open.
+    QList<Task *> running = TaskBoard::instance()->keeping();
+    bool last = std::none_of(WINDOWS.begin(), WINDOWS.end(), [this](MainWindow *m) { return m != this && !m->chooser_mode; });
+    if (!close_confirmed && last && !chooser_mode && !running.isEmpty() && !JobsWindow::is_open()) {
         ev->ignore();
         if (close_box) {   // already asked
             close_box->raise();
             close_box->activateWindow();
             return;
         }
-        close_box = new QMessageBox(QMessageBox::Question, "Operations Running",
-                                    QString("These operations are still running:\n\n%1\n\n"
-                                            "Stop them and close the window? Items already processed stay processed.")
+        QStringList names;
+        for (int i = 0; i < std::min<qsizetype>(5, running.size()); ++i)
+            names << "• " + running[i]->title;
+        if (running.size() > 5)
+            names << QString("…and %1 more").arg(running.size() - 5);
+        close_box = new QMessageBox(QMessageBox::Question, "Jobs Are Running",
+                                    QString("These jobs are still running or waiting:\n\n%1\n\nThey can go on without "
+                                            "any Kestrel window: the Jobs window shows them, and Kestrel exits once "
+                                            "they're done (and the Jobs window is closed).")
                                         .arg(names.join('\n')),
                                     QMessageBox::NoButton, this);
-        QPushButton *stop = close_box->addButton("Stop and Close", QMessageBox::DestructiveRole);
-        close_box->addButton("Keep Running", QMessageBox::RejectRole);
-        ask_box(close_box, [this, stop](QAbstractButton *b) {
-            if (b != stop)
+        QPushButton *keep = close_box->addButton("Exit and Open the Jobs Window", QMessageBox::AcceptRole);
+        QPushButton *stop = close_box->addButton("Stop All Jobs and Exit", QMessageBox::DestructiveRole);
+        close_box->addButton(QMessageBox::Cancel);
+        close_box->setDefaultButton(keep);
+        ask_box(close_box, [this, keep, stop](QAbstractButton *b) {
+            if (b != keep && b != stop)
                 return;
-            for (Task *t : task_panel->tasks)
-                t->cancel();
-            task_panel->refresh();
-            centralWidget()->setEnabled(false);   // stay visible (showing "cancelling…") until stopped
-            close_when_idle();
+            if (b == keep) {
+                JobsWindow::open(nullptr);   // a window of its own: not closed with this one
+            } else {
+                // each stops as a cancel does (one that can't be cancelled runs to its end; Kestrel exits after)
+                for (Task *t : TaskBoard::instance()->keeping())
+                    t->cancel();
+            }
+            close_confirmed = true;
+            close();
         });
         return;
     }
+    // this window's jobs: shown in another window's status bar from now on
+    for (MainWindow *m : WINDOWS)
+        if (m != this && !m->chooser_mode) {
+            for (Task *t : task_panel->tasks)
+                m->task_panel->add(t);
+            break;
+        }
     if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
         set_view_value("geometry", saveGeometry());
     set_view_value("splitter", split->saveState());
@@ -1634,15 +1668,6 @@ void MainWindow::sync_undo()
     a_undo->setEnabled(!what.isEmpty());
 }
 
-void MainWindow::close_when_idle()
-{
-    // finish closing once every task has stopped (tasks that can't be cancelled run to the end)
-    if (!task_panel->tasks.isEmpty())
-        QTimer::singleShot(100, this, &MainWindow::close_when_idle);
-    else
-        close();
-}
-
 // ---------------------------------------------------------------- entry
 
 void apply_thumb_settings(ThumbnailManager *t)
@@ -1654,6 +1679,7 @@ void apply_thumb_settings(ThumbnailManager *t)
     t->folder_accent = thumbs::follows_accent(color);
     t->folder_color = t->folder_accent ? accent_color().name() : color;
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
+    t->job_minutes = std::max(1, s.value("thumb_job_minutes", 3).toInt());
     static ThumbnailManager *watched = nullptr;
     if (!watched) {   // runs before the windows' own updates, which then draw folders in the new accent
         watched = t;

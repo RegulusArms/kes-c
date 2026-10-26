@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     {
         // keys that aren't settings to choose but state kept as Kestrel is used (window sizes, history, orders)
         static const QStringList STATE = {"geometry", "splitter", "recent_servers", "chooser_folder", "jobs_window_geometry",
-                                          "jobs_window_split", "sidebar_places_order", "sidebar_devices_order",
+                                          "jobs_window_split", "jobs_window_lists", "sidebar_places_order", "sidebar_devices_order",
                                           "sidebar_mounts_order", "sidebar_collapsed", "tower_window_geometry",
                                           "viewer_geometry", "viewer_recent_folders"};
         QStringList missing;

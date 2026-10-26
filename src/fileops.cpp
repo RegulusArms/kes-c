@@ -19,6 +19,8 @@
 #include <QTime>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMouseEvent>
 #include <QLabel>
 #include <QMainWindow>
@@ -226,8 +228,19 @@ TaskBoard::TaskBoard()
     });
 }
 
+QList<Task *> TaskBoard::keeping() const
+{
+    QList<Task *> out;
+    for (Task *t : local)
+        if (t->keeps_running)
+            out << t;
+    return out;
+}
+
 void TaskBoard::add(Task *task)
 {
+    if (local.contains(task))   // (handed to another window's status bar)
+        return;
     local << task;
     stats::peak("tasks at once", local.size());
     connect(task, &Task::progress, this, [this]() {
@@ -526,6 +539,14 @@ static TaskPanel *panel_for(QWidget *widget)
     return nullptr;
 }
 
+// A job's failure is told also when the window that started it has closed (with no parent, then)
+static void tell_errors(Task *t, QWidget *parent, const QString &title)
+{
+    QPointer<QWidget> p(parent);
+    QObject::connect(t, &Task::error, t, [p, title](const QString &msg) { warn(p, title, msg); });
+    t->keeps_running = std::make_unique<QEventLoopLocker>();
+}
+
 Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, bool cancellable, bool quiet)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
@@ -533,8 +554,7 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
-        QPointer<QWidget> p(parent);
-        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
     }
@@ -544,18 +564,17 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
 }
 
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done,
-                bool cancellable, const QStringList &steps, bool quiet, const QStringList &intro)
+                bool cancellable, const QStringList &steps, bool quiet, const QStringList &intro, bool outlives_parent)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
     t->paths = paths;
     t->steps = steps;
     t->intro = intro;
-    QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
+    QObject *ctx = parent && !outlives_parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
-        QPointer<QWidget> p(parent);
-        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
     }
@@ -1604,6 +1623,15 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             }
             for (const QString &root : tapes)
                 drives::sync_tape_job(p, root);
+            // the remembered sizes of the folders it changed (and those above them) are out of date
+            QStringList changed;
+            for (const Job &j : (*ops)->touched) {
+                if (!j.dst.isEmpty())
+                    changed << dirname(j.dst);
+                if (j.op.contains("move") || j.op == "delete")
+                    changed << j.src;
+            }
+            dirsizes::drop_with_parents(changed);
         }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
@@ -1641,7 +1669,8 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
     }
     paths.removeAll(QString());
-    return queue_job(parent, title, paths, work, finished, true, steps, false, intro);
+    // what it finishes (undo, the tape's index, what failed) doesn't need the window: it may have closed meanwhile
+    return queue_job(parent, title, paths, work, finished, true, steps, false, intro, true);
 }
 
 namespace {
@@ -2016,6 +2045,116 @@ Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
             on_done(r.toStringList());
     });
 }
+
+namespace dirsizes {
+
+static const int MAX_ENTRIES = 5000;
+static const qint64 MAX_AGE = 365LL * 24 * 3600;   // older entries are trimmed
+
+QString cache_file() { return join(APP_CACHE(), "folder-sizes.json"); }
+
+static QJsonObject &entries()
+{
+    // re-read when another Kestrel has written it
+    static QJsonObject cached;
+    static qint64 read_mtime = -1;
+    struct stat st;
+    qint64 m = stat_(cache_file(), st) ? qint64(st.st_mtim.tv_sec) * 1000000000 + st.st_mtim.tv_nsec : 0;
+    if (m != read_mtime) {
+        bool ok = false;
+        cached = QJsonDocument::fromJson(read_file(cache_file(), &ok)).object();
+        read_mtime = m;
+    }
+    return cached;
+}
+
+static void save(QJsonObject &all)
+{
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    QList<QPair<qint64, QString>> by_age;
+    for (auto it = all.begin(); it != all.end();) {
+        qint64 at = it.value().toObject().value("at").toInteger();
+        if (now - at > MAX_AGE) {
+            it = all.erase(it);
+        } else {
+            by_age << qMakePair(at, it.key());
+            ++it;
+        }
+    }
+    if (by_age.size() > MAX_ENTRIES) {   // the oldest go
+        std::sort(by_age.begin(), by_age.end());
+        for (int i = 0; i < by_age.size() - MAX_ENTRIES; ++i)
+            all.remove(by_age[i].second);
+    }
+    try {
+        makedirs(APP_CACHE(), true);
+        write_atomic(cache_file(), QJsonDocument(all).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {   // a cache: a failure to write it only means counting again next time
+    }
+}
+
+std::optional<Entry> get(const QString &folder)
+{
+    QJsonObject o = entries().value(folder).toObject();
+    struct stat st;
+    if (o.isEmpty() || !lstat_(folder, st) || !S_ISDIR(st.st_mode) || o.value("dev").toInteger() != qint64(st.st_dev) ||
+        o.value("ino").toInteger() != qint64(st.st_ino))
+        return std::nullopt;
+    Entry e;
+    e.stats.size = o.value("size").toInteger();
+    e.stats.files = o.value("files").toInteger();
+    e.stats.dirs = o.value("dirs").toInteger();
+    e.measured = o.value("at").toInteger();
+    return e;
+}
+
+void put(const QString &folder, const DirStats &s)
+{
+    struct stat st;
+    if (!lstat_(folder, st) || !S_ISDIR(st.st_mode))
+        return;
+    QJsonObject &all = entries();
+    all[folder] = QJsonObject{{"dev", qint64(st.st_dev)}, {"ino", qint64(st.st_ino)}, {"size", s.size},
+                              {"files", s.files},         {"dirs", s.dirs},          {"at", QDateTime::currentSecsSinceEpoch()}};
+    save(all);
+}
+
+void drop_with_parents(const QStringList &paths)
+{
+    QJsonObject &all = entries();
+    if (all.isEmpty())
+        return;
+    bool changed = false;
+    for (const QString &p : paths) {
+        for (QString d = rstrip(p, '/'); !d.isEmpty(); d = dirname(d)) {
+            if (all.contains(d)) {
+                all.remove(d);
+                changed = true;
+            }
+            if (d == "/")
+                break;
+        }
+    }
+    if (changed)
+        save(all);
+}
+
+QString age_text(qint64 measured, qint64 now)
+{
+    qint64 ago = std::max<qint64>(0, now - measured);
+    auto n = [](qint64 v, const char *unit) { return QString("%1 %2%3 ago").arg(v).arg(unit).arg(v == 1 ? "" : "s"); };
+    QString words = ago < 60               ? QString("just now")
+                    : ago < 3600           ? n(ago / 60, "minute")
+                    : ago < 86400          ? n(ago / 3600, "hour")
+                    : ago < 30 * 86400     ? n(ago / 86400, "day")
+                    : ago < 365 * 86400LL  ? n(ago / (30 * 86400), "month")
+                                           : n(ago / (365 * 86400LL), "year");
+    if (ago < 60)
+        return "Calculated just now";
+    return "Calculated " + words + " (" + QDateTime::fromSecsSinceEpoch(measured).toString("yyyy-MM-dd HH:mm") + ")";
+}
+
+}  // namespace dirsizes
 
 DirStats dir_stats(const QString &path, std::function<bool()> cancel)
 {

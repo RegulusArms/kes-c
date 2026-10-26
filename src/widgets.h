@@ -64,10 +64,13 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
                       const QModelIndex &parent) override;
+    QStringList mimeTypes() const override;   // files, and items dragged out of Open as Archive (archive::MEMBERS_MIME)
 
     int thumb_size = 128;
     bool folder_previews = true;
     std::function<void(const QStringList &, const QString &)> drop_handler;
+    // items dragged out of Open as Archive, dropped into target (ArchiveWindow::drop_members)
+    std::function<void(const QMimeData *, const QString &)> members_handler;
 
 private:
     QPixmap thumb(const QModelIndex &index) const;
@@ -267,6 +270,7 @@ public:
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
     void dropped(const QStringList &sources, const QString &target);
+    void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
     void shred_trash_requested();   // Empty Trash with BleachBit
 

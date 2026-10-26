@@ -427,12 +427,9 @@ QWidget *PropertiesDialog::general_tab()
         size_label = sel_label(is_dir ? QString("Calculating…")
                                       : QString("%1 (%2 bytes)").arg(human_size(qint64(st.st_size)),
                                                                      group_digits(st.st_size)));
-        form->addRow("Size:", size_label);
-        if (is_dir) {
-            QString p = path;
-            run([p]() { return QVariant::fromValue(fileops::dir_stats(p)); },
-                [this](const QVariant &r) { show_dir_size(r); });
-        }
+        form->addRow("Size:", is_dir && !S_ISLNK(st.st_mode) ? size_row() : size_label);
+        if (is_dir && !S_ISLNK(st.st_mode))
+            start_size(false);
         QDateTime bt = QFileInfo(path).birthTime();
         form->addRow("Created:", sel_label(bt.isValid() ? fmt_ts(bt.toSecsSinceEpoch())
                                                         : QString("unknown (not supported by filesystem)")));
@@ -459,27 +456,8 @@ QWidget *PropertiesDialog::general_tab()
         form->addRow("Items:", sel_label(QString("%1 selected").arg(paths.size())));
         form->addRow("Location:", sel_label(dirname(path)));
         size_label = sel_label("Calculating…");
-        form->addRow("Total size:", size_label);
-        QStringList ps = paths;
-        run(
-            [ps]() {
-                fileops::DirStats total;
-                for (const QString &p : ps) {
-                    if (isdir(p) && !islink(p)) {
-                        fileops::DirStats s = fileops::dir_stats(p);
-                        total.size += s.size;
-                        total.files += s.files;
-                        total.dirs += s.dirs + 1;
-                    } else {
-                        struct stat st;
-                        if (lstat_(p, st))
-                            total.size += st.st_size;
-                        total.files += 1;
-                    }
-                }
-                return QVariant::fromValue(total);
-            },
-            [this](const QVariant &r) { show_dir_size(r); });
+        form->addRow("Total size:", size_row());
+        start_size(false);
     }
     // the drive's size from drives::Sizes (statfs can wait on a slow drive): filled in when it comes
     QString root = drives::mount_root(path);
@@ -537,6 +515,102 @@ void PropertiesDialog::apply_folder_style()
     bool on = style_previews->isChecked();
     if (on != t->previews_for(path))
         t->set_folder_previews({path}, on);
+}
+
+QWidget *PropertiesDialog::size_row()
+{
+    auto *box = new QWidget;
+    auto *v = new QVBoxLayout(box);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->addWidget(size_label);
+    auto *h = new QHBoxLayout;
+    size_age = new QLabel;
+    size_age->setStyleSheet("color: palette(placeholder-text)");
+    recalc = new QPushButton("Recalculate");
+    recalc->setToolTip("Count the size again (a job in the Jobs window)");
+    connect(recalc, &QPushButton::clicked, this, [this]() { start_size(true); });
+    h->addWidget(size_age, 1);
+    h->addWidget(recalc);
+    v->addLayout(h);
+    return box;
+}
+
+void PropertiesDialog::start_size(bool fresh)
+{
+    // remembered: the folders counted before (unless Recalculate); the rest is counted
+    QHash<QString, fileops::dirsizes::Entry> known;
+    QStringList dirs;
+    for (const QString &p : paths)
+        if (isdir(p) && !islink(p)) {
+            dirs << p;
+            if (!fresh)
+                if (auto e = fileops::dirsizes::get(p))
+                    known.insert(p, *e);
+        }
+    qint64 oldest = 0;
+    for (const auto &e : known)
+        oldest = oldest ? std::min(oldest, e.measured) : e.measured;
+    QStringList ps = paths;
+    auto total_of = [ps, known](const QHash<QString, fileops::DirStats> &counted) {
+        fileops::DirStats total;
+        for (const QString &p : ps) {
+            if (known.contains(p) || counted.contains(p)) {
+                fileops::DirStats s = known.contains(p) ? known[p].stats : counted[p];
+                total.size += s.size;
+                total.files += s.files;
+                total.dirs += s.dirs + (ps.size() > 1 ? 1 : 0);   // several: the folder itself counts too
+            } else {
+                struct stat st;
+                if (lstat_(p, st))
+                    total.size += st.st_size;
+                total.files += 1;
+            }
+        }
+        return total;
+    };
+    bool all_known = std::all_of(dirs.begin(), dirs.end(), [&](const QString &d) { return known.contains(d); });
+    if (all_known && !dirs.isEmpty()) {
+        show_dir_size(QVariant::fromValue(total_of({})));
+        size_age->setText(fileops::dirsizes::age_text(oldest, QDateTime::currentSecsSinceEpoch()));
+        recalc->setEnabled(true);
+        return;
+    }
+    QStringList to_count;
+    for (const QString &d : dirs)
+        if (!known.contains(d))
+            to_count << d;
+    size_label->setText("Calculating…");
+    size_age->setText(known.isEmpty() ? QString() : "Partly remembered");
+    recalc->setEnabled(false);
+    auto work = [to_count, total_of](Task *task) {
+        QHash<QString, fileops::DirStats> counted;
+        for (const QString &d : to_count) {
+            task->report(0, 0, basename(d));
+            fileops::DirStats s = fileops::dir_stats(d, [task]() { return task->cancelled.load(); });
+            task->check();   // stopped: nothing is stored
+            counted.insert(d, s);
+            // remembered at once, also if the window has been closed meanwhile (on the UI thread: dirsizes is)
+            QMetaObject::invokeMethod(qApp, [d, s]() { fileops::dirsizes::put(d, s); });
+        }
+        return QVariant::fromValue(total_of(counted));
+    };
+    QPointer<PropertiesDialog> self(this);
+    auto done = [self, oldest, known](const QVariant &res) {
+        if (!self)
+            return;
+        self->recalc->setEnabled(true);
+        if (!res.isValid()) {
+            self->size_label->setText("Not calculated (stopped)");
+            return;
+        }
+        self->show_dir_size(res);
+        // the oldest figure in it says how old the total is
+        self->size_age->setText(fileops::dirsizes::age_text(known.isEmpty() ? QDateTime::currentSecsSinceEpoch() : oldest,
+                                                            QDateTime::currentSecsSinceEpoch()));
+    };
+    QString what = paths.size() == 1 ? "“" + basename(rstrip(path, '/')) + "”" : QString("%1 items").arg(paths.size());
+    // Recalculate: a job of its own (in the Jobs window, with Stop); the first count is quiet, as before
+    fileops::queue_job(this, "Counting the size of " + what, to_count, work, done, true, {}, !fresh);
 }
 
 void PropertiesDialog::show_dir_size(const QVariant &res)

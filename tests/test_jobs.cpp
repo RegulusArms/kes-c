@@ -9,6 +9,7 @@
 #include "windiag.h"
 
 #include <QClipboard>
+#include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
@@ -428,6 +429,69 @@ int main(int argc, char **argv)
         if (auto *b = qobject_cast<QMessageBox *>(x); b && b->isVisible())
             b->close();
     tw->close();
+
+    // ---- jobs belong to Kestrel, not to a window: closing the window that started one doesn't stop it (nor ask);
+    // the last window asks; with every window closed Kestrel runs on until its jobs have ended
+    {
+        for (QWidget *x : QApplication::topLevelWidgets())
+            if (x != w && x->isVisible() && x->isWindow())
+                x->close();
+        spin(100);
+        MainWindow *w2 = open_window({HOME()});
+        spin(200);
+        auto hold = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> job = holder(w, "Keeps going", home_path("x"), hold);
+        spin(200);
+        QPointer<MainWindow> first = w;
+        w->close();
+        spin(300);
+        bool asked = shown_window<QMessageBox>() != nullptr;
+        check((!first || !first->isVisible()) && job && !job->isFinished() && !asked && w2->task_panel->tasks.contains(job.data()),
+              "closing a window that started a job doesn't ask or stop it: it goes on, shown in another window's "
+              "status bar");
+        QPointer<MainWindow> last = w2;
+        w2->close();
+        QMessageBox *q = nullptr;
+        wait_for([&]() { return (q = shown_window<QMessageBox>()) != nullptr; }, 2000);
+        QStringList buttons;
+        QAbstractButton *keep = nullptr;
+        if (q)
+            for (QAbstractButton *b : q->buttons()) {
+                buttons << b->text();
+                if (b->text() == "Exit and Open the Jobs Window")
+                    keep = b;
+            }
+        check(last && last->isVisible() && q && q->text().contains("Keeps going") &&
+                  buttons.contains("Stop All Jobs and Exit") && keep,
+              "closing the last window while a job runs asks: exit and open the Jobs window, or stop all jobs (" +
+                  buttons.join(", ") + ")");
+        if (keep)
+            keep->click();
+        spin(300);
+        check((!last || !last->isVisible()) && JobsWindow::is_open() && job && !job->isFinished() && !shown_window<JobsWindow>()->parentWidget(),
+              "...Exit and Open the Jobs Window: the window closes, the Jobs window (a window of its own) opens, and the "
+              "job goes on");
+        QPointer<Task> quiet = fileops::queue_job(nullptr, "quiet", {}, [](Task *) { return QVariant(); }, nullptr, true,
+                                                  {}, true);
+        check(job && job->keeps_running && (!quiet || !quiet->keeps_running),
+              "a job the user sees keeps Kestrel running; a quiet helper task doesn't");
+        // the Jobs window closed too: Kestrel quits only once the job has ended
+        QElapsedTimer since;
+        since.start();
+        qint64 job_ended = -1, quit_at = -1;
+        QTimer::singleShot(300, []() {
+            if (JobsWindow *jw = shown_window<JobsWindow>())
+                jw->close();
+        });
+        QTimer::singleShot(1500, [&]() { *hold = false; });
+        QObject::connect(job.data(), &QThread::finished, [&]() { job_ended = since.elapsed(); });
+        QTimer::singleShot(15000, []() { QApplication::exit(9); });   // (a safety net)
+        int rc = app.exec();
+        quit_at = since.elapsed();
+        check(rc == 0 && job_ended >= 1400 && quit_at >= job_ended,
+              QString("with every window closed, Kestrel goes on until its jobs have ended, then quits (job ended "
+                      "at %1 ms, quit at %2 ms)").arg(job_ended).arg(quit_at));
+    }
 
     finish();
 }

@@ -14,16 +14,22 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialogButtonBox>
 #include <QDialog>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QLineEdit>
+#include <QMimeData>
+#include <QUrl>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRandomGenerator>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTreeWidget>
 
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include <atomic>
@@ -525,6 +531,90 @@ int main(int argc, char **argv)
                   (other.isEmpty() ? QString("other formats") : other));
     }
 
+    // ---- Compress…'s volume sizes: standard ones by what they fit (exact bytes), or Custom… with a unit
+    if (archive::tool("7z").isEmpty()) {
+        skip("volume sizes (7z isn't installed)");
+    } else {
+        QString c = home_path("vols");
+        makedirs(join(c, "src"), true);
+        QByteArray noise;
+        for (int i = 0; i < 600 * 1024; ++i)
+            noise += char(QRandomGenerator::global()->bounded(256));
+        write_text(join(c, "src/noise.bin"), noise);
+        auto *cd = new CompressDialog(w, {join(c, "src/noise.bin")});
+        cd->show();   // (what's offered depends on what's shown)
+        QComboBox *fmt = cd->findChild<QComboBox *>();
+        fmt->setCurrentIndex(fmt->findData("7z"));
+        QGroupBox *split = nullptr;
+        for (QGroupBox *b : cd->findChildren<QGroupBox *>())
+            if (b->title() == "Split into volumes")
+                split = b;
+        QComboBox *sizes = nullptr;
+        QSpinBox *num = nullptr;
+        if (split) {
+            split->setChecked(true);
+            for (QComboBox *b : split->findChildren<QComboBox *>())
+                if (b->findData("dvd") >= 0)
+                    sizes = b;
+            num = split->findChild<QSpinBox *>();
+        }
+        bool dvd = false, custom_shown = false;
+        if (sizes && num) {
+            sizes->setCurrentIndex(sizes->findData("dvd"));
+            dvd = cd->spec().volume_bytes == 4700372992LL - 4 * 1024 * 1024 && num->isHidden() &&
+                  archive::command_preview(cd->spec()).contains("-v4696178688b");
+            sizes->setCurrentIndex(sizes->findData("custom"));
+            custom_shown = !num->isHidden();
+        }
+        QStringList labels;
+        for (int i = 0; sizes && i < sizes->count(); ++i)
+            labels << sizes->itemText(i);
+        check(dvd && custom_shown && labels.contains("700 MB (CD)") && labels.contains("4 GB (FAT32 USB stick)") &&
+                  labels.contains("50 GB (dual-layer Blu-ray)") && labels.last() == "Custom…",
+              "Compress… offers volume sizes by what they fit, a DVD's exact (4,700,372,992 bytes less its file "
+              "system), passed in bytes, and Custom… shows the number and unit (" + labels.join(", ") + ")");
+        archive::Spec sp;
+        if (num) {
+            num->setValue(200);
+            for (QComboBox *b : split->findChildren<QComboBox *>())
+                if (b->findText("KB") >= 0)
+                    b->setCurrentText("KB");
+            sp = cd->spec();
+            if (auto *bb = cd->findChild<QDialogButtonBox *>())   // OK: the options are saved
+                bb->button(QDialogButtonBox::Ok)->click();
+        }
+        delete cd;
+        bool remembered = false;
+        {
+            CompressDialog again(w, {join(c, "src/noise.bin")});
+            again.show();
+            QComboBox *f2 = again.findChild<QComboBox *>();
+            f2->setCurrentIndex(f2->findData("7z"));
+            remembered = again.spec().volume_bytes == 200 * 1024 || !split;
+            QComboBox *s2 = nullptr;
+            for (QComboBox *b : again.findChildren<QComboBox *>())
+                if (b->findData("dvd") >= 0)
+                    s2 = b;
+            remembered = remembered && s2 && s2->currentData() == "custom";
+        }
+        sp.level = 0;
+        Task vt("vols", [](Task *) { return QVariant(); });
+        QStringList made;
+        try {
+            archive::compress(&vt, sp);
+            for (const QString &n : listdir(dirname(sp.out)))
+                if (n.startsWith(basename(sp.out)))
+                    made << n;
+        } catch (const std::exception &e) {
+            made << QString("error: ") + e.what();
+        }
+        made.sort();
+        bool sized = made.size() == 4 && QFileInfo(join(dirname(sp.out), made.first())).size() == 200 * 1024;
+        check(sp.volume_bytes == 200 * 1024 && remembered && sized,
+              "a custom size in KB makes volumes of exactly that size, and the choice is remembered for the format (" +
+                  made.join(", ") + ")");
+    }
+
     QString z7 = archive::tool("7z");
     if (z7.isEmpty()) {
         skip("Extract All and the password checks (7z isn't installed)");
@@ -909,6 +999,123 @@ int main(int argc, char **argv)
           "an archive with encrypted files but visible names opens without asking, asks when an encrypted file is "
           "extracted, and not again while the window is open");
     fw->close();
+
+    // ---- opening a file from inside the archive, and dragging items out
+    {
+        // the default app for text: a script noting what it was given
+        QString marker = home_path("opened.txt"), script = home_path("bin/note-open");
+        makedirs(home_path("bin"), true);
+        write_text(script, ("#!/bin/sh\necho \"$1\" > '" + marker + "'\n").toUtf8());
+        ::chmod(enc(script).constData(), 0755);
+        makedirs(home_path(".local/share/applications"), true);
+        write_text(home_path(".local/share/applications/kes-test-open.desktop"),
+                   ("[Desktop Entry]\nType=Application\nName=Note\nExec=" + script + " %f\nMimeType=text/plain;\n").toUtf8());
+        makedirs(home_path(".config"), true);
+        write_text(home_path(".config/mimeapps.list"), "[Default Applications]\ntext/plain=kes-test-open.desktop\n");
+        spin(500);   // (GIO notices new applications by watching their folders)
+        bool made_plain = make7("plain.7z", "");
+        ArchiveWindow *pw = ArchiveWindow::open(w, join(base, "plain.7z"));
+        wait_for([&]() { return pw->loaded(); });
+        aw = pw;
+        QTreeWidgetItem *top = nullptr;
+        for (int i = 0; i < pw->tree->topLevelItemCount(); ++i)
+            if (pw->tree->topLevelItem(i)->data(0, Qt::UserRole + 1).toString() == "top.txt")
+                top = pw->tree->topLevelItem(i);
+        if (top)
+            Q_EMIT pw->tree->itemActivated(top, 0);
+        bool opened = wait_for([&]() { return exists(marker); }, 10000);
+        QString copy = QString::fromUtf8(read_file(marker)).trimmed();
+        struct stat st;
+        check(made_plain && opened && copy.startsWith(ArchiveWindow::temp_root() + "/") && copy.endsWith("/top.txt") &&
+                  read_file(copy) == "hello" && lstat_(copy, st) && !(st.st_mode & 0222),
+              "a file double-clicked in the archive window is extracted to a temporary copy (read-only) and opened "
+              "with its app (" + copy + ")");
+
+        // dragged out: Kestrel takes the items themselves, extracted straight into the folder it's dropped on
+        auto temp_count = [&]() { return isdir(ArchiveWindow::temp_root()) ? listdir(ArchiveWindow::temp_root()).size() : 0; };
+        QString drop_dir = home_path("dropped-out");
+        makedirs(drop_dir, true);
+        w->pane()->set_path(drop_dir);
+        wait_for([&]() { return w->pane()->path == drop_dir; });
+        int temps = temp_count();
+        std::unique_ptr<QMimeData> md(pw->drag_data({"inner/", "top.txt"}));
+        bool both = md->hasFormat(archive::MEMBERS_MIME) && md->formats().contains("text/uri-list");
+        bool taken = w->pane()->view()->model()->dropMimeData(md.get(), Qt::CopyAction, -1, -1, QModelIndex());
+        bool landed = wait_for([&]() { return read_file(join(drop_dir, "inner/a.txt")) == "hello" &&
+                                              read_file(join(drop_dir, "top.txt")) == "hello"; }, 10000);
+        check(both && taken && landed && temp_count() == temps,
+              "items dragged out onto a Kestrel folder are extracted straight into it (no temporary copy made)");
+        // another app asks for the files: extracted then, to the temporary folder
+        std::unique_ptr<QMimeData> other(pw->drag_data({"top.txt"}));
+        QList<QUrl> urls = other->urls();
+        check(urls.size() == 1 && urls.first().isLocalFile() &&
+                  urls.first().toLocalFile().startsWith(ArchiveWindow::temp_root() + "/") &&
+                  read_file(urls.first().toLocalFile()) == "hello",
+              "for another app the dragged items are extracted when the drop asks for them, into the temporary "
+              "folder");
+        pw->close();
+        // encrypted files whose password isn't known yet: only Kestrel takes them (it can ask)
+        ArchiveWindow *ew = ArchiveWindow::open(w, join(base, "names.7z"));
+        wait_for([&]() { return ew->loaded(); });
+        std::unique_ptr<QMimeData> enc_md(ew->drag_data({"top.txt"}));
+        check(enc_md->hasFormat(archive::MEMBERS_MIME) && !enc_md->formats().contains("text/uri-list"),
+              "encrypted items whose password isn't known are offered to Kestrel only, not as files to other apps");
+        ew->close();
+        // a day-old temporary copy is deleted when the next one is made
+        QString old = join(ArchiveWindow::temp_root(), "old-copy");
+        makedirs(old, true);
+        write_text(join(old, "f.txt"), "x");
+        ::chmod(enc(join(old, "f.txt")).constData(), 0444);
+        struct timeval tv[2] = {{QDateTime::currentSecsSinceEpoch() - 2 * 86400, 0},
+                                {QDateTime::currentSecsSinceEpoch() - 2 * 86400, 0}};
+        ::utimes(enc(old).constData(), tv);
+        ArchiveWindow *pw2 = ArchiveWindow::open(w, join(base, "plain.7z"));
+        wait_for([&]() { return pw2->loaded(); });
+        std::unique_ptr<QMimeData> again(pw2->drag_data({"top.txt"}));
+        again->urls();
+        check(!lexists(old), "temporary copies not used for a day are deleted when a new one is made");
+        pw2->close();
+    }
+
+    // ---- unzip, taken only without 7-Zip (which the tests always have): listing, single items, testing
+    if (archive::tool("unzip").isEmpty()) {
+        skip("the unzip path (unzip isn't installed)");
+    } else {
+        QString uz = home_path("uz");
+        makedirs(join(uz, "src"), true);
+        for (const QString &n : {"a [1].txt", "a 1.txt", "b*?.txt", "bxy.txt", "c.txt"})
+            write_text(join(uz, "src/" + n), n.toUtf8());
+        bool zipped = make({z7, "a", "-tzip", join(uz, "u.zip"), "a [1].txt", "a 1.txt", "b*?.txt", "bxy.txt", "c.txt"},
+                           join(uz, "src"));
+        qputenv("KESTREL_TEST_HIDE_TOOLS", "7z");
+        Task ut("unzip", [](Task *) { return QVariant(); });
+        QStringList names, got1, got2;
+        bool tested = false;
+        QString err;
+        try {
+            for (const archive::Entry &e : archive::list(&ut, join(uz, "u.zip")))
+                names << e.path;
+            names.sort();
+            makedirs(join(uz, "o1"), true);
+            makedirs(join(uz, "o2"), true);
+            archive::extract_members(&ut, join(uz, "u.zip"), join(uz, "o1"), QString(), {"a [1].txt"});
+            archive::extract_members(&ut, join(uz, "u.zip"), join(uz, "o2"), QString(), {"b*?.txt"});
+            got1 = listdir(join(uz, "o1"));
+            got2 = listdir(join(uz, "o2"));
+            tested = archive::test(&ut, join(uz, "u.zip")).ok;
+        } catch (const std::exception &e) {
+            err = e.what();
+        }
+        bool via_unzip = archive::extract_tool(join(uz, "u.zip")) == "unzip";
+        qunsetenv("KESTREL_TEST_HIDE_TOOLS");
+        check(zipped && via_unzip && names == QStringList{"a 1.txt", "a [1].txt", "b*?.txt", "bxy.txt", "c.txt"},
+              "without 7-Zip, unzip lists a zip (" + names.join(", ") + err + ")");
+        check(got1 == QStringList{"a [1].txt"} && got2 == QStringList{"b*?.txt"} &&
+                  read_file(join(uz, "o1/a [1].txt")) == "a [1].txt",
+              "...extracts single items, names with [ ] * ? taken as they are, not as patterns (" + got1.join(", ") +
+                  " | " + got2.join(", ") + ")");
+        check(tested, "...and tests it");
+    }
 
     // a big archive: its items are made in the job, so showing them doesn't hold up the window (it froze for 1–2 s
     // per 100,000 items), in order and with their times

@@ -72,7 +72,7 @@ static const QList<QPair<QString, Field>> JOB_FIELDS = {{"flight", STR}, {"id", 
 static const QList<QPair<QString, Field>> TASK_FIELDS = {{"id", STR},          {"title", STR},      {"text", STR},
                                                          {"fraction", NUM},    {"cancellable", BOOL},
                                                          {"cancelling", BOOL}, {"admin", BOOL}, {"state", STR}};
-static const QStringList UNDO_KINDS = {"move", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
+static const QStringList UNDO_KINDS = {"move", "move_into", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
 
 static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
 

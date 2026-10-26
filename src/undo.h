@@ -25,7 +25,8 @@ Q_SIGNALS:
 };
 Signals *signals_();
 
-// kind "move": pairs (src, dst) · "rename": (old, new) · "trash": (original, -) · "create": (path, -) ·
+// kind "move": pairs (src, dst) · "move_into": (folder, -) the folder made for them, then the moves (src, dst): undone
+// by moving them back and removing the folder if it's left empty · "rename": (old, new) · "trash": (original, -) · "create": (path, -) ·
 // "none": no items (what was done can't be undone)
 void record(const QString &kind, const QString &label, const QList<QPair<QString, QString>> &items);
 void record_paths(const QString &kind, const QString &label, const QStringList &paths);   // "trash" / "create"

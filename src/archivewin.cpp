@@ -6,6 +6,14 @@
 #include "windows.h"
 
 #include <QCollator>
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMimeData>
+#include <QTimer>
+#include <QUrl>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -17,8 +25,11 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <atomic>
 #include <deque>
 #include <memory>
+#include <sys/stat.h>
+#include <thread>
 
 using namespace util;
 
@@ -155,6 +166,125 @@ void ArchiveWindow::Listing::build()
         top << r->item;
 }
 
+static void make_tree_writable(const QString &p)
+{
+    walk(p, [](const QString &root, QStringList &, QStringList &files) {
+        ::chmod(enc(root).constData(), 0700);
+        for (const QString &f : files)
+            ::chmod(enc(join(root, f)).constData(), 0600);
+        return true;
+    });
+}
+
+// A new folder for temporary copies; the ones not used for a day are deleted first (an app may still be reading a
+// newer one)
+static QString new_temp_folder()
+{
+    QString root = ArchiveWindow::temp_root();
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    if (isdir(root))
+        for (const QString &n : listdir(root)) {
+            struct stat st;
+            QString p = join(root, n);
+            if (lstat_(p, st) && now - qint64(st.st_mtime) > 86400) {
+                make_tree_writable(p);   // the copies are read-only
+                util::rmtree(p);
+            }
+        }
+    makedirs(root, true);
+    QByteArray tmpl = enc(join(root, "XXXXXX"));
+    if (!::mkdtemp(tmpl.data()))
+        throw OSError(errno, "Couldn't make a temporary folder in " + root);
+    return dec(tmpl.constData());
+}
+
+namespace {
+// What items dragged out of the window carry: MEMBERS_MIME for Kestrel, and a file list made only when a drop asks
+// for it (extracted then, on a thread, the window kept drawing meanwhile)
+class MembersMime : public QMimeData {
+public:
+    QString archive, password;
+    QStringList members;
+    bool offer_files = false;
+    mutable bool extracted = false;
+    mutable QList<QUrl> files;
+
+    QStringList formats() const override
+    {
+        QStringList f{ArchiveWindow::MEMBERS_MIME};
+        if (offer_files)
+            f << "text/uri-list";
+        return f;
+    }
+    bool hasFormat(const QString &mime) const override { return formats().contains(mime); }
+
+protected:
+    QVariant retrieveData(const QString &mime, QMetaType type) const override
+    {
+        if (mime == ArchiveWindow::MEMBERS_MIME)
+            return QJsonDocument(QJsonObject{{"archive", archive}, {"members", QJsonArray::fromStringList(members)}})
+                .toJson(QJsonDocument::Compact);
+        if (mime != "text/uri-list" || !offer_files)
+            return QVariant();
+        if (!extracted) {
+            extracted = true;
+            extract_now();
+        }
+        if (type.id() == QMetaType::QByteArray) {
+            QByteArray out;
+            for (const QUrl &u : files)
+                out += u.toEncoded() + "\r\n";
+            return out;
+        }
+        QVariantList l;
+        for (const QUrl &u : files)
+            l << u;
+        return l;
+    }
+
+private:
+    void extract_now() const
+    {
+        std::atomic<bool> done{false};
+        QStringList made;
+        std::thread t([&]() {
+            Task task("Extracting for a drop", [](Task *) { return QVariant(); });
+            try {
+                made = archive::extract_members(&task, archive, new_temp_folder(), password, members);
+            } catch (const std::exception &) {
+            }
+            done = true;
+        });
+        QTimer tick;   // wakes the wait below
+        tick.start(30);
+        while (!done)   // the windows keep drawing meanwhile
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 30);
+        t.join();
+        for (const QString &p : made)
+            files << QUrl::fromLocalFile(p);
+    }
+};
+
+class MemberTree : public QTreeWidget {
+public:
+    explicit MemberTree(ArchiveWindow *win) : win(win) {}
+
+protected:
+    QStringList mimeTypes() const override { return {ArchiveWindow::MEMBERS_MIME, "text/uri-list"}; }
+    QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
+    {
+        QStringList members;
+        for (QTreeWidgetItem *i : items)
+            members << i->data(0, PathRole).toString();
+        return win->drag_data(members);
+    }
+    Qt::DropActions supportedDropActions() const override { return Qt::CopyAction; }
+
+private:
+    ArchiveWindow *win;
+};
+}  // namespace
+
 static QList<QPointer<ArchiveWindow>> &open_windows()
 {
     static QList<QPointer<ArchiveWindow>> list;
@@ -165,7 +295,7 @@ ArchiveWindow *ArchiveWindow::open(MainWindow *owner, const QString &path_in)
 {
     QString path = archive::first_volume(path_in);
     for (const QPointer<ArchiveWindow> &w : open_windows())
-        if (w && w->archive_path == path) {
+        if (w && w->archive_path == path && w->isVisible()) {   // (a closed one is about to be deleted)
             w->raise();
             w->activateWindow();
             return w;
@@ -198,7 +328,10 @@ ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(
     bar->addStretch(1);
     bar->addWidget(filter);
     lay->addLayout(bar);
-    tree = new QTreeWidget;
+    tree = new MemberTree(this);
+    tree->setDragEnabled(true);
+    tree->setDragDropMode(QAbstractItemView::DragOnly);
+    tree->setDefaultDropAction(Qt::CopyAction);
     tree->setHeaderLabels({"Name", "Size", "Packed", "Modified"});
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // sorted when a column's header is clicked, but not kept sorted by the tree itself, which would sort a big
@@ -229,6 +362,10 @@ ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(
     connect(filter, &QLineEdit::textChanged, this, &ArchiveWindow::apply_filter);
     connect(tree, &QTreeWidget::itemSelectionChanged, this, &ArchiveWindow::selection_changed);
     connect(tree, &QTreeWidget::customContextMenuRequested, this, &ArchiveWindow::context_menu);
+    connect(tree, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) {   // double-click, Enter
+        if (is_loaded && item && !item->data(0, DirRole).toBool())
+            open_member(item->data(0, PathRole).toString());
+    });
     for (QPushButton *b : {extract_here, extract_to, extract_all, test})
         b->setEnabled(false);
     resize(760, 520);
@@ -351,6 +488,12 @@ void ArchiveWindow::context_menu(const QPoint &pos)
     if (!is_loaded || tree->selectedItems().isEmpty())
         return;
     auto *m = new QMenu(this);
+    QTreeWidgetItem *cur = tree->currentItem();
+    if (cur && tree->selectedItems().size() == 1 && !cur->data(0, DirRole).toBool()) {
+        QString member = cur->data(0, PathRole).toString();
+        m->addAction("Open", this, [this, member]() { open_member(member); });
+        m->addSeparator();
+    }
     m->addAction("Extract Here", this, [this]() { extract_selected(dirname(archive_path)); });
     m->addAction("Extract To…", this, &ArchiveWindow::choose_and_extract);
     m->popup(tree->viewport()->mapToGlobal(pos));
@@ -381,10 +524,24 @@ void ArchiveWindow::extract_selected(const QString &dest)
     QStringList members = selected_members();
     if (members.isEmpty() || !owner)
         return;
-    QString path = archive_path;
-    auto pw = std::make_shared<QString>(password);
-    bool ask_first = password.isEmpty() && needs_password(members);
-    QPointer<QWidget> asker(this);
+    QPointer<MainWindow> w(owner);
+    QString name = basename(archive_path);
+    extract_job(owner, this, archive_path, members, dest, "Extracting from " + name, [w, dest](const QStringList &made) {
+        if (w && w->pane() && w->pane()->dir() == dest)
+            for (const QString &p : made)
+                w->pane()->select_later(p);
+    });
+}
+
+void ArchiveWindow::extract_job(MainWindow *owner, QPointer<ArchiveWindow> win, const QString &path,
+                                const QStringList &members, const QString &dest, const QString &title,
+                                std::function<void(const QStringList &)> after)
+{
+    if (members.isEmpty() || !owner)
+        return;
+    auto pw = std::make_shared<QString>(win ? win->password : QString());
+    bool ask_first = win && pw->isEmpty() && win->needs_password(members);
+    QPointer<QWidget> asker = win ? static_cast<QWidget *>(win.data()) : static_cast<QWidget *>(owner);
     auto work = [path, dest, members, pw, ask_first, asker](Task *task) -> QVariant {
         QStringList tried;
         if (ask_first) {
@@ -409,10 +566,9 @@ void ArchiveWindow::extract_selected(const QString &dest)
             }
         }
     };
-    QPointer<ArchiveWindow> self(this);
     QPointer<MainWindow> w(owner);
     QString name = basename(path);
-    auto done = [self, w, pw, name, dest](const QVariant &r) {
+    auto done = [win, w, pw, name, dest, after](const QVariant &r) {
         if (!w)
             return;
         if (!r.isValid()) {
@@ -424,23 +580,96 @@ void ArchiveWindow::extract_selected(const QString &dest)
             w->statusBar()->showMessage("Extracting from " + name + " cancelled: no password", 4000);
             return;
         }
-        if (self && !pw->isEmpty())
-            self->password = *pw;   // not asked again while this window is open
+        if (win && !pw->isEmpty())
+            win->password = *pw;   // not asked again while this window is open
         QStringList made = m["made"].toStringList();
         w->statusBar()->showMessage(QString("Extracted %1 item%2 from %3 to %4")
                                         .arg(QString::number(made.size()), made.size() == 1 ? "" : "s", name, dest),
                                     6000);
         if (!m["dropped"].toList().isEmpty())
-            archive_ui::say_dropped_links(self ? static_cast<QWidget *>(self) : w, name, m["dropped"].toList());
-        if (w->pane() && w->pane()->dir() == dest)
-            for (const QString &p : made)
-                w->pane()->select_later(p);
+            archive_ui::say_dropped_links(win ? static_cast<QWidget *>(win) : w, name, m["dropped"].toList());
+        if (after)
+            after(made);
     };
     QStringList steps;
     for (const QString &m : members)
         steps << m;
-    fileops::queue_job(owner, "Extracting from " + name, {path, dest}, work, done, true,
-                       members.size() > 1 ? steps : QStringList());
+    fileops::queue_job(owner, title, {path, dest}, work, done, true, members.size() > 1 ? steps : QStringList());
+}
+
+QString ArchiveWindow::temp_root() { return join(APP_CACHE(), "archive-files"); }
+
+void ArchiveWindow::open_member(const QString &member)
+{
+    if (!owner || member.isEmpty() || member.endsWith('/'))
+        return;
+    QString dir;
+    try {
+        dir = new_temp_folder();
+    } catch (const OSError &e) {
+        warn(this, "Open", e.message());
+        return;
+    }
+    QPointer<ArchiveWindow> self(this);
+    extract_job(owner, this, archive_path, {member}, dir, "Opening " + basename(rstrip(member, '/')) + " from " +
+                                                              basename(archive_path),
+                [self](const QStringList &made) {
+                    if (made.isEmpty())
+                        return;
+                    // read-only: it's a copy, and changing it wouldn't change the archive
+                    ::chmod(enc(made.first()).constData(), 0444);
+                    if (!open_default(made.first()) && self)
+                        warn(self, "Open", QString("No application is set to open “%1”.").arg(basename(made.first())));
+                });
+}
+
+qint64 ArchiveWindow::size_of(const QStringList &members) const
+{
+    qint64 total = 0;
+    for (const archive::Entry &e : entries)
+        if (!e.dir)
+            for (const QString &m : members)
+                if (e.path == m || (m.endsWith('/') && e.path.startsWith(m))) {
+                    total += std::max<qint64>(0, e.size);
+                    break;
+                }
+    return total;
+}
+
+
+QMimeData *ArchiveWindow::drag_data(const QStringList &members) const
+{
+    auto *md = new MembersMime;
+    md->archive = archive_path;
+    md->members = members;
+    md->password = password;
+    // other apps need finished files: offered when they can be made quickly enough and without asking
+    md->offer_files = size_of(members) <= BIG_DRAG && (!password.isEmpty() || !needs_password(members));
+    return md;
+}
+
+bool ArchiveWindow::drop_members(MainWindow *win, const QMimeData *data, const QString &dest)
+{
+    if (!data || !data->hasFormat(MEMBERS_MIME) || !win)
+        return false;
+    QJsonObject o = QJsonDocument::fromJson(data->data(MEMBERS_MIME)).object();
+    QString path = o.value("archive").toString();
+    QStringList members;
+    for (const QJsonValue &v : o.value("members").toArray())
+        members << v.toString();
+    if (!path.startsWith('/') || members.isEmpty())
+        return false;
+    QPointer<ArchiveWindow> from;
+    for (const QPointer<ArchiveWindow> &w : open_windows())
+        if (w && w->archive_path == path)
+            from = w;
+    QPointer<MainWindow> mw(win);
+    extract_job(win, from, path, members, dest, "Extracting from " + basename(path), [mw, dest](const QStringList &made) {
+        if (mw && mw->pane() && mw->pane()->dir() == dest)
+            for (const QString &p : made)
+                mw->pane()->select_later(p);
+    });
+    return true;
 }
 
 namespace archive_ui {

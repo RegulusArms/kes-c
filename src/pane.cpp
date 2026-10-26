@@ -14,6 +14,7 @@
 #include "thumbs.h"
 #include "stats.h"
 #include "util.h"
+#include "archivewin.h"
 #include "widgets.h"
 #include "windows.h"
 
@@ -587,6 +588,7 @@ FSModel *Pane::make_model()
     proxy->set_pinned_first(win->view_value("pinned_first", false).toBool());
     MainWindow *w = win;
     m->drop_handler = [w](const QStringList &paths, const QString &target) { w->handle_drop(paths, target); };
+    m->members_handler = [w](const QMimeData *data, const QString &target) { ArchiveWindow::drop_members(w, data, target); };
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
     if (win->show_hidden)
         f |= QDir::Hidden;
@@ -1045,7 +1047,9 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         close_search(false, true);
     path = p;
     stack->setCurrentWidget(mode_view);
-    cancel_thumbs();
+    // the folder left: its thumbnail jobs wait behind what's shown now (and stop after a while), not stopped at once
+    thumbs->lower(model);
+    thumbs->lower(search_model);
     animator->clear();
     model->setNameFilters(type_filters);
     QModelIndex src_root = model->setRootPath(p);

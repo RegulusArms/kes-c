@@ -33,6 +33,9 @@ static const QStringList SYSTEM_PATH = {"/usr/local/bin", "/usr/bin", "/bin"};
 
 QString tool(const QString &name)
 {
+    // tests: KESTREL_TEST_HIDE_TOOLS="7z,…" act as if those weren't installed (the unzip path is taken only without 7z)
+    if (qEnvironmentVariable("KESTREL_TEST_HIDE_TOOLS").split(',', Qt::SkipEmptyParts).contains(name))
+        return QString();
     // the system's copy over e.g. conda's (unless started from an explicitly activated conda env; see util.h)
     if (explicit_conda_env())
         return QStandardPaths::findExecutable(name);
@@ -223,6 +226,26 @@ QPair<QString, QString> kind(const QString &path)
 bool is_tar(const Format &fmt) { return fmt.id == "tar" || fmt.id.startsWith("tar."); }
 
 bool gpg_encrypted(const QString &path) { return path.toLower().endsWith(".gpg") && kind(path).first == "tar"; }
+
+const QList<VolumeSize> &volume_sizes()
+{
+    static const qint64 MiB = 1024 * 1024, DISC_FS = 4 * MiB;
+    static const QList<VolumeSize> sizes = {
+        // an email's 25 MB limit counts the attachment after encoding (base64: a third more), and the message
+        {"email", "18 MB (a 25 MB email)", 18 * 1000 * 1000},
+        {"100m", "100 MB", 100 * 1000 * 1000},
+        {"cd650", "650 MB (CD)", 333000LL * 2048 - DISC_FS},   // 74 minutes: 333,000 sectors of 2,048 bytes
+        {"cd700", "700 MB (CD)", 360000LL * 2048 - DISC_FS},   // 80 minutes
+        {"1g", "1 GB", 1000LL * 1000 * 1000},
+        {"2g", "2 GB", 2000LL * 1000 * 1000},
+        {"fat32", "4 GB (FAT32 USB stick)", 4095 * MiB},       // a FAT32 file's largest: 4 GiB less a byte
+        {"dvd", "4.7 GB (DVD)", 4700372992LL - DISC_FS},
+        {"dvd_dl", "8.5 GB (dual-layer DVD)", 8543666176LL - DISC_FS},
+        {"bd", "25 GB (Blu-ray)", 25025314816LL - DISC_FS},
+        {"bd_dl", "50 GB (dual-layer Blu-ray)", 50050629632LL - DISC_FS},
+    };
+    return sizes;
+}
 
 QString first_volume(const QString &path)
 {
@@ -686,8 +709,8 @@ static Command compress_command(const Spec &spec)
             if (fmt.id == "zip")
                 c.argv << "-mem=" + (spec.zip_encryption.isEmpty() ? QString("AES256") : spec.zip_encryption);
         }
-        if (spec.volume_mb)
-            c.argv << QString("-v%1m").arg(spec.volume_mb);
+        if (spec.volume_bytes)
+            c.argv << QString("-v%1b").arg(spec.volume_bytes);   // b: bytes, exactly
         c.argv << spec.extra << "--" << spec.out << rels;
     } else if (t == "zip") {
         c.argv = QStringList{exe("zip"), "-r", "-y", "-dc", QString("-%1").arg(lvl)};   // -dc: "done/remaining" count
@@ -702,8 +725,8 @@ static Command compress_command(const Spec &spec)
             c.argv << "-s";
         if (spec.recovery)
             c.argv << QString("-rr%1%").arg(spec.recovery);
-        if (spec.volume_mb)
-            c.argv << QString("-v%1m").arg(spec.volume_mb);
+        if (spec.volume_bytes)
+            c.argv << QString("-v%1b").arg(spec.volume_bytes);   // b: bytes (rar's plain number is thousands)
         if (!pw.isEmpty()) {   // -p / -hp without a value: rar reads the password from stdin
             c.argv << (spec.encrypt_names ? "-hp" : "-p");
             c.stdin_text = pw + "\n" + pw + "\n";

@@ -105,7 +105,7 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
   <running type="exe">kes</running>
   <option id="cache">
     <label>Cache</label>
-    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, and exiftool's tag lists (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option)</description>
+    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, files opened from inside archives, the folder sizes Properties remembers, and exiftool's tag lists (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option)</description>
     <action command="delete" search="walk.all" path="\$XDG_CACHE_HOME/kestrel-explorer"/>
   </option>
   <option id="history">

@@ -49,6 +49,7 @@
   - Link to the Desktop.
   - `.desktop` shortcuts, marked as trusted so they can be launched.
 - Rename (F2). Batch rename works with templates (`[Name] ###`, `[Date]`) or find and replace with regex.
+- **New Folder with Selection…** (right-click one or more items) makes a folder beside them, named as you choose, and moves them into it; Undo puts them back.
 - Duplicate, Move To…, Copy To…, and Compress / Extract (see [Archives](archives.md)).
 - **Undo (Ctrl+Z)** for moves, renames (also batch), Move to Trash, and anything created by copy, paste, duplicate, new folder/file or links (undoing those moves them to the trash). The Edit menu shows what will be undone. Permanent deletes, merges into existing folders, archives and admin-session operations can't be undone. Each Kestrel undoes only what was done in it (its own windows); turn on Preferences → *Share undo between all Kestrel windows* to have Ctrl+Z in any window undo the newest action from any Kestrel. The shared history is kept by the tower (see below) and is cleared when the last Kestrel closes.
 - **Starred and Recent** in the sidebar. Right-click anything → **Star** (starred items show a ★). Recent lists the desktop's recently used files; files you open from Kestrel are added unless "File History" is off in GNOME's Privacy settings.
@@ -62,7 +63,7 @@
   - **Set as Wallpaper (UWP)** on an image or video adds it to UWP's library and shows it on every monitor as a new UWP profile named after the file. It starts UWP if needed and opens its editor. Without UWP, "Set as Wallpaper" sets the GNOME background instead.
   - **Add to Selected UWP Monitor** appears while UWP's editor window is open. It adds the file to UWP's library and puts it on the monitors selected in the editor (or adds it to that monitor's slideshow). Press OK in UWP to keep it, just as when you pick from UWP's own library.
 - Properties window:
-  - **General:** size (recursive for folders), dates, inode, the free space on the drive, and the default app.
+  - **General:** size (recursive for folders), dates, inode, the free space on the drive, and the default app. A folder's size is remembered once counted: it shows at once the next time, with when it was counted ("Calculated 3 days ago (2026-10-21 14:05)"), and **Recalculate** counts it again (a job in the Jobs window). Kestrel's own copies, moves and deletes forget the sizes of the folders they change.
   - **Permissions:** an editable rwx grid plus setuid, setgid and sticky bits.
   - **Image:** image details and a Set as Wallpaper button.
   - **Metadata:** every tag exiftool can read, with a filter. With `exiftool` installed you can also edit the file's metadata, and changes are written straight to the file:
@@ -77,6 +78,8 @@
 **Jobs: one queue, and the Jobs window**
 - Jobs that read or write drives (copy, move, delete, extract, compress, checksums, shredding) wait for their turn on the drives they use, across every Kestrel window and process, so two jobs never fight over one drive. By drive (the default): jobs on different drives run side by side, jobs on the same drive one after the other, in order. Or one at a time. A rename within a drive doesn't wait.
 - Click the job progress in the status bar (or ☰ → **Jobs…**, Ctrl+Shift+J) for the **Jobs window**: every job of every Kestrel window, running, waiting and finished, with progress and time left. Select one for its steps and its log (the archive tools' live output, passwords masked), with Copy and Save Log…. A copy or move is titled with what it copies and where to, and its log starts with what started it (Paste, Paste Into Folder, a drop, Copy To…, Move To…), in which window and when, from where to where, and how long it waited and for which jobs. If its destination folder was moved or deleted while it waited, it stops with one message saying so, before copying anything. Pause, Resume, Stop (Delete), Start Now, move a waiting job up or down; Pause All / Resume All; start new jobs paused; choose by drive or one at a time.
+- Jobs belong to Kestrel, not to the window that started them: closing a window doesn't stop its jobs (another window's status bar shows them). Closing the last window while jobs run asks whether to **exit and open the Jobs window** (they go on; Kestrel exits once they're done and the Jobs window is closed) or **stop all jobs and exit**; with the Jobs window open, it just closes.
+- Making thumbnails and folder previews shows in the Jobs window's lower part: a job per folder you look at ("Thumbnails: Pictures/2024, 312 of 840"), for its window, with Pause and Stop (what's made stays). Leaving a folder puts its job behind the one you're in now; it goes on when nothing newer waits and stops after 3 minutes (Preferences → Images & Videos), and going back puts it first again. It waits while another job uses its drive.
 - A paused copy stops within a few megabytes (its part file kept aside); a paused extraction or compression pauses its program. Administrator jobs can't be paused.
 - Preferences → **Show developer tools** adds ☰ → **Tower…**: the tower's status, the Kestrels checked in, every message it passes on, the queue and the drives in use, and the shared undo list (also `kes --tower-monitor`). Its **Windows** tab shows each of that Kestrel's windows as Qt sees it (size, the minimum and maximum it asks for, state, screen, border) and its recent changes, to copy or save: for a window that misbehaves, compare it with a new one (Ctrl+N).
 
@@ -94,13 +97,13 @@
 
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
-- **Open as Archive**: a window listing what's inside an archive, to extract single files or folders from it (7z, zip, rar, zpaq, tar and what 7-Zip opens).
+- **Open as Archive**: a window listing what's inside an archive, to extract single files or folders from it (7z, zip, rar, zpaq, tar and what 7-Zip opens). Double-click a file to open it with its app (from a temporary copy), or drag items out onto a Kestrel folder, the sidebar, the desktop or another app.
 - **Test Archive(s)**: check every file in one or several archives against its checksum without extracting, with one message at the end.
 - **Extract All Here** and **Extract All To…** for several archives at once: one job, one ✕, one summary at the end; a split set counts as one archive.
 - **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong. In Extract All the first password typed is tried on the rest, and you're asked again only when it doesn't open one.
 - **Remember this password** (opt-in) saves an archive's password in your login keyring (GNOME Keyring, KWallet); a saved password is found again even after the archive is renamed or moved. Preferences can forget them all.
 - **Compress…** on any files or folders: 7z, zip, rar, zpaq, tar, tar.gz/bz2/xz/zst/lz/lz4 or a single compressed file, using pigz, gzip, zpaq, zstd, xz, bzip2, lzip, 7-Zip, rar and the other tools you have installed.
-- Every option the format supports: program, level, method, CPU threads, password (AES-256; tar archives through gpg, as `name.tar.gz.gpg`), a checksum file made as a tar archive is written, encrypted file names, split volumes, solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
+- Every option the format supports: program, level, method, CPU threads, password (AES-256; tar archives through gpg, as `name.tar.gz.gpg`), a checksum file made as a tar archive is written, encrypted file names, split volumes (sized by what they fit: a CD, DVD, Blu-ray, FAT32 stick or email, each its exact size, or a size of your own), solid archives, rar recovery records, and extra options for the program, with a live preview of the exact command.
 - **Compress to “name.ext”** repeats your last settings in one click.
 - Progress, elapsed time and Cancel in the status bar; cancelling removes partial output (extracting straight into an existing folder may leave what was already written).
 

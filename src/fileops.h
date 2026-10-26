@@ -6,6 +6,7 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QEventLoopLocker>
 #include <QJsonObject>
 #include <QMap>
 #include <QMutex>
@@ -20,6 +21,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 class QCheckBox;
@@ -56,6 +58,9 @@ public:
     qint64 queued_ms = 0;        // when it went into the job queue to wait (0: it started at once)
     QStringList waited_for;      // the jobs ahead of it on its drives then (titles), for its log
     QStringList intro;           // its log's first lines: what started it, when, from where to where
+    // A job the user sees (not a quiet helper task) keeps Kestrel running until it ends, also once every Kestrel
+    // window is closed (the Jobs window shows it then); released when it's deleted.
+    std::unique_ptr<QEventLoopLocker> keeps_running;
     bool failed = false;         // ended with an error
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
     static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
@@ -124,6 +129,9 @@ public:
     QList<TaskInfo> others(const QList<Task *> &mine) const;   // all but `mine`: our other windows', then other Kestrels'
     QList<TaskInfo> all() const { return others({}); }        // every job running or waiting: ours, then the others'
     void cancel(const TaskInfo &task);   // another Kestrel's task: asks it to cancel
+    QList<Task *> mine() const { return local; }   // this Kestrel's, every window's
+    // the jobs that keep this Kestrel running (keeps_running), running or waiting
+    QList<Task *> keeping() const;
     QList<FinishedTask> finished;        // ours that have ended, newest last
     void clear_finished();
 
@@ -194,9 +202,11 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done =
 // `paths` before its thread starts, so it doesn't compete with other jobs on them (in any Kestrel). `steps`: what it's
 // going to do, listed in the Jobs window (it sets task->step as it goes).
 // intro: the first lines of its log (Task::intro).
+// outlives_parent: on_done runs also when parent has gone meanwhile (it must then not need it).
+// Jobs don't belong to a window: closing it doesn't stop them, and their errors are shown without it.
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done = nullptr,
                 bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false,
-                const QStringList &intro = QStringList());
+                const QStringList &intro = QStringList(), bool outlives_parent = false);
 // Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet.
 Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done = nullptr,
                bool quiet = false);
@@ -255,6 +265,23 @@ struct DirStats {
 };
 // (total bytes, file count, dir count) recursively, not following symlinks
 DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr);
+
+// Folder sizes worked out before (Properties), so they show at once: ~/.cache/kestrel-explorer/folder-sizes.json,
+// keyed by path and checked against the folder's device and inode (another folder later under the same name isn't
+// given them). Stored after a finished count only. Kestrel's own copies, moves and deletes drop the entries of the
+// folders they change and of the folders above them. UI thread.
+namespace dirsizes {
+struct Entry {
+    DirStats stats;
+    qint64 measured = 0;   // when (seconds since the epoch)
+};
+QString cache_file();
+std::optional<Entry> get(const QString &folder);
+void put(const QString &folder, const DirStats &stats);
+void drop_with_parents(const QStringList &paths);   // each path's own entry and every folder's above it
+QString age_text(qint64 measured, qint64 now);      // "Calculated 3 days ago (2026-10-21 14:05)", "Calculated just now"
+}  // namespace dirsizes
+
 // What emptying the trash removes: every entry in the trash folders on every drive (files, info and expunged)
 QStringList trash_contents();
 // Shredding with BleachBit (`bleachbit --shred`): files and folders are overwritten, then deleted, so they can't be

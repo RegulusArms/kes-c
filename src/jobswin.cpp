@@ -3,6 +3,7 @@
 #include "atc.h"
 #include "fileops.h"
 #include "jobs.h"
+#include "thumbs.h"
 #include "util.h"
 #include "windows.h"
 
@@ -82,16 +83,19 @@ static QPointer<JobsWindow> the_window;
 
 JobsWindow *JobsWindow::open(QWidget *parent)
 {
-    if (the_window) {
+    if (the_window && the_window->isVisible()) {   // (a closed one is about to be deleted)
         the_window->raise();
         the_window->activateWindow();
         return the_window;
     }
-    auto *w = new JobsWindow(parent ? parent->window() : nullptr);
+    Q_UNUSED(parent);
+    auto *w = new JobsWindow(nullptr);
     the_window = w;
     show_free(w);
     return w;
 }
+
+bool JobsWindow::is_open() { return the_window && the_window->isVisible(); }
 
 JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
 {
@@ -137,7 +141,50 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     list->setColumnWidth(3, 150);
     list->setItemDelegateForColumn(2, new ProgressDelegate(list));
     connect(list, &QTreeWidget::currentItemChanged, this, &JobsWindow::show_details);
-    ll->addWidget(list);
+    lists = new QSplitter(Qt::Vertical);
+    lists->setChildrenCollapsible(false);
+    lists->addWidget(list);
+    auto *tbox = new QWidget;
+    auto *tl = new QVBoxLayout(tbox);
+    tl->setContentsMargins(0, 0, 0, 0);
+    thumb_list = new QTreeWidget;
+    thumb_list->setAccessibleName("Thumbnail jobs");
+    thumb_list->setRootIsDecorated(false);
+    thumb_list->setUniformRowHeights(true);
+    thumb_list->setHeaderLabels({"Thumbnails and folder previews", "For", "State", "Progress"});
+    thumb_list->header()->setStretchLastSection(false);
+    thumb_list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    thumb_list->setColumnWidth(1, 150);
+    thumb_list->setColumnWidth(2, 150);
+    thumb_list->setColumnWidth(3, 130);
+    thumb_list->setItemDelegateForColumn(3, new ProgressDelegate(thumb_list));
+    tl->addWidget(thumb_list, 1);
+    auto *tc = new QHBoxLayout;
+    thumb_pause = new QPushButton("Pause");
+    thumb_stop = new QPushButton("Stop");
+    thumb_stop->setToolTip("Stop making this folder's previews (those made stay)");
+    auto thumb_act = [this](bool stop) {
+        ThumbnailManager *t = ThumbnailManager::instance();
+        QTreeWidgetItem *it = thumb_list->currentItem();
+        if (!t || !it)
+            return;
+        quint64 id = it->data(0, Qt::UserRole).toULongLong();
+        if (stop)
+            t->stop_job(id);
+        else
+            t->pause_job(id, it->text(2) != "Paused");
+    };
+    connect(thumb_pause, &QPushButton::clicked, this, [thumb_act]() { thumb_act(false); });
+    connect(thumb_stop, &QPushButton::clicked, this, [thumb_act]() { thumb_act(true); });
+    connect(thumb_list, &QTreeWidget::currentItemChanged, this, &JobsWindow::refresh_thumbs);
+    tc->addWidget(thumb_pause);
+    tc->addWidget(thumb_stop);
+    tc->addStretch(1);
+    tl->addLayout(tc);
+    lists->addWidget(tbox);
+    lists->setStretchFactor(0, 3);   // three quarters: the jobs; a quarter: the thumbnails
+    lists->setStretchFactor(1, 1);
+    ll->addWidget(lists, 1);
     auto *controls = new QHBoxLayout;
     pause_btn = new QPushButton("Pause");
     connect(pause_btn, &QPushButton::clicked, this, [this]() {
@@ -200,6 +247,11 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
         resize(1000, 560);
     if (!split->restoreState(s.value("jobs_window_split").toByteArray()))
         split->setSizes({560, 440});
+    if (!lists->restoreState(s.value("jobs_window_lists").toByteArray()))
+        lists->setSizes({300, 100});
+    if (ThumbnailManager *t = ThumbnailManager::instance())
+        connect(t, &ThumbnailManager::jobs_changed, this, &JobsWindow::refresh_thumbs);
+    refresh_thumbs();
 
     connect(TaskBoard::instance(), &TaskBoard::changed, this, [this]() {
         if (!timer.isActive())
@@ -219,7 +271,42 @@ void JobsWindow::closeEvent(QCloseEvent *ev)
 {
     settings().setValue("jobs_window_geometry", saveGeometry());
     settings().setValue("jobs_window_split", split->saveState());
+    settings().setValue("jobs_window_lists", lists->saveState());
     QDialog::closeEvent(ev);
+}
+
+void JobsWindow::refresh_thumbs()
+{
+    ThumbnailManager *t = ThumbnailManager::instance();
+    QList<ThumbJob> now = t ? t->thumb_jobs() : QList<ThumbJob>();
+    quint64 current = thumb_list->currentItem() ? thumb_list->currentItem()->data(0, Qt::UserRole).toULongLong() : 0;
+    bool same = thumb_list->topLevelItemCount() == now.size();
+    for (int i = 0; same && i < now.size(); ++i)
+        same = thumb_list->topLevelItem(i)->data(0, Qt::UserRole).toULongLong() == now[i].id;
+    if (!same) {   // came, went or moved: made again
+        thumb_list->blockSignals(true);
+        thumb_list->clear();
+        for (const ThumbJob &j : now) {
+            auto *it = new QTreeWidgetItem(thumb_list);
+            it->setData(0, Qt::UserRole, j.id);
+            if (j.id == current)
+                thumb_list->setCurrentItem(it);
+        }
+        thumb_list->blockSignals(false);
+    }
+    for (int i = 0; i < now.size(); ++i) {
+        const ThumbJob &j = now[i];
+        QTreeWidgetItem *it = thumb_list->topLevelItem(i);
+        it->setText(0, j.title() + QString(", %1 of %2").arg(j.done).arg(j.total));
+        it->setToolTip(0, j.folder);
+        it->setText(1, j.window);
+        it->setText(2, j.state());
+        it->setData(3, Qt::UserRole + 1, j.total ? double(j.done) / j.total : -1.0);
+    }
+    QTreeWidgetItem *cur = thumb_list->currentItem();
+    thumb_pause->setEnabled(cur);
+    thumb_stop->setEnabled(cur);
+    thumb_pause->setText(cur && cur->text(2) == "Paused" ? "Resume" : "Pause");
 }
 
 void JobsWindow::keyPressEvent(QKeyEvent *ev)

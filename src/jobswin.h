@@ -21,9 +21,18 @@ class JobsWindow : public QDialog {
     Q_OBJECT
 public:
     explicit JobsWindow(QWidget *parent = nullptr);
-    static JobsWindow *open(QWidget *parent);   // shows this Kestrel's Jobs window (made if there's none)
+    // shows this Kestrel's Jobs window (made if there's none). A window of its own, not its opener's: jobs go on
+    // when every Kestrel window has closed, and it's where they're watched then
+    static JobsWindow *open(QWidget *parent);
+    static bool is_open();
     void refresh();
     QTreeWidget *list;   // one row per job: its key in Qt::UserRole ("flight/id", or "done:<n>" for a finished one)
+    // Below it (a quarter of the height), this Kestrel's thumbnail jobs (ThumbJob): browsing doesn't flood the list of
+    // copies, moves and extractions. Their id in Qt::UserRole.
+    QTreeWidget *thumb_list;
+    QPushButton *thumb_pause, *thumb_stop;
+    QSplitter *lists;
+    void refresh_thumbs();
 
 protected:
     void keyPressEvent(QKeyEvent *ev) override;

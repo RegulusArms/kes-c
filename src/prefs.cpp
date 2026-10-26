@@ -100,6 +100,11 @@ static QList<Pref> build()
     add("Images & Videos", "", "play_webm", "Play WebM videos in the file view (silent looping previews)", BOOL, false);
     range(add("Images & Videos", "", "thumb_max_mb", "Don't make previews of files larger than", INT, 200), 1, 10000,
           " MB");
+    range(add("Images & Videos", "", "thumb_job_minutes", "Stop making a folder's previews this long after leaving it",
+              INT, 3, QString(),
+              "Its thumbnail job in the Jobs window waits behind the folder you're in, and stops after this long. "
+              "What it made is kept."),
+          1, 240, " min");
     add("Images & Videos", "", "slow_previews", "Previews on tapes and floppies", CUSTOM, QStringList(),
         "a drive's menu → Show Previews on This Drive");
 

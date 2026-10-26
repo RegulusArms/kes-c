@@ -4,6 +4,8 @@
 
 #include <QLabel>
 #include <QMenu>
+#include <QSplitter>
+#include <QTreeWidget>
 #include <QStatusBar>
 
 #include <fcntl.h>
@@ -333,8 +335,9 @@ int main(int argc, char **argv)
                   .arg(done_at_scan_end).arg(total_at_scan_end));
     }
 
-    // -- the folder previews a pane asks for are its own: its window closing, or the pane moving to another folder,
-    // cancels those, and no other window's (one process, one queue)
+    // -- thumbnailing is a job per pane and folder (the Jobs window's lower list): the pane leaving the folder lowers
+    // its job (what's newer comes first; back, it's first again; left long enough, it stops), Pause and Stop work,
+    // it waits while another job uses its drive, and its window closing stops it, no other window's
     {
         QImage im(800, 600, QImage::Format_RGB32);
         im.fill(QColor("#3070b0"));
@@ -371,14 +374,94 @@ int main(int argc, char **argv)
         // the other window's first: the newest requests go first, so these come last unless w1's are dropped
         ask(few, w2->pane()->thumb_owner());
         ask(many, w1->pane()->thumb_owner());
-        w1->pane()->set_path(home_path("own"));   // w1 moves on: its 300 are dropped, w2's 3 stay
-        int left = g_thumbs->pending_count();
+        auto job_of = [&](const QString &folder) {
+            for (const ThumbJob &j : g_thumbs->thumb_jobs())
+                if (j.folder == folder)
+                    return j;
+            return ThumbJob();
+        };
+        QString many_dir = home_path("own/many"), few_dir = home_path("own/few");
+        spin(300);
+        ThumbJob mj = job_of(many_dir);
+        check(mj.id && mj.title() == "Thumbnails: own/many" && mj.total == 300 && mj.window == w1->windowTitle() &&
+                  mj.state() == "Running" && job_of(few_dir).id,
+              "a pane's thumbnails are a job of their own, for its folder and window (" + mj.title() + ", " +
+                  QString::number(mj.total) + ", " + mj.window + ")");
+        // the Jobs window lists them below the other jobs, in a quarter of its height
+        JobsWindow *jw = JobsWindow::open(w1);
+        jw->refresh_thumbs();
+        QString row = jw->thumb_list->topLevelItemCount() ? jw->thumb_list->topLevelItem(0)->text(0) : QString();
+        QList<int> sizes = jw->lists->sizes();
+        bool listed = false;
+        for (int i = 0; i < jw->thumb_list->topLevelItemCount(); ++i)
+            listed = listed || jw->thumb_list->topLevelItem(i)->text(0).startsWith("Thumbnails: own/many, ");
+        check(listed && sizes.size() == 2 && sizes[0] > sizes[1] * 2,
+              "the Jobs window lists the thumbnail jobs in a part of its own below the other jobs (" + row + ")");
+        g_thumbs->pause_job(mj.id, true);
+        spin(800);
+        int paused_at = made(many);
+        spin(800);
+        bool held = made(many) <= paused_at + 2 && job_of(many_dir).state() == "Paused";
+        g_thumbs->pause_job(mj.id, false);
+        check(held && wait_for([&]() { return made(many) > paused_at + 2; }, 10000),
+              "a paused thumbnail job makes nothing more until it's resumed");
+
+        w1->pane()->set_path(home_path("own"));   // w1 moves on: its job is lowered, w2's comes first
+        spin(100);
+        int many_then = made(many);
         bool came = wait_for([&]() { return made(few) == 3; }, 20000);
-        check(left <= 3 + 2 && came, QString("a pane moving to another folder cancels its own folder previews (%1 still "
-                                             "queued), not another window's (%2 of 3 made)").arg(left).arg(made(few)));
-        int moved_on = made(many);
+        int many_when_few = made(many);
+        check(came && job_of(many_dir).lowered && job_of(many_dir).state() == "Lowered (folder left)" &&
+                  many_when_few <= many_then + 4,
+              QString("leaving a folder lowers its thumbnail job: another window's newer ones come first (%1 more of the "
+                      "lowered job's made meanwhile)").arg(many_when_few - many_then));
+        check(wait_for([&]() { return made(many) > many_when_few + 2; }, 10000),
+              "...and the lowered job goes on once nothing newer waits");
+        ask(many, w1->pane()->thumb_owner());   // back in it (as its view draws it again)
+        check(!job_of(many_dir).lowered && job_of(many_dir).state() == "Running", "going back to the folder raises it again");
+
+        // another job on its drive: it waits, and goes on after
+        auto hold = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> holder = fileops::queue_job(w1, "Holding the drive", {many_dir}, [hold](Task *t) {
+            while (*hold) {
+                t->check();
+                QThread::msleep(20);
+            }
+            return QVariant();
+        });
+        bool waits = wait_for([&]() { return job_of(many_dir).state() == "Waiting for the drive"; }, 5000);
         spin(500);
-        check(made(many) <= moved_on + 2, "nothing more is made for the folder the pane left");
+        int busy_at = made(many);
+        spin(800);
+        bool idle = made(many) <= busy_at + 2;
+        *hold = false;
+        wait_for([&]() { return !holder; });
+        check(waits && idle && wait_for([&]() { return made(many) > busy_at + 2; }, 10000),
+              "a thumbnail job waits while another job uses its drive, and goes on after");
+
+        // left behind long enough, it stops (what it made stays)
+        w1->pane()->set_path(home_path("own"));
+        g_thumbs->job_minutes = 0;
+        bool timed_out = wait_for([&]() { return !job_of(many_dir).id; }, 6000);
+        g_thumbs->job_minutes = 3;
+        int stopped_at = made(many);
+        spin(800);
+        check(timed_out && made(many) <= stopped_at + 2 && stopped_at > 0,
+              "a lowered thumbnail job stops after the time set in Preferences, keeping what it made");
+        // Stop: nothing more, and the view drawing the folder again doesn't start it again
+        QStringList many3 = make_tree(home_path("own/many3"), 300);
+        QString many3_dir = home_path("own/many3");
+        ask(many3, w1->pane()->thumb_owner());
+        spin(200);
+        g_thumbs->stop_job(job_of(many3_dir).id);
+        spin(300);
+        int stop_at = made(many3);
+        ask(many3, w1->pane()->thumb_owner());
+        spin(800);
+        check(stop_at < 250 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
+              QString("Stop ends a thumbnail job: the view drawing the folder again doesn't start it again (%1 made at "
+                      "the stop, %2 now)").arg(stop_at).arg(made(many3)));
+        jw->close();
 
         QStringList few2 = make_tree(home_path("own/few2"), 3), many2 = make_tree(home_path("own/many2"), 300);
         ask(few2, w2->pane()->thumb_owner());
@@ -386,7 +469,7 @@ int main(int argc, char **argv)
         int queued = g_thumbs->pending_count();
         w1->close();
         int at_close = made(many2);
-        left = g_thumbs->pending_count();
+        int left = g_thumbs->pending_count();
         check(queued > 250 && at_close < 100 && left <= 3 + 2,
               QString("closing a window cancels the folder previews it asked for (%1 queued, %2 made, %3 left)")
                   .arg(queued).arg(at_close).arg(left));

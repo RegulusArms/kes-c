@@ -43,59 +43,7 @@ into.
 
 ### Jobs
 
-- [ ] **Thumbnailing is a job in the Jobs window.** Making thumbnails and folder previews (mosaics) shows up in the
-  Jobs window like any other job, instead of running unseen in `g_thumbs` (src/thumbs.cpp: `pool`, `dir_pool`).
-  - One job per pane and folder that asked (e.g. "Thumbnails: Pictures/2024, 312 of 840"), with the window and
-    folder it's for, progress, and Pause / Stop like other jobs. Stopping it leaves the thumbnails made so far.
-  - Requests have owners already (0.3.2-alpha.14: `ThumbRequest`, `cancel_for`; a pane leaving a folder or closing
-    cancels its own), which a job per pane and folder can build on.
-  - Decided: leaving a folder doesn't end its job, it lowers its priority: the folder being shown comes first, and the
-    jobs of folders left behind run only when nothing newer is waiting (going back to a folder raises its job again).
-    A lowered job times out after a few minutes (Preferences, default 3 minutes) and stops, keeping what it made, so
-    while browsing deeper the old low-priority jobs fall away on their own. The timer counts from when it was lowered.
-  - Decided: they follow the job queue's per-drive rules like any other job (a drive's one-job-at-a-time, physical
-    disks, tapes and floppies; previews there still need permission as today).
-  - Decided: the Jobs window's list is split in two: normal jobs on top (75% of the height), thumbnailing below (25%),
-    so browsing doesn't flood the list of copies, moves and extractions.
-
-- [ ] **Jobs run in the background, apart from the Kestrel windows.** Jobs (copies, moves, extractions, checksums,
-  preview builds…) run in a background process of their own, like the tower, instead of inside the window that
-  started them. The Jobs window is a view onto that process: it can be opened at any time and closed without
-  stopping anything.
-  - All Kestrel windows can be closed while jobs keep running.
-  - Closing the last Kestrel window while jobs are running asks something like "Exit and open the Jobs window, or
-    stop all jobs?"
-    - **Exit and open the Jobs window:** the Jobs window opens, the Kestrel windows close, and the jobs go on.
-    - **Stop all jobs:** they're stopped (each one leaving things as a cancel does today) and Kestrel exits.
-  - If the Jobs window is already open, the last Kestrel window just closes, without asking: the jobs carry on and
-    can still be watched there.
-  - Today closing a window that runs jobs asks whether to stop them or keep going, and they live in that window's
-    process. With this, a job no longer depends on the window that started it.
-  - Messages a job needs to show when it ends or needs an answer (a conflict, a password, a summary) would then come
-    from the Jobs window, or a window opened for them, since the window that started it may be gone.
-
 ### Archives
-
-- [ ] **Better archive window QoL.** Follow-ups to Open as Archive (`src/archivewin.cpp`):
-  - Open a file from inside the archive (double-click): extract it to a temporary copy and open that with its app.
-    The temporary copies need a cache folder, cleaned up afterwards and added to the BleachBit cleaner.
-  - Drag items out of the window into a Kestrel folder, the desktop or another app, extracted as they're dropped.
-  - A test for the unzip path (used only when 7-Zip isn't installed), which the test environment never takes because
-    7-Zip is always there: listing, extracting single items (names with `[ ] * ?` escaped) and testing.
-
-- [ ] **Split sizes to pick from when compressing.** In Compress…, when the chosen program can split an archive into
-  volumes (7z, rar, zip with 7-Zip; the **Split into volumes** box, shown only then), the size becomes a dropdown of
-  standard sizes plus **Custom…** with a box for any size. Today it's a number box and an MB / GB unit
-  (`src/archive_ui.cpp`).
-  - Standard sizes, named by what they fit: 25 MB (email), 100 MB, 650 MB (CD), 700 MB (CD), 1 GB, 2 GB, 4 GB (just under
-    4 GiB: a FAT32 USB stick's largest file, 4095 MB), 4.7 GB (DVD), 8.5 GB (dual-layer DVD), 25 GB (Blu-ray),
-    50 GB (dual-layer Blu-ray). Exact byte sizes for the discs (a "4.7 GB" DVD holds 4,700,372,992 bytes, not
-    4.7 GiB), so a volume really fits; to settle when it's built.
-  - **Custom…** shows the number box with a unit (KB, MB, GB) again; the last custom size is remembered, and the
-    choice (standard or custom) is remembered per format as now.
-  - The Command preview shows the exact size passed to the program (`-v` for 7z and rar).
-  - The size is passed around in whole megabytes today (`volume_mb`): exact disc sizes and a KB unit need it in bytes
-    (or KB) all the way to the command.
 
 ### Drives, the sidebar and the Overview
 
@@ -192,41 +140,6 @@ into.
   - Trust in plain terms: a valid signature from a key you haven't marked as trusted is still "valid, but this key
     isn't verified by you", not a scary wall of gpg output.
   - Optional, later: **Encrypt / Decrypt** with gpg (to a recipient or with a password).
-
-- [ ] **Remember folder sizes for Properties.** Kestrel's cache gets a section for folder sizes and counts it has
-  already worked out (size, files, folders, and when it was measured). When Properties opens on a folder that's in it,
-  the remembered figures show at once instead of "Calculating…", with a **Recalculate** button beside them;
-  Recalculate runs the count again and stores the new result.
-  - It says how old the figures are: "Calculated 3 days ago (2026-10-21 14:05)", in plain words (minutes, hours,
-    days, months ago) with the exact date and time after. A freshly counted size says "Calculated just now".
-  - Today Properties always counts from scratch (`fileops::dir_stats` on a worker, src/dialogs.cpp `PropertiesDialog`,
-    shown by `show_dir_size`), which takes a long time on big trees and is slow on tapes and floppies.
-  - Stored after every finished count (not a cancelled or failed one), keyed by the folder's path (plus the device
-    and inode, so a different folder later under the same name isn't shown the old figures). For a selection of several
-    items, each folder's own entry is used where there is one and only the rest is counted.
-  - Whether to also recalculate on its own when the entry looks stale (the folder's modification time is newer than
-    the entry; that only catches changes directly in it, not deeper down), or only when asked. Kestrel's own copies,
-    moves and deletes into a folder could drop the entries of it and its parents.
-  - Written with `util::write_atomic()` under ~/.cache/kestrel-explorer; old entries trimmed (count or age). Added to
-    the BleachBit cleaner (kes-setup `bleachbit_cleaner`, tests/test_installer.sh) and to Clear Cache if there is one.
-  - Test: `fileops` or `ui` (a remembered entry shows without counting; Recalculate replaces it; a cancelled count
-    stores nothing).
-
-- [ ] **New folder from the selection.** With two or more files and/or folders selected, right-click →
-  **New Folder with Selection…**: a window asks for the new folder's name (prefilled with a free "New Folder" name,
-  selected for typing over); on OK the folder is made in the folder the items were selected in and every selected item
-  is moved into it.
-  - A menu entry for the several-items menu (`menus::SEVERAL`): an id in `build_menu` (`menus::tag`), a place in
-    `menus::defaults()` near Move To… (`src/menus.cpp`; `prefs` test checks they match). Maybe also for one item.
-  - The name window is free (`ask_text()`, no modal). Re-read the selection's state in the callback: items moved or
-    deleted meanwhile are left out (said in the summary), and the name re-checked when OK is pressed.
-  - Claim the name without replacing anything (`mkdirat`, which fails on a taken name); a taken name asks again with
-    the name kept. Then the moves are an ordinary queued move job (same drive: renames), so Undo puts the items back
-    and removes the folder if Kestrel made it and it's empty. Each item moved whole; a failure or cancel leaves the
-    rest where they were and the folder with what got moved (said in the job's log, not deleted).
-  - Admin windows go through the helper; tapes and floppies work like any move on that drive.
-  - Test: `fileops` / `ui` (the items end up inside, the folder in the right place, a taken name isn't replaced, Undo
-    restores, a move failing part-way keeps everything).
 
 ### Images, video and audio
 
@@ -362,6 +275,13 @@ into.
     wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
 
 ## Done
+
+- [x] **Thumbnailing is a job in the Jobs window** (0.3.2-alpha.15). Each view and folder that asks for thumbnails and folder previews is a `ThumbJob` (src/thumbs.h), listed in the Jobs window's lower part (a vertical splitter, 3:1, `jobs_window_lists`) as "Thumbnails: Pictures/2024, 312 of 840", with the window it's for, its state, progress, Pause and Stop. A request (`ThumbRequest`) takes its pool priority from its highest job; leaving a folder (`ThumbnailManager::lower`, from `Pane::set_path`) puts its jobs below every other, coming back (the view asking again) raises them, and a lowered job stops after `thumb_job_minutes` (Preferences → Images & Videos, default 3). Pause, and another job using the drive (`jobs::Queue::busy`, checked every 2 s and on the queue's changes), hold its queued requests out of the pool (`place`, `tryTake`); Stop drops them and isn't undone by the view drawing the folder again (until it leaves it). Its view closing still stops them (0.3.2-alpha.14). Decided along the way: thumbnail jobs wait for other jobs on their drive, but not the other way round (browsing would otherwise hold up copies); they're this Kestrel's only (not in the tower's shared queue). Test: `theme`.
+- [x] **Jobs run in the background, apart from the Kestrel windows** (0.3.2-alpha.15). Decided: the Kestrel process stays alive rather than a separate jobs process. A job the user sees holds a `QEventLoopLocker` (`Task::keeps_running`), so Kestrel quits only once its last window and its jobs are gone; quiet helper tasks don't. Closing a window that isn't the last doesn't ask: its jobs go on in another window's status bar. The last window asks (`MainWindow::closeEvent`: Exit and Open the Jobs Window / Stop All Jobs and Exit / Cancel) unless the Jobs window is open; Quit (Ctrl+Q) closes every window that way. The Jobs window is a window of its own (no parent). `start_ops` finishes without its window (undo, the tape's index, what failed: `queue_job`'s `outlives_parent`), and a job's error is shown with no parent when its window is gone. Not done: a password question that's open on a window that then closes goes with it (the job takes it as cancelled). Test: `jobs`.
+- [x] **Better archive window QoL** (0.3.2-alpha.15). Double-click (or Open in its menu) extracts the file to `~/.cache/kestrel-explorer/archive-files/<random>/` (read-only) and opens it with its app; copies older than a day are deleted when the next is made; in the BleachBit cleaner's cache option. Dragging items out (`MemberTree`, `MembersMime`): `archive::MEMBERS_MIME` ({"archive", "members"}), which the folder model and the sidebar take first (extracted straight into the folder, `ArchiveWindow::drop_members`, by the archive's window when it's open, for its password), and a `text/uri-list` filled only when a drop asks for it (`retrieveData`: extracted on a thread then, the windows kept drawing), offered up to 500 MB and not for encrypted items whose password isn't known. The unzip path is tested with `KESTREL_TEST_HIDE_TOOLS=7z` (`archive::tool`); unzip added to CI's test packages. Test: `archives`, `installer`.
+- [x] **Split sizes to pick from when compressing** (0.3.2-alpha.15). `archive::volume_sizes()`: 18 MB (a 25 MB email: its limit counts the attachment after base64), 100 MB, 650 / 700 MB CDs (333,000 / 360,000 sectors of 2,048 bytes), 1 GB, 2 GB, 4 GB (FAT32: 4,095 MiB), 4.7 GB DVD (4,700,372,992 bytes), 8.5 GB DVD (8,543,666,176), 25 / 50 GB Blu-ray (25,025,314,816 / 50,050,629,632); the discs less 4 MiB for their file system. Custom… shows the number and KB / MB / GB (binary). `Spec::volume_bytes` replaces `volume_mb`, passed as `-v<n>b` to 7z and rar (exact, shown in the Command preview). Saved per format: `volume_choice` (a size saved before counts as Custom), the custom number and unit as before. Test: `archives`.
+- [x] **Remember folder sizes for Properties** (0.3.2-alpha.15). `fileops::dirsizes` (src/fileops.h): `~/.cache/kestrel-explorer/folder-sizes.json` (write_atomic, re-read when another Kestrel wrote it), by path with the device and inode checked, trimmed to 5,000 entries and a year. Properties shows a remembered size at once with "Calculated 3 days ago (2026-10-21 14:05)" and Recalculate; decided (by the user): it never counts again on its own, Recalculate does, as a queued job in the Jobs window (a stopped one stores nothing). A folder not seen yet is counted as before (quietly) and remembered. Several items: each folder's own entry, the rest counted. Kestrel's copies, moves, deletes and Move to Trash drop the entries of the folders they change and those above. In the BleachBit cleaner's cache option. Not in Clear Folder Preview Cache (only previews). Test: `fileops`, `installer`.
+- [x] **New Folder with Selection** (0.3.2-alpha.15). `menus::tag` "new_folder_with", after Duplicate in a file's, a folder's and several items' menus (`menus::defaults`). `MainWindow::new_folder_with` asks (ask_text, a free "New Folder" offered) for a name; `move_into_new` re-reads what's still there (the rest left out and said), claims the name with mkdir (a taken one asks again, the name kept; no permission: the admin helper's mkdir), then `start_move_into` moves them as a queued job (its log says what was left out and that a stop keeps what moved). Undo: the new undo kind "move_into" (the folder, then the moves; PROTOCOL 5), which moves them back and removes the folder if it's empty. Test: `fileops`, `ui`.
 
 - [x] **A closed window's folder previews kept being made** (fixed in 0.3.2-alpha.14). The queue (`ThumbnailManager`, src/thumbs.cpp) is the process's, and closing a window cancelled nothing; moving to another folder ran `cancel_pending()`, which emptied every window's requests. Now each request (`ThumbRequest`) has owners: whoever asked (a pane's `FSModel` and `SearchModel`, the `InfoPanel`, the viewer's canvas and filmstrip, Properties, a bookmark card). `cancel_for(owner)` drops what no one else wants: `QThreadPool::tryTake` while it's queued (a pointer kept only until the job starts, under `run_lock`, so it's never stale), otherwise skipped when its turn comes; one already being made is finished and cached. `Pane::cancel_thumbs` on leaving a folder and in `~Pane`, `MainWindow::closeEvent` for its panes and info panel, and an owner's `destroyed()` for the rest. `cancel_pending()` stays for everyone's (previews turned off, the caches deleted). Why the process lived on wasn't seen; most likely another window of it. Test: `theme`.
 - [x] **The scroll wheel over the image viewer's info panel went to the next image** (fixed in 0.3.2-alpha.14). The panel's scroll bar ignores a turn it can't use (the details fit, or at an end; mid-scroll it was fine), and Qt passed it on to `ImageViewer::wheelEvent`. `ViewerInfo::wheelEvent` now keeps every one, and the viewer ignores a turn over the panel (one from its scroll bar comes up another way). Test: `viewer`.

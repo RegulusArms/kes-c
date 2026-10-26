@@ -149,6 +149,7 @@ QList<Entry> defaults(Kind k)
     if (folder)
         l << item("paste_into", "Paste Into Folder");
     l << item("move_to", "Move To…") << item("copy_to", "Copy To…") << item("duplicate", "Duplicate")
+      << item("new_folder_with", "New Folder with Selection…")
       << item("rename", "Rename…")
       << submenu("copy_path", "Copy Path / Name",
                  {item("copy_full_path", "Copy Full Path"), item("copy_name", "Copy Name"), item("copy_uri", "Copy URI")})

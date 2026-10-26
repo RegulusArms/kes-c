@@ -2,7 +2,37 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.14
+## 0.3.2-alpha.15
+
+- **Jobs no longer belong to the window that started them.** Closing a Kestrel window doesn't ask about its jobs
+  or stop them: they go on, shown in another window's status bar. Closing the last window while jobs run asks
+  whether to **exit and open the Jobs window** (the jobs go on, and Kestrel exits once they're done and the Jobs
+  window is closed) or **stop all jobs and exit**. With the Jobs window open, the last window just closes. A copy or
+  move finishes its work (undo, writing a tape's index, saying what failed) even when its window has gone. Quit
+  (Ctrl+Q) closes every window the same way.
+- **Making thumbnails and folder previews is a job in the Jobs window.** Each folder you look at gets one ("Thumbnails:
+  Pictures/2024, 312 of 840"), with the window it's for, progress, Pause and Stop, in a part of the Jobs window of
+  its own below the copies, moves and extractions. Leaving a folder no longer throws away its previews: its job waits
+  behind the folder you're in now, carries on when nothing newer is waiting, and stops after 3 minutes (Preferences →
+  Images & Videos). Going back to the folder puts it first again. A thumbnail job also waits while another job (a
+  copy, an extraction…) uses its drive.
+- **Remembered folder sizes in Properties.** A folder's size, once counted, shows at once the next time, with when
+  it was counted ("Calculated 3 days ago (2026-10-21 14:05)") and a **Recalculate** button, which counts it again as
+  a job in the Jobs window. It isn't counted again on its own. Kestrel's own copies, moves and deletes forget the
+  sizes of the folders they change. The sizes are kept in Kestrel's cache, which the BleachBit cleaner empties.
+- **New Folder with Selection…** in the right-click menu of one or more items: it asks for a name, makes the folder
+  beside them (never over a name that's taken) and moves them into it. Undo puts them back and removes the folder.
+- **Open as Archive: open and drag out.** Double-click a file in the archive window to open it with its app (it's
+  extracted to a temporary copy first; copies are cleaned up after a day). Drag items out onto a Kestrel folder or
+  the sidebar to extract them there, or onto another app or the desktop (extracted as they're dropped; up to 500 MB,
+  and not encrypted items whose password hasn't been given yet).
+- **Volume sizes to pick from in Compress….** When an archive can be split, the size is a list of standard sizes
+  named by what they fit (a CD, a DVD, a Blu-ray, a FAT32 USB stick's largest file, an email), each the exact size
+  that really fits, or **Custom…** with a size in KB, MB or GB. The size is passed to the program in bytes.
+- **Fixed: the Jobs window and the archive window reopened as nothing just after being closed.** Opening one again
+  right after closing it could raise the closed one instead of showing a new one.
+
+## 0.3.2-alpha.14 (2026-10-25)
 
 - **Fixed: a closed window's folder previews kept being made.** Thumbnails and folder previews are made by one queue
   for all of a Kestrel's windows, and closing a window took nothing out of it. With another window still open, the

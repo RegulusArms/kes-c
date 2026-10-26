@@ -243,12 +243,19 @@ CompressDialog::CompressDialog(QWidget *parent, const QStringList &paths_) : QDi
     split->setCheckable(true);
     split->setChecked(false);
     auto *sl = new QHBoxLayout(split);
+    vol_size = new QComboBox;
+    for (const archive::VolumeSize &v : archive::volume_sizes()) {
+        vol_size->addItem(v.label, v.id);
+        vol_size->setItemData(vol_size->count() - 1, QString("%L1 bytes").arg(v.bytes), Qt::ToolTipRole);
+    }
+    vol_size->addItem("Custom…", "custom");
     vol = new QSpinBox;
     vol->setRange(1, 1000000);
     vol->setValue(4000);
     vol_unit = new QComboBox;
-    vol_unit->addItems({"MB", "GB"});
+    vol_unit->addItems({"KB", "MB", "GB"});   // binary: 1 MB = 1,048,576 bytes, as 7-Zip and rar count them
     sl->addWidget(new QLabel("Volume size:"));
+    sl->addWidget(vol_size);
     sl->addWidget(vol);
     sl->addWidget(vol_unit);
     sl->addStretch(1);
@@ -305,7 +312,8 @@ CompressDialog::CompressDialog(QWidget *parent, const QStringList &paths_) : QDi
         connect(w, &QCheckBox::toggled, this, &CompressDialog::update_preview);
     for (QSpinBox *w : {vol, threads, recovery})
         connect(w, &QSpinBox::valueChanged, this, &CompressDialog::update_preview);
-    for (QComboBox *w : {vol_unit, method, zip_enc})
+    connect(vol_size, &QComboBox::currentIndexChanged, this, &CompressDialog::volume_choice_changed);
+    for (QComboBox *w : {vol_size, vol_unit, method, zip_enc})
         connect(w, &QComboBox::currentIndexChanged, this, &CompressDialog::update_preview);
     connect(fmt, &QComboBox::currentIndexChanged, this, &CompressDialog::format_changed);
     connect(tool, &QComboBox::currentIndexChanged, this, &CompressDialog::tool_changed);
@@ -321,6 +329,23 @@ const archive::Format &CompressDialog::format() const
         if (f.id == id)
             return f;
     return fmts.first();
+}
+
+qint64 CompressDialog::volume_bytes() const
+{
+    QString id = vol_size->currentData().toString();
+    for (const archive::VolumeSize &v : archive::volume_sizes())
+        if (v.id == id)
+            return v.bytes;
+    QString u = vol_unit->currentText();
+    return qint64(vol->value()) * (u == "GB" ? 1024 * 1024 * 1024LL : u == "MB" ? 1024 * 1024 : 1024);
+}
+
+void CompressDialog::volume_choice_changed()
+{
+    bool custom = vol_size->currentData() == "custom";
+    vol->setVisible(custom);
+    vol_unit->setVisible(custom);
 }
 
 QString CompressDialog::key(const QString &n) const { return QString("archive/%1/%2").arg(format().id, n); }
@@ -365,6 +390,10 @@ void CompressDialog::format_changed()
     split->setChecked(s.value(key("split"), false).toBool());
     vol->setValue(s.value(key("volume"), 4000).toInt());
     vol_unit->setCurrentText(s.value(key("volume_unit"), "MB").toString());
+    // a standard size, or Custom… (also what a size saved before there were standard ones is)
+    QString choice = s.value(key("volume_choice"), s.contains(key("volume")) ? "custom" : "fat32").toString();
+    vol_size->setCurrentIndex(std::max(0, vol_size->findData(choice)));
+    volume_choice_changed();
     threads->setValue(s.value(key("threads"), 0).toInt());
     tool_changed();
 }
@@ -456,7 +485,6 @@ archive::Spec CompressDialog::spec() const
     QStringList ex = shlex_split(extra->text(), &ok);
     if (!ok)
         ex.clear();
-    qint64 v = vol->value() * (vol_unit->currentText() == "GB" ? 1024 : 1);
     QString n = name->text().trimmed();
     QString pass = f.password && enc->isEnabled() && enc->isChecked() ? pw->text() : QString();
     QString full_ext = f.ext + (archive::is_tar(f) && !pass.isEmpty() ? ".gpg" : "");
@@ -478,7 +506,7 @@ archive::Spec CompressDialog::spec() const
     sp.password = pass;
     sp.encrypt_names = f.encrypt_names ? enc_names->isChecked() : false;
     sp.zip_encryption = zip_enc->currentData().toString();
-    sp.volume_mb = split->isVisible() && split->isChecked() ? v : 0;
+    sp.volume_bytes = split->isVisible() && split->isChecked() ? volume_bytes() : 0;
     if (f.solid)
         sp.solid = solid->isChecked();
     sp.recovery = f.recovery ? recovery->value() : 0;
@@ -566,8 +594,11 @@ void CompressDialog::save(const archive::Spec &sp)
     s.setValue(key("recovery"), recovery->value());
     s.setValue(key("extra"), extra->text());
     s.setValue(key("split"), split->isChecked());
-    s.setValue(key("volume"), vol->value());
-    s.setValue(key("volume_unit"), vol_unit->currentText());
+    s.setValue(key("volume_choice"), vol_size->currentData().toString());
+    if (vol_size->currentData() == "custom") {   // the last custom size stays when a standard one is chosen
+        s.setValue(key("volume"), vol->value());
+        s.setValue(key("volume_unit"), vol_unit->currentText());
+    }
     if (sums->isVisible()) {
         s.setValue(key("checksum"), sums->isChecked());
         if (sums->isChecked()) {   // the algorithms are Create Checksum File's too

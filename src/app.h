@@ -94,6 +94,11 @@ public:
     void transfer_to(const QStringList &paths, const QString &op);
     void duplicate(const QStringList &paths);
     void new_folder();
+    // New Folder with Selection…: asks for a name, makes the folder beside them (never over a taken name) and moves
+    // them into it as a queued job; Undo moves them back and removes the folder
+    void new_folder_with(const QStringList &paths);
+    void move_into_new(const QStringList &paths, const QString &dir, const QString &name);
+    void start_move_into(const QStringList &items, const QStringList &gone, const QString &folder);   // it's made
     void new_file(const QString &tmpl = QString());
     void rename(const QStringList &paths);
     void trash_paths(const QStringList &paths);
@@ -151,7 +156,6 @@ private:
     QStringList open_with_choice(const QStringList &files, const QString &choice);
     void uwp_add(const QString &path);
     void folder_style_menu(QMenu *m, const QStringList &folders);
-    void close_when_idle();
     void sync_undo();
     void run_shred(const QStringList &targets, const QString &title);
     void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
@@ -159,7 +163,8 @@ private:
     void make_file(const QString &dir, const QString &name, const QString &tmpl);
     void delete_now(const QStringList &paths);   // Delete Permanently, once confirmed
     void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
-    QPointer<QMessageBox> close_box;             // "Operations Running", while it's asking
+    QPointer<QMessageBox> close_box;             // "Jobs Are Running" (the last window), while it's asking
+    bool close_confirmed = false;                // answered: close without asking again
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

@@ -10,6 +10,7 @@
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -1400,6 +1401,136 @@ int main(int argc, char **argv)
         watching = false;
         watcher.join();
         check(made && opened && refused && seen > 0 && leaked == 0, label);
+    }
+
+    // ---- Properties remembers folder sizes: shown at once with when they were worked out; only Recalculate counts
+    // again (a job); a stopped count stores nothing; Kestrel's own changes drop the entries
+    {
+        QString fs = P("fsizes");
+        makedirs(join(fs, "deep/er"), true);
+        write_text(join(fs, "one.bin"), QByteArray(1000, 'x'));
+        write_text(join(fs, "deep/er/two.bin"), QByteArray(234, 'y'));
+        auto size_text = [](PropertiesDialog *d) {
+            for (QLabel *l : d->findChildren<QLabel *>())
+                if (l->text().contains("bytes") || l->text().startsWith("Calculating") || l->text().startsWith("Not calc"))
+                    return l->text();
+            return QString();
+        };
+        auto *d = new PropertiesDialog(w, {fs});
+        bool counted = wait_for([&]() { return size_text(d).contains("1,234 bytes"); });
+        check(counted && d->size_age->text() == "Calculated just now" && fileops::dirsizes::get(fs) &&
+                  fileops::dirsizes::get(fs)->stats.size == 1234,
+              "a folder Properties hasn't seen is counted, says \"Calculated just now\", and is remembered (" +
+                  size_text(d) + " | " + d->size_age->text() + ")");
+        delete d;
+        // as if measured three days ago; the folder changed since (not by Kestrel): still shown as remembered
+        {
+            QJsonObject all = QJsonDocument::fromJson(read_file(fileops::dirsizes::cache_file())).object();
+            QJsonObject e = all.value(fs).toObject();
+            qint64 then = QDateTime::currentSecsSinceEpoch() - 3 * 86400 - 60;
+            e["at"] = then;
+            all[fs] = e;
+            write_atomic(fileops::dirsizes::cache_file(), QJsonDocument(all).toJson());
+            write_text(join(fs, "new.bin"), QByteArray(66, 'z'));
+            d = new PropertiesDialog(w, {fs});
+            QString at = QDateTime::fromSecsSinceEpoch(then).toString("yyyy-MM-dd HH:mm");
+            check(size_text(d).contains("1,234 bytes") && d->size_age->text() == "Calculated 3 days ago (" + at + ")" &&
+                      d->recalc->isEnabled(),
+                  "a remembered size shows at once, without counting, saying how old it is (" + d->size_age->text() + ")");
+        }
+        // Recalculate waits its turn like any job: stopped while it waits, nothing is stored
+        auto held = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> holder = fileops::queue_job(w, "Holding", {fs}, [held](Task *t) {
+            while (*held) {
+                t->check();
+                QThread::msleep(20);
+            }
+            return QVariant();
+        });
+        spin(150);
+        d->recalc->click();
+        QPointer<Task> count;
+        wait_for([&]() {
+            for (Task *t : w->task_panel->tasks)
+                if (t->title == "Counting the size of “fsizes”")
+                    count = t;
+            return count;
+        });
+        bool job = count && count->queued && !d->recalc->isEnabled();
+        if (count)
+            count->cancel();
+        wait_for([&]() { return !count; });
+        check(job && fileops::dirsizes::get(fs)->stats.size == 1234 && size_text(d).startsWith("Not calc"),
+              "Recalculate is a job in the job queue; stopped, it stores nothing (" + size_text(d) + ")");
+        *held = false;
+        wait_for([&]() { return !holder; });
+        d->recalc->click();
+        bool again = wait_for([&]() { return size_text(d).contains("1,300 bytes"); });
+        check(again && d->size_age->text() == "Calculated just now" && fileops::dirsizes::get(fs)->stats.size == 1300,
+              "Recalculate counts again and replaces the remembered size (" + size_text(d) + ")");
+        delete d;
+        // Kestrel's own copy into a folder below drops the entry of it and of the folders above
+        fileops::dirsizes::put(join(fs, "deep"), fileops::dirsizes::get(fs)->stats);
+        run_ops(w, {{"copy", join(fs, "one.bin"), join(fs, "deep/er/copy.bin")}});
+        check(!fileops::dirsizes::get(fs) && !fileops::dirsizes::get(join(fs, "deep")),
+              "a copy into a folder drops the remembered sizes of the folders it's in");
+        // another folder under the same name later isn't given the old one's size
+        fileops::dirsizes::put(join(fs, "deep"), fileops::DirStats{5, 1, 0});
+        util::rename(join(fs, "deep"), join(fs, "deep-old"));
+        makedirs(join(fs, "deep"), true);
+        check(!fileops::dirsizes::get(join(fs, "deep")), "a different folder later under the same name isn't given the "
+                                                         "remembered size (device and inode checked)");
+    }
+
+    // ---- New Folder with Selection: a free window for the name, the folder made beside the items, them moved in;
+    // a taken name isn't replaced; Undo puts them back and removes the folder; a move failing part-way keeps all
+    {
+        QString nf = P("nfsel");
+        makedirs(join(nf, "sub"), true);
+        write_text(join(nf, "a.txt"), "a");
+        write_text(join(nf, "b.txt"), "b");
+        write_text(join(nf, "sub/in.txt"), "in");
+        QStringList items{join(nf, "a.txt"), join(nf, "b.txt"), join(nf, "sub")};
+        w->new_folder_with(items);
+        QInputDialog *ask = nullptr;
+        wait_for([&]() { return (ask = shown_window<QInputDialog>()) != nullptr; });
+        bool asked = ask && ask->textValue() == "New Folder" && is_free_window(ask);
+        if (ask) {
+            ask->setTextValue("Box");
+            ask->accept();
+        }
+        QString box = join(nf, "Box");
+        bool moved = wait_for([&]() {
+            return isfile(join(box, "a.txt")) && isfile(join(box, "b.txt")) && isfile(join(box, "sub/in.txt")) &&
+                   !lexists(join(nf, "a.txt")) && !lexists(join(nf, "sub"));
+        }, 10000);
+        check(asked && moved, "New Folder with Selection asks for a name in a free window (a free “New Folder” "
+                              "offered) and moves every selected item into the new folder beside them");
+        wait_for([&]() { return undo::label() == "New Folder with Selection"; }, 3000);
+        check(undo::label() == "New Folder with Selection" &&
+                  undo_and_wait(w, [&]() { return isfile(join(nf, "a.txt")) && isdir(join(nf, "sub")) && !lexists(box); }),
+              "Undo puts the items back where they were and removes the folder it made");
+
+        write_text(join(nf, "Taken"), "keep me");
+        w->move_into_new({join(nf, "a.txt")}, nf, "Taken");
+        wait_for([&]() { return (ask = shown_window<QInputDialog>()) != nullptr; });
+        bool again = ask && ask->textValue() == "Taken" && ask->labelText().contains("already");
+        if (ask)
+            ask->reject();
+        spin(300);
+        check(again && text_of(join(nf, "Taken")) == "keep me" && isfile(join(nf, "a.txt")),
+              "a taken name isn't replaced: the name window comes back with it kept, and nothing moves");
+
+        // a folder can't move to another parent without write permission on it: that one fails, the rest move
+        ::chmod(enc(join(nf, "sub")).constData(), 0555);
+        w->move_into_new(items, nf, "Part");
+        QString part = join(nf, "Part");
+        bool partway = wait_for([&]() { return isfile(join(part, "a.txt")) && isfile(join(part, "b.txt")); }, 10000);
+        spin(500);
+        ::chmod(enc(join(nf, "sub")).constData(), 0755);
+        check(partway && isdir(join(nf, "sub")) && isfile(join(nf, "sub/in.txt")) && !lexists(join(part, "sub")) &&
+                  isdir(part),
+              "a move failing part-way keeps everything: what moved stays in the new folder, the rest where it was");
     }
     finish();
 }

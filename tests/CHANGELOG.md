@@ -4,6 +4,38 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.15
+
+Added:
+- `jobs`: jobs belong to Kestrel, not to a window. Closing the window that started a job doesn't ask or stop it (it
+  moves to another window's status bar); closing the last one asks (exit and open the Jobs window, or stop all jobs),
+  and Exit and Open the Jobs Window opens it as a window of its own while the job goes on; a job the user sees keeps
+  Kestrel running and a quiet task doesn't; with every window closed (the Jobs window too), Kestrel's event loop runs
+  until the job ends and then quits.
+- `theme`: thumbnailing as jobs: one per pane and folder (its title, total and window), listed in the Jobs window's
+  own lower part; Pause holds it; leaving the folder lowers it (another window's newer ones come first), it carries on
+  after, and going back raises it; it waits while another job uses its drive; a lowered job stops after the time set
+  in Preferences, keeping what it made; Stop isn't undone by the view drawing the folder again.
+- `fileops`: remembered folder sizes in Properties (counted once and remembered, "Calculated just now"; shown at once
+  later with how old they are, also when the folder changed since; Recalculate is a queued job, a stopped one stores
+  nothing, a finished one replaces the size; a copy drops the entries of the folders it changes; a different folder
+  under the same name isn't given the old size), and New Folder with Selection (a free name window, the items moved
+  in, Undo, a taken name not replaced, a move failing part-way keeping everything).
+- `archives`: Compress…'s volume sizes (offered by what they fit, a DVD's exact size passed in bytes, Custom… with a
+  KB size making volumes of exactly that size, the choice remembered); opening a file from the archive window (a
+  read-only temporary copy opened with its app, through a test application); dragging items out (onto a Kestrel
+  folder: extracted straight there, no temporary copy; for another app: extracted when the drop asks; encrypted ones
+  whose password isn't known offered to Kestrel only); day-old temporary copies deleted; and the unzip path (taken
+  only without 7-Zip, never before in the tests): listing, single items with [ ] * ? in their names, testing.
+- CI (`deb.yml`): unzip installed in the test and sanitizer jobs, for the unzip checks.
+
+Changed:
+- `theme`: "a pane moving to another folder cancels its own folder previews" (0.3.2-alpha.14) is now "leaving a folder
+  lowers its thumbnail job": leaving no longer cancels them (by design: they wait behind newer ones).
+- `installer`: the BleachBit dry run also lists the folder sizes cache and the archive window's temporary copies.
+- `ui`: the context menus listed in ui_actions.txt include New Folder with Selection….
+- `prefs`: the Jobs window's split between its two lists (`jobs_window_lists`) is kept state.
+
 ## 0.3.2-alpha.14
 
 Added:
