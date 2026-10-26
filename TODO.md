@@ -47,20 +47,21 @@ into.
 
 ### Drives, the sidebar and the Overview
 
-- [ ] **Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
+- [ ] ~~**Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
   **Rename in Kestrel…** to give it a name of your own, such as "Camera SD card" or "Backup HDD". Kestrel only shows
-  that name; the drive's own label is never changed.
-  - Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
+  that name; the drive's own label is never changed.~~ *Struck for now.*
+  - ~~Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
     `g_mount_get_uuid()`, or the volume's UUID identifier), so the name follows the drive to any port or mount point,
     also before it's mounted. Phones and cameras have no UUID: use the most stable id GIO offers for them (the
-    device's serial, else its gvfs address), and say in the dialog when the name may not stick.
-  - Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
+    device's serial, else its gvfs address), and say in the dialog when the name may not stick.~~
+  - ~~Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
     drive's top folder, the window title, Properties. The real label stays visible where it matters (a tooltip, or
-    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").
-  - Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
+    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").~~
+  - ~~Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
     Kestrels through the tower (a new message, so bump PROTOCOL), and added to BleachBit's cleaner. **Reset Name**
-    puts the drive's own name back.
-  - Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than guessing.
+    puts the drive's own name back.~~
+  - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
+    guessing.~~
 
 - [ ] **Overview page improvements, chosen in Preferences.** Let the user pick what the Overview shows, in
   Preferences → Overview. Today it always shows the same four sections: Drives, Phones & Cameras, Network, Bookmarks.
@@ -80,34 +81,37 @@ into.
   - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
   - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
 
-- [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
-  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
-  the Overview card and safer unmounting. Still to do:
-  - Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads (`user.ltfs.startblock`,
-    `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*` also tried): with the tape
-    mounted, `getfattr -d -m -` on the tape's mount point and on a file. Fix the names where they differ.
-  - Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that browsing
-    it no longer freezes.
-  - Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
+- [ ] ~~**LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
+  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index
+  sync, the Overview card and safer unmounting. Still to do:~~ *Struck for now.*
+  - ~~Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads
+    (`user.ltfs.startblock`, `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*`
+    also tried): with the tape mounted, `getfattr -d -m -` on the tape's mount point and on a file. Fix the names
+    where they differ.~~
+  - ~~Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that
+    browsing it no longer freezes.~~
+  - ~~Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
-    what's on which tape).
+    what's on which tape).~~
 
 ### Views and search
 
 ### File tools
 
-- [ ] **Find similar images** (the part of Find Duplicates left for later): the same photo at another size or quality,
-  not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates window.
+- [ ] ~~**Find similar images** (the part of Find Duplicates left for later): the same photo at another size or
+  quality, not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates
+  window.~~ *Struck for now.*
 
 - [ ] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
 
 ### Images, video and audio
 
-- [ ] **Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen then:
-  - **Rate** images (stars 1–5, as XMP Rating), next to star / pin.
-  - **Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default app),
-    with play/pause and a seek bar.
-  - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
+- [ ] ~~**Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen
+  then:~~ *Struck for now.*
+  - ~~**Rate** images (stars 1–5, as XMP Rating), next to star / pin.~~
+  - ~~**Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default
+    app), with play/pause and a seek bar.~~
+  - ~~**Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.~~
 
 - [ ] **Drag an image out of the viewer.** With an image open in Kestrel's image viewer, drag it out and drop a copy
   anywhere that takes files: the desktop, another Kestrel or GNOME Files window, a browser's upload field, a chat or
@@ -233,6 +237,65 @@ into.
   - **Docs:** a Kubuntu section in docs/install.md, like the Mint one.
   - Order: walk through the app in the VM (drives first), then kes-setup (portal, Dolphin, FileManager1), then the
     wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
+
+### Translations
+
+- [ ] **Make Kestrel translatable, still English only.** Kestrel is set up as if it were translated, but ships only
+  English, so nothing changes for users. Afterwards, adding a language means writing one .ts file and nothing in the
+  code. Nothing goes through `tr()` today, and every text is an English literal in src/.
+  - **Build:** add `LinguistTools` to `find_package(Qt6 …)` and `qt_add_translations` (on Qt 6.4, CI's oldest). Build
+    the .qm files into kes as resources, the way the icon is (data/kestrel.qrc), so the .deb and install.sh need no new
+    paths. Add `qt6-l10n-tools` to the build deps (install.sh, CI, docs/dependencies.md).
+  - **Loading:** install a `QTranslator` for the UI language at startup.
+  - **An English .ts:** plurals need it. Once `n == 1 ? "file" : "files"` becomes `tr("%n file(s)", "", n)`, the
+    English file turns it back into "1 file" / "2 files" (`lupdate -pluralonly`). So "English only" is still one real
+    translation file.
+  - **Mark the strings:** wrap every user-visible text in `tr()`/`QCoreApplication::translate()`: menus,
+    Preferences labels (src/prefs.cpp's `label` and choice labels), messages, job logs, status line, Overview, archive
+    window, viewer, tooltips. Leave out settings keys, menu ids (`menus::tag`), file names, command lines and what
+    goes to other programs. Do it file by file, menus and Preferences first.
+  - **Things that break when translated:**
+    - **Plurals:** about 37 `n == 1 ? "file" : "files"` spots, changed to `%n` (languages have different plural
+      rules, and CJK has none).
+    - **Sentences built from pieces** (`"Copying " + name + " to " + dest`): turn each into one string with `%1 %2`
+      in a single multi-argument `.arg()`, so translators can reorder the parts. This matches the existing rule
+      against chained `.arg()` after user text.
+    - **Numbers, sizes and dates:** `group_digits` hardcodes `,`, `human_size` prints `1.5 MB` with a `.` and
+      English units, and about 10 `toString("…")` calls use fixed date formats. Move them to `QLocale` (`toString`,
+      `formattedDataSize`, `dateFormat`). Check the date groups (src/groups.cpp) and sorting. Decide whether formats
+      follow the UI language or the system's number/date locale (`LC_NUMERIC`/`LC_TIME`, as GNOME does). The latter
+      changes what users see in this item already.
+    - **Code that compares displayed text** (`name->text() == …` and similar) or finds things by label: change these
+      to compare data, not translations.
+  - **Workflow:** add a script (or CMake target) that runs `lupdate` to refresh the .ts files, and a section in
+    docs/development.md on marking new strings and adding a language.
+  - **Pseudo-translation (a test tool, not shipped):** a generated .ts that pads and accents every text
+    (`[Ǫρéñ ƒöłðéř······]`). With only English, the app looks the same whether a string is marked or not, so this is
+    how missed strings and clipped layouts show up.
+  - **Tests:** a check in `ui` (like the modal-call check) that fails on a user-visible literal in a widget call
+    (`setText("…")`, `QAction("…")`, `warn(…, "…")`) not wrapped in `tr()`, so new code stays translatable. A check
+    that the .ts files build and that no translation drops a `%1`/`%n`. A run with the pseudo-translation.
+  - Order: build + loading + English .ts + pseudo-translation, then the `ui` check (warning only until the strings
+    are done), then mark strings one area at a time, then plurals and locale formats.
+
+- [ ] **Translate Kestrel, the major languages first:** French, German, Italian, Spanish, Portuguese (both Brazilian
+  and European), Russian, Korean, Japanese and Chinese (Simplified). Needs the item above.
+  - **The files:** `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`. Translation itself: Qt Linguist,
+    or a hosted service such as Weblate (free for open source) so others can contribute.
+  - **Portuguese** comes in two versions, pt_BR and pt_PT. Check that the locale picks the right one (`pt_BR` →
+    pt_BR; `pt_PT` and plain `pt` → pt_PT).
+  - **Loading:** pick the translation from `QLocale::system()`, plus Qt's own `qtbase_*.qm` for the standard buttons
+    and dialogs (qt6-translations-l10n, a Recommends). Optionally add a Preferences setting to choose the language
+    (in src/prefs.cpp, applied on restart).
+  - **Russian** has three plural forms (1 файл, 2 файла, 5 файлов), which the `%n` plurals from the item above
+    handle; check a few counts (1, 2, 5, 11, 21) in it.
+  - **Widths:** German, French and Russian run about 30% longer. Check fixed-width buttons, Preferences rows, the status line
+    and column headers. CJK needs a font with the glyphs (the desktop's usually has them).
+  - **Outside kes:** the desktop entry (`Name[fr]=`, `Comment[…]`, `GenericName`), data/kestrel.portal, the GNOME
+    Shell extension's metadata, kes-setup's and the admin helper's messages (these could stay English at first; say
+    so in the docs).
+  - **Tests:** a run under `LANG=de_DE.UTF-8` (and Russian and one CJK locale) that checks the translation loads, plus the
+    `%1`/`%n` check from the item above over the real files.
 
 ## Done
 
