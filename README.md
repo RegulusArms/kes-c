@@ -83,6 +83,7 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint and Ubuntu 24.04 notes |
 | [Dependencies](docs/dependencies.md) | The packages needed to build, the recommended ones and the optional ones, and what each is used for |
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
+| [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
 | [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo, Dolphin, Thunar, Krusader and PCManFM |
