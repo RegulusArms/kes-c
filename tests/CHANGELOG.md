@@ -4,6 +4,12 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.19
+
+Changed:
+- `installer`: `--install-optional`'s expected `apt-get install` line includes `libheif-examples`, the optional package
+  0.3.2-alpha.18 added (for Convert Image to HEIC and AVIF). The test still listed the old packages, so CI failed.
+
 ## 0.3.2-alpha.18
 
 Added:

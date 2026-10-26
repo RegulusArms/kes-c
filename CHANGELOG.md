@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.18
+## 0.3.2-alpha.19
+
+- Nothing yet.
+
+## 0.3.2-alpha.18 (2026-10-26)
 
 - **Choose what the Overview shows** (Preferences → Overview): tick the sections to show and put them in any order;
   the card size (small, normal, large); whether the system drive is shown alone (as before), with its other mounts

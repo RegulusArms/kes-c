@@ -283,7 +283,7 @@ printf '#!/bin/sh\necho "$@" >> "%s/sudo.log"\n' "$WORK" > "$WORK/apt-stubs/sudo
 chmod +x "$WORK/apt-stubs"/*
 rm -f "$WORK/sudo.log"
 PATH="$WORK/apt-stubs:$PATH" "$SETUP" --install-optional </dev/null >"$WORK/out9" 2>&1
-check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg rsync" ]] &&
+check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg rsync libheif-examples" ]] &&
        grep -q "Not available on this system (skipped): rar" "$WORK/out9" && grep -q "multiverse" "$WORK/out9"' \
     "kes-setup --install-optional: installs the missing optional packages apt has, and names the ones it hasn't"
 rm -f "$WORK/sudo.log"
