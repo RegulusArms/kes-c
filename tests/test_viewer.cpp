@@ -274,6 +274,85 @@ int main(int argc, char **argv)
               "the original as it was, and leaves no part file or half-made image");
     }
 
+    // ---- Wipe Metadata: every tag out, the pixels untouched; a copy beside the image, or the image itself replaced
+    check(metadata::can_wipe(t) && metadata::can_wipe(png) && !metadata::can_wipe(join(dir, "raw.cr2")) &&
+              !metadata::can_wipe(join(dir, "missing.jpg")) && !metadata::can_wipe(join(TESTS_DIR, "fixtures")),
+          "JPEGs and PNGs can have their metadata wiped; camera raw files, missing files and folders can't");
+    if (which("exiftool")) {
+        auto camera_of = [](const QString &p) {
+            for (const auto &[k, v] : metadata::basic_info(p))
+                if (k == "Camera")
+                    return v;
+            return QString();
+        };
+        double lat = 0, lon = 0;
+        QString wp = join(dir, "wipe.jpg");
+        write_bytes(wp, jpeg_of(q, exif_block(6, "TestCam", "X1", 51.5, -0.125)));
+        util::chmod(wp, 0600);
+        QByteArray before = read_file(wp);
+        QString look = corners(shown(wp)), copy;
+        QString e = error_of([&]() { copy = metadata::wipe(wp, true); });
+        struct stat cs {};
+        ::stat(enc(copy).constData(), &cs);
+        check(e.isEmpty() && basename(copy) == "wipe (no metadata).jpg" && read_file(wp) == before &&
+                  camera_of(copy).isEmpty() && !metadata::gps_position(copy, &lat, &lon) && camera_of(wp) == "TestCam X1",
+              "Wipe Metadata as a copy writes \"name (no metadata).jpg\" without the camera details or GPS position, the "
+              "original untouched (" + e + ")");
+        check(metadata::orientation_tag(copy).value == 6 && corners(shown(copy)) == look && (cs.st_mode & 0777) == 0600 &&
+                  parts_in(dir).isEmpty(),
+              "...keeping the orientation (it looks the same) and the original's permissions, with no part file left");
+        QString copy2;
+        e = error_of([&]() { copy2 = metadata::wipe(wp, true); });
+        check(e.isEmpty() && basename(copy2) == "wipe (no metadata 2).jpg" && read_file(copy).size() > 0,
+              "the next copy gets the next free name, never replacing the first");
+
+        e = error_of([&]() { metadata::wipe(wp, false, false); });
+        struct stat ws {};
+        ::stat(enc(wp).constData(), &ws);
+        check(e.isEmpty() && camera_of(wp).isEmpty() && !metadata::gps_position(wp, &lat, &lon) &&
+                  metadata::orientation_tag(wp).offset < 0 && (ws.st_mode & 0777) == 0600 && parts_in(dir).isEmpty(),
+              "Wipe Metadata on the original replaces it without its metadata (without the orientation either, when "
+              "not kept), keeping its permissions (" + e + ")");
+
+        QString wpng = join(dir, "wipe.png");
+        {
+            QImage g = q;
+            g.setText("parameters", "a kestrel over a field");
+            g.save(wpng);
+        }
+        e = error_of([&]() { metadata::wipe(wpng, false); });
+        check(e.isEmpty() && QImage(wpng).text("parameters").isEmpty() &&
+                  QImage(wpng).convertToFormat(QImage::Format_RGB32) == q.convertToFormat(QImage::Format_RGB32),
+              "a PNG's text (image-generation prompts) is wiped, its pixels kept exactly (" + e + ")");
+
+        QString junk = join(dir, "junk.jpg");
+        write_bytes(junk, "not an image");
+        e = error_of([&]() { metadata::wipe(junk, false); });
+        QString e2 = error_of([&]() { metadata::wipe(junk, true); });
+        check(!e.isEmpty() && !e2.isEmpty() && read_file(junk) == "not an image" &&
+                  !lexists(join(dir, "junk (no metadata).jpg")) && parts_in(dir).isEmpty(),
+              "a file exiftool can't read isn't changed, no copy is made, and the error says why (" + e + ")");
+
+        // a write that fails part-way (a full disk)
+        write_bytes(wp, jpeg_of(q, exif_block(1, "TestCam", "X1")));
+        before = read_file(wp);
+        struct rlimit old_lim, lim{64, 64};
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        lim.rlim_max = old_lim.rlim_max;
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        e = error_of([&]() { metadata::wipe(wp, false); });
+        e2 = error_of([&]() { metadata::wipe(wp, true); });
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(!e.isEmpty() && !e2.isEmpty() && read_file(wp) == before && !lexists(join(dir, "wipe (no metadata 3).jpg")) &&
+                  parts_in(dir).isEmpty(),
+              "a wipe that fails part-way (a file-size limit), on the original or as a copy, keeps the original as it "
+              "was and leaves no part file or half-made copy");
+    } else {
+        skip("Wipe Metadata (exiftool isn't installed)");
+    }
+
     // ---- Straighten: the tag's turn into the pixels (jpegtran), the tag set to 1
     QString st = join(dir, "straight.jpg");
     write_bytes(st, jpeg_of(q, exif_block(6, "Cam", "One")));

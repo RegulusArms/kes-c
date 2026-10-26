@@ -54,6 +54,14 @@ struct Change {
 };
 QStringList set_tags(const QString &path, const QList<Change> &changes);   // warnings; raises Error
 QStringList clear_all(const QString &path, bool keep_basic = true);
+// Wipe Metadata…: every tag taken out (EXIF, XMP, IPTC, GPS, comments, a PNG's text…), the pixels untouched
+// (exiftool). For images Kestrel can wipe: not camera raw files, whose maker notes are needed to develop them.
+bool can_wipe(const QString &path);
+// path without its metadata (keep_basic: its orientation and colour profile stay), written over path itself (fsynced
+// first) or, with copy, as a new file beside it ("photo (no metadata).jpg", the next free name, with path's
+// permissions). Either way a part file renamed into place: a failure leaves path and the name as they were. Returns
+// the file written; raises Error.
+QString wipe(const QString &path, bool copy, bool keep_basic = true);
 
 // ---------------------------------------------------------------- tag catalog
 

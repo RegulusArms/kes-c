@@ -184,6 +184,8 @@ QList<Entry> defaults(Kind k)
                      {item("image_wallpaper", "Set as Wallpaper"), item("image_cover", "Use as Folder Cover"),
                       item("image_copy", "Copy Image to Clipboard")},
                      "for images");
+    if (file || several)
+        l << item("wipe_metadata", "Wipe Metadata…", several ? "when images are selected" : "for images");
     if (folder || several) {
         QString n = several ? "when all are folders" : QString();
         l << item("folder_colour", "Folder Colour ▸", n) << item("show_image_previews", "Show Image Previews", n);

@@ -4,6 +4,7 @@
 #include "archive_ui.h"
 #include "dialogs.h"
 #include "hashcheck.h"
+#include "prefs.h"
 #include "stats.h"
 
 #include <QDir>
@@ -536,6 +537,53 @@ int main(int argc, char **argv)
                   !only.contains("Move to Trash"),
               "right-clicking a mixed selection gives the usual menu (Move to Trash), not the trash's (Restore); "
               "a selection all in the trash gets the trash's");
+    }
+
+    // ---- Wipe Metadata… in the right-click menu: images only; a copy or the original, as Preferences says
+    {
+        auto texts_of = [&](const QStringList &paths) {
+            QMenu *m = w->build_menu(w->pane(), paths);
+            QStringList texts;
+            for (QAction *a : m->actions())
+                if (a->isEnabled())
+                    texts << a->text();
+            m->deleteLater();
+            return texts;
+        };
+        QString png = P("wm/gen.png"), txt = P("wm/notes.txt");
+        makedirs(P("wm"), true);
+        QImage g(16, 16, QImage::Format_RGB32);
+        g.fill(Qt::red);
+        g.setText("parameters", "a prompt");
+        g.save(png);
+        make(txt, "t");
+        if (which("exiftool")) {
+            check(texts_of({png}).contains("Wipe Metadata…") && texts_of({txt, png}).contains("Wipe Metadata…") &&
+                      !texts_of({txt}).contains("Wipe Metadata…"),
+                  "Wipe Metadata… is in the right-click menu of an image, and of a selection with images, not of other files");
+            prefs::set("metadata_wipe", "copy");
+            QString copy = P("wm/gen (no metadata).png");
+            w->wipe_metadata({txt, png});
+            check(wait_for([&]() { return exists(copy); }, 20000) && wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
+                      QImage(png).text("parameters") == "a prompt" && text_of(txt) == "t" && !lexists(P("wm/notes (no metadata).txt")),
+                  "with \"make a copy\" (the default), Wipe Metadata… writes a copy without the metadata beside the "
+                  "image, leaving the original and the files that aren't images as they were");
+            check(undo_and_wait(w, [&]() { return !lexists(copy); }) && exists(png),
+                  "...and Undo moves the copy to the trash");
+
+            prefs::set("metadata_wipe", "original");
+            QStringList earlier = boxes;
+            boxes.clear();
+            w->wipe_metadata({png});
+            check(wait_for([&]() { return !boxes.isEmpty(); }) && boxes.first().contains("No backup") && (spin(300), true) &&
+                      QImage(png).text("parameters") == "a prompt" && !lexists(copy),
+                  "with \"wipe the original\", it asks first (no backup is kept), and closing the question changes nothing");
+            boxes = earlier;
+            prefs::reset({"metadata_wipe"});
+        } else {
+            check(!texts_of({png}).contains("Wipe Metadata…"), "without exiftool, Wipe Metadata… is greyed out");
+            skip("Wipe Metadata… (exiftool isn't installed)");
+        }
     }
 
     // ---- unique names and links

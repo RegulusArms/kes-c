@@ -34,7 +34,10 @@ struct Entry {
 };
 QStringList to_start(const QList<Entry> &queue, const QString &mode);
 
-QString mode();   // "drive" (by drive, the default) or "one" (one at a time)
+// "drive" (by drive, the default), "one" (one at a time) or "all" (all at once: every job starts as it's queued, also
+// on a drive another job uses, unless it's paused)
+QString mode();
+QString known_mode(const QString &mode);   // mode itself when it's one of these, else "drive"
 void set_mode(const QString &mode);
 
 // a job of any Kestrel, as the queue knows it

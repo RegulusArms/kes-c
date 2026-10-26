@@ -36,6 +36,10 @@ QStringList to_start(const QList<Entry> &queue, const QString &mode)
         }
         if (e.paused)   // waiting, paused: it neither starts nor holds up the jobs after it
             continue;
+        if (mode == "all") {   // let it rip: drives shared, nothing waits
+            out << e.key;
+            continue;
+        }
         if (mode == "one") {
             if (!running) {
                 out << e.key;
@@ -54,11 +58,13 @@ QStringList to_start(const QList<Entry> &queue, const QString &mode)
     return out;
 }
 
-QString mode() { return settings().value("jobs_mode", "drive").toString() == "one" ? "one" : "drive"; }
+QString known_mode(const QString &m) { return m == "one" || m == "all" ? m : QString("drive"); }
+
+QString mode() { return known_mode(settings().value("jobs_mode", "drive").toString()); }
 
 void set_mode(const QString &m)
 {
-    settings().setValue("jobs_mode", m == "one" ? "one" : "drive");
+    settings().setValue("jobs_mode", known_mode(m));
     atc::announce("queue_mode", {{"mode", mode()}});
     Queue::instance()->control(QString(), QString(), "decide");
 }
@@ -112,8 +118,8 @@ void Queue::submit(Task *t)
         return;
     }
     // for its log, if it has to wait: the jobs ahead of it in its lanes (every Kestrel's), or all of them one at a time
-    bool one = mode() == "one";
-    for (const Job &j : jobs())
+    bool one = mode() == "one", all = mode() == "all";
+    for (const Job &j : all ? QList<Job>() : jobs())   // all at once: nothing to wait for
         if (one || std::any_of(j.drives.begin(), j.drives.end(), [&ids](const QString &d) { return ids.contains(d); }))
             t->waited_for << j.title;
     t->queued_ms = Task::now_ms();
@@ -122,7 +128,7 @@ void Queue::submit(Task *t)
     l.drives = ids;
     l.paused = start_paused();
     t->queued = true;
-    t->text = l.paused ? "Paused (not started)" : "Waiting for its turn (its drive is in use)…";
+    t->text = l.paused ? "Paused (not started)" : all ? "Starting…" : "Waiting for its turn (its drive is in use)…";
     local << l;
     connect(t, &QThread::finished, this, [this, t]() { finished(t); });
     connect(t, &Task::cancel_asked, this, [this, t]() {   // cancelled while waiting: its thread starts only to end

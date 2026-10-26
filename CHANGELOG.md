@@ -2,7 +2,23 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.15
+## 0.3.2-alpha.16
+
+- **Wipe Metadata…** in the right-click menu of one or more images: takes out all of their metadata (camera details,
+  GPS location, dates, comments, image-generation prompts) without touching the pixels, as a job in the Jobs window.
+  By default the originals are kept and a copy without metadata is made beside each (`photo (no metadata).jpg`; Undo
+  moves the copies to the trash). Preferences → Images & Videos can make it wipe the originals instead, with no backup
+  (it asks first), and choose whether the orientation and colour profile are kept (on by default, so photos don't
+  turn sideways). Needs exiftool; not for camera raw files. A failure or cancel leaves each image as it was.
+- **Run jobs all at once.** A third way for the job queue to run jobs, besides by drive and one at a time: every job
+  starts as soon as it's queued, also on a drive another job is using (paused jobs still wait). Not the default:
+  choose it in the Jobs window's **Run jobs** or Preferences → Files. Jobs on the same drive then compete for it,
+  which can be slower overall, and makes a tape or floppy seek back and forth. Kestrels of this version don't share
+  the job queue with earlier ones still running.
+- **A page listing every right-click menu** ([Right-click menus](docs/context-menus.md)): what each entry does and
+  when it shows.
+
+## 0.3.2-alpha.15 (2026-10-26)
 
 - **Jobs no longer belong to the window that started them.** Closing a Kestrel window doesn't ask about its jobs
   or stop them: they go on, shown in another window's status bar. Closing the last window while jobs run asks

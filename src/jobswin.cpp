@@ -108,7 +108,8 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     mode = new QComboBox;
     mode->addItem("By drive: jobs on different drives at the same time", "drive");
     mode->addItem("One at a time, in order", "one");
-    mode->setCurrentIndex(jobs::mode() == "one" ? 1 : 0);
+    mode->addItem("All at once: every job starts as it's queued", "all");
+    mode->setCurrentIndex(mode->findData(jobs::mode()));
     mode->setAccessibleName("How jobs run");
     connect(mode, &QComboBox::currentIndexChanged, this, [this]() { jobs::set_mode(mode->currentData().toString()); });
     top->addWidget(mode);

@@ -43,6 +43,25 @@ into.
 
 ### Jobs
 
+- [ ] **The Jobs window: each list with its own controls, and choices for thumbnailing.**
+  - Layout: the job buttons (Pause, Stop, Start Now, Up, Down, Clear Finished) go right under the jobs list, above
+    the thumbnail jobs. Today they sit below both lists (src/jobswin.cpp: `controls`, after the splitter `lists`), so
+    they look like they're for the thumbnails too. The thumbnail jobs' controls go below the thumbnail list: its
+    Pause and Stop (already there), and the new choices below.
+  - **Thumbnailing**, a choice of three (a setting in src/prefs.cpp, Preferences → Images & Videos, also shown under
+    the thumbnail list, like Run jobs above the jobs list):
+    - **One per drive, even while it's in use:** one thumbnail job runs on each drive alongside the copies, moves and
+      extractions there; the others on that drive wait behind it.
+    - **Wait until the drive is free** (today's behaviour, and the default): a thumbnail job waits while another job
+      uses its drive (ThumbnailManager::check_jobs in src/thumbs.cpp, `jobs::Queue::busy`).
+    - **Paused:** no thumbnailing at all until switched back. What's already made still shows, and the jobs stay listed
+      as paused, carrying on where they were when it's switched back.
+  - Applies to every Kestrel, as Run jobs does (it goes through the tower).
+  - Tapes and floppies keep their own rule: no previews unless allowed for that drive (Show Previews on This Drive).
+  - Test: `theme` (thumbnail jobs are tested there): with each choice, a thumbnail job on a drive a copy is using
+    runs, waits, or stays paused; with "one per drive", a second folder's job on that drive waits for the first.
+    `ui`: the job buttons are under the jobs list, the thumbnail ones under the thumbnail list.
+
 ### Archives
 
 ### Drives, the sidebar and the Overview
@@ -104,6 +123,21 @@ into.
   - Not onto a tab showing the Overview, Starred, Recent or search results (no one folder to drop into): it still
     switches, and the drop goes where the pointer then is. Onto the Trash: Move to Trash.
   - Test: `ui`, as the drops onto folders are tested there (the drag events where a real drag sends them).
+
+- [ ] **A selection box only as big as the item.** In the grid, the highlight around a selected (or hovered) file or
+  folder fills its whole cell, and the whole cell counts as the item, so in a full folder there's little empty space
+  left to right-click for the folder's own menu (New Folder, Paste…). Make the box fit just around the icon and its
+  name, and make a click outside it count as empty space.
+  - Today: GridDelegate::paint (src/widgets.cpp) draws the highlight over the cell less 3 px on each side
+    (`option.rect.adjusted(3, 3, -3, -3)`), and the view's indexAt() takes the whole cell. Both need the same, smaller
+    shape: the icon as drawn (a thumbnail's real size, not the icon size, for wide or tall images) and the name's lines
+    as wrapped, each centred. Probably one helper in GridDelegate that both paint and the pane's hit test ask.
+  - Everything that asks "which item is under the pointer?" should use it: clicks, middle-click (a folder in a new
+    tab), the right-click menu
+    (MainWindow::context_menu), drops onto folders (dragMoveEvent's drop target), hover, and the rubber band, which
+    should select an item only when it touches the box.
+  - The list view stays as it is (a whole row is the item there).
+  - Test: `ui`: a right-click in a cell outside the box gives empty space's menu, on the icon or the name the item's.
 
 ### File tools
 

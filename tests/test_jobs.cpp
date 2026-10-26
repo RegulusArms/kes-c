@@ -65,6 +65,11 @@ int main(int argc, char **argv)
     check(starts({{"run", {"a"}, true}, {"f", {"a"}, false, false, true}}, "drive") == "f", "...a job started now starts anyway");
     check(starts({{"run", {"a"}, true}, {"b", {"b"}}}, "one") == "" && starts({{"x", {"a"}}, {"y", {"b"}}}, "one") == "x",
           "one at a time: nothing starts while a job runs, then only the first");
+    check(starts({{"run", {"a"}, true}, {"w1", {"a"}}, {"p", {"a"}, false, true}, {"w2", {"a", "b"}}}, "all") == "w1,w2",
+          "all at once: every waiting job starts, also on a drive in use, except a paused one");
+    check(jobs::known_mode("all") == "all" && jobs::known_mode("one") == "one" && jobs::known_mode("rip") == "drive" &&
+              jobs::known_mode(QString()) == "drive",
+          "...the queue modes known are by drive, one at a time and all at once; anything else is by drive");
 
     // ---- drives: the physical disk, the same in every Kestrel
     QString tape = home_path("tape");
@@ -122,6 +127,21 @@ int main(int argc, char **argv)
     bool waited_one = other && other->queued;
     *held = false;
     check(waited_one && wait_for([&]() { return !other && !h; }), "one at a time: a job on another drive waits too");
+
+    // all at once
+    jobs::set_mode("all");
+    check(jobs::mode() == "all" && settings().value("jobs_mode").toString() == "all",
+          "all at once is kept as the queue's mode");
+    *held = true;
+    h = holder(w, "Holding, all at once", HOME(), held);
+    spin(150);
+    QPointer<Task> same = fileops::start_ops(w, {{"copy", home_path("a.txt"), home_path("a-rip.txt")}}, "Copy, all at once");
+    bool rip = wait_for([&]() { return !same && exists(home_path("a-rip.txt")); }) && h && !h->queued;
+    *held = false;
+    check(rip && wait_for([&]() { return !h; }),
+          "all at once: a job on a drive another job is using starts at once instead of waiting");
+    jobs::set_mode("rip");
+    check(jobs::mode() == "drive", "...and an unknown mode is stored as by drive");
     jobs::set_mode("drive");
 
     // cancel, start now, reorder, start paused

@@ -76,6 +76,7 @@ The shared entries, plus:
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
 | **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
+| **Wipe Metadata…** | Takes out all of the image's metadata (camera details, GPS location, dates, comments, image-generation prompts), the pixels untouched: by default as a copy beside it (`photo (no metadata).jpg`; Undo trashes the copy), or from the original with no backup (asks first), as set in Preferences → Images & Videos. Greyed out as **Wipe Metadata (install exiftool)** without exiftool | Images (JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, GIF, TIFF; not camera raw files) |
 | **Send To ▸** | **Email…** (attaches it in your mail app) or **Bluetooth Device…** | With `xdg-email` or `bluetooth-sendto` installed |
 
 ## A folder
@@ -140,6 +141,7 @@ The shared entries, plus:
 | **Extract Here** / **Extract To…** / **Open as Archive** / **Test Archive** | As for one archive | A split set selected whole |
 | **Extract All Here** / **Extract All To…** | Extracts each archive, one after another | When all are archives |
 | **Test Archives** | Tests each archive | When all are archives |
+| **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
 | **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
 | **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
 

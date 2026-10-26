@@ -19,6 +19,7 @@
 #include "menus.h"
 #include "places.h"
 #include "prefswin.h"
+#include "metadata.h"
 #include "prefs.h"
 #include "sharing.h"
 #include "undo.h"
@@ -1302,6 +1303,17 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
           "image_cover");
         T(im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
           "image_copy");
+    }
+    if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return metadata::can_wipe(x); })) {
+        if (metadata::can_edit()) {
+            T(m->addAction(icon({"edit-clear-all", "edit-clear"}), "Wipe Metadata…", this,
+                           [this, paths]() { wipe_metadata(paths); }),
+              "wipe_metadata");
+        } else {
+            QAction *a = T(m->addAction(icon({"edit-clear-all", "edit-clear"}), "Wipe Metadata (install exiftool)"),
+                           "wipe_metadata");
+            a->setEnabled(false);
+        }
     }
     QStringList folders;
     for (const QString &x : paths)

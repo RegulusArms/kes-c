@@ -17,6 +17,7 @@
 #include <QXmlStreamReader>
 
 #include <cmath>
+#include <sys/stat.h>
 #include <mutex>
 
 using namespace util;
@@ -947,6 +948,54 @@ QStringList clear_all(const QString &path, bool keep_basic)
         if (!m.contains("No writable tags set"))
             out << m;
     return out;
+}
+
+bool can_wipe(const QString &path)
+{
+    static const QSet<QString> EXTS = {".jpg", ".jpeg", ".jpe", ".png", ".apng", ".webp", ".heic", ".heif", ".hif",
+                                       ".avif", ".jxl", ".gif", ".tif", ".tiff"};
+    return EXTS.contains(ext_of(path)) && isfile(path);
+}
+
+QString wipe(const QString &path, bool copy, bool keep_basic)
+{
+    // exiftool writes the wiped file to its output, which Kestrel puts in place itself (exiftool's own in-place write
+    // isn't fsynced, and a copy has to claim its name without replacing anything)
+    QStringList argv{"exiftool", "-charset", "filename=utf8", "-all="};
+    if (keep_basic)
+        argv << "-tagsfromfile" << "@" << "-icc_profile" << "-orientation";
+    argv << "-o" << "-" << abspath(path);
+    auto r = proc::run(argv, 300000);
+    if (r.failed)
+        throw Error("Wiping metadata needs exiftool (package libimage-exiftool-perl).");
+    if (r.rc != 0 || r.out.isEmpty()) {
+        QString err = QString::fromUtf8(r.err).trimmed();
+        throw Error(QString("Couldn't wipe the metadata of %1: %2").arg(basename(path), err.isEmpty() ? QString("exiftool failed") : err));
+    }
+    struct stat st;
+    bool have_mode = ::stat(enc(path).constData(), &st) == 0;
+    auto fill = [&](int fd) {
+        if (copy && have_mode)
+            ::fchmod(fd, st.st_mode & 0777);   // a copy of a private photo stays private
+        write_all(fd, r.out.constData(), r.out.size(), path);
+    };
+    if (!copy) {
+        write_parts(path, fill, false, true);
+        return path;
+    }
+    auto [stem, ext] = split_ext(basename(path));
+    for (int n = 1;; ++n) {
+        QString to = join(dirname(path), stem + " (no metadata" + (n > 1 ? " " + QString::number(n) : QString()) + ")" + ext);
+        if (lexists(to))
+            continue;
+        try {
+            write_parts(to, fill, true);
+            return to;
+        } catch (const OSError &e) {
+            if (e.code != EEXIST)   // taken meanwhile: the next name
+                throw;
+        }
+    }
 }
 
 // ---------------------------------------------------------------- tag catalog for "Add Tag"

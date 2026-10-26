@@ -96,6 +96,14 @@ static QList<Pref> build()
         "lossless format is written again), so nothing is lost. Ctrl+S saves it at once.")
         .choices = {{"Ask whether to save them", "ask"}, {"Always save them", "always"},
                     {"Never save them (only for viewing)", "never"}};
+    const QString wiping = "Wipe Metadata (an image's right-click menu)";
+    add("Images & Videos", wiping, "metadata_wipe", "Wiping an image's metadata", CHOICE, "copy", QString(),
+        "Wipe Metadata… takes out the camera details, GPS location, dates, comments and image-generation prompts, "
+        "without touching the pixels.")
+        .choices = {{"Keep the original and make a copy without metadata", "copy"},
+                    {"Wipe the original (no backup)", "original"}};
+    add("Images & Videos", wiping, "metadata_wipe_keep_basic", "Keep the orientation and colour profile", BOOL, true,
+        QString(), "Without them, a photo taken turned shows sideways, and colours can look different.");
     add("Images & Videos", "", "play_gifs", "Play animated GIFs in the file view", BOOL, false);
     add("Images & Videos", "", "play_webm", "Play WebM videos in the file view (silent looping previews)", BOOL, false);
     range(add("Images & Videos", "", "thumb_max_mb", "Don't make previews of files larger than", INT, 200), 1, 10000,
@@ -115,7 +123,8 @@ static QList<Pref> build()
         "Create Checksum File…, Compress… (tar formats)")
         .choices = {{"One file for each algorithm", false}, {"One file with every algorithm", true}};
     add("Files", "Jobs", "jobs_mode", "Run jobs", CHOICE, "drive", "the Jobs window (Ctrl+Shift+J)")
-        .choices = {{"By drive (jobs on different drives side by side)", "drive"}, {"One at a time", "one"}};
+        .choices = {{"By drive (jobs on different drives side by side)", "drive"}, {"One at a time", "one"},
+                    {"All at once (every job starts as it's queued, even on a drive in use)", "all"}};
     add("Files", "Jobs", "jobs_start_paused", "Start new jobs paused", BOOL, false, "the Jobs window (Ctrl+Shift+J)");
 
     const QString tapes = "Tapes (copying onto an LTFS tape)";

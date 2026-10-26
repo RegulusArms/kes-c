@@ -4,6 +4,22 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.16
+
+Added:
+- `viewer`: Wipe Metadata (metadata::wipe): a copy is written as "name (no metadata).jpg" without the camera details
+  or GPS position, keeping the orientation (it looks the same) and the original's permissions, the original untouched;
+  the next copy gets the next free name; wiping the original replaces it (keeping its permissions; the orientation
+  goes too when not kept); a PNG's text is wiped with its pixels kept exactly; a file exiftool can't read is left as it
+  was with no copy; a wipe that fails part-way (RLIMIT_FSIZE) keeps the original and leaves no part file or half-made
+  copy; which files can be wiped (not raw files, missing files or folders).
+- `jobs`: the queue mode "all at once": the scheduler starts every waiting job, also on a drive in use, except a
+  paused one; only by drive, one at a time and all at once are known modes (anything else is by drive, also when
+  stored); with it on, a copy on a drive a running job holds starts at once instead of waiting.
+- `fileops`: Wipe Metadata… in the right-click menu: shown for images and selections with images, not for other files;
+  with "make a copy" it writes the copy and leaves the original and non-images alone, and Undo trashes the copy; with
+  "wipe the original" it asks first, and closing the question changes nothing.
+
 ## 0.3.2-alpha.15
 
 Added:

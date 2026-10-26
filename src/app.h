@@ -102,6 +102,9 @@ public:
     void new_file(const QString &tmpl = QString());
     void rename(const QStringList &paths);
     void trash_paths(const QStringList &paths);
+    // Wipe Metadata…: the images' metadata taken out (metadata::wipe), as a queued job; copies beside them or the
+    // originals themselves (asked first), as Preferences says. Undo moves the copies to the trash.
+    void wipe_metadata(const QStringList &paths);
     void delete_paths(const QStringList &paths);
     void restore(const QStringList &paths);
     void empty_trash();

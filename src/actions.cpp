@@ -6,6 +6,8 @@
 #include "admin.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "metadata.h"
+#include "prefs.h"
 #include "undo.h"
 #include "util.h"
 #include "widgets.h"
@@ -510,6 +512,95 @@ void MainWindow::delete_now(const QStringList &paths)
     for (const QString &p : paths)
         jobs << fileops::Job{"delete", p, QString()};
     fileops::start_ops(this, jobs, "Deleting", done);
+}
+
+void MainWindow::wipe_metadata(const QStringList &paths)
+{
+    QStringList imgs;
+    for (const QString &p : paths)
+        if (metadata::can_wipe(p))
+            imgs << p;
+    if (imgs.isEmpty())
+        return;
+    bool copy = prefs::get("metadata_wipe").toString() != "original";
+    bool keep = prefs::get("metadata_wipe_keep_basic").toBool();
+    QPointer<MainWindow> self(this);
+    auto start = [self, imgs, copy, keep]() {
+        if (!self)
+            return;
+        auto work = [imgs, copy, keep](Task *task) -> QVariant {
+            QStringList made;
+            QVariantList failed;
+            for (int i = 0; i < imgs.size(); ++i) {
+                if (task->cancelled)
+                    break;   // the images done so far stay done
+                task->step = i;
+                task->report(i, imgs.size(),
+                             QString("%1 of %2 — %3").arg(group_digits(i), group_digits(imgs.size()), basename(imgs[i])));
+                try {
+                    made << metadata::wipe(imgs[i], copy, keep);
+                    task->log((copy ? "Copied without metadata: " : "Wiped: ") + made.last());
+                } catch (const Error &e) {
+                    failed << QVariant(QStringList{imgs[i], e.message()});
+                    task->log("Failed: " + imgs[i] + ": " + e.message());
+                }
+            }
+            task->was_cancelled = task->cancelled;
+            return QVariantMap{{"made", made}, {"failed", failed}};
+        };
+        auto done = [self, copy](const QVariant &res) {
+            QVariantMap m = res.toMap();
+            QStringList made = m.value("made").toStringList();
+            if (copy)
+                undo::record_paths("create", "Wipe Metadata", made);   // undone: the copies go to the trash
+            if (!self)
+                return;
+            if (copy && self->pane())
+                for (const QString &p : made)
+                    self->pane()->select_later(p);
+            QVariantList failed = m.value("failed").toList();
+            if (!failed.isEmpty()) {
+                QStringList lines;
+                for (const QVariant &f : failed.mid(0, 10))
+                    lines << f.toStringList().value(1);
+                warn(self, "Wipe Metadata",
+                     QString("%1 image(s) couldn't be wiped:\n\n%2").arg(QString::number(failed.size()), lines.join('\n')));
+            } else if (res.isValid()) {
+                self->statusBar()->showMessage(
+                    QString(copy ? "Made %1 copy(ies) without metadata" : "Wiped the metadata of %1 image(s)")
+                        .arg(group_digits(made.size())),
+                    4000);
+            }
+        };
+        QStringList steps;
+        for (const QString &p : imgs)
+            steps << basename(p);
+        QStringList intro{copy ? QString("Wipe Metadata: %1 image(s), each copied beside it without its metadata")
+                                     .arg(imgs.size())
+                               : QString("Wipe Metadata: %1 image(s), wiped in place (no backup)").arg(imgs.size()),
+                          "Each image is written whole under a hidden name and then renamed into place; if this stops "
+                          "part-way, the images done so far stay done and the rest are as they were."};
+        QString title = imgs.size() == 1 ? "Wiping the metadata of “" + basename(imgs.first()) + "”"
+                                         : QString("Wiping the metadata of %1 images").arg(imgs.size());
+        fileops::queue_job(self, title, imgs, work, done, true, imgs.size() > 1 ? steps : QStringList(), false, intro, true);
+    };
+    if (copy) {
+        start();
+        return;
+    }
+    // the originals changed with no copy kept: asked first
+    QString what = imgs.size() == 1 ? "“" + basename(imgs.first()) + "”" : QString("these %1 images").arg(imgs.size());
+    auto *box = new QMessageBox(QMessageBox::Warning, "Wipe Metadata",
+                                "Wipe all metadata (camera details, GPS location, dates, comments, image-generation "
+                                "prompts…) from " + what + "?\n\nNo backup is kept, so this can't be undone.",
+                                QMessageBox::Cancel, this);
+    box->setInformativeText("Preferences → Images & Videos can keep the originals and make copies instead.");
+    QPushButton *ok = box->addButton("Wipe", QMessageBox::DestructiveRole);
+    box->setDefaultButton(QMessageBox::Cancel);
+    ask_box(box, [ok, start](QAbstractButton *b) {
+        if (b == ok)
+            start();
+    });
 }
 
 void MainWindow::restore(const QStringList &paths)

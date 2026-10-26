@@ -65,7 +65,7 @@ static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"queue", {{"jobs", JOBS}, {"mode", STR}}},   // keep (the tower's): the job queue of every Kestrel, in order
     {"lane_open", {{"flight", STR}, {"task", STR}}},   // (the tower's) that flight's job may start
     {"job_control", {{"flight", STR}, {"task", STR}, {"action", STR}}},   // pause, resume, start_now, up, down, cancel
-    {"queue_mode", {{"mode", STR}}},   // "drive" or "one" (jobs.h)
+    {"queue_mode", {{"mode", STR}}},   // "drive", "one" or "all" (jobs.h)
 };
 static const QList<QPair<QString, Field>> JOB_FIELDS = {{"flight", STR}, {"id", STR},      {"title", STR}, {"state", STR},
                                                         {"drives", STRS}, {"paused", BOOL}, {"admin", BOOL}};
@@ -333,7 +333,7 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
                                           nullptr);
             QString type = msg.value("type").toString();
             if (type == "queue_mode") {
-                tower->mode = msg.value("mode").toString() == "one" ? "one" : "drive";
+                tower->mode = jobs::known_mode(msg.value("mode").toString());
                 run_queue(conn);
             } else if (type == "job_control") {   // the queue's part of it (the flight running the job does the rest)
                 QString flight = msg.value("flight").toString(), id = msg.value("task").toString(),

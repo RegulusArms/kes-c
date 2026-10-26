@@ -206,7 +206,7 @@ void TowerWindow::refresh()
     lines << (landing >= 0 ? QString("Lands in %1 s (no Kestrel left)").arg((landing + 999) / 1000)
                            : QString("Stays up while a Kestrel is checked in"));
     lines << QString("Messages refused (malformed, unknown, another protocol): %1").arg(s.value("refused").toInt());
-    lines << QString("Job queue: %1 job(s), %2").arg(s.value("queued").toInt()).arg(s.value("mode").toString() == "one" ? "one at a time" : "by drive");
+    lines << QString("Job queue: %1 job(s), %2").arg(s.value("queued").toInt()).arg(s.value("mode").toString() == "one" ? "one at a time" : s.value("mode").toString() == "all" ? "all at once" : "by drive");
     status->setText(lines.join("<br>"));
 
     // the Kestrels, with their windows and jobs (their kept state)

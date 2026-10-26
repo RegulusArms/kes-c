@@ -123,7 +123,7 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection, each folder's sort and grouping |
 | `src/drives.cpp` | Slow drives (LTFS tapes, floppy disks): recognising them from the mount table, their sizes read in the background, tape attributes and index sync, one job at a time per drive |
 | `src/tapebuf.cpp` | The RAM write buffer for copies onto a tape (no shoe-shining): read ahead by a thread, sized from the memory available |
-| `src/jobs.cpp` | The job queue: one for every Kestrel (kept by the tower, else each Kestrel's own), by drive or one at a time |
+| `src/jobs.cpp` | The job queue: one for every Kestrel (kept by the tower, else each Kestrel's own), by drive, one at a time or all at once |
 | `src/jobswin.cpp` | The Jobs window: every job, its steps and log, the queue's controls |
 | `src/windiag.cpp` | Window diagnostics: each window's size, limits, state and recent changes (the Tower window's Windows tab) |
 | `src/towerwin.cpp` | The Tower window (developer tools, `kes --tower-monitor`): what the tower is doing, live |
