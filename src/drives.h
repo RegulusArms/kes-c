@@ -26,6 +26,7 @@ struct Mount {
     QString root, source, fstype;
 };
 QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a second); safe on any thread
+void reread_mounts();    // the next mounts() reads the table again, not its copy
 QString device_label(const QString &device);   // a file system's label (/dev/disk/by-label), without asking the drive
 qint64 device_bytes(const QString &device);    // a block device's size from /sys (as lsblk), without asking it; -1: none
 

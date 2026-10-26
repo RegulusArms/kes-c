@@ -15,6 +15,8 @@
 #include <QImageWriter>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QWheelEvent>
 
 #include <cmath>
 #include <sys/resource.h>
@@ -433,6 +435,29 @@ int main(int argc, char **argv)
         reds += v->info->histogram->bins[0][i];
     check(counted > 0 && reds * 2 > counted * 0.9 && reds * 2 < counted * 1.1,
           "...and a histogram of it (half of this image is bright red or white)");
+
+    // the wheel over the info panel scrolls it and never changes the image, also when it can't scroll (at its top,
+    // or the details fit): Qt passes a wheel turn nothing used on to the viewer, which turns it into the next image
+    {
+        auto turn = [](QWidget *to, QPoint pos, int dy) {
+            QWheelEvent ev(pos, to->mapToGlobal(pos), QPoint(), QPoint(0, dy), Qt::NoButton, Qt::NoModifier,
+                           Qt::NoScrollPhase, false);
+            QApplication::sendEvent(to, &ev);
+            return ev.isAccepted();
+        };
+        QWidget *port = v->info->viewport();
+        v->info->verticalScrollBar()->setValue(0);
+        int at = v->index;
+        bool kept = turn(port, port->rect().center(), 120);   // up, at the top: nothing to scroll
+        turn(v, v->info->mapTo(v, v->info->rect().center()), -120);   // what would reach the viewer from it
+        bool stayed = v->index == at;
+        turn(v, v->canvas->mapTo(v, v->canvas->rect().center()), -120);
+        bool moved = v->index == at + 1;
+        v->go_to(at);
+        check(kept && stayed && moved, QString("the wheel over the info panel stays there (kept: %1, image kept: %2), "
+                                               "and over the picture still goes to the next image (%3)")
+                                           .arg(kept).arg(stayed).arg(moved));
+    }
 
     // compare
     v->toggle_compare();

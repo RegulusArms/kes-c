@@ -123,15 +123,24 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         make_links(paths, target, "sym");
         return;
     }
+    QString how = target_in.isEmpty() ? "Paste" : "Paste Into Folder";
     if (op == "cut") {
         QPointer<MainWindow> self(this);
         fileops::transfer(this, paths, target, "move", [self]() {
             if (self)
                 self->cut_paths.clear();
             QGuiApplication::clipboard()->clear();
-        });
+        }, how);
     } else {
-        fileops::transfer(this, paths, target, "copy");
+        // copied files are forgotten once pasted, so an old copy isn't pasted again by mistake (Paste Into Folder is a
+        // click away from Move To…); not when the clipboard holds something else by then, or paths copied as text
+        QPointer<MainWindow> self(this);
+        fileops::transfer(this, paths, target, "copy", nullptr, how, [self, paths]() {
+            const QMimeData *md = QGuiApplication::clipboard()->mimeData();
+            bool files = md && (md->hasFormat("x-special/gnome-copied-files") || md->hasUrls());
+            if (self && files && self->read_clipboard() == qMakePair(QString("copy"), paths))
+                QGuiApplication::clipboard()->clear();
+        });
     }
 }
 
@@ -143,8 +152,10 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
     bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier, alt = mods & Qt::AltModifier;
     if (alt) {
         QMenu m(this);
-        m.addAction("Move Here", this, [this, paths, target]() { fileops::transfer(this, paths, target, "move"); });
-        m.addAction("Copy Here", this, [this, paths, target]() { fileops::transfer(this, paths, target, "copy"); });
+        m.addAction("Move Here", this,
+                    [this, paths, target]() { fileops::transfer(this, paths, target, "move", nullptr, "Drop (Move Here)"); });
+        m.addAction("Copy Here", this,
+                    [this, paths, target]() { fileops::transfer(this, paths, target, "copy", nullptr, "Drop (Copy Here)"); });
         m.addAction("Link Here", this, [this, paths, target]() { make_links(paths, target, "sym"); });
         m.exec(QCursor::pos());
         return;
@@ -163,13 +174,15 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
         bool same = lstat_(paths.first(), a) && stat_(target, b) && a.st_dev == b.st_dev;
         op = same ? "move" : "copy";
     }
-    fileops::transfer(this, paths, target, op);
+    fileops::transfer(this, paths, target, op, nullptr, "Drop");
 }
 
 void MainWindow::transfer_to(const QStringList &paths, const QString &op)
 {
     choose_folder(this, op == "move" ? "Move To" : "Copy To", cur_dir().isEmpty() ? HOME() : cur_dir(),
-                  [this, paths, op](const QString &d) { fileops::transfer(this, paths, d, op); });
+                  [this, paths, op](const QString &d) {
+                      fileops::transfer(this, paths, d, op, nullptr, op == "move" ? "Move To…" : "Copy To…");
+                  });
 }
 
 void MainWindow::duplicate(const QStringList &paths)

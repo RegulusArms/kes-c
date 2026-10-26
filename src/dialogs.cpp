@@ -389,7 +389,7 @@ QWidget *PropertiesDialog::general_tab()
     icon->setPixmap(icon_for_path(path).pixmap(96, 96));
     form->addRow(icon);
     if (ThumbnailManager *t = ThumbnailManager::instance(); single && isdir(path) && t) {
-        QPixmap pm = t->folder_pixmap(path, QFileInfo(path).lastModified().toSecsSinceEpoch(), 128);
+        QPixmap pm = t->folder_pixmap(path, QFileInfo(path).lastModified().toSecsSinceEpoch(), 128, true, this);
         if (!pm.isNull())
             icon->setPixmap(t->scaled(pm, 128));
     }

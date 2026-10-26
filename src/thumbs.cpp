@@ -766,10 +766,11 @@ QPixmap ThumbnailManager::plain_folder(const QString &color, int size, const QSt
     return *it;
 }
 
-QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews)
+QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews,
+                                       const QObject *owner)
 {
     if (previews && previews_for(path)) {
-        QPixmap pm = get(path, mtime, true, size);
+        QPixmap pm = get(path, mtime, true, size, 0, owner);
         if (!pm.isNull())
             return pm;
     }
@@ -815,7 +816,8 @@ static const qint64 DEVICE_MAX_BYTES = 30000000;   // larger files on a phone ar
 
 static QString key_path(const QString &key) { return key.section('\x1f', 0, 0); }
 
-QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize)
+QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize,
+                              const QObject *owner)
 {
     QString k = key(path, mtime, is_dir, size);
     auto it = cache.find(k);
@@ -825,7 +827,9 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
     }
     if (failed.contains(k))
         return QPixmap();
-    if (!pending.contains(k)) {
+    if (auto p = pending.constFind(k); p != pending.constEnd()) {
+        add_owner(**p, owner);   // another view wants it too
+    } else {
         bool device = is_device_path(path);
         // a tape or floppy: no thumbnails or folder mosaics unless the user allowed them for that drive (each one
         // makes a tape seek, a floppy read for seconds). Not remembered as failed, so allowing them takes effect
@@ -840,14 +844,23 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             failed << k;
             return QPixmap();
         }
-        pending << k;
+        auto req = std::make_shared<ThumbRequest>();
+        req->id = ++next_id;
+        add_owner(*req, owner);
+        pending.insert(k, req);
         stats::count("thumbnails not in memory");
         stats::peak("thumbnail queue", pending.size());
         prio += 1;
         thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);
         QString uri = device ? device_uri(path) : QString();
-        auto job = [this, k, path, mtime, is_dir, b, opts, device, uri, fsize]() {
+        auto job = [this, req, k, path, mtime, is_dir, b, opts, device, uri, fsize]() {
+            {
+                QMutexLocker l(&run_lock);
+                req->queued = nullptr;   // started: no longer in the queue for drop() to take
+            }
+            if (req->cancelled)   // no one wants it any more (cancel_for), and the queue couldn't give it back
+                return;
             QImage img;
             try {
                 if (device) {
@@ -861,18 +874,25 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             } catch (...) {
                 img = QImage();
             }
-            Q_EMIT job_done(k, path, img, mtime, is_dir);
+            Q_EMIT job_done(k, path, img, mtime, is_dir, req->id);
         };
-        (device ? device_pool : is_dir ? dir_pool : pool).start(job, prio);
+        req->pool = device ? &device_pool : is_dir ? &dir_pool : &pool;
+        QRunnable *r = QRunnable::create(std::move(job));   // auto-deleted after it has run
+        {
+            QMutexLocker l(&run_lock);
+            req->queued = r;   // before start(): the job clears it when it begins
+        }
+        req->pool->start(r, prio);
         batch_total += 1;
         schedule_progress();
     }
     return QPixmap();
 }
 
-QIcon ThumbnailManager::get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize)
+QIcon ThumbnailManager::get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize,
+                                 const QObject *owner)
 {
-    QPixmap pm = get(path, mtime, is_dir, size, fsize);
+    QPixmap pm = get(path, mtime, is_dir, size, fsize, owner);
     if (pm.isNull())
         return QIcon();
     QString k = key(path, mtime, is_dir, size);
@@ -900,12 +920,68 @@ QPixmap ThumbnailManager::scaled(const QPixmap &pm, int size)
 
 void ThumbnailManager::cancel_pending()
 {
-    pool.clear();
-    dir_pool.clear();
-    device_pool.clear();
+    {
+        QMutexLocker l(&run_lock);
+        for (const auto &req : std::as_const(pending)) {
+            req->cancelled = true;
+            req->queued = nullptr;   // clear() deletes the queued ones
+        }
+        pool.clear();
+        dir_pool.clear();
+        device_pool.clear();
+    }
     pending.clear();
     batch_total = batch_done = 0;
     schedule_progress();
+}
+
+void ThumbnailManager::add_owner(ThumbRequest &req, const QObject *owner)
+{
+    if (!owner) {
+        req.shared = true;
+        return;
+    }
+    req.owners.insert(owner);
+    if (!watched.contains(owner)) {   // a view closed or replaced without cancelling: its requests go with it
+        watched.insert(owner);
+        connect(owner, &QObject::destroyed, this, [this, owner]() {
+            watched.remove(owner);
+            cancel_for(owner);
+        });
+    }
+}
+
+void ThumbnailManager::drop(const std::shared_ptr<ThumbRequest> &req)
+{
+    req->cancelled = true;
+    QMutexLocker l(&run_lock);
+    // still queued (it clears queued under this lock when it starts, so the pointer is alive): take it back; one the
+    // pool is just handing to a thread isn't there any more, and skips itself (cancelled)
+    if (req->queued && req->pool->tryTake(req->queued)) {
+        delete req->queued;
+        req->queued = nullptr;
+    }
+}
+
+void ThumbnailManager::cancel_for(const QObject *owner)
+{
+    if (!owner)
+        return;
+    int n = 0;
+    for (auto it = pending.begin(); it != pending.end();) {
+        std::shared_ptr<ThumbRequest> req = it.value();
+        if (req->owners.remove(owner) && req->owners.isEmpty() && !req->shared) {
+            it = pending.erase(it);
+            drop(req);
+            n += 1;
+        } else {
+            ++it;
+        }
+    }
+    if (n) {
+        batch_total = std::max(batch_done, batch_total - n);
+        schedule_progress();
+    }
 }
 
 void ThumbnailManager::schedule_progress()
@@ -968,9 +1044,12 @@ void ThumbnailManager::cache_put(const QString &k, const QPixmap &pm)
     }
 }
 
-void ThumbnailManager::on_done(const QString &k, const QString &path, const QImage &img, qint64 mtime, bool is_dir)
+void ThumbnailManager::on_done(const QString &k, const QString &path, const QImage &img, qint64 mtime, bool is_dir,
+                               quint64 id)
 {
-    if (pending.remove(k)) {
+    // (a cancelled one that was already being made still counts: it's cached; a newer request for it stays pending)
+    if (auto p = pending.find(k); p != pending.end() && (*p)->id == id) {
+        pending.erase(p);
         batch_done += 1;
         schedule_progress();
     }

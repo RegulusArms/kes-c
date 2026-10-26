@@ -8,6 +8,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 using namespace test;
 
@@ -330,6 +331,71 @@ int main(int argc, char **argv)
         check(total_at_scan_end == 321 && done_at_scan_end >= 0 && done_at_scan_end < total_at_scan_end / 2,
               QString("a preview build finishes scanning the tree before most previews are made (%1 of %2 done then)")
                   .arg(done_at_scan_end).arg(total_at_scan_end));
+    }
+
+    // -- the folder previews a pane asks for are its own: its window closing, or the pane moving to another folder,
+    // cancels those, and no other window's (one process, one queue)
+    {
+        QImage im(800, 600, QImage::Format_RGB32);
+        im.fill(QColor("#3070b0"));
+        QString src = home_path("own-src.png");
+        im.save(src, "PNG");
+        // folders of 4 images each (links to one picture: quick to make, and still read one by one)
+        auto make_tree = [&](const QString &root, int n) {
+            QStringList dirs;
+            for (int d = 0; d < n; ++d) {
+                QString dir = join(root, QString("d%1").arg(d));
+                makedirs(dir, true);
+                for (int i = 0; i < 4; ++i)
+                    ::link(enc(src).constData(), enc(join(dir, QString("p%1.png").arg(i))).constData());
+                dirs << dir;
+            }
+            return dirs;
+        };
+        int b = thumbs::bucket_for(256);
+        auto made = [&](const QStringList &dirs) {
+            int n = 0;
+            for (const QString &d : dirs)
+                n += exists(join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(d)).arg(b)));
+            return n;
+        };
+        auto ask = [&](const QStringList &dirs, const QObject *owner) {
+            for (const QString &d : dirs)
+                g_thumbs->folder_pixmap(d, QFileInfo(d).lastModified().toSecsSinceEpoch(), 256, true, owner);
+        };
+        QString shown = home_path("own/shown");   // what the windows show: nothing of their own to preview
+        makedirs(shown, true);
+        MainWindow *w1 = open_window({shown}), *w2 = open_window({shown});
+        spin(200);
+        QStringList few = make_tree(home_path("own/few"), 3), many = make_tree(home_path("own/many"), 300);
+        // the other window's first: the newest requests go first, so these come last unless w1's are dropped
+        ask(few, w2->pane()->thumb_owner());
+        ask(many, w1->pane()->thumb_owner());
+        w1->pane()->set_path(home_path("own"));   // w1 moves on: its 300 are dropped, w2's 3 stay
+        int left = g_thumbs->pending_count();
+        bool came = wait_for([&]() { return made(few) == 3; }, 20000);
+        check(left <= 3 + 2 && came, QString("a pane moving to another folder cancels its own folder previews (%1 still "
+                                             "queued), not another window's (%2 of 3 made)").arg(left).arg(made(few)));
+        int moved_on = made(many);
+        spin(500);
+        check(made(many) <= moved_on + 2, "nothing more is made for the folder the pane left");
+
+        QStringList few2 = make_tree(home_path("own/few2"), 3), many2 = make_tree(home_path("own/many2"), 300);
+        ask(few2, w2->pane()->thumb_owner());
+        ask(many2, w1->pane()->thumb_owner());
+        int queued = g_thumbs->pending_count();
+        w1->close();
+        int at_close = made(many2);
+        left = g_thumbs->pending_count();
+        check(queued > 250 && at_close < 100 && left <= 3 + 2,
+              QString("closing a window cancels the folder previews it asked for (%1 queued, %2 made, %3 left)")
+                  .arg(queued).arg(at_close).arg(left));
+        check(wait_for([&]() { return made(few2) == 3; }, 20000), "another window's folder previews still come");
+        spin(500);
+        check(made(many2) <= at_close + 2,
+              QString("nothing more is made for the closed window (%1 at the close, %2 now)").arg(at_close).arg(made(many2)));
+        w2->close();
+        spin(100);
     }
 
 

@@ -384,7 +384,7 @@ QPixmap Filmstrip::thumb(const QString &path)
     if (it->first < 0)
         return QPixmap();
     asked.insert(path);
-    return tm->get(path, it->first, false, 128, it->second);
+    return tm->get(path, it->first, false, 128, it->second, this);
 }
 
 void Filmstrip::paintEvent(QPaintEvent *)
@@ -517,6 +517,14 @@ ViewerInfo::ViewerInfo(QWidget *parent) : QScrollArea(parent)
     QPalette pal = palette();
     pal.setColor(QPalette::Link, QColor("#7ab7ff"));   // the map link, readable on the dark panel
     setPalette(pal);
+}
+
+void ViewerInfo::wheelEvent(QWheelEvent *ev)
+{
+    // the scroll bar ignores a turn it can't use (the details fit, or they're at that end), which would then reach
+    // ImageViewer::wheelEvent and change the image
+    QScrollArea::wheelEvent(ev);
+    ev->accept();
 }
 
 void ViewerInfo::row(const QString &k, const QString &v, bool rich)
@@ -860,7 +868,7 @@ void ImageViewer::show_current()
         // for RAW photos), then the image itself
         QPixmap thumb;
         if (auto *tm = ThumbnailManager::instance(); tm && shown_bytes >= 0)
-            thumb = tm->get(path, qint64(st.st_mtime), false, 256, shown_bytes);
+            thumb = tm->get(path, qint64(st.st_mtime), false, 256, shown_bytes, this);
         if (thumb.isNull())
             canvas->clear_image("Loading…");
         else
@@ -1647,6 +1655,10 @@ void ImageViewer::wheelEvent(QWheelEvent *ev)
 {
     int dy = ev->angleDelta().y();
     if (!dy)
+        return;
+    // only the wheel over the picture or the filmstrip changes images: one that came up from the info panel (its
+    // scroll bar's ignores one at an end too) stays there
+    if (info->isVisible() && info->rect().contains(info->mapFrom(this, ev->position().toPoint())))
         return;
     wheel_acc += dy;   // smooth touchpads send small deltas
     if (std::abs(wheel_acc) >= 120) {

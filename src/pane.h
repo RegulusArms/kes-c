@@ -91,6 +91,8 @@ public:
     void start_search();
     void close_search(bool refocus = true, bool navigating = false);
     void stop_search();
+    void cancel_thumbs();   // drop the thumbnails and folder previews this pane asked for that no one else wants
+    const QObject *thumb_owner() const;   // whom its folder's thumbnails are asked for (ThumbnailManager::get)
     QStringList selected_paths() const;
     // the selected items as the view knows them (kind: KindRole's bits, -1 if it doesn't know; size: -1 likewise),
     // without asking the file system: on a busy tape, a stat waits until the drive gets there

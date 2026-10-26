@@ -30,27 +30,6 @@ into.
   - So something during a long session breaks that window's state. Still to find out: does the window follow the
     mouse until the next click, or jump away at once?
 
-- [ ] **A closed window's folder previews keep being made.** Seen: a window showing a folder of a few hundred
-  subfolders (folder previews on) was closed (its size and layout were saved then, so the close went through, past
-  the "Operations Running" question), yet new mosaics were still written to ~/.cache/kestrel-explorer/folders minutes
-  later, its process reading one subfolder after another.
-  - Found: the thumbnail and folder-preview queue belongs to the process (`g_thumbs`, src/thumbs.cpp: `pool`,
-    `dir_pool`), not to a window, and closing a window cancels nothing (`MainWindow::closeEvent` stops searches and
-    closes viewers; `Pane::~Pane` only stops a search). So while the process lives on, it works through everything the
-    closed window asked for (hundreds of mosaics: each lists its folder, picks 4 images spread across it and reads them).
-  - Why the process lived on wasn't seen (it had gone before it could be looked at). Not an exit waiting for the
-    queue: `g_thumbs` is never deleted, so no `~QThreadPool` waits for it, and nothing runs on Qt's global pool (which
-    `~QApplication` would wait for). Not the hidden "Operations Running" question either (the layout was saved).
-    Most likely another window of the same process (Ctrl+N windows share it) left open, minimised or on another
-    workspace; the Jobs and Tower windows close with their main window. Next time: `xdotool search --pid <pid>`
-    lists its windows, and `gdb -p <pid> -batch -ex 'thread apply all bt'` shows what it's doing.
-  - The other way round, too: a pane moving to another folder calls `cancel_pending()`, which empties the whole
-    process's queue, other windows' and tabs' requests included (they're asked again only when those views repaint).
-  - To change: requests with an owner (the pane that asked): a pane leaving a folder, closing, or its window closing
-    cancels its own (queued tasks skipped when no one wants them any more, `QThreadPool::tryTake` where it can), and
-    no one else's. Test: two windows of one process, one closed while its previews are queued: nothing more is made
-    for it, and the other window's previews still come.
-
 - [ ] **Tape copies: short dips left, and fewer questions to the drive.** Copies onto an LTFS tape used to drop to
   about a quarter of the drive's speed for long stretches; the cause was programs asking the tape for its free space
   (see Done). Still open:
@@ -60,62 +39,6 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
-- [ ] **The scroll wheel over the image viewer's info panel goes to the next image.** With the Info Panel (I) open,
-  turning the wheel over it changes the image instead of scrolling the panel.
-  - Likely cause: `ViewerInfo` (src/viewer.cpp) is a QScrollArea with no wheel handling of its own. Its scroll bar
-    ignores a wheel event it can't use (the panel's contents fit, or it's already at that end), so the event goes up
-    to `ImageViewer::wheelEvent`, which turns it into `navigate()`. Check whether it also happens mid-scroll.
-  - To change: the panel keeps every wheel event over it (scrolling when it can, otherwise nothing), so only the
-    wheel over the picture or the filmstrip changes images.
-
-- [ ] **A job queued behind another fails when its destination is moved while it waits, and its log looks like part
-  of the other job.** Seen: a copy of two files onto a tape ("Copying with dd") ran; a move on another drive ran;
-  then a "Copying" job of the *same two source files* into an unrelated folder failed with
-  `[Errno 2] No such file or directory: '<the folder>'` for each file. Investigated (2026-10-25): the jobs didn't mix.
-  The third was a job of its own, made while the tape copy ran, most likely **Paste Into Folder** on that folder's
-  right-click menu: the clipboard still held the files copied for the tape copy, and Paste Into Folder sits right
-  above Move To… (a misclick there is easy, and there's no confirmation). It read from the same drive as the tape copy,
-  so the queue held it ("Waiting for its turn"). Meanwhile the folder was moved into another folder (its parent's
-  time matches), so when its turn came the destination wasn't there. Kestrel does what it was told. What's wrong:
-  - **Nothing says what a job is or where it came from.** Both were titled "Copying", and the logs have no header.
-    The log should start with what started it (Paste Into Folder / drop / Copy To… / Move To…, which window),
-    when, from where to where, and how long it waited and for which job ("Waited 2 min for: Copying with dd onto
-    the tape"). The title should name the destination ("Copying 2 items to <folder>").
-  - **A destination that's gone when the job starts gives one error per file.** Check it when the turn comes and fail
-    once, clearly: "The folder it was copying into was moved or deleted while this job waited." Option: hold the
-    destination open (`O_PATH` fd) when the job is queued and copy with `openat`, so a job follows its folder when
-    it's moved (it ends up where the user put the folder), and fails clearly only when the folder is deleted.
-    Choose: follow the folder, or stop?
-  - **Paste Into Folder is easy to hit by mistake, and the paste may be stale.** Ideas: move it below Move To… /
-    Copy To… (or only in the empty space's menu), show what it would paste ("Paste 2 Items Into Folder"), and/or
-    forget a copy from the clipboard once it has been pasted somewhere.
-  - Test: `jobs` / `fileops` (a job queued behind another, its destination moved meanwhile: it follows it or fails
-    once with the clear message; the log header names the source, destination and the wait).
-
-- [ ] **A drive or mount sometimes doesn't show up in the sidebar right after it's mounted.** It comes later (on
-  some other refresh). Not because Kestrel polls and misses it. Nothing is polled, and it should stay that way. The
-  sidebar already listens to what the OS says:
-  - The kernel's mount table: `drives::MountWatch` (src/drives.cpp) uses GIO's `GUnixMountMonitor`, which waits on
-    `/proc/self/mountinfo`, and the kernel wakes it on every mount and unmount. `Sidebar` (src/widgets.cpp) restarts
-    `phone_timer` on that, then `refresh()` 300 ms later reads `drives::mounts()` afresh (`mounts_stale`).
-  - GIO's `GVolumeMonitor` (volume/mount added/removed/changed) for phones and network shares (gvfs, which gets them
-    from udisks2 over D-Bus, as GNOME Files does).
-  - So the event comes, and the gap must be in what happens after it. To find out first: **which kind of mount** was
-    late (a USB stick or disk under /media, a network share, a FUSE mount in the home folder, a tape, a phone), and
-    whether it was missing entirely or just named wrong.
-  - Leads: (1) the refresh runs 300 ms after the *first* event, and a mount can come in steps (udisks2 mounts, then
-    the udev symlinks such as /dev/disk/by-label appear, gvfs adds its mount object later still). If the last step
-    arrives after the timer has fired and nothing else fires, the sidebar shows an in-between state.
-    (2) `drives::mounts()` keeps its list for a second unless `mounts_stale` is set, and that flag is shared by every
-    caller (thumbnails, jobs, `drive_ids` on other threads). Check that one caller using up the flag can't leave the
-    sidebar with an older copy. (3) `g_unix_mount_monitor_get()` belongs to the GLib main context of the thread that
-    first calls it. If `MountWatch::instance()` is ever first made on a worker thread, its signal never comes.
-  - If the kernel's table really isn't enough: udisks2's D-Bus objects (`org.freedesktop.UDisks2`, `InterfacesAdded`
-    and the `MountPoints` property changing on a `Filesystem`) are the service that already knows each drive. They
-    send signals and don't need polling, but they only cover drives udisks2 manages.
-  - Test: `MountWatch::mounts_changed()` followed by a mount that only appears in `KESTREL_TEST_MOUNTS` a moment
-    later: the sidebar lists it without any other event.
-
 ## New features
 
 ### Jobs
@@ -124,9 +47,8 @@ into.
   Jobs window like any other job, instead of running unseen in `g_thumbs` (src/thumbs.cpp: `pool`, `dir_pool`).
   - One job per pane and folder that asked (e.g. "Thumbnails: Pictures/2024, 312 of 840"), with the window and
     folder it's for, progress, and Pause / Stop like other jobs. Stopping it leaves the thumbnails made so far.
-  - Ties in with the bug "A closed window's folder previews keep being made": requests get an owner (the pane), so
-    a pane closing or its window closing ends its own jobs, and `cancel_pending()` no longer empties every other
-    window's and tab's requests.
+  - Requests have owners already (0.3.2-alpha.14: `ThumbRequest`, `cancel_for`; a pane leaving a folder or closing
+    cancels its own), which a job per pane and folder can build on.
   - Decided: leaving a folder doesn't end its job, it lowers its priority: the folder being shown comes first, and the
     jobs of folders left behind run only when nothing newer is waiting (going back to a folder raises its job again).
     A lowered job times out after a few minutes (Preferences, default 3 minutes) and stops, keeping what it made, so
@@ -209,7 +131,6 @@ into.
     through: show "health not available" rather than nothing.
   - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
   - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
-
 
 - [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
   floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
@@ -441,6 +362,11 @@ into.
     wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
 
 ## Done
+
+- [x] **A closed window's folder previews kept being made** (fixed in 0.3.2-alpha.14). The queue (`ThumbnailManager`, src/thumbs.cpp) is the process's, and closing a window cancelled nothing; moving to another folder ran `cancel_pending()`, which emptied every window's requests. Now each request (`ThumbRequest`) has owners: whoever asked (a pane's `FSModel` and `SearchModel`, the `InfoPanel`, the viewer's canvas and filmstrip, Properties, a bookmark card). `cancel_for(owner)` drops what no one else wants: `QThreadPool::tryTake` while it's queued (a pointer kept only until the job starts, under `run_lock`, so it's never stale), otherwise skipped when its turn comes; one already being made is finished and cached. `Pane::cancel_thumbs` on leaving a folder and in `~Pane`, `MainWindow::closeEvent` for its panes and info panel, and an owner's `destroyed()` for the rest. `cancel_pending()` stays for everyone's (previews turned off, the caches deleted). Why the process lived on wasn't seen; most likely another window of it. Test: `theme`.
+- [x] **The scroll wheel over the image viewer's info panel went to the next image** (fixed in 0.3.2-alpha.14). The panel's scroll bar ignores a turn it can't use (the details fit, or at an end; mid-scroll it was fine), and Qt passed it on to `ImageViewer::wheelEvent`. `ViewerInfo::wheelEvent` now keeps every one, and the viewer ignores a turn over the panel (one from its scroll bar comes up another way). Test: `viewer`.
+- [x] **A job queued behind another failed per file when its destination was moved while it waited, and nothing said what it was** (fixed in 0.3.2-alpha.14; investigated 2026-10-25: most likely Paste Into Folder by mistake, with the files copied for a tape copy still on the clipboard). Titles name what goes where (`fileops::transfer_title`: "Copying 2 items to Photos (with dd)"). The log starts with `Task::intro` (what started it, given by `transfer`'s `how`: Paste, Paste Into Folder, Drop, Copy To…, Move To…, the image viewer; the window's title; the time; From / To) and, after a wait of a second or more, "Waited 2 min for: …" (the jobs ahead in its lanes when it was queued, `Queue::submit`). `start_ops` checks the destination folders when the turn comes and fails once ("…isn't there any more: it was moved or deleted while this job waited. Nothing was copied."). Decided: stop, not follow the folder (an O_PATH fd and openat in every copy path). Decided: copied files are forgotten once pasted (`MainWindow::paste`, not paths copied as text); Paste Into Folder keeps its place and name. Test: `jobs`.
+- [x] **A drive or mount sometimes showed in the sidebar only later** (fixed in 0.3.2-alpha.14; which kind was late wasn't found out). Found in the code: every change restarted the 300 ms timer, so changes coming faster than that (containers, an automounter) put the refresh off until they stopped; and a step with no event of its own after the refresh (udev's by-label link: an empty label was also cached until the next change) was missed. Now `Sidebar::drives_changed` refreshes 300 ms after the first change of a burst, then `check_mounts` 1 s and 3 s after the last (`drives::reread_mounts`, the mount table only; nothing is asked, nothing polled); an empty label isn't cached. The shared `mounts_stale` flag was fine (whoever uses it reads a table that has the change). `MountWatch` now attaches GIO's monitor to the default main context and lives on the UI thread, whichever thread makes it first. Test: `sidebar`.
 
 - [x] **Dragging 800+ selected folders into another folder froze the window for several seconds** (fixed in 0.3.2-alpha.13; not grouped, same drive, the desktop offered to force quit). Cause: each folder leaving the view deselects it, and every selection change ran `MainWindow::update_status`, which counted the whole selection through `Pane::selected_paths()`, whose duplicate check was a list search over every row × column index (quadratic per call, so cubic in all). Now `selected_paths` uses a set, and the status line is updated once per burst (30 ms single-shot); the file chooser's update stays immediate (its OK button follows it). Measured in a CI-like container with 1,500 folders: the window held 5.7 s before, about 0.4 s now. Not changed: date grouping's full regroup per removed row (`DateGroupProxy::after`), still quadratic for big grouped folders. Test: `ui`.
 - [x] **Kestrel froze when Open as Archive finished reading a big archive** (fixed in 0.3.2-alpha.13). Cause: `show_entries` built the QTreeWidget items (icons, dates, sorting) on the UI thread, about 1.9 s per 100,000 files. Now `ArchiveWindow::Listing::build` makes them in the reading job, sorted there (QCollator sort keys), icons looked up in `EntryItem::data` only for drawn rows; the tree isn't kept sorted (the header's clicks sort it) so adding them doesn't re-sort. The listing itself was slow too: `QDateTime::fromString` (~0.2 ms each) replaced by a hand parser in `archive.cpp` `parse_time`, and listings no longer run under `stdbuf -o0`. Test: `archives`.

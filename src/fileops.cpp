@@ -69,6 +69,8 @@ static thread_local Task *running_task = nullptr;
 
 Task *Task::current() { return running_task; }
 
+qint64 Task::now_ms() { return monotonic_ms(); }
+
 qint64 Task::elapsed_ms() const { return started_ms ? monotonic_ms() - started_ms : 0; }
 
 void Task::cancel()
@@ -180,6 +182,11 @@ void Task::run()
     running_task = this;
     proc::set_watcher(this);
     started_ms = monotonic_ms();
+    for (const QString &line : intro)
+        log(line);
+    if (queued_ms && started_ms - queued_ms >= 1000)
+        log("Waited " + fileops::wait_text(started_ms - queued_ms) +
+            (waited_for.isEmpty() ? QString() : " for: " + waited_for.join("; ")));
     try {
         check();   // cancelled while it waited in the queue: it ends at once
         res = fn(this);
@@ -537,11 +544,12 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
 }
 
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done,
-                bool cancellable, const QStringList &steps, bool quiet)
+                bool cancellable, const QStringList &steps, bool quiet, const QStringList &intro)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
     t->paths = paths;
     t->steps = steps;
+    t->intro = intro;
     QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
@@ -1521,8 +1529,41 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
         paths);
 }
 
+QString wait_text(qint64 ms)
+{
+    qint64 s = (ms + 500) / 1000;
+    if (s < 60)
+        return QString("%1 s").arg(s);
+    if (s < 3600)
+        return s % 60 ? QString("%1 min %2 s").arg(s / 60).arg(s % 60) : QString("%1 min").arg(s / 60);
+    return (s / 60) % 60 ? QString("%1 h %2 min").arg(s / 3600).arg((s / 60) % 60) : QString("%1 h").arg(s / 3600);
+}
+
+QString transfer_title(const QStringList &sources, const QString &dest_dir, const QString &op, bool dd)
+{
+    QString what = sources.size() == 1 ? "“" + basename(rstrip(sources.first(), '/')) + "”"
+                                       : QString("%1 items").arg(sources.size());
+    QString to = basename(rstrip(dest_dir, '/'));
+    return QString(op == "copy" ? "Copying " : "Moving ") + what + " to " + (to.isEmpty() ? dest_dir : to) +
+           (dd ? " (with dd)" : "");
+}
+
+// The folders the jobs write into that aren't there (any more): a destination moved or deleted while the job waited
+static QStringList missing_destinations(const QList<Job> &jobs)
+{
+    QStringList out;
+    for (const Job &j : jobs) {
+        if (j.dst.isEmpty() || j.op == "delete")
+            continue;
+        QString dir = dirname(j.dst);
+        if (!out.contains(dir) && !isdir(dir))
+            out << dir;
+    }
+    return out;
+}
+
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done,
-                const QString &undo_label)
+                const QString &undo_label, const QStringList &intro)
 {
     if (jobs.isEmpty())
         return nullptr;
@@ -1575,6 +1616,16 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             on_done();
     };
     auto work = [ops, jobs](Task *task) {
+        // checked when its turn comes: one clear failure, not one "No such file or directory" for each item
+        QStringList gone = missing_destinations(jobs);
+        if (!gone.isEmpty()) {
+            bool moving = std::all_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.op.contains("move"); });
+            throw Error(QString("The folder it was %1 into, “%2”, isn't there any more: it was moved or deleted %3. "
+                                "Nothing was %4.")
+                            .arg(moving ? "moving" : "copying", gone.first(),
+                                 task->queued_ms ? "while this job waited" : "before this job began",
+                                 moving ? "moved" : "copied"));
+        }
         *ops = std::make_unique<Ops>(task, jobs);
         QStringList errors = (*ops)->run();
         task->log(errors.isEmpty() ? QString("Finished.") : QString("Finished, with %1 error(s).").arg(errors.size()));
@@ -1590,7 +1641,7 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
     }
     paths.removeAll(QString());
-    return queue_job(parent, title, paths, work, finished, true, steps);
+    return queue_job(parent, title, paths, work, finished, true, steps, false, intro);
 }
 
 namespace {
@@ -1777,17 +1828,32 @@ void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<v
 }
 
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
-              std::function<void()> on_done)
+              std::function<void()> on_done, const QString &how, std::function<void()> on_started)
 {
     QPointer<QWidget> owner(parent);
-    plan_transfer(parent, sources, dest_dir, op, [owner, op, on_done](const QList<Job> &planned) {
+    // what started it, when (asked now: the conflict and tape questions may stay open a while)
+    QString window = parent ? parent->window()->windowTitle() : QString();
+    QStringList from;
+    for (const QString &s : sources)
+        if (!from.contains(dirname(abspath(s))))
+            from << dirname(abspath(s));
+    QStringList intro{QString(op == "copy" ? "Copy" : "Move") + " of " +
+                          (sources.size() == 1 ? QString("1 item") : QString("%1 items").arg(sources.size())) +
+                          ", started by " + (how.isEmpty() ? QString("Kestrel") : how) +
+                          (window.isEmpty() ? QString() : " in the window “" + window + "”") + " at " +
+                          QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"),
+                      "From: " + from.join(", "), "To: " + dest_dir};
+    plan_transfer(parent, sources, dest_dir, op, [owner, sources, dest_dir, op, on_done, intro, on_started](const QList<Job> &planned) {
         if (planned.isEmpty())
             return;
-        choose_tape_writer(owner, planned, [owner, op, on_done](const QList<Job> &jobs) {
+        choose_tape_writer(owner, planned, [owner, sources, dest_dir, op, on_done, intro, on_started](const QList<Job> &jobs) {
             bool dd = std::any_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.dd; });
-            QString title = QString(op == "copy" ? "Copying" : "Moving") + (dd ? " with dd" : "");
-            if (owner)   // (re-read: the window may have closed while the question was open)
-                start_ops(owner, jobs, title, on_done, op == "copy" ? "Copy" : "Move");
+            if (!owner)   // (re-read: the window may have closed while the question was open)
+                return;
+            start_ops(owner, jobs, transfer_title(sources, dest_dir, op, dd), on_done, op == "copy" ? "Copy" : "Move",
+                      intro);
+            if (on_started)
+                on_started();
         });
     });
 }

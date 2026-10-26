@@ -496,10 +496,20 @@ void Pane::set_type_filter(const QStringList &globs)
 
 Pane::~Pane()
 {
+    cancel_thumbs();
     if (search_thread) {
         search_thread->stop = true;
         search_thread->wait();
     }
+}
+
+const QObject *Pane::thumb_owner() const { return model; }
+
+void Pane::cancel_thumbs()
+{
+    // only this pane's: other tabs and windows of this process keep theirs
+    thumbs->cancel_for(model);
+    thumbs->cancel_for(search_model);
 }
 
 // -- setup
@@ -1035,7 +1045,7 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         close_search(false, true);
     path = p;
     stack->setCurrentWidget(mode_view);
-    thumbs->cancel_pending();
+    cancel_thumbs();
     animator->clear();
     model->setNameFilters(type_filters);
     QModelIndex src_root = model->setRootPath(p);

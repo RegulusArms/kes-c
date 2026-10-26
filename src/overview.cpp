@@ -749,7 +749,7 @@ void BookmarkCard::update_pic()
 {
     if (local && isdir(target)) {
         QFileInfo fi(target);
-        pic->setPixmap(thumbs->scaled(thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128), 128));
+        pic->setPixmap(thumbs->scaled(thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128, true, this), 128));
         return;
     }
     // A network location (mounted when opened), or one that isn't there: a drive that isn't connected, or a folder

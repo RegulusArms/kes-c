@@ -8,9 +8,11 @@
 #include "towerwin.h"
 #include "windiag.h"
 
+#include <QClipboard>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -225,6 +227,60 @@ int main(int argc, char **argv)
               done.last().log.contains("Copy s2.txt → ") && done.last().log.contains("done") &&
               done.last().log.contains("Finished."),
           "a finished job is kept with its log: each step, how it went, and the end");
+
+    // ---- a paste queued behind another job: its title and log say what it is (what started it, in which window,
+    // from where to where, what it waited for); its destination moved meanwhile, it fails once, clearly
+    {
+        makedirs(home_path("pq-dest"), true);
+        makedirs(home_path("pq-elsewhere"), true);
+        write_text(home_path("pq1.txt"), "1");
+        write_text(home_path("pq2.txt"), "2");
+        auto *md = new QMimeData;
+        md->setData("x-special/gnome-copied-files",
+                    ("copy\n" + file_uri(home_path("pq1.txt")) + "\n" + file_uri(home_path("pq2.txt"))).toUtf8());
+        QGuiApplication::clipboard()->setMimeData(md);
+        *held = true;
+        h = holder(w, "Holding the drive", HOME(), held);
+        spin(150);
+        w->paste(home_path("pq-dest"));   // Paste Into Folder on it
+        QPointer<Task> pq;
+        wait_for([&]() {
+            for (Task *t : w->task_panel->tasks)
+                if (t->title == "Copying 2 items to pq-dest")
+                    pq = t;
+            return pq;
+        });
+        check(pq && pq->queued, "a copy's title names how much it copies and where to (" +
+                                    (pq ? pq->title : QString("no such job")) + ")");
+        check(w->read_clipboard().second.isEmpty(), "copied files are forgotten once pasted (no second paste of them by "
+                                                    "mistake)");
+        ::rename(enc(home_path("pq-dest")).constData(), enc(home_path("pq-elsewhere/pq-dest")).constData());
+        spin(1100);   // a wait the log mentions (from 1 s)
+        *held = false;
+        check(wait_for([&]() { return !pq; }), "...it runs once the drive is free");
+        wait_for([]() { return shown_window<QMessageBox>() != nullptr; }, 3000);
+        spin(200);   // (a message for each item would come together)
+        QStringList shown;
+        for (QWidget *top : QApplication::topLevelWidgets())
+            if (auto *box = qobject_cast<QMessageBox *>(top); box && box->isVisible()) {
+                if (box->windowTitle().startsWith("Copying"))
+                    shown << box->text();
+                box->close();
+            }
+        const FinishedTask &f = done.last();
+        QString msg = shown.value(0);
+        check(shown.size() == 1 && msg.contains("“" + home_path("pq-dest") + "”, isn't there any more") &&
+                  msg.contains("while this job waited") && !msg.contains("No such file") && f.state == "failed" &&
+                  !exists(home_path("pq-elsewhere/pq-dest/pq1.txt")),
+              "a copy whose destination was moved while it waited fails once, saying so, and copies nothing (" +
+                  shown.join(" | ") + ")");
+        check(f.log.contains("Copy of 2 items, started by Paste Into Folder in the window “" + w->windowTitle() + "” at ") &&
+                  f.log.contains("From: " + HOME()) && f.log.contains("To: " + home_path("pq-dest")) &&
+                  f.log.contains(QRegularExpression("Waited [12] s for: Holding the drive")) &&
+                  f.log.indexOf("From: ") < f.log.indexOf("Waited"),
+              "its log starts with what started it, in which window and when, from where to where, and how long it "
+              "waited for which job:\n" + f.log.left(400));
+    }
 
     // ---- the Jobs window: opened from the status bar's job panel, every job, its log, Delete cancels
     *held = true;

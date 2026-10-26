@@ -243,7 +243,7 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
     };
     cb.on_undo = [this](std::function<void()> after) { undo::undo(this, after); };
     cb.on_transfer = [this](const QString &path, const QString &folder, const QString &op) {
-        fileops::transfer(this, {path}, folder, op);
+        fileops::transfer(this, {path}, folder, op, nullptr, op == "move" ? "the image viewer's Move" : "the image viewer's Copy");
     };
     auto *v = new ImageViewer(images, idx, cb);
     *viewer_ptr = v;

@@ -2,7 +2,33 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.13
+## 0.3.2-alpha.14
+
+- **Fixed: a closed window's folder previews kept being made.** Thumbnails and folder previews are made by one queue
+  for all of a Kestrel's windows, and closing a window took nothing out of it. With another window still open, the
+  closed one's hundreds of folder previews went on being made, reading one folder after another, for minutes. Each
+  window, tab, viewer and info panel now asks for its own, and closing it, or moving to another folder, cancels what
+  it asked for. That also fixes the other way round: moving to another folder dropped every window's previews still
+  waiting, not just its own.
+- **Fixed: the scroll wheel over the image viewer's info panel went to the next image.** It now scrolls the panel,
+  and does nothing when the panel has nowhere left to scroll. Only the wheel over the picture or the filmstrip changes
+  images.
+- **A job says what it is and where it came from.** A copy or move is titled with what it copies and where to
+  ("Copying 2 items to Photos", "Copying “a.txt” to Backup (with dd)"), not just "Copying". Its log in the Jobs window
+  starts with what started it (Paste, Paste Into Folder, a drop, Copy To…, Move To…, the image viewer), in which
+  window and when, from where to where, and, if it had to wait, for how long and for which jobs.
+- **Fixed: a job whose destination was moved while it waited gave one error for each file.** A copy or move queued
+  behind another job now checks its destination folder when its turn comes. If the folder was moved or deleted in the
+  meantime, the job fails once with a message saying so, and nothing is copied.
+- **Copied files are forgotten once pasted.** After a paste of copied files (Paste or Paste Into Folder), the clipboard
+  is cleared, so an old copy can't be pasted again by a slip of the mouse. To paste the same files somewhere else, copy
+  them again. Cut and paste already worked this way. Paths copied as text are left alone.
+- **Fixed: a drive or mount sometimes showed in the sidebar only later.** Mount changes coming in quick succession (a
+  container starting, an automounter) put off the sidebar's update until they stopped. It now updates within a
+  second, and checks again a little later (from the mount table, asking no drive anything) for a mount that settles
+  after the first update, or whose label appears late.
+
+## 0.3.2-alpha.13 (2026-10-25)
 
 - **Fixed: Kestrel froze for a while when Open as Archive finished reading a big archive.** The window's list was
   built all at once on the UI thread, which held up every Kestrel window for 1–2 seconds per 100,000 files. It's now

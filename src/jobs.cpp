@@ -111,6 +111,12 @@ void Queue::submit(Task *t)
         t->start();
         return;
     }
+    // for its log, if it has to wait: the jobs ahead of it in its lanes (every Kestrel's), or all of them one at a time
+    bool one = mode() == "one";
+    for (const Job &j : jobs())
+        if (one || std::any_of(j.drives.begin(), j.drives.end(), [&ids](const QString &d) { return ids.contains(d); }))
+            t->waited_for << j.title;
+    t->queued_ms = Task::now_ms();
     Local l;
     l.task = t;
     l.drives = ids;

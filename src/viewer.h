@@ -140,6 +140,9 @@ public:
 Q_SIGNALS:
     void details_loaded();
 
+protected:
+    void wheelEvent(QWheelEvent *ev) override;   // kept: scrolls the panel, never goes on to change the image
+
 private:
     void row(const QString &k, const QString &v, bool rich = false);
     void clear_rows();

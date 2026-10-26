@@ -20,6 +20,7 @@
 
 #include <atomic>
 #include <list>
+#include <memory>
 
 namespace thumbs {
 
@@ -71,17 +72,34 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared = false);
 
 }  // namespace thumbs
 
+// One thumbnail or folder preview being made (ThumbnailManager::pending), and who asked for it.
+struct ThumbRequest {
+    quint64 id = 0;
+    QSet<const QObject *> owners;   // the views that asked (a pane's models, an info panel, a viewer…)
+    bool shared = false;            // also asked for without an owner: only cancel_pending() drops it
+    QThreadPool *pool = nullptr;
+    QRunnable *queued = nullptr;    // until it starts running (guarded by ThumbnailManager::run_lock)
+    std::atomic<bool> cancelled{false};   // no one wants it any more: skipped if it hasn't started
+};
+
 class ThumbnailManager : public QObject {
     Q_OBJECT
 public:
     explicit ThumbnailManager(QObject *parent = nullptr);
     static ThumbnailManager *instance();   // the app's manager (the first one created)
 
-    // a pixmap if ready; otherwise schedule generation and return a null pixmap
-    QPixmap get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize = 0);
-    QIcon get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize = 0);
+    // a pixmap if ready; otherwise schedule generation and return a null pixmap. owner: who wants it (cancel_for;
+    // dropped when it's destroyed); nullptr for a request only cancel_pending() drops
+    QPixmap get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize = 0,
+                const QObject *owner = nullptr);
+    QIcon get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize = 0,
+                   const QObject *owner = nullptr);
     QPixmap scaled(const QPixmap &pm, int size);   // cached smooth downscale to fit size x size
-    void cancel_pending();
+    void cancel_pending();   // everyone's (previews turned off, the caches deleted)
+    // What owner asked for and no one else still wants: taken out of the queue, or skipped when its turn comes (one
+    // already being made is finished and cached). Other owners' requests stay.
+    void cancel_for(const QObject *owner);
+    int pending_count() const { return int(pending.size()); }
     void invalidate(const QString &path, bool disk = true);   // disk=false keeps the cached mosaic on disk
     void clear_memory();
     void reload_styles();   // re-read covers and folder styles (another Kestrel changed them)
@@ -97,7 +115,8 @@ public:
     QPixmap plain_folder(const QString &color, int size, const QString &symbol = QString());
     // What to draw for a folder: its preview mosaic (in its colour), else a plain folder in its colour. previews=false
     // skips the mosaic and gives a plain folder only in a custom colour, else a null pixmap for the theme's icon.
-    QPixmap folder_pixmap(const QString &path, qint64 mtime, int size, bool previews = true);
+    QPixmap folder_pixmap(const QString &path, qint64 mtime, int size, bool previews = true,
+                          const QObject *owner = nullptr);
     QHash<QString, QVariantMap> styles;
 
     QHash<QString, QString> covers;
@@ -112,11 +131,13 @@ public:
 Q_SIGNALS:
     void updated(const QString &path);
     void progress(int done, int total);   // for the current batch (0, 0 = idle)
-    void job_done(const QString &key, const QString &path, const QImage &img, qint64 mtime, bool is_dir);
+    void job_done(const QString &key, const QString &path, const QImage &img, qint64 mtime, bool is_dir, quint64 id);
 
 private:
     QString key(const QString &path, qint64 mtime, bool is_dir, int size) const;
-    void on_done(const QString &key, const QString &path, const QImage &img, qint64 mtime, bool is_dir);
+    void on_done(const QString &key, const QString &path, const QImage &img, qint64 mtime, bool is_dir, quint64 id);
+    void add_owner(ThumbRequest &req, const QObject *owner);
+    void drop(const std::shared_ptr<ThumbRequest> &req);
     void schedule_progress();
     void emit_progress();
     void load_covers();
@@ -130,7 +151,10 @@ private:
     std::list<std::pair<QString, QPixmap>> lru;   // most recently used at the back
     QHash<QString, std::list<std::pair<QString, QPixmap>>::iterator> cache;
     QHash<QString, QIcon> icons;
-    QSet<QString> pending;
+    QHash<QString, std::shared_ptr<ThumbRequest>> pending;   // by key
+    QSet<const QObject *> watched;   // owners whose destroyed() cancels their requests
+    QMutex run_lock;
+    quint64 next_id = 0;
     int prio = 0;
     QHash<QPair<qint64, int>, QPixmap> scaled_cache;
     QQueue<QPair<qint64, int>> scaled_order;

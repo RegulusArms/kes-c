@@ -80,10 +80,10 @@ QPixmap FSModel::thumb(const QModelIndex &index) const
     QString path = fi.absoluteFilePath();
     qint64 mtime = fi.lastModified().toSecsSinceEpoch();
     if (fi.isDir())
-        return thumbs->folder_pixmap(path, mtime, thumb_size, folder_previews);
+        return thumbs->folder_pixmap(path, mtime, thumb_size, folder_previews, this);
     if (!thumbs::can_thumbnail(path))
         return QPixmap();
-    return thumbs->get(path, mtime, false, thumb_size, fi.size());
+    return thumbs->get(path, mtime, false, thumb_size, fi.size(), this);
 }
 
 QIcon FSModel::plain_icon(const QModelIndex &index) const
@@ -367,9 +367,9 @@ QVariant SearchModel::data(const QModelIndex &index, int role) const
         bool is_dir = st.value(0).toBool();
         QPixmap pm;
         if (is_dir)
-            pm = thumbs->folder_pixmap(path, st.value(1).toLongLong(), thumb_size, folder_previews);
+            pm = thumbs->folder_pixmap(path, st.value(1).toLongLong(), thumb_size, folder_previews, this);
         else if (thumbs::can_thumbnail(path))
-            pm = thumbs->get(path, st.value(1).toLongLong(), false, thumb_size, st.value(2).toLongLong());
+            pm = thumbs->get(path, st.value(1).toLongLong(), false, thumb_size, st.value(2).toLongLong(), this);
         if (role == ThumbRole)
             return pm.isNull() ? QVariant() : QVariant(pm);
         return pm.isNull() ? QVariant(icon_for_path(path, is_dir)) : QVariant(QIcon(pm));
@@ -1069,6 +1069,13 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     phone_timer.setSingleShot(true);
     phone_timer.setInterval(300);
     connect(&phone_timer, &QTimer::timeout, this, &Sidebar::refresh);
+    settle_timer.setSingleShot(true);
+    connect(&settle_timer, &QTimer::timeout, this, [this]() {
+        drives::reread_mounts();   // (not the copy mounts() keeps for a second)
+        check_mounts();
+        if (++settle_step < 2)
+            settle_timer.start(2000);   // 1 s, then 3 s after the last change
+    });
     setIconSize(QSize(18, 18));
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -1083,7 +1090,7 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     refresh();
     on_palette_change(this, [this]() { refresh(); });   // the headers' colour is set per item
     // drives come and go: the kernel says so (MountWatch; GIO's monitor above for phones), nothing is polled
-    connect(drives::MountWatch::instance(), &drives::MountWatch::changed, this, [this]() { phone_timer.start(); });
+    connect(drives::MountWatch::instance(), &drives::MountWatch::changed, this, &Sidebar::drives_changed);
     connect(drives::Sizes::instance(), &drives::Sizes::changed, this, &Sidebar::check_mounts);   // a size or tape name came
 }
 
@@ -1093,7 +1100,18 @@ Sidebar::~Sidebar()
     g_object_unref(monitor);
 }
 
-void Sidebar::monitor_changed(void *, void *, void *self) { static_cast<Sidebar *>(self)->phone_timer.start(); }
+void Sidebar::monitor_changed(void *, void *, void *self) { static_cast<Sidebar *>(self)->drives_changed(); }
+
+void Sidebar::drives_changed()
+{
+    // made again 300 ms after the first change of a burst, not the last: changes coming faster than that (containers
+    // or an automounter mounting one thing after another) would otherwise hold it off until they stop. One that
+    // comes after the refresh starts the timer again.
+    if (!phone_timer.isActive())
+        phone_timer.start();
+    settle_step = 0;
+    settle_timer.start(1000);
+}
 
 // ---------------------------------------------------------------- sidebar order
 
@@ -1896,9 +1914,9 @@ void InfoPanel::set_preview()
     int size = std::max(160, std::min(viewport()->width() - 24, 512));
     QPixmap pm;
     if (is_dir)
-        pm = thumbs->folder_pixmap(path, mtime, 512, folder_previews);
+        pm = thumbs->folder_pixmap(path, mtime, 512, folder_previews, this);
     else if (thumbs::can_thumbnail(path))
-        pm = thumbs->get(path, mtime, false, 512, fsize);
+        pm = thumbs->get(path, mtime, false, 512, fsize, this);
     if (!pm.isNull())
         preview->setPixmap(thumbs->scaled(pm, size));
     else

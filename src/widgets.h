@@ -336,6 +336,11 @@ private:
     QList<DriveInfo> phones;   // phones and cameras (GIO)
     QList<DriveInfo> shares;   // network shares mounted through GVFS (GIO)
     QTimer phone_timer;   // a change to the drives (GIO, MountWatch): the list made again, once, shortly after
+    // ...and checked again a little later (check_mounts), for the steps of a mount that come after the refresh with no
+    // event of their own (udev's by-label link, a mount that settles a moment later)
+    QTimer settle_timer;
+    int settle_step = 0;
+    void drives_changed();
     GVolumeMonitor *monitor = nullptr;
     QPoint press_pos;
     QPersistentModelIndex press_index;

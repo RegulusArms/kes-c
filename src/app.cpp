@@ -1612,8 +1612,13 @@ void MainWindow::closeEvent(QCloseEvent *ev)
     set_view_value("splitter", split->saveState());
     if (chooser)
         chooser->finish(false);   // closed without choosing: cancelled
-    for (Pane *p : panes())
+    // the thumbnails and folder previews it asked for (the queue is the process's, which other windows may keep
+    // running): none made for it from here on
+    for (Pane *p : panes()) {
         p->stop_search();
+        p->cancel_thumbs();
+    }
+    thumbs->cancel_for(info);
     for (const auto &v : viewers)
         if (v)
             v->close();

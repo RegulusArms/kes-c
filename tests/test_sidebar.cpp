@@ -4,6 +4,8 @@
 #include "drives.h"
 #include "proc.h"
 
+#include <QElapsedTimer>
+
 using namespace test;
 
 int main(int argc, char **argv)
@@ -178,6 +180,36 @@ int main(int argc, char **argv)
     drives::MountWatch::instance()->mounts_changed();
     bool goes = wait_for([&]() { return !s->entry_keys("devices").contains(arrived); }, 3000);
     check(shows && goes, "a drive mounted shows in the sidebar, and one unmounted goes, as soon as the mount table changes");
+    // a mount that comes in steps: the kernel's event first, the mount in the table only after the sidebar's refresh
+    // has run, and nothing else said (udev's by-label link and the like have no event)
+    QString late = "/media/" + user + "/kestrel-late";
+    drives::MountWatch::instance()->mounts_changed();
+    spin(600);   // the refresh has run, without it
+    bool not_yet = !s->entry_keys("devices").contains(late);
+    qputenv("KESTREL_TEST_MOUNTS", (late + "|vfat|/dev/kestrel-late").toUtf8());
+    bool late_shows = wait_for([&]() { return s->entry_keys("devices").contains(late); }, 4000);
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    wait_for([&]() { return !s->entry_keys("devices").contains(late); }, 3000);
+    check(not_yet && late_shows, "a mount that's in the table only a moment after the event still shows, with no other "
+                                 "event");
+    // mount changes coming faster than the refresh's 300 ms (containers, an automounter) don't hold it off
+    QString busy = "/media/" + user + "/kestrel-busy";
+    qputenv("KESTREL_TEST_MOUNTS", (busy + "|vfat|/dev/kestrel-busy").toUtf8());
+    QElapsedTimer stream;
+    stream.start();
+    bool during = false;
+    while (stream.elapsed() < 2500 && !during) {
+        drives::MountWatch::instance()->mounts_changed();
+        spin(100);
+        during = s->entry_keys("devices").contains(busy);
+    }
+    qint64 took = stream.elapsed();
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    wait_for([&]() { return !s->entry_keys("devices").contains(busy); }, 3000);
+    check(during && took < 1000, QString("a drive mounted shows within a second while other mounts keep changing (%1 ms)")
+                                     .arg(took));
     QString disk;   // a real block device, if this machine has one mounted
     for (const drives::Mount &mt : drives::mounts())
         if ((mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd")) &&

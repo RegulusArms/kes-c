@@ -53,8 +53,12 @@ public:
     QStringList steps;    // what it's going to do, for the Jobs window (e.g. each item of a copy)
     std::atomic<int> step{-1};   // the step it's on
     qint64 started_ms = 0;       // when its thread started (the job queue let it run)
+    qint64 queued_ms = 0;        // when it went into the job queue to wait (0: it started at once)
+    QStringList waited_for;      // the jobs ahead of it on its drives then (titles), for its log
+    QStringList intro;           // its log's first lines: what started it, when, from where to where
     bool failed = false;         // ended with an error
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
+    static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
 
     void cancel();
     void check();   // throws Cancelled; waits here while paused
@@ -189,8 +193,10 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done =
 // The same for a job that reads or writes drives: it waits in the job queue (jobs.h) for lanes on the drives of
 // `paths` before its thread starts, so it doesn't compete with other jobs on them (in any Kestrel). `steps`: what it's
 // going to do, listed in the Jobs window (it sets task->step as it goes).
+// intro: the first lines of its log (Task::intro).
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done = nullptr,
-                bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false);
+                bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false,
+                const QStringList &intro = QStringList());
 // Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet.
 Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done = nullptr,
                bool quiet = false);
@@ -210,8 +216,10 @@ struct Job {
 // into existing folders and copies that replaced something can't (what was replaced is gone): the status bar says so,
 // and when nothing else in the job can be undone an entry that can't be is recorded, so Ctrl+Z doesn't undo the action
 // before it instead.
+// A copy or move whose destination folder isn't there when its turn comes (moved or deleted while it waited) fails
+// at once, with one message, before anything is written. intro: its log's first lines (Task::intro).
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
-                const QString &undo_label = QString());
+                const QString &undo_label = QString(), const QStringList &intro = QStringList());
 
 // Resolve conflicts interactively (a window for each, answered one after another); planned(jobs) then runs with the
 // job list for start_ops, unless the user cancels or parent is closed meanwhile.
@@ -220,8 +228,16 @@ void plan_transfer(QWidget *parent, const QStringList &sources, const QString &d
 // Jobs writing files onto a tape: by Kestrel's buffered copy or by dd (Job::dd), as Preferences say (tape_writer), or as
 // asked in a free window; go(jobs) runs with the choice made (not at all when the question is cancelled).
 void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<void(const QList<Job> &)> go);
+// Copy or move sources into dest_dir (plan_transfer, choose_tape_writer, start_ops). how: what the user did ("Paste
+// Into Folder", "Drop", "Move To…"), for the job's log, which also names the window, the time, and from where to where.
+// on_started: once the job is made (not when planning was cancelled).
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
-              std::function<void()> on_done = nullptr);
+              std::function<void()> on_done = nullptr, const QString &how = QString(),
+              std::function<void()> on_started = nullptr);
+// The job's title: "Copying “a.txt” to Photos", "Moving 3 items to Backup (with dd)"
+QString transfer_title(const QStringList &sources, const QString &dest_dir, const QString &op, bool dd);
+// "45 s", "2 min 5 s", "1 h 3 min"
+QString wait_text(qint64 ms);
 
 // Copy files from a device (needs_local_copy) into ~/.cache/kestrel-explorer/device-files, as a busy task ("will
 // launch once ready") with Cancel, then call on_done(local paths) on the UI thread (not after a cancel or an error). A copy is reused while its

@@ -4,6 +4,24 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.14
+
+Added:
+- `theme`: two windows of one Kestrel asking for folder previews (300 folders for one, 3 for the other). One window
+  moving to another folder drops its own requests and not the other's; then a window closing with its previews still
+  queued gets nothing more made, while the other window's still come. Guards against the queue belonging to no one
+  (previews went on being made for a closed window, and moving to another folder dropped every window's).
+- `viewer`: the wheel over the info panel, at its top where it can't scroll, is kept by the panel and doesn't change
+  the image, while the wheel over the picture still goes to the next one. Guards against the scroll bar passing an
+  unused wheel turn on to the viewer.
+- `jobs`: Paste Into Folder queued behind another job on the same drive, its destination moved while it waits. The
+  title names how much it copies and where to; the copied files are gone from the clipboard once pasted; it fails
+  with one message saying the folder was moved while it waited, and copies nothing; its log starts with what started
+  it, in which window and when, from where to where, and how long it waited for which job.
+- `sidebar`: a mount that's in the mount table only after the sidebar's refresh, with no further event, still shows;
+  and a drive mounted while mount changes keep coming every 100 ms shows within a second. Guards against the
+  sidebar's update being put off by a stream of changes, or missing a mount's later steps.
+
 ## 0.3.2-alpha.13
 
 Added:

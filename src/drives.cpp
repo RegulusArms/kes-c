@@ -60,6 +60,8 @@ static Slow kind_of(const Mount &mt);
 static std::atomic<bool> slow_mounted{false};   // a tape or floppy is in the mount list (kept with it, below)
 static std::atomic<bool> mounts_stale{false};   // the kernel said the mount table changed (MountWatch)
 
+void reread_mounts() { mounts_stale = true; }
+
 QList<Mount> mounts()
 {
     static QMutex m;
@@ -111,7 +113,8 @@ QString device_label(const QString &device)
     }
     QString label = read_label(device);
     QMutexLocker l(&labels_lock);
-    labels.insert(device, label);
+    if (!label.isEmpty())   // none yet may be udev not having made the by-label link of a drive just mounted
+        labels.insert(device, label);
     return label;
 }
 
@@ -548,7 +551,13 @@ MountWatch::MountWatch()
 {
     // GIO's watch on the kernel's mount table (it waits on /proc/self/mountinfo, which wakes it on every mount and
     // unmount): nothing is polled, and no drive is asked anything
+    // The monitor belongs to the thread-default main context of the thread that asks for it, and signals there: the
+    // default one (Qt's UI thread runs it), whichever thread makes this first, so a worker's context that's never run
+    // again can't swallow its signals.
+    moveToThread(QCoreApplication::instance() ? QCoreApplication::instance()->thread() : thread());
+    g_main_context_push_thread_default(g_main_context_default());
     GUnixMountMonitor *m = g_unix_mount_monitor_get();
+    g_main_context_pop_thread_default(g_main_context_default());
     g_signal_connect(m, "mounts-changed", G_CALLBACK(+[](GUnixMountMonitor *, gpointer self) {
                          static_cast<MountWatch *>(self)->mounts_changed();
                      }),
