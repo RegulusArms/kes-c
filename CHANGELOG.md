@@ -2,9 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.19
+## 0.3.2-alpha.20
 
-- Nothing yet.
+- **Fixed: a drive's health could show billions of bad sectors** (e.g. "4294967299 bad sectors" on the Overview and
+  sidebar) when its details listed only 3. Some drives put extra bits in the S.M.A.R.T. counters that udisks adds up;
+  the health line now shows the real count.
+
+## 0.3.2-alpha.19 (2026-10-26)
+
+- Version bump only.
 
 ## 0.3.2-alpha.18 (2026-10-26)
 

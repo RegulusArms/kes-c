@@ -113,6 +113,10 @@ int main(int argc, char **argv)
                           {"SmartNumBadSectors", 3}});
     check(i.state == State::Failing, "a drive udisks calls failing is failing, whatever else it says");
     i = health::from_ata({{"SmartSupported", true}, {"SmartEnabled", true}, {"SmartUpdated", 5},
+                          {"SmartNumBadSectors", Q_INT64_C(4294967299)}});
+    check(i.state == State::Warning && i.summary == "3 bad sectors",
+          "a bad-sector total with vendor bits above the low 32 counts only the low 32 (3, not 4294967299)");
+    i = health::from_ata({{"SmartSupported", true}, {"SmartEnabled", true}, {"SmartUpdated", 5},
                           {"SmartNumBadSectors", 0}, {"SmartPowerOnSeconds", 7200}});
     check(i.state == State::Good && i.summary == "Healthy" && i.power_on_s == 7200, "otherwise healthy");
     check(health::from_nvme({{"SmartUpdated", 1}, {"SmartCriticalWarning", QStringList{"spare"}}}).state == State::Warning &&

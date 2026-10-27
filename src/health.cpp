@@ -52,6 +52,10 @@ Info from_ata(const QVariantMap &a)
         return i;
     }
     qint64 bad = a.value("SmartNumBadSectors", -1).toLongLong();
+    // libatasmart's total (reallocated + pending) can carry vendor bits from above a raw value's low 32 bits (a Seagate
+    // with 3 reallocated sectors reports 4294967299); the attributes in the details window show the real count
+    if (bad > 0xFFFFFFFFLL)
+        bad &= 0xFFFFFFFFLL;
     int failing = a.value("SmartNumAttributesFailing").toInt();
     QString test = a.value("SmartSelftestStatus").toString();
     if (a.value("SmartFailing").toBool()) {
