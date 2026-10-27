@@ -88,7 +88,7 @@ A tool does the work; Kestrel adds what a file manager should:
 Kestrel's code can be correct and still break because a tool under it changed. Kestrel's source didn't change, so reviewing it can't catch that; only running the real tool and checking the result can. That's why Kestrel's tests run the actual tools rather than imitations of them:
 
 - **Silent breakage.** A changed output format usually doesn't crash anything. It gives a wrong answer, such as an encrypted archive read as unencrypted or a file missing from a listing. The tests check the answers.
-- **Before a release, not after.** CI installs the main tools in a clean Ubuntu 24.04 environment and runs the test suite. A failing test stops the package from being built, so a breaking change blocks a release instead of reaching users.
+- **Before a release, not after.** CI installs the main tools in clean Ubuntu 24.04 and 26.04 environments and runs the test suite on both. A failing test stops the package from being built, so a breaking change blocks a release instead of reaching users.
 - **The safety promises.** Tests make jobs fail part-way, by cancelling them or limiting file size, and check that the original is intact and nothing half-made is left behind.
 - **Both ways.** Features with a fallback are tested with the tool and without it (for example, content search with ripgrep and with grep).
 - **Changing tools safely.** When a default changes, the same tests run against the new tool.

@@ -14,6 +14,9 @@ Added:
   ubuntu:24.04, `resolute`/`resolute-dev` on ubuntu:26.04 (the suites of the channel just published) and `stable`/`dev`
   on 26.04. A dropped release's frozen suites get an entry there, checked whenever the repository is updated, so they keep installing after
   they stop getting builds.
+- A `test-resolute` CI job: the whole suite (`tests/run.sh`) on Ubuntu 26.04 too, in a clean ubuntu:26.04 container
+  as a normal user, alongside `test` on 24.04; the package now needs both to pass. Until now only 24.04 ran the tests,
+  so a change that broke only on 26.04's newer Qt, GLib or tools (the main platform) reached the package unnoticed.
 
 ## 0.3.2-alpha.24
 

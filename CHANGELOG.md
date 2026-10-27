@@ -12,6 +12,8 @@ What changed in each version of Kestrel Explorer, newest first.
   `/etc/os-release`, so Linux Mint and every Ubuntu flavour get the right one; they fall back to `stable` or `dev`
   on a release without its own. `stable` and `dev` keep working and get every build too, but if you added the
   repository before, run the install commands again to switch to your release's suite.
+- **Tested on Ubuntu 26.04 too.** The automated tests now run on Ubuntu 26.04 as well as 24.04, and a package is only
+  built when both pass, so a change that breaks only with 26.04's newer Qt or tools is caught before it reaches you.
 
 ## 0.3.2-alpha.24 (2026-10-27)
 

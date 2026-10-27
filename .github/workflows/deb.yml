@@ -1,8 +1,8 @@
-# Runs the tests, then builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs
-# there and on newer). A failing test stops the run: no package, release or apt update. The package is then installed
-# on clean 24.04 and 26.04 systems (tests/check_package.sh), and only one that passes goes into the apt repo. The tests
-# also run with AddressSanitizer and UndefinedBehaviorSanitizer, alongside (a finding fails the run, without holding up
-# the package).
+# Runs the tests on Ubuntu 24.04 and 26.04, then builds the .deb (on 24.04, whose Qt 6.4 is the oldest supported, so
+# the package installs there and on newer). A failing test on either stops the run: no package, release or apt update.
+# The package is then installed on clean 24.04 and 26.04 systems (tests/check_package.sh), and only one that passes
+# goes into the apt repo. The tests also run with AddressSanitizer and UndefinedBehaviorSanitizer on 24.04, alongside
+# (a finding fails the run, without holding up the package).
 #   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
 #   pull request to main  → build only (the .deb is kept as a workflow artifact)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
@@ -63,6 +63,29 @@ jobs:
       - name: Run the tests
         run: tests/run.sh
 
+  test-resolute:
+    # the same tests on Ubuntu 26.04 (a newer Qt, GLib and tools), so a change that only breaks there stops the package
+    # too. In a clean ubuntu:26.04 container (through Google's mirror, as in "package"), with the tests run as a
+    # normal user, as on a runner.
+    runs-on: ubuntu-24.04
+    container: mirror.gcr.io/library/ubuntu:26.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        # the same packages as "test"
+        run: |
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev \
+            libxcb1-dev libsecret-1-dev dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit \
+            libxml2-utils gnome-keyring p7zip-full libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg
+
+      - name: Run the tests
+        shell: bash
+        run: |
+          useradd -m tester
+          chown -R tester: "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 tests/run.sh"
+
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
@@ -86,7 +109,7 @@ jobs:
           KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh
 
   deb:
-    needs: test
+    needs: [test, test-resolute]
     runs-on: ubuntu-24.04
     outputs:
       artifact: kestrel-explorer-${{ steps.ver.outputs.deb }}
