@@ -1,0 +1,55 @@
+# The apt repository's suites (reprepro's conf/distributions): CI's apt job copies this file over gh-pages' own before
+# adding a build, so a suite is added or changed here, not on gh-pages. A suite stays listed for as long as the
+# repository serves it, also after it stops getting new builds (the Ubuntu releases CI publishes to are APT_RELEASES in
+# .github/workflows/deb.yml): taking one out of this file would stop reprepro looking after it.
+#   stable, dev            every build, whatever the release (the sources files written before the release suites)
+#   <codename>             a release's builds from main, for that Ubuntu release and the systems based on it
+#   <codename>-dev         a release's development builds (the DEV branch)
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: stable
+Description: Kestrel Explorer releases (merges to main)
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: dev
+Description: Kestrel Explorer development builds (the DEV branch)
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: noble
+Description: Kestrel Explorer releases for Ubuntu 24.04 (noble) and systems based on it, such as Linux Mint 22
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: noble-dev
+Description: Kestrel Explorer development builds for Ubuntu 24.04 (noble) and systems based on it
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: resolute
+Description: Kestrel Explorer releases for Ubuntu 26.04 (resolute) and systems based on it
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: resolute-dev
+Description: Kestrel Explorer development builds for Ubuntu 26.04 (resolute) and systems based on it
+Architectures: amd64
+Components: main
+SignWith: 40F0256B43982A85B2B6A469925DACC8216A421F

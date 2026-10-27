@@ -78,6 +78,11 @@ test stops the run. A push or pull request that only changes Markdown files does
   and the menu entry is valid, that the admin helper's root-only rules hold (a user's set-user-ID program copied into root's folder is root's and isn't set-user-ID; what it makes in the user's folder is the user's; no hard links to system files), and that removing it leaves nothing behind. Only a package that passes goes into the apt
   repository. It needs root and a throwaway system:
   `docker run --rm -v "$PWD":/src:ro ubuntu:24.04 /src/tests/check_package.sh /src/kestrel-explorer_….deb`
+- **The apt suites** (`apt-check`, after the apt repository is updated): the same checks, with the package installed
+  from the repository as a user's sources file would (`check_package.sh --apt REPO SUITE`, from a copy of gh-pages),
+  after checking that the suite is there and signed with the published key: each Ubuntu release's suite on its own
+  ubuntu:24.04 or 26.04 system, and `stable` or `dev`. A release Kestrel no longer supports keeps its frozen suites,
+  checked on that release's system whenever the repository is updated.
 
 ## How the tests work
 

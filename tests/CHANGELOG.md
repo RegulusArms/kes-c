@@ -4,6 +4,17 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.25
+
+Added:
+- `check_package.sh --apt REPO SUITE`: installs the package from a suite of a copy of the apt repository, as a user's
+  sources file would, after checking that the suite is there, signed with the repository's published key, and has
+  the package; then the same checks as for a .deb. Covers the new per-release apt suites.
+- An `apt-check` CI job, after the apt repository is updated: the package installed from `noble`/`noble-dev` on
+  ubuntu:24.04, `resolute`/`resolute-dev` on ubuntu:26.04 (the suites of the channel just published) and `stable`/`dev`
+  on 26.04. A dropped release's frozen suites get an entry there, checked whenever the repository is updated, so they keep installing after
+  they stop getting builds.
+
 ## 0.3.2-alpha.24
 
 Added:

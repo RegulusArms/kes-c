@@ -221,32 +221,8 @@ into.
   - Also on a schedule (e.g. weekly), not only on pushes: tools change when the distro updates them, not when
     Kestrel does.
 
-- [ ] **apt suites by Ubuntu release, so dropping one doesn't strand its users.** Today there's one `stable` and one
-  `dev` suite, and every release gets the same .deb. When main stops supporting a release (24.04 first: newer Qt,
-  libraries it doesn't have), publishing the new version replaces the last one that installs there (`reprepro
-  includedeb`, and gh-pages keeps no history): existing users silently stop getting updates (apt keeps the installed
-  version because the new Depends can't be met) and new installs fail with unmet dependencies. apt never falls back to
-  an older version on its own.
-  - Add suites named after the Ubuntu release (`noble`, `resolute`…, plus a dev one for each, e.g. `noble-dev`) beside
-    `stable` and `dev`. While a release is supported, CI publishes the same .deb to all of them (the pool keeps one
-    copy). Keep `stable` and `dev` working for the sources files people already have.
-  - Install instructions (index.html on gh-pages, docs/install.md) pick the suite from /etc/os-release:
-    `UBUNTU_CODENAME` (Linux Mint sets it, e.g. Mint 22 → noble), else `VERSION_CODENAME`. So Mint and every Ubuntu
-    flavour (Kubuntu, Xubuntu…) get the right suite without a table to look up.
-  - Not by desktop: the package's dependencies follow the Ubuntu base, not the desktop, and the desktop is handled when
-    Kestrel runs (kes-setup and Kestrel check for GNOME, Cinnamon, KDE). Dropping a desktop is a code and docs change,
-    with a changelog entry, not an apt one.
-  - Dropping a release: before the first version that doesn't install there, stop publishing to its suite (it keeps
-    the last version that works), say so in the changelog and on the install page, and keep a `package` check that
-    the frozen suite still installs on that release's container. Optionally a maintenance branch for data-safety fixes,
-    published only to that suite. `stable`/`dev` users on the dropped release get a notice in Kestrel (switch to
-    the release's suite) rather than a package rewriting their apt sources.
-  - CI: one `reprepro includedeb` per suite in the apt job; conf/distributions on gh-pages gains the suites (fetch
-    gh-pages fresh before editing it). When GitHub retires the `ubuntu-24.04` runner image, the test jobs move to
-    `ubuntu:24.04` containers (through mirror.gcr.io) for as long as 24.04 is supported.
-  - The signing key expires 2029-10-04, about when 24.04's standard support ends: extend it either way.
-
 ## Done
+- [x] **apt suites by Ubuntu release, so dropping one doesn't strand its users** (0.3.2-alpha.25). Suites `noble`, `resolute` and their `-dev` ones beside `stable`/`dev`, in `.github/apt/distributions`; the apt job copies it and the page (`.github/apt/index.html`) to gh-pages and runs `reprepro includedeb` for the channel's suite and each `APT_RELEASES` release's (`deb.yml`; the pool keeps one copy). Install commands (page, docs/install.md, README) pick the suite from `/etc/os-release` (`UBUNTU_CODENAME`, else `VERSION_CODENAME`) and fall back to `stable`/`dev` when its `InRelease` isn't there. `apt-check` installs from each suite on its release's container (`check_package.sh --apt`), with a place for frozen suites. Dropping a release, the runner image's retirement and the signing key: docs/development.md "The apt repository and Ubuntu releases". Still to do when the time comes: the in-Kestrel notice for `stable`/`dev` users on a dropped release, and extending the signing key (expires 2029-10-04).
 - [x] **Compare two images in the viewer with a slider** (0.3.2-alpha.24). `compare == 3`: B's canvas draws A (`under`, the hidden `pinned`, kept at its size) right of the divider (`split`, `divider_x`) and itself left of it; a press near the divider, or anywhere while the images fit, moves it (Alt+drag still drags out). Zoom and pan linked by `link_view`; images of different sizes are each fitted to the window. D toggles it (`toggle_slider`); Compare in Viewer (`compare_images`, two images) → `MainWindow::compare_in_viewer` → `compare_first_two(3)`, A: the first in the folder's order. Test: `viewer`.
 - [x] **Drag an image out of the viewer** (0.3.2-alpha.18). `ViewerCanvas::fits()`: with the whole image in view a left-drag drags out (`drag_out`), zoomed in it pans and Alt+drag drags out (chosen with the user). `ImageViewer::image_data`: the file's URL, its own bytes and PNG made on request (`ImageMime`), marked `COPY_ONLY_MIME` so Kestrel's drop targets (`handle_drop`, the folder model, tabs, sidebar) copy, never move; turned or edited and not saved, a copy as shown in `~/.cache/kestrel-explorer/viewer-copies` (chosen with the user; a day old: deleted). Kestrel's drag picture on Wayland (`DragGhost`, moved to widgets.h), the focus given to the app dropped into. Ctrl+C now puts the file on the clipboard too (copied files). Test: `viewer`.
 - [x] **Rotate images losslessly** (0.3.2-alpha.18). Rotate ▸ (`rotate`, `rotate_cw`, `rotate_180`, `rotate_ccw`, `flip_horizontal`, `flip_vertical`) → `convert::rotate` (a queued job) → `imgedit::rotate_file`: JPEG through jpegtran `-perfect -copy all` from how it's shown (`compose` with its tag), the tag set to 1 (chosen with the user over the tag only; without jpegtran: the tag); `NotWholeBlocks` asks once (Trim the Edge / Set the Orientation Tag); PNG, BMP, TIFF, lossless WebP written again (`save_edit` with `keep_meta`: exiftool copies EXIF/XMP); HEIC, AVIF, lossy WebP asked first (`reencode`). Part files, fsynced. Not done: the viewer's R/L still save through the tag. Test: `media`.

@@ -7,8 +7,10 @@
 #   pull request to main  → build only (the .deb is kept as a workflow artifact)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
 # A push or pull request that only changes Markdown files (*.md) doesn't start it at all.
-# DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch, suites "dev" and "stable"),
-# signed with the APT_GPG_PRIVATE_KEY secret.
+# DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch), signed with the
+# APT_GPG_PRIVATE_KEY secret: into "dev" and "stable", and the suites of each Ubuntu release in APT_RELEASES
+# ("noble-dev", "noble"…). Its suites and page are .github/apt/, copied there with each build; "apt-check" then installs
+# from what it serves, on each release's clean system.
 name: Build .deb
 
 on:
@@ -22,6 +24,12 @@ on:
 
 permissions:
   contents: write   # to create releases and tags
+
+env:
+  # The Ubuntu releases (by codename) whose apt suites get each build: <codename> from main, <codename>-dev from DEV.
+  # To stop supporting one, take it out here before the first version that won't install there: its suites keep the
+  # last one that does (they stay in .github/apt/distributions), and move its apt-check entry to the frozen ones.
+  APT_RELEASES: noble resolute
 
 concurrency:
   group: deb-${{ github.ref }}
@@ -82,7 +90,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       artifact: kestrel-explorer-${{ steps.ver.outputs.deb }}
-      suite: ${{ steps.dev.outcome == 'success' && 'dev' || steps.release.outputs.released == 'true' && 'stable' || '' }}
+      channel: ${{ steps.dev.outcome == 'success' && 'dev' || steps.release.outputs.released == 'true' && 'stable' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -169,12 +177,14 @@ jobs:
 
   apt:
     needs: [deb, package]
-    if: needs.deb.outputs.suite != ''
+    if: needs.deb.outputs.channel != ''
     runs-on: ubuntu-24.04
     concurrency:
       group: apt-repo   # one update of gh-pages at a time, DEV and main alike
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4   # .github/apt: the repo's suites and page
+
       - uses: actions/checkout@v4
         with:
           ref: gh-pages
@@ -193,12 +203,21 @@ jobs:
       - name: Add the package
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          CHANNEL: ${{ needs.deb.outputs.channel }}
         run: |
           sudo apt-get update && sudo apt-get install -y reprepro
           printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
-          # replaces the suite's previous version; reprepro deletes pool files nothing refers to any more
-          reprepro -b repo includedeb "${{ needs.deb.outputs.suite }}" debs/*.deb
-          reprepro -b repo list dev; reprepro -b repo list stable
+          cp .github/apt/distributions repo/conf/distributions
+          cp .github/apt/index.html repo/index.html
+          suites=("$CHANNEL")
+          for release in $APT_RELEASES; do
+            if [[ "$CHANNEL" == dev ]]; then suites+=("$release-dev"); else suites+=("$release"); fi
+          done
+          # each replaces the suite's previous version; the pool keeps one copy of a .deb however many suites have it,
+          # and reprepro deletes pool files nothing refers to any more. Suites not named here (a dropped release's)
+          # keep what they have.
+          for suite in "${suites[@]}"; do reprepro -b repo includedeb "$suite" debs/*.deb; done
+          reprepro -b repo ls kestrel-explorer
 
       - name: Publish
         # one commit, force-pushed: old .debs would otherwise stay in the branch's history for good
@@ -208,5 +227,44 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan publish
           git add -A
-          git commit -q -m "apt repo: ${{ needs.deb.outputs.suite }} ${{ needs.deb.outputs.artifact }}"
+          git commit -q -m "apt repo: ${{ needs.deb.outputs.channel }} ${{ needs.deb.outputs.artifact }}"
           git push --force origin publish:gh-pages
+
+  apt-check:
+    # what the apt repo serves now, installed from each release's suite on that release's clean system: the suite is
+    # there, signed with the published key, and its package installs and works (tests/check_package.sh --apt). From a
+    # copy of gh-pages (file:), so it doesn't wait for GitHub Pages to deploy.
+    needs: [deb, apt]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "ubuntu:24.04", release: noble }      # the channel's suite for the release: noble or noble-dev
+          - { image: "ubuntu:26.04", release: resolute }
+          - { image: "ubuntu:26.04" }                      # the channel's own: stable or dev
+          # a dropped release's frozen suites, checked whenever the repo is updated (they get no builds, but must still install), e.g.
+          # - { image: "ubuntu:24.04", frozen: noble }
+          # - { image: "ubuntu:24.04", frozen: noble-dev }
+    container: mirror.gcr.io/library/${{ matrix.image }}   # through Google's mirror, as in "package"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: repo
+
+      - name: Install and check the package from the suite
+        shell: bash
+        env:
+          CHANNEL: ${{ needs.deb.outputs.channel }}
+          RELEASE: ${{ matrix.release }}
+          FROZEN: ${{ matrix.frozen }}
+        run: |
+          if [[ -n "$FROZEN" ]]; then suite=$FROZEN
+          elif [[ -z "$RELEASE" ]]; then suite=$CHANNEL
+          elif [[ "$CHANNEL" == dev ]]; then suite=$RELEASE-dev
+          else suite=$RELEASE; fi
+          echo "Suite: $suite"
+          bash tests/check_package.sh --apt repo "$suite"

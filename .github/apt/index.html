@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kestrel Explorer apt repository</title>
+<!-- The apt repository's page (gh-pages index.html): CI's apt job copies this file there with each build, so it's
+     changed here, not on gh-pages. -->
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #5f6368; --code: #f3f4f6; --border: #e1e4e8; --link: #0b62d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --fg: #e8eaed; --muted: #9aa0a6; --code: #23262d; --border: #33373f; --link: #7ab4ff; }
+  }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; margin: 0; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  p.lead { color: var(--muted); margin-top: 0; }
+  pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1rem;
+        overflow-x: auto; font-size: .88rem; line-height: 1.45; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  a { color: var(--link); }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kestrel Explorer</h1>
+  <p class="lead">apt repository for Ubuntu 24.04 / Linux Mint 22 and newer (amd64).
+    Source: <a href="https://github.com/RegulusArms/kes-c">github.com/RegulusArms/kes-c</a></p>
+
+  <h2>Install</h2>
+<pre><code>sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=stable
+sudo tee /etc/apt/sources.list.d/kestrel.sources &gt;/dev/null &lt;&lt;EOF
+Types: deb
+URIs: https://regulusarms.github.io/kes-c
+Suites: $suite
+Components: main
+Signed-By: /etc/apt/keyrings/kestrel.asc
+EOF
+sudo apt update &amp;&amp; sudo apt install kestrel-explorer</code></pre>
+  <p>The suite is your Ubuntu release's, read from <code>/etc/os-release</code> (<code>UBUNTU_CODENAME</code>, which
+    Linux Mint and every Ubuntu flavour set, else <code>VERSION_CODENAME</code>): <code>noble</code> on Ubuntu 24.04
+    and Linux Mint 22, <code>resolute</code> on Ubuntu 26.04. On a release without its own suite it's
+    <code>stable</code>, which has the same package. Then run <code>kes</code>, or open Kestrel Explorer from the app
+    menu.</p>
+
+  <h2>Development builds</h2>
+  <p>For the latest build of the DEV branch instead, use your release's dev suite: the same commands with these two
+    lines in place of the <code>suite=</code> ones (it's <code>dev</code> on a release without its own), then
+    <code>sudo apt update &amp;&amp; sudo apt upgrade</code>.</p>
+<pre><code>suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}-dev")
+curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=dev</code></pre>
+
+  <h2>Suites</h2>
+  <div class="wrap"><table>
+    <tr><th>Suite</th><th>For</th><th>Gets</th></tr>
+    <tr><td><code>noble</code>, <code>noble-dev</code></td><td>Ubuntu 24.04, Linux Mint 22</td><td>every release / development build</td></tr>
+    <tr><td><code>resolute</code>, <code>resolute-dev</code></td><td>Ubuntu 26.04</td><td>every release / development build</td></tr>
+    <tr><td><code>stable</code>, <code>dev</code></td><td>any release</td><td>every release / development build, for the newest supported releases only</td></tr>
+  </table></div>
+  <p>When Kestrel stops supporting an Ubuntu release, its suites keep the last version that installs there and
+    get no more builds; this page and the changelog say so. <code>stable</code> and <code>dev</code> move on to
+    versions that may not install on it any more, so if your <code>kestrel.sources</code> says
+    <code>Suites: stable</code> or <code>dev</code> (as it did before the release suites), run the commands above
+    again to switch to your release's suite.</p>
+
+  <h2>Remove</h2>
+<pre><code>sudo apt remove kestrel-explorer
+sudo rm /etc/apt/sources.list.d/kestrel.sources /etc/apt/keyrings/kestrel.asc</code></pre>
+
+  <p>Signing key fingerprint: <code>40F0 256B 4398 2A85 B2B6  A469 925D ACC8 216A 421F</code></p>
+</main>
+</body>
+</html>

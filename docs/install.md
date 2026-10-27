@@ -4,14 +4,16 @@
 
 ## Install with apt
 
-Ubuntu 24.04, Linux Mint 22 and newer (amd64) can install it from the apt repository at https://regulusarms.github.io/kes-c/ and get updates with the system's others. There are two channels; pick one.
+Ubuntu 24.04, Linux Mint 22 and newer (amd64) can install it from the apt repository at https://regulusarms.github.io/kes-c/ and get updates with the system's others. There are two channels; pick one. Each Ubuntu release has its own suite for both, named after its codename (`noble` and `noble-dev` for Ubuntu 24.04 and Linux Mint 22, `resolute` and `resolute-dev` for 26.04): the commands read it from `/etc/os-release` (`UBUNTU_CODENAME`, which Linux Mint and every Ubuntu flavour set, else `VERSION_CODENAME`), and use the general `stable` or `dev` suite, which has the same packages, on a release without its own.
 
 **Releases** (each merge to `main`):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=stable
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: %s\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' "$suite" \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
 ```
@@ -21,7 +23,9 @@ sudo apt update && sudo apt install kestrel-explorer
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: dev\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}-dev")
+curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=dev
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: %s\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' "$suite" \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
 ```
@@ -35,6 +39,8 @@ kes-setup --install-optional   # and/or install the optional packages: exiftool,
 ```
 
 `sudo apt upgrade` keeps you on the channel you picked. To switch, run the other channel's commands; they replace `kestrel.sources`. Going from releases to development builds upgrades at the next `apt upgrade`. Going back doesn't, because a development build has a higher version than the release it came after: you stay on it until the next release, or go back now with `sudo apt install --allow-downgrades kestrel-explorer=<version>` (`apt policy kestrel-explorer` lists the versions).
+
+When Kestrel stops supporting an Ubuntu release, that release's suites keep the last version that installs on it and get no more updates; the [changelog](../CHANGELOG.md) and the [repository's page](https://regulusarms.github.io/kes-c/) say so. `stable` and `dev` move on to versions it can't install, so if your `/etc/apt/sources.list.d/kestrel.sources` says `Suites: stable` or `Suites: dev` (as the commands wrote before the release suites), run your channel's commands above again: they switch you to your release's suite.
 
 The packages are built by GitHub Actions (`.github/workflows/deb.yml`), which also attaches each one to a [GitHub release](https://github.com/RegulusArms/kes-c/releases). Remove it with `sudo apt remove kestrel-explorer` (run `kes-setup --undo` first if you used `--default`).
 

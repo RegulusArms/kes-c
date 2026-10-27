@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.24.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.2-alpha.25.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -54,7 +54,9 @@ This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.c
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=stable
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: %s\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' "$suite" \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
 kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)

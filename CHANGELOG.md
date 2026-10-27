@@ -2,7 +2,18 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.24
+## 0.3.2-alpha.25
+
+- **apt suites for each Ubuntu release.** The apt repository now has a suite for each Ubuntu release Kestrel
+  supports, named after its codename: `noble` (Ubuntu 24.04, Linux Mint 22) and `resolute` (Ubuntu 26.04), each with a
+  `-dev` one for development builds. When Kestrel stops supporting a release, its suites keep the last version that
+  installs there, so people on it keep a working Kestrel and new installs still succeed, instead of updates stopping
+  without a word and installs failing on missing dependencies. The install commands pick the suite from
+  `/etc/os-release`, so Linux Mint and every Ubuntu flavour get the right one; they fall back to `stable` or `dev`
+  on a release without its own. `stable` and `dev` keep working and get every build too, but if you added the
+  repository before, run the install commands again to switch to your release's suite.
+
+## 0.3.2-alpha.24 (2026-10-27)
 
 - **The image viewer picks up new images in the folder** without being reopened. Opened on an image of a folder, it
   adds images that appear there later (for example from a program generating them) to its list and filmstrip, in
