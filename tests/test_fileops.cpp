@@ -341,35 +341,49 @@ int main(int argc, char **argv)
             return out;
         };
         make(P("race/big.bin"), "b");
-        ::truncate(enc(P("race/big.bin")).constData(), qint64(256) << 20);   // sparse: long enough to step in
+        ::truncate(enc(P("race/big.bin")).constData(), qint64(32) << 20);   // sparse: several chunks, so one to pause at
         make(P("race/dir/inner.bin"), "i");
-        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(256) << 20);
+        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(32) << 20);
         // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
-        // is still to come), "another program" saves the destination. Watched here, not through progress reports,
-        // which come at most every 80 ms: a fast disk can copy the file before the first one.
+        // is still to come), the job is paused (held at its next chunk) and "another program" saves the destination.
+        // Watched here, not through progress reports, which come at most every 80 ms: a fast disk can copy the file
+        // before the first one. Paused, not raced: on a slow runner the copy could otherwise finish first.
         auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
             boxes.clear();
             bool stepped = false;
             Task *t = fileops::start_ops(w, {job}, "Test", []() {});
-            QPointer<Task> tp(t);
+            QPointer<Task> tp(t);   // not deleted before events are processed
             QElapsedTimer clock;
             clock.start();
             while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
                 if (!leftovers().isEmpty()) {
-                    intrude();
-                    stepped = true;
+                    tp->set_paused(true);
+                    QThread::msleep(100);   // the chunk it's on finished
+                    if (!leftovers().isEmpty()) {
+                        intrude();
+                        stepped = true;
+                    }
+                    tp->set_paused(false);
+                    break;
                 }
                 QThread::usleep(200);
             }
-            wait_for([&]() { return !tp; }, 20000);
+            wait_for([&]() { return !tp; }, 60000);
             wait_for([]() { return !boxes.isEmpty(); }, 3000);
             return stepped;
         };
+        // what went wrong, for the check's text
+        auto race_state = [&](bool stepped) {
+            return QString("stepped in: %1; new.bin: %2; part files: %3; message: %4")
+                .arg(QString(stepped ? "yes" : "no"), text_of(P("race/new.bin")).left(20),
+                     leftovers().join(", "), boxes.isEmpty() ? QString("none") : boxes.last().left(120));
+        };
         bool stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
                                   []() { write_text(P("race/new.bin"), "theirs"); });
-        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
-                  boxes.last().contains("appeared"),
-              "a file another program saves under the new name while a copy runs is kept, and the conflict is reported");
+        bool kept = stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+                    boxes.last().contains("appeared");
+        check(kept, "a file another program saves under the new name while a copy runs is kept, and the conflict is "
+                    "reported" + (kept ? QString() : " (" + race_state(stepped) + ")"));
         // a folder copy claims its new name by making the folder there (never replacing): one another program made
         // under that name after the copy was planned is kept
         make(P("race/newdir/theirs.txt"), "t");
@@ -394,9 +408,10 @@ int main(int argc, char **argv)
         ::unlink(enc(P("race/new.bin")).constData());
         stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
                              []() { write_text(P("race/new.bin"), "theirs"); });
-        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
-                  boxes.last().contains("appeared"),
-              "...and a file another program saves under the name meanwhile is still kept, and reported");
+        kept = stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+               boxes.last().contains("appeared");
+        check(kept, "...and a file another program saves under the name meanwhile is still kept, and reported" +
+                        (kept ? QString() : " (" + race_state(stepped) + ")"));
         QString part = P("race/" + part_name());
         write_text(part, "p");
         bool taken = false;

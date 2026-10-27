@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.21
+## 0.3.2-alpha.22
+
+- Nothing yet.
+
+## 0.3.2-alpha.21 (2026-10-27)
 
 - **Calculate Folder Size** in a folder's right-click menu (also for several folders): opens Properties and counts the
   size afresh, also when a size was remembered from before.

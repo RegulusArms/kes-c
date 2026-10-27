@@ -4,6 +4,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.22
+
+Changed:
+- `fileops`: the two "a file another program saves under the new name while a copy runs" checks pause the copy while
+  they save the file, instead of racing it, and copy 32 MB rather than 256 MB. Once the file is there the copy counts
+  as replacing it and syncs its data to disk first; on a slow CI runner (the sanitizers job) syncing 256 MB could take
+  longer than the test waited, and the check failed. A failing check now says which part went wrong (stepped in or
+  not, what the file holds, part files left, the message shown).
+
 ## 0.3.2-alpha.21
 
 Added:
