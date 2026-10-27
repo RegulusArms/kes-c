@@ -676,6 +676,62 @@ int main(int argc, char **argv)
         spin(50);
     }
 
+    // -- the right-click menu's shortcuts into Properties: Calculate Folder Size counts afresh (not the size remembered),
+    // Open Metadata opens it on the Metadata tab, and shows for images, not for a plain text file
+    {
+        auto entry = [&](const QStringList &paths, const QString &id) -> QAction * {
+            QMenu *m = w->build_menu(w->pane(), paths);
+            m->deleteLater();
+            for (QAction *a : m->actions())
+                if (menus::id_of(a) == id)
+                    return a;
+            return nullptr;
+        };
+        auto newest_props = [&](const QSet<QWidget *> &before) -> PropertiesDialog * {
+            for (QWidget *t : QApplication::topLevelWidgets())
+                if (auto *d = qobject_cast<PropertiesDialog *>(t); d && d->isVisible() && !before.contains(d))
+                    return d;
+            return nullptr;
+        };
+        auto tops = []() {
+            const QWidgetList l = QApplication::topLevelWidgets();
+            return QSet<QWidget *>(l.begin(), l.end());
+        };
+        QString dir = home_path("sizeme");
+        makedirs(dir, true);
+        write_text(join(dir, "a.bin"), QByteArray(1000, 'x'));
+        fileops::dirsizes::put(dir, fileops::DirStats{5, 1, 0});   // remembered, and wrong
+        QSet<QWidget *> before = tops();
+        QAction *calc = entry({dir}, "calculate_size");
+        if (calc)
+            calc->trigger();
+        bool counted = calc && wait_for([&]() {
+            auto e = fileops::dirsizes::get(dir);
+            return e && e->stats.size == 1000;
+        }, 5000);
+        PropertiesDialog *pd = newest_props(before);
+        check(calc && pd && counted, "Calculate Folder Size opens Properties and counts the folder again, not the size "
+                                     "remembered");
+        if (pd)
+            pd->close();
+        QString img = home_path("meta.png");
+        QImage(8, 8, QImage::Format_RGB32).save(img);
+        before = tops();
+        QAction *meta = entry({img}, "open_metadata");
+        if (meta)
+            meta->trigger();
+        spin(100);
+        pd = newest_props(before);
+        QTabWidget *tw = pd ? pd->findChild<QTabWidget *>() : nullptr;
+        check(meta && tw && tw->tabText(tw->currentIndex()) == "Metadata",
+              "Open Metadata opens Properties on its Metadata tab");
+        if (pd)
+            pd->close();
+        check(!entry({home_path("file.txt")}, "open_metadata") && !entry({home_path("file.txt")}, "calculate_size"),
+              "...and neither shows for a plain text file");
+        spin(50);
+    }
+
     // -- every window Kestrel opens is free (windows.h): messages, questions, text, pickers, and the conflict question
     // of a copy; none is opened modally anywhere in the source
     {

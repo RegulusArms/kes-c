@@ -638,6 +638,18 @@ void PropertiesDialog::start_size(bool fresh)
     fileops::queue_job(this, "Counting the size of " + what, to_count, work, done, true, {}, !fresh);
 }
 
+void PropertiesDialog::calculate_size()
+{
+    if (recalc && recalc->isEnabled())   // a remembered size: counted afresh (a count under way is fresh already)
+        start_size(true);
+}
+
+void PropertiesDialog::show_metadata()
+{
+    if (meta_tab_widget)
+        tabs->setCurrentWidget(meta_tab_widget);   // (loads it: maybe_load_meta)
+}
+
 void PropertiesDialog::show_dir_size(const QVariant &res)
 {
     auto s = res.value<fileops::DirStats>();

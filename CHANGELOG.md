@@ -2,7 +2,20 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.20
+## 0.3.2-alpha.21
+
+- **Calculate Folder Size** in a folder's right-click menu (also for several folders): opens Properties and counts the
+  size afresh, also when a size was remembered from before.
+- **Open Metadata** in a file's right-click menu: opens Properties straight on its Metadata tab. Shown for images, and
+  with exiftool installed also for videos, audio, PDFs, e-books and office documents.
+- **Kestrel's own cache folder gets no thumbnails** (`~/.cache/kestrel-explorer`: its folder previews, animated
+  previews and temporary copies). Browsing it, or generating previews over it, made thumbnails of those previews
+  and wrote them back into the caches; files and folders there now show plain icons.
+- **Fixed: unlocking an encrypted drive failed** with "Expected G_MOUNT_OPERATION_HANDLED but got 2" as soon as the
+  password window opened, and entering the password then did nothing. The drive now waits for the password and
+  unlocks with it. The same applied to questions asked while mounting.
+
+## 0.3.2-alpha.20 (2026-10-27)
 
 - **Fixed: a drive's health could show billions of bad sectors** (e.g. "4294967299 bad sectors" on the Overview and
   sidebar) when its details listed only 3. Some drives put extra bits in the S.M.A.R.T. counters that udisks adds up;

@@ -182,6 +182,12 @@ QStringList thumbnailers_for(const QString &path)
     return {};
 }
 
+bool in_app_cache(const QString &path)
+{
+    QString root = APP_CACHE();
+    return path == root || path.startsWith(root + '/');
+}
+
 bool can_thumbnail(const QString &path)
 {
     return is_image(path) || is_video(path) || !thumbnailers_for(path).isEmpty();
@@ -864,6 +870,10 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             place(**p);
         }
     } else {
+        // Kestrel's own cache (folder previews, animated previews, copies): thumbnails of it would only fill
+        // ~/.cache/thumbnails and its folders with previews of previews
+        if (thumbs::in_app_cache(path))
+            return QPixmap();
         bool device = is_device_path(path);
         // a tape or floppy: no thumbnails or folder mosaics unless the user allowed them for that drive (each one
         // makes a tape seek, a floppy read for seconds). Not remembered as failed, so allowing them takes effect
@@ -1492,6 +1502,10 @@ bool RecursiveBuilder::run(Task *job)
         return true;
     };
     QString top = rstrip(root, '/');
+    if (thumbs::in_app_cache(top)) {   // Kestrel's own cache: no previews made in it (ThumbnailManager::get)
+        task = nullptr;
+        return false;
+    }
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
         if (task && task->cancelled)
             stop = true;
@@ -1501,7 +1515,7 @@ bool RecursiveBuilder::run(Task *job)
         int level = rstrip(dir, '/') == top ? 0 : QStringView(dir).mid(top.size()).count('/');
         if (depth < 0 || level < depth)
             for (const QString &d : dirs)
-                if (!d.startsWith('.'))
+                if (!d.startsWith('.') && !thumbs::in_app_cache(join(dir, d)))
                     keep << d;
         natural_sort(keep);
         dirs = keep;

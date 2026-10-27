@@ -12,6 +12,7 @@
 class Animator;
 class FSModel;
 class PreferencesDialog;
+class PropertiesDialog;
 class QMessageBox;
 class GridDelegate;
 class ImageViewer;
@@ -113,7 +114,7 @@ public:
     void shred_paths(const QStringList &paths);   // with BleachBit
     void empty_trash_with_bleachbit();
     void make_links(const QStringList &paths, QString dest, const QString &kind);
-    void properties(const QStringList &paths, QWidget *parent = nullptr);
+    PropertiesDialog *properties(const QStringList &paths, QWidget *parent = nullptr);
     void preferences();
     void clear_cache();
     void purge_thumbnails();

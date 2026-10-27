@@ -21,6 +21,7 @@
 #include <memory>
 
 typedef struct _GMount GMount;
+typedef struct _GMountOperation GMountOperation;
 typedef struct _GVolume GVolume;
 typedef struct _GVolumeMonitor GVolumeMonitor;
 
@@ -52,6 +53,8 @@ void mount_uri(QWidget *parent, const QString &uri, std::function<void(const QSt
 void mount_volume(QWidget *parent, const VolumeRef &volume,
                   std::function<void(const QString &, const QString &)> on_done);
 void unmount(QWidget *parent, const MountRef &mount, std::function<void(const QString &)> on_done);
+// A GMountOperation whose passwords and questions are asked in free windows parented to parent (the caller unrefs it)
+GMountOperation *make_mount_operation(QWidget *parent);
 
 }  // namespace overview
 

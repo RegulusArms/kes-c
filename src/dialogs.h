@@ -109,6 +109,9 @@ private:
     void apply();
 
 public:
+    // the right-click menu's shortcuts: count the size again (unless a count is under way), show the Metadata tab
+    void calculate_size();
+    void show_metadata();
     void verify_against(const QString &hash_path);   // the Checksums tab's checksum file (Browse…)
     QLabel *hash_result = nullptr;                   // what it said
 

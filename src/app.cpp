@@ -1564,6 +1564,17 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, paths]() { shred_paths(paths); }),
           "shred");
     m->addSeparator();
+    // shortcuts into Properties: its size counted afresh, its Metadata tab
+    if (all_dirs && std::none_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); }))
+        T(m->addAction(icon({"drive-harddisk", "document-properties"}), "Calculate Folder Size", this, [this, paths]() {
+            if (PropertiesDialog *d = properties(paths))
+                d->calculate_size();
+        }), "calculate_size");
+    if (!is_dir && !single.isEmpty() && metadata::viewable(single))
+        T(m->addAction(icon({"document-properties"}), "Open Metadata", this, [this, single]() {
+            if (PropertiesDialog *d = properties({single}))
+                d->show_metadata();
+        }), "open_metadata");
     T(m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); }), "properties");
     menus::arrange(m, kind);
     return m;
@@ -1605,13 +1616,14 @@ void MainWindow::uwp_add(const QString &path)
         warn(this, "UWP", "Couldn't reach UWP. Is its editor window still open?");
 }
 
-void MainWindow::properties(const QStringList &paths, QWidget *parent)
+PropertiesDialog *MainWindow::properties(const QStringList &paths, QWidget *parent)
 {
     if (paths.isEmpty())
-        return;
+        return nullptr;
     auto *d = new PropertiesDialog(parent ? parent : this, paths);   // several can be open, each a window of its own
     connect(d, &QDialog::finished, this, &MainWindow::update_status);
     show_free(d);
+    return d;
 }
 
 // -- settings

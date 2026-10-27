@@ -31,6 +31,9 @@ struct OrientationTag {
 OrientationTag orientation_tag(const QString &path);
 OrientationTag orientation_tag_in(const QByteArray &file);   // the same for a file's contents
 QList<MetaRow> full_metadata(const QString &path);
+// whether full_metadata has something to show for a file (by its name): images, and with exiftool also videos, audio,
+// PDFs, e-books and office documents (the right-click menu's Open Metadata)
+bool viewable(const QString &path);
 // When a photo or video was taken, from its metadata (EXIF DateTimeOriginal / DateTimeDigitized, a PNG's Creation Time,
 // an MP4 / MOV movie header's creation time); invalid when it has none. Reads the file: not on the UI thread.
 QDateTime taken(const QString &path);

@@ -220,7 +220,12 @@ QList<Entry> defaults(Kind k)
     if (folder)
         l << item("regen_preview", "Regenerate Preview") << previews_menu() << item("open_terminal", "Open in Terminal");
     l << sep() << item("trash", "Move to Trash") << item("delete", "Delete Permanently…")
-      << item("shred", "Shred with BleachBit…", "with BleachBit installed") << sep() << item("properties", "Properties");
+      << item("shred", "Shred with BleachBit…", "with BleachBit installed") << sep();
+    if (folder || several)
+        l << item("calculate_size", "Calculate Folder Size", several ? "when all are folders" : QString());
+    if (file || arc)
+        l << item("open_metadata", "Open Metadata", "for images; with exiftool, videos, audio and documents too");
+    l << item("properties", "Properties");
     return l;
 }
 

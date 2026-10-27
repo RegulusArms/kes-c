@@ -46,6 +46,8 @@ const QHash<QString, QStringList> &thumbnailers();
 QStringList thumbnailers_for(const QString &path);
 // whether a file can get a thumbnail: images and videos (Kestrel's own), anything else a system thumbnailer handles
 bool can_thumbnail(const QString &path);
+// whether path is Kestrel's own cache folder (~/.cache/kestrel-explorer) or inside it: no thumbnails or previews there
+bool in_app_cache(const QString &path);
 QImage system_thumb(const QString &path, int size);
 QImage video_frame(const QString &path, int size);
 // a QImage thumbnail (max size x size) using the freedesktop cache; null if there is none. fresh: made again even if

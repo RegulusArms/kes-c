@@ -336,6 +336,34 @@ int main(int argc, char **argv)
                   .arg(done_at_scan_end).arg(total_at_scan_end));
     }
 
+    // -- nothing in Kestrel's own cache (~/.cache/kestrel-explorer) gets a thumbnail or folder preview: they'd only be
+    // previews of its previews, written back into it and into ~/.cache/thumbnails
+    {
+        QString inside = join(APP_CACHE(), "thumb-test"), sub = join(inside, "sub");
+        makedirs(sub, true);
+        for (int i = 0; i < 2; ++i) {
+            QImage im(600, 400, QImage::Format_RGB32);
+            im.fill(QColor::fromHsv(i * 90, 200, 200));
+            im.save(join(sub, QString("c%1.png").arg(i)), "PNG");
+        }
+        auto large = []() { return isdir(join(THUMB_DIR(), "large")) ? listdir(join(THUMB_DIR(), "large")).size() : 0; };
+        auto preview = [](const QString &d) { return exists(join(join(APP_CACHE(), "folders"), md5(d) + "-256.png")); };
+        int before = large();
+        RecursiveBuilder(inside, 256, g_thumbs).run();
+        RecursiveBuilder(CACHE_ROOT(), 256, g_thumbs).run();   // the walk from above it leaves it out
+        check(large() == before && !preview(inside) && !preview(sub),
+              "Generate Previews Recursively makes nothing inside Kestrel's own cache folder");
+        QString img = join(sub, "c0.png");
+        g_thumbs->get(img, QFileInfo(img).lastModified().toSecsSinceEpoch(), false, 256, QFileInfo(img).size());
+        g_thumbs->folder_pixmap(sub, QFileInfo(sub).lastModified().toSecsSinceEpoch(), 256, true);
+        spin(1500);
+        check(large() == before && !preview(sub) &&
+                  g_thumbs->get(img, QFileInfo(img).lastModified().toSecsSinceEpoch(), false, 256,
+                                QFileInfo(img).size()).isNull(),
+              "a file or folder inside Kestrel's own cache folder gets no thumbnail or preview");
+        rmtree(inside);
+    }
+
     // -- thumbnailing is a job per pane and folder (the Jobs window's lower list): the pane leaving the folder lowers
     // its job (what's newer comes first; back, it's first again; left long enough, it stops), Pause and Stop work,
     // it waits while another job uses its drive, and its window closing stops it, no other window's

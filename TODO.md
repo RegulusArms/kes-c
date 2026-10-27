@@ -193,6 +193,51 @@ into.
   - **Tests:** a run under `LANG=de_DE.UTF-8` (and Russian and one CJK locale) that checks the translation loads, plus the
     `%1`/`%n` check from the item above over the real files.
 
+### Tests and CI — beta release blocker
+
+*Everything in this section is to be done before the first beta.*
+
+- [ ] **A tool check: which external tools work, in its own CI job.** Kestrel wraps the standard command-line tools
+  (7-Zip, unrar/rar, zpaq, tar's compressors, gpg, rsync, ffmpeg/ffprobe, exiftool, jpegtran, heif-enc, ripgrep,
+  BleachBit…), and the test suite skips a tool's checks when it isn't installed, so CI only covers the tools it
+  happens to have (unrar, rar, zpaq, ripgrep, pigz, the parallel compressors and heif-enc aren't installed; zstd, xz
+  and bzip2 only come with GitHub's runner image). A separate job installs every tool Kestrel can use, runs each of
+  them through Kestrel's own code, and reports what works and what doesn't.
+  - Its own job (or workflow), run on its own: nothing waits for it, and a failure there never stops the build, the
+    package, the release or the apt update.
+  - A report of each tool: installed or not, its version, and works / broken / missing, with the error for a broken
+    one (in the run's summary page, and kept as an artifact).
+  - Both 7-Zips: `7zip` (what the docs recommend) and the older `p7zip-full` (what the test jobs install now).
+  - On ubuntu:24.04 and 26.04 containers (pulled through mirror.gcr.io), so a newer tool that behaves differently
+    shows up before users find it.
+  - Also on a schedule (e.g. weekly), not only on pushes: tools change when the distro updates them, not when
+    Kestrel does.
+
+- [ ] **apt suites by Ubuntu release, so dropping one doesn't strand its users.** Today there's one `stable` and one
+  `dev` suite, and every release gets the same .deb. When main stops supporting a release (24.04 first: newer Qt,
+  libraries it doesn't have), publishing the new version replaces the last one that installs there (`reprepro
+  includedeb`, and gh-pages keeps no history): existing users silently stop getting updates (apt keeps the installed
+  version because the new Depends can't be met) and new installs fail with unmet dependencies. apt never falls back to
+  an older version on its own.
+  - Add suites named after the Ubuntu release (`noble`, `resolute`…, plus a dev one for each, e.g. `noble-dev`) beside
+    `stable` and `dev`. While a release is supported, CI publishes the same .deb to all of them (the pool keeps one
+    copy). Keep `stable` and `dev` working for the sources files people already have.
+  - Install instructions (index.html on gh-pages, docs/install.md) pick the suite from /etc/os-release:
+    `UBUNTU_CODENAME` (Linux Mint sets it, e.g. Mint 22 → noble), else `VERSION_CODENAME`. So Mint and every Ubuntu
+    flavour (Kubuntu, Xubuntu…) get the right suite without a table to look up.
+  - Not by desktop: the package's dependencies follow the Ubuntu base, not the desktop, and the desktop is handled when
+    Kestrel runs (kes-setup and Kestrel check for GNOME, Cinnamon, KDE). Dropping a desktop is a code and docs change,
+    with a changelog entry, not an apt one.
+  - Dropping a release: before the first version that doesn't install there, stop publishing to its suite (it keeps
+    the last version that works), say so in the changelog and on the install page, and keep a `package` check that
+    the frozen suite still installs on that release's container. Optionally a maintenance branch for data-safety fixes,
+    published only to that suite. `stable`/`dev` users on the dropped release get a notice in Kestrel (switch to
+    the release's suite) rather than a package rewriting their apt sources.
+  - CI: one `reprepro includedeb` per suite in the apt job; conf/distributions on gh-pages gains the suites (fetch
+    gh-pages fresh before editing it). When GitHub retires the `ubuntu-24.04` runner image, the test jobs move to
+    `ubuntu:24.04` containers (through mirror.gcr.io) for as long as 24.04 is supported.
+  - The signing key expires 2029-10-04, about when 24.04's standard support ends: extend it either way.
+
 ## Done
 - [x] **Drag an image out of the viewer** (0.3.2-alpha.18). `ViewerCanvas::fits()`: with the whole image in view a left-drag drags out (`drag_out`), zoomed in it pans and Alt+drag drags out (chosen with the user). `ImageViewer::image_data`: the file's URL, its own bytes and PNG made on request (`ImageMime`), marked `COPY_ONLY_MIME` so Kestrel's drop targets (`handle_drop`, the folder model, tabs, sidebar) copy, never move; turned or edited and not saved, a copy as shown in `~/.cache/kestrel-explorer/viewer-copies` (chosen with the user; a day old: deleted). Kestrel's drag picture on Wayland (`DragGhost`, moved to widgets.h), the focus given to the app dropped into. Ctrl+C now puts the file on the clipboard too (copied files). Test: `viewer`.
 - [x] **Rotate images losslessly** (0.3.2-alpha.18). Rotate ▸ (`rotate`, `rotate_cw`, `rotate_180`, `rotate_ccw`, `flip_horizontal`, `flip_vertical`) → `convert::rotate` (a queued job) → `imgedit::rotate_file`: JPEG through jpegtran `-perfect -copy all` from how it's shown (`compose` with its tag), the tag set to 1 (chosen with the user over the tag only; without jpegtran: the tag); `NotWholeBlocks` asks once (Trim the Edge / Set the Orientation Tag); PNG, BMP, TIFF, lossless WebP written again (`save_edit` with `keep_meta`: exiftool copies EXIF/XMP); HEIC, AVIF, lossy WebP asked first (`reencode`). Part files, fsynced. Not done: the viewer's R/L still save through the tag. Test: `media`.

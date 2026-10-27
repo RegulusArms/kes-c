@@ -49,6 +49,8 @@ These entries are on the file, folder, archive and several-items menus. The sect
 | **Move to Trash** | Moves the item(s) to the trash (Ctrl+Z puts them back) | Always |
 | **Delete Permanently…** | Asks, then deletes without the trash | Always |
 | **Shred with BleachBit…** | Asks, then overwrites and deletes the item(s) so they can't be recovered | With BleachBit installed |
+| **Calculate Folder Size** | Opens Properties and counts the size afresh (a job in the Jobs window), also when a size was remembered | Folders, or several items when all are folders (not links to folders) |
+| **Open Metadata** | Opens Properties on its Metadata tab | Files: images; with exiftool also videos, audio, PDFs, e-books and office documents |
 | **Properties** | Opens the Properties window (size, permissions, metadata, checksums…) | Always |
 
 **Links & Shortcuts ▸**

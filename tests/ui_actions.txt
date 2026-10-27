@@ -251,6 +251,7 @@ context menu, a folder > ---
 context menu, a folder > Move to Trash
 context menu, a folder > Delete Permanently…
 context menu, a folder > ---
+context menu, a folder > Calculate Folder Size
 context menu, a folder > Properties
 context menu, two files > Open
 context menu, two files > ---

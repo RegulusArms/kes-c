@@ -4,6 +4,22 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.21
+
+Added:
+- `ui`: Calculate Folder Size opens Properties and counts the folder again rather than showing the size remembered;
+  Open Metadata opens Properties on its Metadata tab; neither is offered for a plain text file. Covers the two new
+  right-click entries.
+- `theme`: files and folders inside Kestrel's own cache folder get no thumbnail or folder preview, whether asked for
+  by a view or by Generate Previews Recursively (on a folder in it, or on ~/.cache above it).
+- `overview`: a mount's password window (an encrypted drive's) and question window make no reply until they're
+  answered, then reply once, handled, with the password typed. Guards against GIO's own handler answering
+  "unhandled" first, which made udisks fail the unlock with "Expected G_MOUNT_OPERATION_HANDLED but got 2".
+
+Changed:
+- `ui`: `ui_actions.txt` lists the folder menu's new Calculate Folder Size (Open Metadata isn't in the listed menus:
+  they have no image).
+
 ## 0.3.2-alpha.20
 
 Added:

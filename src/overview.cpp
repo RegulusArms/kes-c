@@ -317,6 +317,9 @@ static void reply_when_done(QDialog *dlg, GMountOperation *op, std::function<boo
 static void ask_password(GMountOperation *op, const char *message, const char *default_user,
                          const char *default_domain, GAskPasswordFlags flags, gpointer data)
 {
+    // GMountOperation's own handler (run after this one) replies "unhandled" on the next idle, and udisks then fails
+    // the unlock ("Expected G_MOUNT_OPERATION_HANDLED but got 2") before the window is answered: it mustn't run
+    g_signal_stop_emission_by_name(op, "ask-password");
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
     auto *dlg = new QDialog(parent);
     dlg->setWindowTitle("Authentication Required");
@@ -390,6 +393,7 @@ static void ask_password(GMountOperation *op, const char *message, const char *d
 
 static void ask_question(GMountOperation *op, const char *message, const char **choices, gpointer data)
 {
+    g_signal_stop_emission_by_name(op, "ask-question");   // (as ask_password)
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
     auto *box = new QMessageBox(QMessageBox::Question, "Question", QString::fromUtf8(message), QMessageBox::NoButton, parent);
     QList<QAbstractButton *> buttons;
@@ -404,7 +408,7 @@ static void ask_question(GMountOperation *op, const char *message, const char **
     });
 }
 
-static GMountOperation *make_mount_operation(QWidget *parent)
+GMountOperation *make_mount_operation(QWidget *parent)
 {
     GMountOperation *op = g_mount_operation_new();
     auto *ptr = new QPointer<QWidget>(parent);

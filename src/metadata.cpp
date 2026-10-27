@@ -1,5 +1,6 @@
 #include "metadata.h"
 
+#include "convert.h"
 #include "proc.h"
 #include "util.h"
 
@@ -875,6 +876,15 @@ QList<MetaRow> full_metadata(const QString &path)
 static const QSet<QString> READONLY_GROUPS = {"", "ExifTool", "System", "File", "Composite"};
 
 bool can_edit() { return which("exiftool"); }
+
+bool viewable(const QString &path)
+{
+    static const QSet<QString> DOCS = {".pdf", ".epub", ".mobi", ".azw3", ".djvu", ".docx", ".xlsx", ".pptx", ".doc",
+                                       ".xls", ".ppt", ".odt", ".ods", ".odp", ".rtf", ".psd", ".svg", ".xmp"};
+    if (is_image(path))
+        return true;
+    return can_edit() && (is_video(path) || convert::is_audio(path) || DOCS.contains(ext_of(path)));
+}
 
 bool is_editable(const QString &group, const QString &value, const QString &tag)
 {
