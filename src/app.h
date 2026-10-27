@@ -84,7 +84,8 @@ public:
     void open_checksums(const QString &path);   // Verify Checksums, its signature first when one is beside it
     bool open_file(const QString &path);
     void quick_view(Pane *pane, const QStringList &paths);
-    void open_viewer(Pane *pane, const QStringList &images, int idx);
+    ImageViewer *open_viewer(Pane *pane, const QStringList &images, int idx, bool whole_folder = false);   // whole_folder: follow it
+    void compare_in_viewer(Pane *pane, const QStringList &two);   // over each other, with a slider
     void context_menu(Pane *pane, QAbstractItemView *view, const QPoint &pos);
     QMenu *menu_at(Pane *pane, QAbstractItemView *view, const QPoint &pos);   // what context_menu shows (and selects)
     QMenu *build_menu(Pane *pane, const QStringList &paths);

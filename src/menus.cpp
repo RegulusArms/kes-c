@@ -104,6 +104,7 @@ QList<Entry> defaults(Kind k)
                       item("info_panel", "Info Panel"), item("info_line", "Info Line"), sep(),
                       item("compare", "Compare With the Next Image"),
                       item("compare_ab", "One at a Time (A/B)", "while comparing"),
+                      item("compare_slider", "Over Each Other, With a Slider", "while comparing"),
                       item("compare_switch", "Show A / Show B", "comparing one at a time")})
           << submenu("viewer_edit", "Rotate and Edit",
                      {item("rotate_right", "Rotate Right"), item("rotate_left", "Rotate Left"),
@@ -190,6 +191,8 @@ QList<Entry> defaults(Kind k)
                      {item("image_wallpaper", "Set as Wallpaper"), item("image_cover", "Use as Folder Cover"),
                       item("image_copy", "Copy Image to Clipboard")},
                      "for images");
+    if (several)
+        l << item("compare_images", "Compare in Viewer", "for two images");
     if (file || several) {
         QString all = several ? "when all are " : "for ";
         l << submenu("rotate", "Rotate",

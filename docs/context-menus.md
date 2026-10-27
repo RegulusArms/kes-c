@@ -154,6 +154,7 @@ The shared entries, plus:
 | **Extract All Here** / **Extract All To…** | Extracts each archive, one after another | When all are archives |
 | **Test Archives** | Tests each archive | When all are archives |
 | **Find Duplicates…** | As for one folder, in all of them together | When all are folders |
+| **Compare in Viewer** | Opens the two in the image viewer over each other, with a slider to drag across (A: the first in the folder's order) | When two images are selected |
 | **Rotate ▸** / **Convert Image…** | As for one image, for each of them, as one job | When all are images |
 | **Convert Video…** / **Extract Audio…** | As for one video, for each of them, one after another as one job with one summary | When all are videos, with ffmpeg installed |
 | **Convert Audio…** | As for one audio file or one folder, for all of them | When all are audio files or all are folders, with ffmpeg installed |
@@ -188,7 +189,7 @@ Right-click the picture in Kestrel's image viewer. The keys are shown in the men
 | Entry | What it does | Shows |
 |---|---|---|
 | **Next** / **Previous** | The next or previous image (Right, Left) | Always |
-| **View ▸** | **Fullscreen** (F); **Start / Stop Slideshow** (S); **Fit to Window** (0); **Actual Size** (1); **Keep Zoom Between Images** (K); **Filmstrip** (T), **Info Panel** (I), **Info Line** (Tab); **Compare With the Next Image** (X) side by side, **One at a Time (A/B)** (V) while comparing, and **Show A / Show B** (B) when comparing one at a time | Always |
+| **View ▸** | **Fullscreen** (F); **Start / Stop Slideshow** (S); **Fit to Window** (0); **Actual Size** (1); **Keep Zoom Between Images** (K); **Filmstrip** (T), **Info Panel** (I), **Info Line** (Tab); **Compare With the Next Image** (X) side by side, **One at a Time (A/B)** (V) and **Over Each Other, With a Slider** (D) while comparing, and **Show A / Show B** (B) when comparing one at a time | Always |
 | **Rotate and Edit ▸** | **Rotate Right** (R), **Rotate Left** (L), **Flip Horizontally** (H); **Save Rotation / Save Changes…** (Ctrl+S, lossless for JPEGs where possible); **Undo the Edits** (Esc) when there are crops or resizes not saved; **Crop…** (Shift+C), **Resize…** (Shift+S); **Straighten** (Shift+O: turns a JPEG's pixels the way its orientation tag says) | Always |
 | **Star** / **Unstar** | As in a folder (*) | Always |
 | **Pin in Its Folder** / **Unpin** | As in a folder (P) | Always |

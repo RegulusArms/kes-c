@@ -1493,6 +1493,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
           "image_copy");
     }
     auto all = [&paths](bool (*f)(const QString &)) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
+    if (paths.size() == 2 && all(&is_image))
+        T(m->addAction(icon({"view-dual", "image-x-generic"}), "Compare in Viewer", this, [this, p, paths]() { compare_in_viewer(p, paths); }),
+          "compare_images");
     if (all(&is_image)) {
         QMenu *rm = m->addMenu(icon({"object-rotate-right", "image-x-generic"}), "Rotate");
         T(rm->menuAction(), "rotate");
@@ -1822,7 +1825,7 @@ void MainWindow::show_shortcuts()
 <tr><td><b>F</b></td><td>Fullscreen</td></tr>
 <tr><td><b>S</b></td><td>Slideshow</td></tr>
 <tr><td><b>T / I / Tab</b></td><td>Filmstrip / info panel / info line</td></tr>
-<tr><td><b>X, V, B</b></td><td>Compare with the next image; side by side ↔ A/B; show A or B</td></tr>
+<tr><td><b>X, V, B, D</b></td><td>Compare with the next image; side by side ↔ A/B; show A or B; over each other with a slider</td></tr>
 <tr><td><b>R / L / H, Ctrl+S</b></td><td>Rotate right / left, flip; save the rotation</td></tr>
 <tr><td><b>Shift+C / Shift+S / Shift+O</b></td><td>Crop / resize / straighten</td></tr>
 <tr><td><b>* / P</b></td><td>Star / pin</td></tr>

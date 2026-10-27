@@ -155,7 +155,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
                 if (is_image(x))
                     all_imgs << x;
             int idx = std::max<int>(0, all_imgs.indexOf(images.first()));
-            open_viewer(p, all_imgs.isEmpty() ? images : all_imgs, all_imgs.contains(images.first()) ? idx : 0);
+            open_viewer(p, all_imgs.isEmpty() ? images : all_imgs, all_imgs.contains(images.first()) ? idx : 0, true);
         } else {
             open_viewer(p, in_view_order(p, images), 0);
         }
@@ -229,7 +229,7 @@ void MainWindow::quick_view(Pane *p, const QStringList &paths)
                 if (is_image(x))
                     all_imgs << x;
             int i = all_imgs.indexOf(imgs.first());
-            open_viewer(p, all_imgs.isEmpty() ? imgs : all_imgs, std::max(i, 0));
+            open_viewer(p, all_imgs.isEmpty() ? imgs : all_imgs, std::max(i, 0), true);
         } else {
             open_viewer(p, in_view_order(p, imgs), 0);
         }
@@ -238,7 +238,7 @@ void MainWindow::quick_view(Pane *p, const QStringList &paths)
     }
 }
 
-void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
+ImageViewer *MainWindow::open_viewer(Pane *p, const QStringList &images, int idx, bool whole_folder)
 {
     QPointer<Pane> pp(p);
     auto viewer_ptr = std::make_shared<QPointer<ImageViewer>>();
@@ -274,12 +274,27 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
     cb.on_transfer = [this](const QString &path, const QString &folder, const QString &op) {
         fileops::transfer(this, {path}, folder, op, nullptr, op == "move" ? "the image viewer's Move" : "the image viewer's Copy");
     };
+    // while the tab still shows the folder: where its new images go in the list
+    cb.folder_order = [pp](const QString &dir) {
+        return pp && !pp->in_search && !pp->is_listing() && pp->path == dir ? pp->all_paths() : QStringList();
+    };
     auto *v = new ImageViewer(images, idx, cb);
     *viewer_ptr = v;
+    // opened on an image of a folder (not a selection, search results, Starred or Recent): the folder's images, and
+    // ones that appear in it later
+    if (whole_folder && p && !p->in_search && !p->is_listing() && !p->is_overview() && !images.isEmpty() &&
+        dirname(images.first()) == p->path)
+        v->follow_folder(p->path);
     viewers << v;
     if (settings().value("viewer_fullscreen", false).toBool())
         v->showFullScreen();
     else
         v->show();
     v->activateWindow();
+    return v;
+}
+
+void MainWindow::compare_in_viewer(Pane *p, const QStringList &two)
+{
+    open_viewer(p, in_view_order(p, two), 0)->compare_first_two(3);   // A: the first in the folder's order
 }

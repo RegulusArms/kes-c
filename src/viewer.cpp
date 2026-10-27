@@ -21,7 +21,9 @@
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QDateTime>
+#include <QDir>
 #include <QDrag>
+#include <QFileSystemWatcher>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QImageReader>
@@ -211,10 +213,8 @@ void ViewerCanvas::clamp()
     offset = QPointF(std::max(-mx, std::min(mx, offset.x())), std::max(-my, std::min(my, offset.y())));
 }
 
-void ViewerCanvas::paintEvent(QPaintEvent *)
+void ViewerCanvas::draw_image(QPainter &p)
 {
-    QPainter p(this);
-    p.fillRect(rect(), QColor("#111"));
     double s = scale();
     if (!pix.isNull() && !full.isEmpty()) {
         double fw = full.width(), fh = full.height();
@@ -230,6 +230,31 @@ void ViewerCanvas::paintEvent(QPaintEvent *)
     } else if (!message.isEmpty()) {
         p.setPen(QColor("#aaa"));
         p.drawText(rect(), Qt::AlignCenter, message);
+    }
+}
+
+void ViewerCanvas::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    p.fillRect(rect(), QColor("#111"));
+    double s = scale();
+    if (under) {
+        int x = divider_x();
+        p.setClipRect(QRect(0, 0, x, height()));
+        draw_image(p);
+        p.setClipRect(QRect(x, 0, width() - x, height()));
+        under->draw_image(p);
+        p.setClipping(false);
+        p.setPen(QPen(QColor(255, 255, 255, 220), 2));
+        p.drawLine(QPointF(x, 0), QPointF(x, height()));
+        QRectF knob(x - 9, height() / 2.0 - 18, 18, 36);   // the handle
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setBrush(QColor(255, 255, 255, 220));
+        p.setPen(QPen(QColor(0, 0, 0, 120), 1));
+        p.drawRoundedRect(knob, 6, 6);
+        p.setRenderHint(QPainter::Antialiasing, false);
+    } else {
+        draw_image(p);
     }
     if (cropping && !pix.isNull()) {
         QSizeF t = img_size();
@@ -262,6 +287,10 @@ void ViewerCanvas::paintEvent(QPaintEvent *)
 
 void ViewerCanvas::resizeEvent(QResizeEvent *ev)
 {
+    if (under) {
+        under->resize(size());
+        under->clamp();
+    }
     clamp();
     QWidget::resizeEvent(ev);
 }
@@ -290,6 +319,14 @@ void ViewerCanvas::mousePressEvent(QMouseEvent *ev)
         ev->ignore();   // back / forward / middle: the viewer's
         return;
     }
+    // the slider: a press on the divider, or anywhere while nothing can be panned, moves it (Alt+drag still takes
+    // the image out)
+    if (under && !cropping && !(ev->modifiers() & Qt::AltModifier) && (near_divider(ev->position()) || fits())) {
+        dragging_split = true;
+        split = std::clamp(ev->position().x() / std::max(1, width()), 0.0, 1.0);
+        update();
+        return;
+    }
     dragging = true;
     drag_out_armed = !cropping && !pix.isNull() && (fits() || (ev->modifiers() & Qt::AltModifier));
     if (cropping) {
@@ -307,8 +344,13 @@ void ViewerCanvas::mousePressEvent(QMouseEvent *ev)
 void ViewerCanvas::mouseMoveEvent(QMouseEvent *ev)
 {
     Q_EMIT pointer_moved();
+    if (dragging_split) {
+        split = std::clamp(ev->position().x() / std::max(1, width()), 0.0, 1.0);
+        update();
+        return;
+    }
     if (!dragging) {
-        setCursor(cropping ? Qt::CrossCursor : Qt::ArrowCursor);
+        setCursor(cropping ? Qt::CrossCursor : under && (near_divider(ev->position()) || fits()) ? Qt::SplitHCursor : Qt::ArrowCursor);
         return;
     }
     if (cropping) {
@@ -334,9 +376,11 @@ void ViewerCanvas::mouseMoveEvent(QMouseEvent *ev)
     Q_EMIT view_changed();
 }
 
+bool ViewerCanvas::near_divider(QPointF pos) const { return std::fabs(pos.x() - divider_x()) <= 12; }
+
 void ViewerCanvas::mouseReleaseEvent(QMouseEvent *)
 {
-    dragging = drag_out_armed = false;
+    dragging = drag_out_armed = dragging_split = false;
     setCursor(cropping ? Qt::CrossCursor : Qt::ArrowCursor);
 }
 
@@ -834,6 +878,8 @@ void ImageViewer::show_on(ViewerCanvas *c, const QString &path)
         update_overlay();
         if (!info->isHidden())
             info->set_histogram(it->pix);
+    } else if (compare == 3) {   // A is drawn by B's canvas
+        canvas->update();
     }
 }
 
@@ -846,6 +892,12 @@ void ImageViewer::want_full(ViewerCanvas *c, const QString &path)
 }
 
 QString ImageViewer::current() const { return paths.isEmpty() ? QString() : paths[index]; }
+
+void ImageViewer::update_title()
+{
+    QString path = current();
+    setWindowTitle(QString("%1 — %2/%3").arg(basename(path), QString::number(index + 1), QString::number(paths.size())));
+}
 
 void ImageViewer::show_current()
 {
@@ -866,7 +918,7 @@ void ImageViewer::show_current()
     stop_movie();
     struct stat st;
     shown_bytes = stat_(path, st) ? qint64(st.st_size) : -1;
-    setWindowTitle(QString("%1 — %2/%3").arg(basename(path), QString::number(index + 1), QString::number(paths.size())));
+    update_title();
     // full-size decodes no longer on screen go (they're big); screen-size ones stay, for going back
     for (auto it = cache.begin(); it != cache.end();) {
         if (it->is_full && it.key() != path && it.key() != pinned_path &&
@@ -947,6 +999,8 @@ void ImageViewer::update_overlay()
             parts << "▶ slideshow";
         if (!steps.isEmpty())
             parts << "✎ not saved (Ctrl+S saves, Esc undoes)";
+        if (compare == 3)   // A is under B, its line hidden
+            parts << "A: " + basename(pinned_path);
         canvas->overlay = parts.join("    ");
         if (compare)
             pinned->overlay = QString("%1    %2%").arg(basename(pinned_path)).arg(qRound(pinned->scale() * 100));
@@ -960,7 +1014,13 @@ void ImageViewer::update_layout()
     pinned->setVisible(compare == 1 || (compare == 2 && showing_a));
     canvas->setVisible(compare != 2 || !showing_a);
     pinned->tag = compare ? "A" : "";
-    canvas->tag = compare ? "B" : "";
+    canvas->tag = compare == 3 ? "B ◂ ▸ A" : compare ? "B" : "";
+    canvas->under = compare == 3 ? pinned : nullptr;
+    if (compare == 3) {   // A, hidden, drawn by B's canvas at its size and view
+        pinned->resize(canvas->size());
+        pinned->clamp();
+        link_view(canvas, pinned);
+    }
     update_overlay();
 }
 
@@ -1142,6 +1202,108 @@ void ImageViewer::drop_current()
     index = std::max(0, std::min<int>(index, paths.size() - 1));
     shown.clear();
     show_current();
+}
+
+// ------------------------------------------------------------ the folder's new images
+
+void ImageViewer::follow_folder(const QString &dir)
+{
+    if (dir.isEmpty() || folder_watch || !drives::slow_root(dir).isEmpty())
+        return;
+    followed = dir;
+    folder_watch = new QFileSystemWatcher(this);
+    folder_watch->addPath(dir);
+    rescan.setSingleShot(true);
+    rescan.setInterval(1000);
+    // not restarted by each change: a folder written to all the time is still scanned once a second
+    connect(folder_watch, &QFileSystemWatcher::directoryChanged, this, [this]() {
+        if (!rescan.isActive())
+            rescan.start();
+    });
+    connect(&rescan, &QTimer::timeout, this, &ImageViewer::scan_folder);
+}
+
+// Listed off the GUI thread: on a drive busy with another program a listing (or a stat) can take seconds. Hidden
+// files (parts being written, Kestrel's among them) are left out, and so are files changed in the last second, which
+// may still be being written: they're looked at again a second later.
+void ImageViewer::scan_folder()
+{
+    if (followed.isEmpty())
+        return;
+    if (scanning) {
+        scan_again = true;
+        return;
+    }
+    scanning = true;
+    QString dir = followed;
+    pool.start([this, dir]() {
+        QStringList found;
+        bool busy = false;
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        for (const QString &name : QDir(dir).entryList(QDir::Files | QDir::NoDotAndDotDot)) {
+            QString p = join(dir, name);
+            struct stat st;
+            if (!is_image(p) || !stat_(p, st))
+                continue;
+            if (now - (qint64(st.st_mtim.tv_sec) * 1000 + st.st_mtim.tv_nsec / 1000000) < 1000) {
+                busy = true;
+                continue;
+            }
+            found << p;
+        }
+        QMetaObject::invokeMethod(this, [this, found, busy]() {
+            scanning = false;
+            add_found(found);
+            if (busy || scan_again) {
+                scan_again = false;
+                if (!rescan.isActive())
+                    rescan.start();
+            }
+        }, Qt::QueuedConnection);
+    });
+}
+
+void ImageViewer::add_found(const QStringList &found)
+{
+    QSet<QString> have(paths.begin(), paths.end());
+    for (const auto &r : removed)   // trashed or moved from here: Ctrl+Z puts them back in their place
+        have << r.first;
+    QStringList fresh;
+    for (const QString &p : found)
+        if (!have.contains(p))
+            fresh << p;
+    if (fresh.isEmpty() || paths.isEmpty())
+        return;
+    natural_sort(fresh);
+    QStringList order = cb.folder_order ? cb.folder_order(followed) : QStringList();
+    for (const QString &p : fresh) {
+        // after the nearest image before it in the folder's order (or before the nearest after it); not there yet
+        // (the folder's view hasn't seen it): at the end
+        int at = paths.size(), k = order.indexOf(p);
+        if (k >= 0) {
+            QHash<QString, int> pos;
+            for (int i = 0; i < paths.size(); ++i)
+                pos.insert(paths[i], i);
+            int j = k - 1;
+            while (j >= 0 && !pos.contains(order[j]))
+                --j;
+            if (j >= 0) {
+                at = pos[order[j]] + 1;
+            } else {
+                j = k + 1;
+                while (j < order.size() && !pos.contains(order[j]))
+                    ++j;
+                if (j < order.size())
+                    at = pos[order[j]];
+            }
+        }
+        paths.insert(at, p);
+        if (at <= index)
+            ++index;
+    }
+    filmstrip->set_items(paths, index);
+    update_title();
+    update_overlay();
 }
 
 // ------------------------------------------------------------ quick actions
@@ -1536,9 +1698,35 @@ void ImageViewer::toggle_ab()
         canvas->show_osd("Not comparing (X compares)");
         return;
     }
-    compare = compare == 1 ? 2 : 1;
+    compare = compare == 2 ? 1 : 2;
     showing_a = false;
     update_layout();
+}
+
+void ImageViewer::toggle_slider()
+{
+    if (!compare) {
+        canvas->show_osd("Not comparing (X compares)");
+        return;
+    }
+    compare = compare == 3 ? 1 : 3;
+    showing_a = false;
+    canvas->split = 0.5;
+    update_layout();
+}
+
+void ImageViewer::compare_first_two(int mode)
+{
+    if (paths.size() < 2)
+        return;
+    if (compare)
+        toggle_compare();
+    go_to(0);
+    toggle_compare();   // A: the first, B: the next one
+    if (mode == 2)
+        toggle_ab();
+    else if (mode == 3)
+        toggle_slider();
 }
 
 void ImageViewer::flip_ab()
@@ -1752,6 +1940,7 @@ void ImageViewer::add_shortcuts()
     add({"X"}, [this]() { toggle_compare(); });
     add({"V"}, [this]() { toggle_ab(); });
     add({"B"}, [this]() { flip_ab(); });
+    add({"D"}, [this]() { toggle_slider(); });
     add({"S"}, [this]() { toggle_slideshow(); });
     add({"Delete"}, [this]() { delete_current(); });
     add({"Ctrl+Z"}, [this]() { undo(); });
@@ -1868,6 +2057,7 @@ QMenu *ImageViewer::build_menu()
     check(view, "compare", "Compare With the Next Image\tX", compare, [this]() { toggle_compare(); });
     if (compare) {
         check(view, "compare_ab", "One at a Time (A/B)\tV", compare == 2, [this]() { toggle_ab(); });
+        check(view, "compare_slider", "Over Each Other, With a Slider\tD", compare == 3, [this]() { toggle_slider(); });
         if (compare == 2)
             add(view, "compare_switch", showing_a ? "Show B\tB" : "Show A\tB", [this]() { flip_ab(); });
     }

@@ -1,7 +1,8 @@
 // Built-in image viewer: images decoded at screen size ahead of time (full size when zoomed in), zoom and pan (wheel,
 // pinch, double-click), slideshow and animations, a filmstrip, an info panel (EXIF, GPS, generation prompts,
-// histogram), comparing two images (side by side or A/B, zoom linked), rotations saved without losing quality, crop
-// and resize, and quick file actions (star, copy or move to a recent folder, trash and undo).
+// histogram), comparing two images (side by side, A/B or over each other with a slider; zoom linked), rotations saved
+// without losing quality, crop and resize, quick file actions (star, copy or move to a recent folder, trash and undo),
+// and new images appearing in the folder joining the list.
 #pragma once
 
 #include <QHash>
@@ -21,7 +22,9 @@
 #include <optional>
 
 class QLabel;
+class QFileSystemWatcher;
 class QMenu;
+class QPainter;
 class QMimeData;
 class QVBoxLayout;
 
@@ -65,6 +68,12 @@ public:
     QString message;   // instead of an image ("Loading…", an error)
     QString overlay;   // the info line, top left
     QString tag;       // "A" / "B" when comparing
+    // The slider: this canvas (B) left of the divider, `under` (A, hidden, kept at this size) right of it; split is
+    // where the divider is, 0 (all A) to 1 (all B)
+    ViewerCanvas *under = nullptr;
+    double split = 0.5;
+    int divider_x() const { return qRound(split * width()); }
+    void draw_image(QPainter &p);
 
 Q_SIGNALS:
     void view_changed();   // zoomed or panned
@@ -85,6 +94,8 @@ private:
     QPointF center() const;
     bool dragging = false;
     bool drag_out_armed = false;   // this press drags the image out once it moves far enough
+    bool dragging_split = false;
+    bool near_divider(QPointF pos) const;
     QPointF drag_start, drag_offset, crop_anchor;
     QString osd;
     QTimer osd_timer;
@@ -168,6 +179,7 @@ public:
         std::function<void(const QString &)> on_reveal;   // show it in its folder
         std::function<void(std::function<void()>)> on_undo;   // Ctrl+Z: undo the newest action, then call back
         std::function<void(const QString &, const QString &, const QString &)> on_transfer;   // (file, folder, op)
+        std::function<QStringList(const QString &)> folder_order;   // a folder's items in the order shown, or none
     };
     ImageViewer(const QStringList &paths, int index, Callbacks callbacks);
     ~ImageViewer() override;
@@ -185,10 +197,17 @@ public:
     void toggle_keep_zoom();
     void toggle_compare();
     void toggle_ab();     // compare side by side ↔ one at a time (A/B)
+    void toggle_slider(); // compare side by side ↔ over each other, with a divider to slide across
+    void compare_first_two(int mode);   // the first image as A, the second as B (Compare in Viewer)
     void flip_ab();       // A/B: show the other one
     void transfer(const QString &folder, const QString &op);   // copy / move the current image there
     void transfer_recent(int n, const QString &op);           // to the n-th recent folder (1 = latest)
     void choose_transfer(const QString &op);
+    // The list is that folder's images: images that appear in it later join the list (in folder_order's place, or at
+    // the end). Not on slow drives (tapes, floppies), where listing the folder again means work for the drive.
+    void follow_folder(const QString &dir);
+    void scan_folder();   // look for new images now (run when the folder changes)
+    QString followed;
     void undo();
     void toggle_star();
     void toggle_pin();
@@ -216,7 +235,7 @@ public:
     ViewerCanvas *canvas;   // the current image (B when comparing)
     ViewerCanvas *pinned;   // A when comparing
     QString pinned_path;
-    int compare = 0;        // 0 off, 1 side by side, 2 A/B
+    int compare = 0;        // 0 off, 1 side by side, 2 A/B, 3 the slider (over each other)
     bool showing_a = false;
     Filmstrip *filmstrip;
     ViewerInfo *info;
@@ -263,6 +282,8 @@ private:
     bool write_rotation(const QString &path, int rotation, bool flip);
     void after_write(const QString &path);
     void drop_current();   // it went (trash, move): off the list
+    void add_found(const QStringList &found);   // the followed folder's images, as listed: new ones join the list
+    void update_title();
     void transfer_file(const QString &path, const QString &folder, const QString &op);
     static void remember_folder(const QString &folder);
     ViewerCanvas *active() const;   // what zoom keys work on: B, or A while A/B shows it
@@ -285,4 +306,7 @@ private:
     QTimer hide_cursor;
     int wheel_acc = 0;
     bool linking = false;
+    QFileSystemWatcher *folder_watch = nullptr;
+    QTimer rescan;            // a change to the followed folder: scanned after a moment, at most once a second
+    bool scanning = false, scan_again = false;
 };

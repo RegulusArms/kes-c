@@ -4,6 +4,16 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.24
+
+Added:
+- `viewer`: an image renamed into the viewer's folder joins the list in its place in the folder's order, one the
+  folder's view doesn't show yet joins at the end, the image shown stays, and hidden files (parts being written)
+  never join. Covers the viewer picking up new images without being reopened.
+- `viewer`: comparing with a slider: Compare in Viewer opens the two as A and B with the divider in the middle, the
+  pixels on each side are B's and A's, dragging it fully left shows only A and fully right only B, zoom is linked,
+  and D switches to and from side by side. Covers the new slider comparison.
+
 ## 0.3.2-alpha.23
 
 Added:

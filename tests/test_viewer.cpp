@@ -1,6 +1,6 @@
 // The image viewer and saving its changes: lossless rotations, Straighten, crop and resize, GPS and the info panel,
-// screen-size decoding, the filmstrip, zoom, compare, quick actions, remembered state, the order it shows a
-// selection in, and dragging an image out (and Ctrl+C).
+// screen-size decoding, the filmstrip, zoom, compare (also with a slider), quick actions, remembered state, the order
+// it shows a selection in, dragging an image out (and Ctrl+C), and new images in the folder joining the list.
 #include "common.h"
 #include "imgedit.h"
 #include "menus.h"
@@ -886,6 +886,93 @@ int main(int argc, char **argv)
         delete drop;
         check(wait_for([&]() { return lexists(join(into, "drag.jpg")); }) && lexists(pic) && calls == 1 && told_copy,
               "an image dragged from the viewer into a folder on the same drive is copied there, and stays where it was");
+    }
+
+    // ---- new images in the folder join the list
+    {
+        QString fdir = home_path("generated");
+        makedirs(fdir);
+        QString x1 = join(fdir, "x1.png"), x2 = join(fdir, "x2.png"), x3 = join(fdir, "x3.png"), z = join(fdir, "z.png");
+        q.save(x1);
+        q.save(x3);
+        ImageViewer::Callbacks fcb;
+        fcb.folder_order = [&](const QString &d) { return d == fdir ? QStringList{x1, x2, x3} : QStringList(); };
+        QPointer<ImageViewer> fv = new ImageViewer({x1, x3}, 1, fcb);
+        fv->show();
+        fv->follow_folder(fdir);
+        check(fv->followed == fdir, "a viewer opened on a folder's image follows the folder");
+        // written as a hidden part and renamed into place, as Kestrel and most programs do
+        QString part = join(fdir, ".x2.png.part");
+        q.save(part, "PNG");
+        util::rename(part, x2);
+        q.save(join(fdir, ".hidden.png"));
+        bool joined = wait_for([&]() { return fv->paths.size() == 3; });
+        check(joined && fv->paths == QStringList({x1, x2, x3}) &&
+                  fv->index == 2 && fv->current() == x3 && fv->filmstrip->paths == fv->paths &&
+                  fv->windowTitle().contains("3/3"),
+              "an image that appears in the folder joins the list in its place in the folder's order, without changing the "
+              "image shown (" + QStringList(fv->paths).replaceInStrings(fdir + "/", "").join(", ") + ")");
+        q.save(z);
+        check(wait_for([&]() { return fv->paths.size() == 4; }) && fv->paths.last() == z && fv->current() == x3,
+              "...and one the folder's view doesn't show yet joins at the end");
+        check(!fv->paths.contains(join(fdir, ".hidden.png")), "...hidden files (parts being written) don't join");
+        fv->close();
+        wait_for([&]() { return !fv; });
+    }
+
+    // ---- comparing with a slider: B left of the divider, A right of it
+    {
+        QString sdir = home_path("slider");
+        makedirs(sdir);
+        QString red = join(sdir, "a-red.png"), blue = join(sdir, "b-blue.png");
+        QImage solid(2400, 1200, QImage::Format_RGB32);
+        solid.fill(qRgb(255, 0, 0));
+        solid.save(red);
+        solid.fill(qRgb(0, 0, 255));
+        solid.save(blue);
+        QPointer<ImageViewer> sv = new ImageViewer({red, blue}, 1, ImageViewer::Callbacks());
+        sv->show();
+        sv->compare_first_two(3);
+        ViewerCanvas *cv = sv->canvas;
+        check(sv->compare == 3 && sv->pinned_path == red && sv->current() == blue && cv->isVisible() &&
+                  !sv->pinned->isVisible() && cv->under == sv->pinned && cv->split == 0.5 && sv->pinned->size() == cv->size(),
+              "Compare in Viewer opens the first image as A and the second as B, over each other with the divider in the "
+              "middle");
+        check(wait_for([&]() { return !sv->pinned->pix.isNull() && !cv->pix.isNull(); }), "...both shown");
+        auto colour_at = [&](double fx) {   // what the canvas shows that far across, below the middle (no messages)
+            QImage shot = cv->grab().toImage();
+            QRgb c = shot.pixel(int(fx * (shot.width() - 1)), shot.height() / 2 + shot.height() / 10);
+            return qRed(c) > 200 && qBlue(c) < 60 ? QString("red") : qBlue(c) > 200 && qRed(c) < 60 ? QString("blue") : QString("other");
+        };
+        QString left = colour_at(0.25), right = colour_at(0.75);
+        check(left == "blue" && right == "red", "half of each shows: B left of the divider, A right of it (" + left + ", " + right + ")");
+        auto press = [&](double fx, QEvent::Type type) {
+            QPointF at(fx * cv->width(), cv->height() / 2.0);
+            QMouseEvent ev(type, at, cv->mapToGlobal(at), Qt::LeftButton,
+                           type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(cv, &ev);
+        };
+        press(0.5, QEvent::MouseButtonPress);
+        press(0.0, QEvent::MouseMove);
+        press(0.0, QEvent::MouseButtonRelease);
+        left = colour_at(0.02), right = colour_at(0.98);
+        check(cv->split == 0 && left == "red" && right == "red", "dragged fully left, only A shows (" + left + ", " + right + ")");
+        press(1.0, QEvent::MouseButtonPress);
+        press(1.0, QEvent::MouseButtonRelease);
+        left = colour_at(0.02), right = colour_at(0.98);
+        check(cv->split == 1 && left == "blue" && right == "blue",
+              "fully right, only B (a click anywhere moves the divider while the images fit) (" + left + ", " + right + ")");
+        cv->set_zoom(cv->fit_scale() * 2);
+        check(sv->pinned->zoom && std::fabs(*sv->pinned->zoom / sv->pinned->fit_scale() - 2) < 1e-6,
+              "zooming B zooms A the same, so the same spot stays under the divider");
+        sv->toggle_slider();
+        check(sv->compare == 1 && !cv->under && sv->pinned->isVisible(), "D again goes back to side by side");
+        sv->toggle_slider();
+        check(sv->compare == 3 && cv->split == 0.5, "...and D once more to the slider, the divider back in the middle");
+        sv->toggle_compare();
+        check(!sv->compare && !cv->under, "X stops comparing");
+        sv->close();
+        wait_for([&]() { return !sv; });
     }
     finish();
 }

@@ -2,7 +2,18 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.23
+## 0.3.2-alpha.24
+
+- **The image viewer picks up new images in the folder** without being reopened. Opened on an image of a folder, it
+  adds images that appear there later (for example from a program generating them) to its list and filmstrip, in
+  their place in the folder's order, without changing the image you're looking at. Files still being written wait
+  until they're finished. Not on tapes and floppies.
+- **Compare two images with a slider.** Select two images and right-click → **Compare in Viewer**: the viewer shows
+  them over each other with a divider in the middle, B on its left and A on its right. Drag it fully left to see only
+  A, fully right to see only B; zooming and panning move both, so the same spot stays under the divider. In the
+  viewer, **D** switches any comparison (X) to the slider and back.
+
+## 0.3.2-alpha.23 (2026-10-27)
 
 - **Fixed: the file chooser asked a tape questions while Kestrel was writing to it.** The file chooser Kestrel
   provides to other apps didn't know about Kestrel's running jobs, so opening one asked the tape for its cartridge's

@@ -39,6 +39,14 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
+- [ ] **Kestrel freezes when a drive is busy with another program.** When another program loads a drive heavily
+  and Kestrel does something on that drive, its window stops responding until GNOME's "not responding" (force quit)
+  dialog appears. Kestrel's own jobs on that drive don't cause it.
+  - Likely: something on the GUI thread waits on the drive (a stat, listing, free-space check, thumbnail or metadata
+    read, file watcher), which is fast normally but blocks for seconds when the drive's queue is full.
+  - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
+    updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
+
 ## New features
 
 ### Jobs
@@ -239,6 +247,7 @@ into.
   - The signing key expires 2029-10-04, about when 24.04's standard support ends: extend it either way.
 
 ## Done
+- [x] **Compare two images in the viewer with a slider** (0.3.2-alpha.24). `compare == 3`: B's canvas draws A (`under`, the hidden `pinned`, kept at its size) right of the divider (`split`, `divider_x`) and itself left of it; a press near the divider, or anywhere while the images fit, moves it (Alt+drag still drags out). Zoom and pan linked by `link_view`; images of different sizes are each fitted to the window. D toggles it (`toggle_slider`); Compare in Viewer (`compare_images`, two images) → `MainWindow::compare_in_viewer` → `compare_first_two(3)`, A: the first in the folder's order. Test: `viewer`.
 - [x] **Drag an image out of the viewer** (0.3.2-alpha.18). `ViewerCanvas::fits()`: with the whole image in view a left-drag drags out (`drag_out`), zoomed in it pans and Alt+drag drags out (chosen with the user). `ImageViewer::image_data`: the file's URL, its own bytes and PNG made on request (`ImageMime`), marked `COPY_ONLY_MIME` so Kestrel's drop targets (`handle_drop`, the folder model, tabs, sidebar) copy, never move; turned or edited and not saved, a copy as shown in `~/.cache/kestrel-explorer/viewer-copies` (chosen with the user; a day old: deleted). Kestrel's drag picture on Wayland (`DragGhost`, moved to widgets.h), the focus given to the app dropped into. Ctrl+C now puts the file on the clipboard too (copied files). Test: `viewer`.
 - [x] **Rotate images losslessly** (0.3.2-alpha.18). Rotate ▸ (`rotate`, `rotate_cw`, `rotate_180`, `rotate_ccw`, `flip_horizontal`, `flip_vertical`) → `convert::rotate` (a queued job) → `imgedit::rotate_file`: JPEG through jpegtran `-perfect -copy all` from how it's shown (`compose` with its tag), the tag set to 1 (chosen with the user over the tag only; without jpegtran: the tag); `NotWholeBlocks` asks once (Trim the Edge / Set the Orientation Tag); PNG, BMP, TIFF, lossless WebP written again (`save_edit` with `keep_meta`: exiftool copies EXIF/XMP); HEIC, AVIF, lossy WebP asked first (`reencode`). Part files, fsynced. Not done: the viewer's R/L still save through the tag. Test: `media`.
 - [x] **Convert images** (0.3.2-alpha.18). Convert Image… (`convert_image`, `convert::ImageDialog`, `media::convert_image`): targets Qt can write plus heif-enc (libheif-examples, new optional package) for HEIC/AVIF; ffmpeg reads what Qt can't; quality, resize (longest side, percentage), metadata kept (`imgedit::with_metadata`: exiftool, or a JPEG's APP1) or stripped, a background for transparency; upright by orientation, colour space kept. Beside or into a folder, never replacing (`write_parts` new_only), trash afterwards. Test: `media`.
