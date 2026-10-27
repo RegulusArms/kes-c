@@ -424,6 +424,7 @@ struct RadioState {
     guint sub = 0;
     qint64 last_launch = 0;
     bool started = false;
+    bool caught_up = false;   // the tower's answer to Kept heard (Radio::caught_up)
 };
 static RadioState rs;
 
@@ -457,6 +458,7 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
     if (!rs.conn)
         rs.conn = G_DBUS_CONNECTION(g_object_ref(conn));
     rs.tower = QString::fromUtf8(owner);
+    rs.caught_up = false;   // a new tower: until its Kept answer comes
     if (!rs.sub)
         rs.sub = g_dbus_connection_signal_subscribe(conn, nullptr, IFACE, "Broadcast", PATH, nullptr,
                                                     G_DBUS_SIGNAL_FLAGS_NONE, on_broadcast, nullptr, nullptr);
@@ -487,6 +489,8 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
                 m["from"] = from;
                 Q_EMIT radio()->heard(m);
             }
+            rs.caught_up = true;
+            Q_EMIT radio()->kept_heard();
         },
         nullptr);
 }
@@ -508,6 +512,7 @@ static void launch_tower()
 static void tower_vanished(GDBusConnection *conn, const gchar *, gpointer)
 {
     rs.tower.clear();
+    rs.caught_up = false;   // the others' jobs aren't known again until a new tower tells them
     if (conn)
         launch_tower();
 }
@@ -543,6 +548,8 @@ QString hand_off(const QStringList &folders, const QStringList &select)
 }
 
 bool Radio::tower_up() const { return rs.conn && !rs.tower.isEmpty(); }
+
+bool Radio::caught_up() const { return tower_up() && rs.caught_up; }
 
 QString Radio::request(const QString &method, const QString &arg)
 {

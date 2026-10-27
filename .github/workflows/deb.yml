@@ -33,6 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
+
       - name: Install build and test dependencies
         # dbus: each test's private session bus; libglib2.0-bin, xdg-utils, desktop-file-utils: the installer test;
         # gnome-shell-common: GNOME Shell's settings, for the dock and extension checks (skipped without them);
@@ -54,6 +59,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Install build and test dependencies
         run: |
@@ -86,6 +96,11 @@ jobs:
           [[ "$GITHUB_REF" == refs/heads/main ]] || deb="$deb+dev${GITHUB_RUN_NUMBER}.g${GITHUB_SHA::7}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "deb=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config dpkg-dev qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
@@ -169,6 +184,11 @@ jobs:
         with:
           name: ${{ needs.deb.outputs.artifact }}
           path: debs
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Add the package
         env:

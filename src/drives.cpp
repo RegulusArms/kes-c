@@ -1,5 +1,6 @@
 #include "drives.h"
 
+#include "atc.h"
 #include "fileops.h"
 #include "jobs.h"
 #include "util.h"
@@ -584,6 +585,14 @@ Sizes::Sizes()
         for (auto it = cache.begin(); it != cache.end();)
             it = !roots.contains(it.key()) && !it->running ? cache.erase(it) : std::next(it);
     });
+    connect(atc::radio(), &atc::Radio::kept_heard, this, [this]() {   // the others' jobs known: tapes held back till now
+        QStringList waiting;
+        for (auto it = cache.cbegin(); it != cache.cend(); ++it)
+            if (it->asked_ms == 0 && slow_kind(it.key()) == Slow::Tape)
+                waiting << it.key();
+        for (const QString &root : waiting)
+            get(root);
+    });
 }
 
 Sizes::Info Sizes::once(const QString &root)
@@ -597,6 +606,9 @@ Sizes::Info Sizes::once(const QString &root)
 // A tape is asked as little as possible: LTFS answers its size and its cartridge's health with commands to the drive,
 // and while it writes they knock it out of streaming. So nothing at all while a job (of any Kestrel) uses it: the last
 // answers stand. Otherwise its size every 30 s, and its health (loads, storage alert) once, then every 10 minutes.
+// Nor before the tower has told this process the others' jobs (a Kestrel just started, the tower restarting): until
+// then a job writing the tape in another Kestrel looks like none. The file chooser never joins the tower, so it never
+// asks a tape anything (its dialogs used to send a health query into a tape being written, and every 30 s its size).
 static const qint64 TAPE_SIZE_MS = 30000, TAPE_HEALTH_MS = 600000;
 
 Sizes::Info Sizes::get(const QString &root)
@@ -605,7 +617,7 @@ Sizes::Info Sizes::get(const QString &root)
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     bool tape = slow_kind(root) == Slow::Tape;
     if (!e.running && now - e.asked_ms > (tape ? TAPE_SIZE_MS : 5000) &&
-        !(tape && jobs::Queue::instance()->busy(root))) {
+        !(tape && (!atc::radio()->caught_up() || jobs::Queue::instance()->busy(root)))) {
         e.running = true;
         e.asked_ms = now;
         if (e.info.total < 0)

@@ -4,6 +4,17 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.23
+
+Added:
+- `slow`: a tape isn't asked its size or health before the tower has told the process the other Kestrels' jobs, and
+  is asked on its own once it has. Covers the file chooser (which never joins the tower) asking a tape another
+  Kestrel was writing for its health and size. The test now joins a tower, as Kestrel does.
+
+Changed:
+- CI (deb.yml): the test, sanitizers, deb and apt jobs point apt at archive.ubuntu.com before installing anything.
+  The runners' default Azure mirror was very slow, and installing the test dependencies held up every run.
+
 ## 0.3.2-alpha.22
 
 Changed:

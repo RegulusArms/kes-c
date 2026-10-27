@@ -47,6 +47,9 @@ public:
     void announce(const QString &type, const QJsonObject &extra = QJsonObject(), bool keep = false);
     QString flight() const;   // our name on the bus ("from" in the others' messages), empty if not connected
     bool tower_up() const;
+    // The others' kept state (e.g. their running jobs) has come from the tower since we last checked in with one; false
+    // before start(), while there's no tower, and in a process that never starts the radio (the file chooser's)
+    bool caught_up() const;
     // Call a tower method and wait for the answer (its string result, "" if it has none); a null QString if the
     // tower isn't up or didn't answer.
     QString request(const QString &method, const QString &arg = QString());
@@ -56,6 +59,7 @@ Q_SIGNALS:
     // a change from another flight ("from": its name), or our own ("own": true); {"type": "left"} when a flight has gone
     void heard(const QJsonObject &msg);
     void reset();   // checked in with a (new) tower: forget the others' kept state, it's sent again next
+    void kept_heard();   // ...and here it all was (caught_up() is now true)
     // every message the tower passes on, as it came (the Tower window's log); valid or not
     void broadcast(const QString &flight, const QString &message);
 };

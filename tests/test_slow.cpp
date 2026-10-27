@@ -92,6 +92,28 @@ int main(int argc, char **argv)
     QStringList devices = w->sidebar->entry_keys("devices");
     check(devices.contains(tape) && devices.contains(floppy), "the sidebar lists the tape and the floppy under Devices");
 
+    // ---- a tape isn't asked anything until the tower has told this process the others' jobs: the file chooser, which
+    // never joins it, sent a health query into a tape another Kestrel was writing (and its size every 30 s). Once the
+    // tower has answered, the tape is asked without anything asking again.
+    {
+        drives::Sizes *sizes = drives::Sizes::instance();
+        int answers = 0;
+        QMetaObject::Connection counted =
+            QObject::connect(sizes, &drives::Sizes::changed, [&](const QString &root) { answers += root == tape; });
+        sizes->get(tape);
+        sizes->once(tape);
+        spin(1500);
+        bool held = answers == 0 && !atc::radio()->caught_up();
+        atc::radio()->start();
+        bool joined = wait_for([]() { return atc::radio()->caught_up(); }, 10000);
+        bool asked = wait_for([&]() { return answers > 0; }, 5000);
+        QObject::disconnect(counted);
+        check(held && joined && asked && sizes->get(tape).total > 0,
+              QString("a tape isn't asked its size or health before the tower has told this process the others' jobs, "
+                      "and is asked once it has (answers before: %1, tower: %2, asked after: %3)")
+                  .arg(held ? "none" : "some", joined ? "joined" : "not joined", asked ? "yes" : "no"));
+    }
+
     // ---- nothing on the UI thread waits for a slow drive's size (a tape asked for its capacity waits behind the
     // reads another program makes: the whole window froze every 4 s)
     qputenv("KESTREL_TEST_STATFS_DELAY_MS", "2500");

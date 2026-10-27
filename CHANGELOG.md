@@ -2,9 +2,20 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.22
+## 0.3.2-alpha.23
 
-- Nothing yet.
+- **Fixed: the file chooser asked a tape questions while Kestrel was writing to it.** The file chooser Kestrel
+  provides to other apps didn't know about Kestrel's running jobs, so opening one asked the tape for its cartridge's
+  health, and then for its size every 30 seconds, in the middle of a write; each question is a command to the drive
+  that interrupts its writing. It now never asks a tape anything. A Kestrel window that has just opened also waits
+  until it knows the other windows' jobs before asking a tape.
+- **Faster builds:** the automated builds now install their packages from Ubuntu's main archive instead of the
+  build machines' default Azure mirror, which was very slow and made every run take much longer. New test and dev
+  builds (and their apt updates) arrive sooner after each change.
+
+## 0.3.2-alpha.22 (2026-10-27)
+
+- Version bump only.
 
 ## 0.3.2-alpha.21 (2026-10-27)
 
