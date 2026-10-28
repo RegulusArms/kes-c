@@ -131,7 +131,9 @@ protected:
     void setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags command) override
     {
         if constexpr (std::is_base_of_v<QListView, View>) {
-            bool press = rect.width() <= 1 && rect.height() <= 1;   // QRect(pos, pos)
+            // QRect(pos, pos); a band is QRect(press, pointer), its width and height negative when dragged up-left
+            QRect n = rect.normalized();
+            bool press = n.width() <= 1 && n.height() <= 1;
             if ((press || this->state() == QAbstractItemView::DragSelectingState) && this->selectionModel()) {
                 QItemSelection sel;
                 if (press) {

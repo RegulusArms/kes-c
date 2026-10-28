@@ -1,8 +1,9 @@
 # The apt repository's suites (reprepro's conf/distributions): CI's apt job copies this file over gh-pages' own before
 # adding a build, so a suite is added or changed here, not on gh-pages. A suite stays listed for as long as the
-# repository serves it, also after it stops getting new builds (the Ubuntu releases CI publishes to are APT_RELEASES in
-# .github/workflows/deb.yml): taking one out of this file would stop reprepro looking after it.
-#   stable, dev            every build, whatever the release (the sources files written before the release suites)
+# repository serves it, also after it stops getting new builds (the Ubuntu releases CI builds for are the "deb" job's
+# matrix in .github/workflows/deb.yml): taking one out of this file would stop reprepro looking after it.
+#   stable, dev            the oldest supported release's builds (APT_GENERAL), for the sources files written before
+#                          the release suites
 #   <codename>             a release's builds from main, for that Ubuntu release and the systems based on it
 #   <codename>-dev         a release's development builds (the DEV branch)
 

@@ -4,6 +4,31 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.26
+
+Added:
+- `package` checks each release's .deb on its own release (noble's on ubuntu:24.04, resolute's on 26.04), and
+  noble's on 26.04 too, which `stable` and `dev` give to every release. Covers the .deb built for each release, whose
+  Depends now ask for its build system's libraries.
+- A `sanitizers-resolute` CI job: the ASAN+UBSAN run on 26.04 too (GCC 15, which needs no `vm.mmap_rnd_bits`), alongside
+  like `sanitizers`: a memory error that only 26.04's Qt or GLib code paths or GCC 15's checks find fails the run.
+- `ui`: a band dragged from empty space selects the four items it touches, from each corner to the opposite one, in
+  the grid and the list, plain and grouped by date (the mouse events sent to the view's viewport). Covers the fix for
+  the grid's band selecting nothing when dragged up and to the left.
+
+Changed:
+- CI's test jobs install `gnome-settings-daemon-common`, so `slow`'s check that GNOME's low-disk-space check skips a
+  tape being written runs instead of being skipped. The 26.04 jobs also install `zip` (the runner image has it), keep
+  `/usr/share/doc` (the container image leaves it out, and with it BleachBit's schema for `installer`'s check), and
+  put the test user in a second group (`admin_helper`'s group ownership check), so they skip no more than 24.04.
+- CI's test jobs (and the others) use `actions/checkout@v7`, `actions/upload-artifact@v7` and
+  `actions/download-artifact@v8`, which run on Node.js 24: v4 ran on Node.js 20, which GitHub deprecated (each run
+  warned, and its runners force Node.js 24 on it).
+- `ui`: the check that a drop into a subfolder leaves the view where it was waits until `select_paths`' own
+  re-scrolls to the selection (at up to 700 ms) are over before scrolling to the top, and fails as "not at the top
+  before the drop" if the view isn't there. It scrolled up after 200 ms, so under the slower sanitizer build on 26.04
+  the re-scroll at 250 ms could land before the drop and the check failed with the view at the bottom.
+
 ## 0.3.2-alpha.25
 
 Added:

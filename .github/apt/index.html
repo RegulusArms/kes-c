@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel Explorer apt repository</title>
-<!-- The apt repository's page (gh-pages index.html): CI's apt job copies this file there with each build, so it's
-     changed here, not on gh-pages. -->
+<!-- The apt repository's page (gh-pages index.html): CI's apt job copies this file there with each release (merge to
+     main), so it's changed here, not on gh-pages, and the page only names suites that releases have published. -->
 <style>
   :root { --bg: #fff; --fg: #1d1d1f; --muted: #5f6368; --code: #f3f4f6; --border: #e1e4e8; --link: #0b62d6; }
   @media (prefers-color-scheme: dark) {
@@ -28,47 +28,73 @@
 <body>
 <main>
   <h1>Kestrel Explorer</h1>
-  <p class="lead">apt repository for Ubuntu 24.04 / Linux Mint 22 and newer (amd64).
+  <p class="lead">apt repository for Ubuntu 26.04, Ubuntu 24.04 and Linux Mint 22 (amd64).
     Source: <a href="https://github.com/RegulusArms/kes-c">github.com/RegulusArms/kes-c</a></p>
 
-  <h2>Install</h2>
+  <p>Each Ubuntu release has a package built for it, against its own Qt and libraries, in a suite of its own. Use
+    the commands for your system. Not sure which you have? <code>grep UBUNTU_CODENAME /etc/os-release</code> prints
+    <code>resolute</code> or <code>noble</code> (Linux Mint prints the Ubuntu release it's based on). Other releases
+    have no package yet; build from source there.</p>
+
+  <h2>Ubuntu 26.04</h2>
 <pre><code>sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=stable
-sudo tee /etc/apt/sources.list.d/kestrel.sources &gt;/dev/null &lt;&lt;EOF
+sudo tee /etc/apt/sources.list.d/kestrel.sources &gt;/dev/null &lt;&lt;'EOF'
 Types: deb
 URIs: https://regulusarms.github.io/kes-c
-Suites: $suite
+Suites: resolute
 Components: main
 Signed-By: /etc/apt/keyrings/kestrel.asc
 EOF
 sudo apt update &amp;&amp; sudo apt install kestrel-explorer</code></pre>
-  <p>The suite is your Ubuntu release's, read from <code>/etc/os-release</code> (<code>UBUNTU_CODENAME</code>, which
-    Linux Mint and every Ubuntu flavour set, else <code>VERSION_CODENAME</code>): <code>noble</code> on Ubuntu 24.04
-    and Linux Mint 22, <code>resolute</code> on Ubuntu 26.04. On a release without its own suite it's
-    <code>stable</code>, which has the same package. Then run <code>kes</code>, or open Kestrel Explorer from the app
-    menu.</p>
+
+  <h2>Ubuntu 24.04 and Linux Mint 22</h2>
+<pre><code>sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+sudo tee /etc/apt/sources.list.d/kestrel.sources &gt;/dev/null &lt;&lt;'EOF'
+Types: deb
+URIs: https://regulusarms.github.io/kes-c
+Suites: noble
+Components: main
+Signed-By: /etc/apt/keyrings/kestrel.asc
+EOF
+sudo apt update &amp;&amp; sudo apt install kestrel-explorer</code></pre>
+  <p>Then run <code>kes</code>, or open Kestrel Explorer from the app menu. Ubuntu's flavours (Kubuntu, Xubuntu…) use
+    the commands of the Ubuntu release they're based on.</p>
 
   <h2>Development builds</h2>
-  <p>For the latest build of the DEV branch instead, use your release's dev suite: the same commands with these two
-    lines in place of the <code>suite=</code> ones (it's <code>dev</code> on a release without its own), then
-    <code>sudo apt update &amp;&amp; sudo apt upgrade</code>.</p>
-<pre><code>suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}-dev")
-curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=dev</code></pre>
+  <p>For the latest build of the DEV branch instead, use <code>Suites: resolute-dev</code> (Ubuntu 26.04) or
+    <code>Suites: noble-dev</code> (Ubuntu 24.04, Linux Mint 22) in
+    <code>/etc/apt/sources.list.d/kestrel.sources</code>, then <code>sudo apt update &amp;&amp; sudo apt upgrade</code>.</p>
 
   <h2>Suites</h2>
   <div class="wrap"><table>
     <tr><th>Suite</th><th>For</th><th>Gets</th></tr>
-    <tr><td><code>noble</code>, <code>noble-dev</code></td><td>Ubuntu 24.04, Linux Mint 22</td><td>every release / development build</td></tr>
-    <tr><td><code>resolute</code>, <code>resolute-dev</code></td><td>Ubuntu 26.04</td><td>every release / development build</td></tr>
-    <tr><td><code>stable</code>, <code>dev</code></td><td>any release</td><td>every release / development build, for the newest supported releases only</td></tr>
+    <tr><td><code>resolute</code>, <code>resolute-dev</code></td><td>Ubuntu 26.04</td><td>its releases / development builds</td></tr>
+    <tr><td><code>noble</code>, <code>noble-dev</code></td><td>Ubuntu 24.04, Linux Mint 22</td><td>its releases / development builds</td></tr>
+    <tr><td><code>stable</code>, <code>dev</code></td><td>sources files set up before 0.3.2-alpha.25</td><td>the Ubuntu 24.04 package, as long as 24.04 is supported</td></tr>
   </table></div>
-  <p>When Kestrel stops supporting an Ubuntu release, its suites keep the last version that installs there and
-    get no more builds; this page and the changelog say so. <code>stable</code> and <code>dev</code> move on to
-    versions that may not install on it any more, so if your <code>kestrel.sources</code> says
-    <code>Suites: stable</code> or <code>dev</code> (as it did before the release suites), run the commands above
-    again to switch to your release's suite.</p>
+
+  <h2>Set up before the release suites?</h2>
+  <p>If your <code>kestrel.sources</code> says <code>Suites: stable</code> or <code>Suites: dev</code>, you get the
+    Ubuntu 24.04 package whatever your system, and updates stop on a release when Kestrel stops supporting it. Switch
+    to your release's suite; for example, on Ubuntu 26.04 from <code>stable</code>:</p>
+<pre><code>sudo sed -i 's/^Suites: .*/Suites: resolute/' /etc/apt/sources.list.d/kestrel.sources
+sudo apt update &amp;&amp; sudo apt upgrade</code></pre>
+  <p>(<code>resolute-dev</code> if you were on <code>dev</code>; <code>noble</code> or <code>noble-dev</code> on
+    Ubuntu 24.04 and Linux Mint 22.) On 26.04 the 26.04 package replaces the 24.04 one at once.</p>
+
+  <h2>When a release is no longer supported</h2>
+  <p>Its suites keep the last version that installs there and get no more builds, so Kestrel keeps working; this
+    page and the changelog say so. After upgrading your system to a newer Ubuntu release, change
+    <code>Suites:</code> to the new release's: its package sorts higher, so <code>apt upgrade</code> moves you to it.</p>
+
+  <h2>Downloading a .deb by hand</h2>
+  <p>Each <a href="https://github.com/RegulusArms/kes-c/releases">GitHub release</a> has one .deb per Ubuntu
+    release: on Ubuntu 26.04 take the one ending in <code>~ubuntu26.04_amd64.deb</code>, on Ubuntu 24.04 and Linux
+    Mint 22 the one ending in <code>~ubuntu24.04_amd64.deb</code>, and install it with
+    <code>sudo apt install ./kestrel-explorer_…_amd64.deb</code>. The 24.04 one also installs on 26.04, so take
+    care to pick yours. A .deb installed by hand doesn't update itself; the apt repository does.</p>
 
   <h2>Remove</h2>
 <pre><code>sudo apt remove kestrel-explorer

@@ -332,6 +332,91 @@ int main(int argc, char **argv)
         wait_for([&]() { return w->pane()->path == home; });
     }
 
+    // -- a band dragged from empty space selects the items it touches, whichever way it goes: grid and list, plain and
+    // grouped by date. Up-left, the grid's band (a rect with a negative width and height) was taken for a press on
+    // empty space and selected nothing.
+    {
+        QString dir = home_path("band");
+        makedirs(dir, true);
+        QStringList files;
+        for (int i = 0; i < 4; i++) {
+            files << join(dir, QString("b%1.txt").arg(i));
+            write_text(files.last(), "b");
+        }
+        // in home's listing first: a folder opened before then is added to it afterwards, and the view loses its root
+        wait_for([&]() {
+            QAbstractItemView *v = w->pane()->view();
+            for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++)
+                if (v->model()->index(r, 0, v->rootIndex()).data(PathRole).toString() == dir)
+                    return true;
+            return false;
+        });
+        w->navigate(dir);
+        wait_for([&]() { return w->pane()->path == dir; });
+        QStringList res;
+        for (int group : {groups::NONE, groups::PERIOD}) {
+            for (const QString mode : {"grid", "list"}) {
+                w->set_view(mode);
+                Pane *p = w->pane();
+                p->set_grouping(group, groups::MODIFIED);
+                QAbstractItemView *v = p->view();
+                QWidget *vp = v->viewport();
+                QRect items;   // where the four are, in the viewport
+                wait_for([&]() {
+                    QApplication::processEvents();
+                    items = QRect();
+                    int n = 0;
+                    if (group == groups::NONE && v->rootIndex().data(PathRole).toString() != dir)   // (grouped: the groups')
+                        return false;
+                    for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++) {
+                        QModelIndex i = v->model()->index(r, 0, v->rootIndex());
+                        QRect cell = v->visualRect(i);
+                        if (files.contains(i.data(PathRole).toString()) && !cell.isEmpty()) {
+                            items |= cell;
+                            n++;
+                        }
+                    }
+                    return n == 4;
+                });
+                // from below and right of them all (empty space) to above and left of the first, and back the other way;
+                // then from the top right and bottom left corners (the list: the two from below)
+                QPoint tl(1, items.top() + 1), br(std::min(vp->width() - 2, items.right() + 40), items.bottom() + 40);
+                const QList<QPair<QPoint, QPoint>> drags = {
+                    {br, tl}, {tl, br}, {QPoint(br.x(), tl.y()), QPoint(tl.x(), br.y())}, {QPoint(tl.x(), br.y()), QPoint(br.x(), tl.y())}};
+                for (const auto &[from, to] : drags) {
+                    QString what = QString("%1%2, from (%3,%4) to (%5,%6)")
+                                       .arg(mode, group ? QString(" grouped") : QString())
+                                       .arg(from.x()).arg(from.y()).arg(to.x()).arg(to.y());
+                    v->clearSelection();
+                    if (v->indexAt(from).isValid()) {   // the list's rows span its width: its empty space is below them
+                        if (mode == "grid")
+                            res << what + ": the start isn't empty space";
+                        continue;
+                    }
+                    auto send = [&](QEvent::Type t, QPoint pos, Qt::MouseButton b, Qt::MouseButtons held) {
+                        QMouseEvent ev(t, QPointF(pos), QPointF(vp->mapToGlobal(pos)), b, held, Qt::NoModifier);
+                        QApplication::sendEvent(vp, &ev);
+                    };
+                    send(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+                    for (int k = 1; k <= 10; k++)
+                        send(QEvent::MouseMove, from + (to - from) * k / 10, Qt::NoButton, Qt::LeftButton);
+                    send(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+                    QStringList got = p->selected_paths();
+                    got.sort();
+                    if (got != files)
+                        res << QString("%1: %2 of 4 selected").arg(what).arg(got.size());
+                }
+            }
+            w->pane()->set_grouping(groups::NONE, groups::MODIFIED);
+        }
+        check(res.isEmpty(), "a band dragged from empty space selects the items it touches, in any direction, in the grid "
+                             "and the list, plain and grouped" +
+                                 (res.isEmpty() ? QString() : " (" + res.join("; ") + ")"));
+        w->set_view("grid");
+        w->navigate(home);
+        wait_for([&]() { return w->pane()->path == home; });
+    }
+
     // -- a drag that starts in the view itself, grouped by period or by day: what it carries is what the view's own
     // model gives for the selected items (as startDrag asks it), with the drag actions it offers. Grouped, that model
     // gave no files (the drop onto a folder did nothing) and offered no move.
@@ -410,9 +495,11 @@ int main(int argc, char **argv)
             return QString("folder not shown");
         QStringList moving = {join(dir, "f297.txt"), join(dir, "f298.txt"), join(dir, "f299.txt")};
         w->pane()->select_paths(moving);   // also makes the first one current
-        spin(100);
+        spin(800);   // past select_paths' own scrolls to it again (at up to 700 ms), which would undo the one to the top
         v->verticalScrollBar()->setValue(0);
         spin(100);
+        if (v->verticalScrollBar()->value() != 0)
+            return QString("not at the top before the drop");
         QModelIndex target;
         for (int r = 0; r < v->model()->rowCount(v->rootIndex()); r++) {
             QModelIndex i = v->model()->index(r, 0, v->rootIndex());

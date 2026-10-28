@@ -2,7 +2,24 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.25
+## 0.3.2-alpha.26
+
+- **A package for each Ubuntu release.** Each release now gets a .deb built on it, with its own Qt and libraries,
+  instead of one 24.04 build for all: Ubuntu 26.04 gets the build its tests ran on. The release suites get their
+  own (`stable` and `dev` keep the 24.04 one, which installs everywhere), and the GitHub releases have both, named
+  `…~ubuntu24.04` and `…~ubuntu26.04`: take the one for your release (`ubuntu24.04` on Linux Mint 22). A system
+  upgraded to a newer Ubuntu release upgrades to that release's build.
+- **Install instructions for each Ubuntu release.** The README, the install guide and the apt repository's page
+  now give Ubuntu 26.04 and Ubuntu 24.04 / Linux Mint 22 their own commands, each naming its release's suite, so
+  nobody ends up with another release's package. The previous commands fell back to `stable` when a release's suite
+  wasn't there yet, which gave 26.04 the 24.04 package. They also explain how to switch from `stable` or `dev` (set
+  up before 0.3.2-alpha.25), and which .deb to take when downloading one by hand.
+- **Automated builds run on Node.js 24.** GitHub's actions for checking out the code and passing packages between
+  jobs moved to their Node.js 24 versions, so the runs no longer warn that Node.js 20 is deprecated.
+- **Drag-selecting up and to the left works again in the grid.** Pressing in empty space and dragging up and to the
+  left selected nothing (since 0.3.2-alpha.17); the other directions, and the list view, worked.
+
+## 0.3.2-alpha.25 (2026-10-27)
 
 - **apt suites for each Ubuntu release.** The apt repository now has a suite for each Ubuntu release Kestrel
   supports, named after its codename: `noble` (Ubuntu 24.04, Linux Mint 22) and `resolute` (Ubuntu 26.04), each with a

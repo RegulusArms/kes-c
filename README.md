@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.25.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.2-alpha.26.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -49,14 +49,26 @@ This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.c
 
 ## Install
 
-**With apt** (Ubuntu 24.04, Linux Mint 22 and newer, amd64), from the releases channel:
+**With apt** (amd64), from the releases channel. Each Ubuntu release has its own package, so use your system's
+commands (`grep UBUNTU_CODENAME /etc/os-release` prints `resolute` on 26.04, `noble` on 24.04 and Linux Mint 22).
+
+**Ubuntu 26.04:**
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-suite=$(. /etc/os-release; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-curl -fsIo /dev/null "https://regulusarms.github.io/kes-c/dists/$suite/InRelease" || suite=stable
-printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: %s\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' "$suite" \
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: resolute\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+  | sudo tee /etc/apt/sources.list.d/kestrel.sources
+sudo apt update && sudo apt install kestrel-explorer
+kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)
+```
+
+**Ubuntu 24.04 and Linux Mint 22:**
+
+```bash
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: noble\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
 kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)
@@ -69,8 +81,9 @@ kes-setup --default   # optional: make it your file manager (kes-setup --undo pu
 ./install.sh --default   # ...and makes it your file manager
 ```
 
-The [install guide](docs/install.md) covers the development-builds channel, switching channels, what `--default` and
-`--dock` change, building by hand, BleachBit and uninstalling.
+The [install guide](docs/install.md) covers the development-builds channel, switching channels (and from the older
+`stable`/`dev` suites), which .deb to download by hand, what `--default` and `--dock` change, building by hand,
+BleachBit and uninstalling.
 
 ## Supported systems
 
