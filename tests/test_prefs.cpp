@@ -167,9 +167,10 @@ int main(int argc, char **argv)
         if (!pd || !pd->editor(p.key))
             no_editor << p.key;
     check(pd && is_free_window(pd) &&
-              tab_texts == QStringList({"General", "Views", "Sidebar", "Overview", "Images & Videos", "Files", "Archives", "Windows", "Menus"}) &&
+              tab_texts == QStringList({"General", "Views", "Sidebar", "Overview", "Images && Videos", "Files", "Archives", "Windows", "Menus"}) &&
               no_editor.isEmpty(),
-          "Preferences is a free window with tabs (" + tab_texts.join(", ") + ") and a control for every setting" +
+          "Preferences is a free window with tabs (" + tab_texts.join(", ") + ") and a control for every setting (a tab's & "
+          "doubled, so it shows as &, not as the next letter underlined)" +
               (no_editor.isEmpty() ? QString() : " (none for: " + no_editor.join(", ") + ")"));
     if (!pd)
         finish();
@@ -350,7 +351,7 @@ int main(int argc, char **argv)
     menus::Entry mine;
     mine.type = menus::Entry::MENU;
     mine.id = "custom1";
-    mine.label = "Mine";
+    mine.label = "Mine & Yours";
     mine.children = {move, copy_to};
     lay.insert(index_of(lay, "rename"), mine);
     menus::Entry s1, s2;
@@ -371,10 +372,22 @@ int main(int argc, char **argv)
             seps_ok = false;
     int copy_at = after.indexOf("copy");
     check(after.value(0) == "properties" && !after.contains("duplicate") && after.value(copy_at + 1) == "copy_name" &&
-              after.contains("Mine[move_to,copy_to]") && !after.contains("move_to") && seps_ok &&
+              after.contains("Mine && Yours[move_to,copy_to]") && !after.contains("move_to") && seps_ok &&
               before.contains("duplicate"),
           "a file's menu follows its layout: an entry hidden, one moved to the top, one taken out of its submenu, two put in "
           "a submenu of the user's own, and no doubled or stray separators (" + after.mid(0, 8).join(" ") + "…)");
+    {
+        // a submenu's title is shown as it's written: its & doubled (a lone one underlined the next letter instead)
+        QMenu *m = w1->build_menu(w1->pane(), {txt});
+        QStringList titles;
+        for (QAction *a : m->actions())
+            if (a->menu() && (menus::id_of(a) == "links" || menus::id_of(a) == "custom1"))
+                titles << a->text();
+        delete m;
+        check(titles == QStringList({"Mine && Yours", "Links && Shortcuts"}),
+              "in a customised menu, “Links & Shortcuts” and a submenu of the user's own named “Mine & Yours” show their & "
+              "(" + titles.join(", ") + ")");
+    }
     check(!after.contains("view_image") && image_menu.value(0) == "view_image" && image_menu.value(1) == "properties",
           "an entry that doesn't apply (View Image for a text file) doesn't appear, and appears where it was put when it "
           "does (an image)");

@@ -417,6 +417,20 @@ int main(int argc, char **argv)
         wait_for([&]() { return w->pane()->path == home; });
     }
 
+    // -- a folder whose name holds "&": its tab doubles it, which the tab bar shows as one "&" (a lone one underlined
+    // the next letter instead), and the window's title has it as it is
+    {
+        QString dir = home_path("Tom & Jerry");
+        makedirs(dir, true);
+        Pane *own = w->new_tab(dir);
+        spin(100);
+        int i = w->tabs->indexOf(own);
+        check(w->tabs->tabText(i) == "Tom && Jerry" && w->windowTitle().startsWith("Tom & Jerry — "),
+              "a folder named “Tom & Jerry” shows as that on its tab and in the window's title (tab: " + w->tabs->tabText(i) +
+                  ", title: " + w->windowTitle() + ")");
+        w->close_tab(i);
+    }
+
     // -- a drag that starts in the view itself, grouped by period or by day: what it carries is what the view's own
     // model gives for the selected items (as startDrag asks it), with the drag actions it offers. Grouped, that model
     // gave no files (the drop onto a folder did nothing) and offered no move.

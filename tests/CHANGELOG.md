@@ -4,6 +4,17 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.27
+
+Changed:
+- `prefs` expects the Preferences tab "Images & Videos" written "Images && Videos" (shown as "&"), and its
+  customised file menu's submenu of the user's own is now named "Mine & Yours". Covers the fix for "&" in tab names,
+  which Qt took as a shortcut mark and showed as the next letter underlined.
+
+Added:
+- `prefs` checks that in a customised menu "Links & Shortcuts" and a submenu named "Mine & Yours" keep their "&".
+- `ui` checks that a folder named "Tom & Jerry" shows as that on its tab and in the window's title.
+
 ## 0.3.2-alpha.26
 
 Added:

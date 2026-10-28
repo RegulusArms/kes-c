@@ -458,7 +458,7 @@ void arrange(QMenu *menu, Kind k)
             if (e.type == Entry::SEP) {
                 pending = true;
             } else if (e.type == Entry::MENU) {
-                auto *sub = new QMenu(e.label, target);
+                auto *sub = new QMenu(QString(e.label).replace('&', "&&"), target);   // (a lone & would underline the next letter)
                 if (QMenu *c = containers.value(e.id))
                     sub->setIcon(c->icon());
                 place(sub, e.children, false);

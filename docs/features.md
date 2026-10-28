@@ -27,6 +27,11 @@
   **Expand All Groups** are in the Sort menu and on empty space's right-click menu. **Date to Group By** picks the date: modified, created, or
   taken (a photo's EXIF, a PNG's Creation Time, an MP4 / MOV video's header; read in the background, falling back to
   the date created). Also in search results, Starred, Recent and Trash; kept per folder, like the sort.
+
+  ![The Sort menu: Name, Size, Type, Modified, Ascending, Descending, Pinned & Starred First, Group by Period, Group by Day (highlighted), Date to Group By, Set as Default, Apply to Subfolders](screenshot-sort-menu.png)
+
+  ![Pictures in the list view grouped by day: "Today, Wednesday, 28 October 2026 (2)", "Yesterday…", then one header for each earlier day, each with a Collapse line at its end](screenshot-group-by-day.png)
+
 - While a search runs, a thin progress bar shows under the search bar (and "Searching…" in the view until something is found); a search that finds nothing says **Nothing found** in the view itself (with the reason when something went wrong, such as a regular expression that doesn't parse), never in a window.
 - Search the current folder by typing to filter, or search subfolders recursively. Wildcards are supported.
 - **Search filters:** the search bar's **Filters** button adds a row to find by type (images, videos, audio, documents, archives, folders), size (larger or smaller than) and date (today, this week, this month, this year, or between two days; modified or created), with or without a name, in this folder or with its subfolders. They're kept for the session, in every tab and window; **Clear** empties them.
@@ -80,6 +85,9 @@
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum, or **Browse…** for a checksum file that lists the file (see [Checksum files](features.md#checksum-files)).
 
 **Jobs: one queue, and the Jobs window**
+
+![The Jobs window: a copy of 4 items to Backup running (1.1 GB of 1.3 GB, 11 seconds left) and two copies waiting for their drives; beside them the running job's steps (two scans copied, the third copying, one to go) and its log](screenshot-jobs.png)
+
 - Jobs that read or write drives (copy, move, delete, extract, compress, checksums, shredding) wait for their turn on the drives they use, across every Kestrel window and process, so two jobs never fight over one drive. By drive (the default): jobs on different drives run side by side, jobs on the same drive one after the other, in order. Or one at a time. Or **all at once**, to let it rip: every job starts as soon as it's queued, also on a drive another job is using (paused ones still wait); it's never the default, and is chosen in the Jobs window or Preferences → Files. Jobs sharing a drive then compete for it, which can make them slower overall, and on a tape or floppy makes it seek back and forth. A rename within a drive doesn't wait.
 - Click the job progress in the status bar (or ☰ → **Jobs…**, Ctrl+Shift+J) for the **Jobs window**: every job of every Kestrel window, running, waiting and finished, with progress and time left. Select one for its steps and its log (the archive tools' live output, passwords masked), with Copy and Save Log…. A copy or move is titled with what it copies and where to, and its log starts with what started it (Paste, Paste Into Folder, a drop, Copy To…, Move To…), in which window and when, from where to where, and how long it waited and for which jobs. If its destination folder was moved or deleted while it waited, it stops with one message saying so, before copying anything. Pause, Resume, Stop (Delete), Start Now, move a waiting job up or down; Pause All / Resume All; start new jobs paused; choose by drive, one at a time or all at once.
 - Jobs belong to Kestrel, not to the window that started them: closing a window doesn't stop its jobs (another window's status bar shows them). Closing the last window while jobs run asks whether to **exit and open the Jobs window** (they go on; Kestrel exits once they're done and the Jobs window is closed) or **stop all jobs and exit**; with the Jobs window open, it just closes.
@@ -118,6 +126,9 @@
 - Kestrel itself never runs as root.
 
 **Overview (default homepage)**
+
+![The Overview page: the Backup and Photos drives with usage bars and free space, Phones & Cameras, Network with Connect to Server, and the bookmarked folders as cards with image previews](screenshot-overview-drives.png)
+
 - Like the old GNOME Files "Other Locations" page:
   - **Drives:** every drive with a usage bar (amber at 75%, red at 90%) and eject/unmount buttons. Unmounted drives can be mounted with a click, and encrypted drives ask for their passphrase. A ZFS pool appears as one card with pool-level numbers.
   - **Phones & Cameras:** connected phones and cameras (see below), or what to do on a phone to connect it.
@@ -185,6 +196,8 @@ Each runs as one job with a real percentage, the time left and ✕ (several file
 
 ☰ → **Preferences…** shows every setting Kestrel keeps in one window, in tabs, including the ones you'd otherwise change somewhere in the windows (each says where else it's set, such as "Also: ☰ → View → Show Hidden Files (Ctrl+H)"):
 
+![Preferences, Views tab: the view (grid or list), the icon sizes in the grid and the list, hidden files, the sidebar and the info panel, and the default sort, each saying where else it's set](screenshot-preferences.png)
+
 - **General:** homepage, single-click, which apps open images and videos, opening the image viewer full screen, sharing undo between windows, developer tools.
 - **Views:** grid or list, icon sizes, hidden files, the sidebar and info panel, the default sort and grouping for folders without their own, Pinned & Starred First, folder previews (how many images, which ones, the colour), and the search bar's options.
 - **Sidebar:** the order of its sections and which are collapsed.
@@ -196,7 +209,13 @@ Each runs as one job with a real percentage, the time left and ✕ (several file
 
 A change applies at once to every open window, and to the other Kestrels; a change made in a window (Ctrl+H, the zoom slider…) shows in an open Preferences window as it happens. The search box at the top filters every tab's settings. **Reset This Tab** and **Reset All** go back to the defaults, after asking.
 
+![Preferences searched for "jobs": only the tabs with a match are enabled, with how many (Images & Videos (2), Files (3)), and the Files tab shows how jobs run, starting new jobs paused and how files are written to a tape](screenshot-preferences-search.png)
+
 **Your own right-click menus.** Preferences → **Menus** sets up the right-click menu separately for a folder, a file, an archive, several items, the empty space in a folder, and the image viewer. Untick an entry to hide it; drag entries (or use Move Up / Move Down) to reorder them and to move them into or out of a submenu, such as Links & Shortcuts (or the viewer's View and Rotate and Edit); add separators and submenus of your own. An entry only appears when it applies (Extract for archives, BleachBit's entries when it's installed…), wherever you put it, and entries added in later versions show up in their default place. **Reset to Default** puts a menu back as it was.
+
+![Preferences, Menus tab, the menu for a file: a submenu "Organise" made with New Submenu…, holding Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin / Unpin unticked](screenshot-menu-editor.png)
+
+![The resulting right-click menu on a text file: Organise opens with Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin is gone](screenshot-custom-menu.png)
 
 ## Checksum files
 

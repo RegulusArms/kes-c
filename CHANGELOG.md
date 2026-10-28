@@ -2,7 +2,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.26
+## 0.3.2-alpha.27
+
+- **"&" shows as "&" in tab and submenu names.** The Preferences tab "Images & Videos" read "Images Videos" with
+  the V underlined (or "Images_Videos"), as did a folder's tab when its name has an "&" ("Tom & Jerry"), and, in a
+  customised right-click menu, "Links & Shortcuts" and any submenu of your own with an "&" in its name.
+- **Screenshots in the feature guide.** The Overview, grouping by day, the Jobs window, Preferences and its search,
+  and customising a right-click menu are now shown in [Features](docs/features.md).
+
+## 0.3.2-alpha.26 (2026-10-27)
 
 - **A package for each Ubuntu release.** Each release now gets a .deb built on it, with its own Qt and libraries,
   instead of one 24.04 build for all: Ubuntu 26.04 gets the build its tests ran on. The release suites get their

@@ -107,7 +107,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
         scroll->setWidget(page);
         scroll->setWidgetResizable(true);
         scroll->setFrameShape(QFrame::NoFrame);
-        tabs->addTab(scroll, tab);
+        tabs->addTab(scroll, QString(tab).replace('&', "&&"));   // (a lone & would underline the next letter)
     }
     menu_editor = new menus::Editor;
     tabs->addTab(menu_editor, "Menus");
@@ -128,7 +128,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     connect(reset_tab_btn, &QPushButton::clicked, this, [this]() {
         int i = tabs->currentIndex();
         ask_yes(this, "Reset This Tab",
-                QString("Put the settings on the %1 tab back to their defaults?").arg(tabs->tabText(i).section(" (", 0, 0)),
+                QString("Put the settings on the %1 tab back to their defaults?").arg(tab_names[i]),
                 [this, i]() { reset_tab(i); });
     });
     connect(reset_all_btn, &QPushButton::clicked, this, [this]() {
@@ -794,7 +794,8 @@ void PreferencesDialog::apply_filter()
                     it.value()->setVisible(in_group.value(it.key().section('\n', 1)) > 0);
         }
         tabs->setTabEnabled(i, shown > 0);
-        tabs->setTabText(i, t.isEmpty() || shown == 0 ? tab : QString("%1 (%2)").arg(tab).arg(shown));
+        QString label = QString(tab).replace('&', "&&");
+        tabs->setTabText(i, t.isEmpty() || shown == 0 ? label : QString("%1 (%2)").arg(label).arg(shown));
     }
     if (!tabs->isTabEnabled(tabs->currentIndex()))
         for (int i = 0; i < tabs->count(); ++i)

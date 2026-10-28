@@ -751,7 +751,7 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
         p->deleteLater();
         return nullptr;
     }
-    int i = tabs->addTab(p, p->title());
+    int i = tabs->addTab(p, QString(p->title()).replace('&', "&&"));   // (a lone & would underline the next letter)
     connect(p, &Pane::path_changed, this, [this, p]() { pane_path_changed(p); });
     connect(p, &Pane::selection_changed, this, [this, p]() {
         if (p != pane())
@@ -851,7 +851,7 @@ void MainWindow::pane_path_changed(Pane *p)
 {
     int i = tabs->indexOf(p);
     if (i >= 0) {
-        tabs->setTabText(i, p->title());
+        tabs->setTabText(i, QString(p->title()).replace('&', "&&"));
         tabs->setTabToolTip(i, p->path);
     }
     if (p != pane())
