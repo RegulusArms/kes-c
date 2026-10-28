@@ -1,7 +1,8 @@
 // The right-click menus, as the user lays them out (Preferences → Menus).
 //
 // Every entry the item menus can have carries an id (tag(); MainWindow::build_menu builds the default menu with them).
-// For each kind of click (a folder, a file, an archive, several items, the empty space in a folder) the user can hide
+// For each kind of click (a folder, a file, an archive, several items, the empty space in a folder, the image viewer)
+// the user can hide
 // entries, reorder them, add separators, move entries into or out of submenus (Links & Shortcuts and the others) and
 // make submenus of their own. arrange() then rebuilds the menu from that layout: an entry that doesn't apply this
 // time (Extract for a folder, a tool that isn't installed, the admin entries) still doesn't appear, wherever it was
@@ -25,14 +26,15 @@ class QTreeWidgetItem;
 
 namespace menus {
 
-enum Kind { FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND };
+enum Kind { FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND, VIEWER };
 QList<Kind> kinds();
-QString kind_key(Kind k);     // folder, file, archive, several, background
+QString kind_key(Kind k);     // folder, file, archive, several, background, viewer
 QString kind_label(Kind k);   // "A folder", "Empty space in a folder"…
 
 struct Entry {
     enum Type { ITEM, SEP, MENU } type = ITEM;
-    QString id;      // ITEM: the entry; MENU: a built-in submenu's id (links, copy_path, image, previews) or "custom…"
+    QString id;      // ITEM: the entry; MENU: a built-in submenu's id (links, copy_path, image, previews, viewer_view,
+                     // viewer_edit) or "custom…"
     QString label;   // ITEM: as shown in the editor; MENU: its title
     QString note;    // ITEM: when it appears ("for images", "when BleachBit is installed")
     bool off = false;          // ITEM: hidden

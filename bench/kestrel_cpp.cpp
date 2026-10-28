@@ -2,7 +2,7 @@
 // Usage: kestrel_cpp TEST DATA_DIR [ARG]. Prints {"s": seconds, "n": items, "rss_mb": peak memory}.
 //
 //   trash      move every file in ~/victim to the trash with the window's Move to Trash, then Empty Trash ("empty_s")
-//   move_xdev  move ~/movesrc to ARG (on another drive)
+//   move_xdev  move ~/move/movesrc to ARG (on another drive)
 #include "app.h"
 #include "fileops.h"
 #include "metadata.h"
@@ -92,10 +92,14 @@ int main(int argc, char **argv)
         qint64 clicked = -1;
         QTimer closer;   // Empty Trash asks first: answer like a user would, and start the clock there
         QObject::connect(&closer, &QTimer::timeout, [&] {
-            if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()); m && clicked < 0) {
-                clicked = t.elapsed();
-                m->button(QMessageBox::Yes)->click();
-            }
+            if (clicked >= 0)
+                return;
+            for (QWidget *top : QApplication::topLevelWidgets())   // a free window, not modal (windows.h)
+                if (auto *m = qobject_cast<QMessageBox *>(top); m && m->isVisible() && m->button(QMessageBox::Yes)) {
+                    clicked = t.elapsed();
+                    m->button(QMessageBox::Yes)->click();
+                    return;
+                }
         });
         closer.start(5);
         w->empty_trash();
@@ -105,7 +109,7 @@ int main(int argc, char **argv)
         empty_left = isdir(trash_files) ? listdir(trash_files).size() : 0;
     } else if (test == "move_xdev") {
         bool fin = false;
-        fileops::start_ops(nullptr, {{"move", join(HOME(), "movesrc"), ARG}}, "Moving", [&] { fin = true; });
+        fileops::start_ops(nullptr, {{"move", join(HOME(), "move/movesrc"), ARG}}, "Moving", [&] { fin = true; });
         wait_for([&] { return fin; });
     } else if (test == "metadata") {
         QStringList files = listdir(D + "/meta");

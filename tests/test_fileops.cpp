@@ -4,12 +4,14 @@
 #include "archive_ui.h"
 #include "dialogs.h"
 #include "hashcheck.h"
+#include "prefs.h"
 #include "stats.h"
 
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -339,35 +341,49 @@ int main(int argc, char **argv)
             return out;
         };
         make(P("race/big.bin"), "b");
-        ::truncate(enc(P("race/big.bin")).constData(), qint64(256) << 20);   // sparse: long enough to step in
+        ::truncate(enc(P("race/big.bin")).constData(), qint64(32) << 20);   // sparse: several chunks, so one to pause at
         make(P("race/dir/inner.bin"), "i");
-        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(256) << 20);
+        ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(32) << 20);
         // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
-        // is still to come), "another program" saves the destination. Watched here, not through progress reports,
-        // which come at most every 80 ms: a fast disk can copy the file before the first one.
+        // is still to come), the job is paused (held at its next chunk) and "another program" saves the destination.
+        // Watched here, not through progress reports, which come at most every 80 ms: a fast disk can copy the file
+        // before the first one. Paused, not raced: on a slow runner the copy could otherwise finish first.
         auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
             boxes.clear();
             bool stepped = false;
             Task *t = fileops::start_ops(w, {job}, "Test", []() {});
-            QPointer<Task> tp(t);
+            QPointer<Task> tp(t);   // not deleted before events are processed
             QElapsedTimer clock;
             clock.start();
             while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
                 if (!leftovers().isEmpty()) {
-                    intrude();
-                    stepped = true;
+                    tp->set_paused(true);
+                    QThread::msleep(100);   // the chunk it's on finished
+                    if (!leftovers().isEmpty()) {
+                        intrude();
+                        stepped = true;
+                    }
+                    tp->set_paused(false);
+                    break;
                 }
                 QThread::usleep(200);
             }
-            wait_for([&]() { return !tp; }, 20000);
+            wait_for([&]() { return !tp; }, 60000);
             wait_for([]() { return !boxes.isEmpty(); }, 3000);
             return stepped;
         };
+        // what went wrong, for the check's text
+        auto race_state = [&](bool stepped) {
+            return QString("stepped in: %1; new.bin: %2; part files: %3; message: %4")
+                .arg(QString(stepped ? "yes" : "no"), text_of(P("race/new.bin")).left(20),
+                     leftovers().join(", "), boxes.isEmpty() ? QString("none") : boxes.last().left(120));
+        };
         bool stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
                                   []() { write_text(P("race/new.bin"), "theirs"); });
-        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
-                  boxes.last().contains("appeared"),
-              "a file another program saves under the new name while a copy runs is kept, and the conflict is reported");
+        bool kept = stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+                    boxes.last().contains("appeared");
+        check(kept, "a file another program saves under the new name while a copy runs is kept, and the conflict is "
+                    "reported" + (kept ? QString() : " (" + race_state(stepped) + ")"));
         // a folder copy claims its new name by making the folder there (never replacing): one another program made
         // under that name after the copy was planned is kept
         make(P("race/newdir/theirs.txt"), "t");
@@ -392,9 +408,10 @@ int main(int argc, char **argv)
         ::unlink(enc(P("race/new.bin")).constData());
         stepped = run_racing({"copy", P("race/big.bin"), P("race/new.bin")},
                              []() { write_text(P("race/new.bin"), "theirs"); });
-        check(stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
-                  boxes.last().contains("appeared"),
-              "...and a file another program saves under the name meanwhile is still kept, and reported");
+        kept = stepped && text_of(P("race/new.bin")) == "theirs" && leftovers().isEmpty() && !boxes.isEmpty() &&
+               boxes.last().contains("appeared");
+        check(kept, "...and a file another program saves under the name meanwhile is still kept, and reported" +
+                        (kept ? QString() : " (" + race_state(stepped) + ")"));
         QString part = P("race/" + part_name());
         write_text(part, "p");
         bool taken = false;
@@ -535,6 +552,53 @@ int main(int argc, char **argv)
                   !only.contains("Move to Trash"),
               "right-clicking a mixed selection gives the usual menu (Move to Trash), not the trash's (Restore); "
               "a selection all in the trash gets the trash's");
+    }
+
+    // ---- Wipe Metadata… in the right-click menu: images only; a copy or the original, as Preferences says
+    {
+        auto texts_of = [&](const QStringList &paths) {
+            QMenu *m = w->build_menu(w->pane(), paths);
+            QStringList texts;
+            for (QAction *a : m->actions())
+                if (a->isEnabled())
+                    texts << a->text();
+            m->deleteLater();
+            return texts;
+        };
+        QString png = P("wm/gen.png"), txt = P("wm/notes.txt");
+        makedirs(P("wm"), true);
+        QImage g(16, 16, QImage::Format_RGB32);
+        g.fill(Qt::red);
+        g.setText("parameters", "a prompt");
+        g.save(png);
+        make(txt, "t");
+        if (which("exiftool")) {
+            check(texts_of({png}).contains("Wipe Metadata…") && texts_of({txt, png}).contains("Wipe Metadata…") &&
+                      !texts_of({txt}).contains("Wipe Metadata…"),
+                  "Wipe Metadata… is in the right-click menu of an image, and of a selection with images, not of other files");
+            prefs::set("metadata_wipe", "copy");
+            QString copy = P("wm/gen (no metadata).png");
+            w->wipe_metadata({txt, png});
+            check(wait_for([&]() { return exists(copy); }, 20000) && wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
+                      QImage(png).text("parameters") == "a prompt" && text_of(txt) == "t" && !lexists(P("wm/notes (no metadata).txt")),
+                  "with \"make a copy\" (the default), Wipe Metadata… writes a copy without the metadata beside the "
+                  "image, leaving the original and the files that aren't images as they were");
+            check(undo_and_wait(w, [&]() { return !lexists(copy); }) && exists(png),
+                  "...and Undo moves the copy to the trash");
+
+            prefs::set("metadata_wipe", "original");
+            QStringList earlier = boxes;
+            boxes.clear();
+            w->wipe_metadata({png});
+            check(wait_for([&]() { return !boxes.isEmpty(); }) && boxes.first().contains("No backup") && (spin(300), true) &&
+                      QImage(png).text("parameters") == "a prompt" && !lexists(copy),
+                  "with \"wipe the original\", it asks first (no backup is kept), and closing the question changes nothing");
+            boxes = earlier;
+            prefs::reset({"metadata_wipe"});
+        } else {
+            check(!texts_of({png}).contains("Wipe Metadata…"), "without exiftool, Wipe Metadata… is greyed out");
+            skip("Wipe Metadata… (exiftool isn't installed)");
+        }
     }
 
     // ---- unique names and links
@@ -1329,7 +1393,8 @@ int main(int argc, char **argv)
     sigaction(SIGPIPE, &saved, nullptr);
     check(!r.failed && !r.timed_out && r.rc == 0, "writing to a program that exits without reading its input doesn't kill Kestrel");
 
-    // -- archive passwords: never on a tool's command line (where every user can see it), apart from zpaq's
+    // -- archive passwords: never on a tool's command line (where every user can see it), apart from zpaq's; a tar's
+    // goes to gpg (tar.gz: tar | gzip | gpg)
     const QString pw = "Kestrel-pw-7731 \"quoted\"";
     QDir().mkpath(P("pwsrc"));
     {
@@ -1339,32 +1404,36 @@ int main(int argc, char **argv)
         rnd.open(QIODevice::ReadOnly);
         f.write(rnd.read(30 << 20));   // big enough that the tool runs a while, for the watcher to see it
     }
-    for (const QString &t : QStringList{"rar", "zip"}) {
-        QString label = t + ": a password-protected archive is made and opened, and the password is never on a "
-                            "command line";
-        if (archive::tool(t).isEmpty() || archive::tool(t == "rar" ? "unrar" : "7z").isEmpty()) {
-            skip(label + " (" + t + " isn't installed)");
+    for (const QString &id : QStringList{"rar", "zip", "tar.gz"}) {
+        bool gpg = id == "tar.gz";
+        QString t = gpg ? "gzip" : id;   // the tool that makes it, and the one that opens it
+        QString reader = id == "rar" ? "unrar" : gpg ? "gpg" : "7z";
+        QString label = id + (gpg ? " (through gpg)" : "") +
+                        ": a password-protected archive is made and opened, and the password is never on a command line";
+        if (archive::tool(t).isEmpty() || archive::tool(reader).isEmpty()) {
+            skip(label + " (" + (archive::tool(t).isEmpty() ? t : reader) + " isn't installed)");
             continue;
         }
         archive::Format fmt;
         for (const archive::Format &f : archive::formats())
-            if (f.id == t)
+            if (f.id == id)
                 fmt = f;
-        QString out = P("secret." + t);
+        QString out = P("secret." + id + (gpg ? ".gpg" : ""));
         std::atomic<bool> watching{true};
         std::atomic<int> seen{0}, leaked{0};
         std::thread watcher([&]() {   // every command line on the system, while the jobs run
-            QByteArray needle = pw.left(15).toUtf8(), name = QByteArray("secret.") + t.toUtf8();
+            // seen: the tool opening it was caught running; leaked: the password in any command line (also one
+            // naming only the hidden part the archive is made under)
+            QByteArray needle = pw.left(15).toUtf8(), name = QByteArray("secret.") + id.toUtf8();
             while (watching) {
                 for (const QString &pid : QDir("/proc").entryList(QDir::Dirs)) {
                     QFile f("/proc/" + pid + "/cmdline");
                     if (pid.at(0).isDigit() && f.open(QIODevice::ReadOnly)) {
                         QByteArray line = f.readAll();
-                        if (line.contains(name)) {
+                        if (line.contains(name))
                             seen++;
-                            if (line.contains(needle))
-                                leaked++;
-                        }
+                        if (line.contains(needle))
+                            leaked++;
                     }
                 }
             }
@@ -1395,6 +1464,136 @@ int main(int argc, char **argv)
         watching = false;
         watcher.join();
         check(made && opened && refused && seen > 0 && leaked == 0, label);
+    }
+
+    // ---- Properties remembers folder sizes: shown at once with when they were worked out; only Recalculate counts
+    // again (a job); a stopped count stores nothing; Kestrel's own changes drop the entries
+    {
+        QString fs = P("fsizes");
+        makedirs(join(fs, "deep/er"), true);
+        write_text(join(fs, "one.bin"), QByteArray(1000, 'x'));
+        write_text(join(fs, "deep/er/two.bin"), QByteArray(234, 'y'));
+        auto size_text = [](PropertiesDialog *d) {
+            for (QLabel *l : d->findChildren<QLabel *>())
+                if (l->text().contains("bytes") || l->text().startsWith("Calculating") || l->text().startsWith("Not calc"))
+                    return l->text();
+            return QString();
+        };
+        auto *d = new PropertiesDialog(w, {fs});
+        bool counted = wait_for([&]() { return size_text(d).contains("1,234 bytes"); });
+        check(counted && d->size_age->text() == "Calculated just now" && fileops::dirsizes::get(fs) &&
+                  fileops::dirsizes::get(fs)->stats.size == 1234,
+              "a folder Properties hasn't seen is counted, says \"Calculated just now\", and is remembered (" +
+                  size_text(d) + " | " + d->size_age->text() + ")");
+        delete d;
+        // as if measured three days ago; the folder changed since (not by Kestrel): still shown as remembered
+        {
+            QJsonObject all = QJsonDocument::fromJson(read_file(fileops::dirsizes::cache_file())).object();
+            QJsonObject e = all.value(fs).toObject();
+            qint64 then = QDateTime::currentSecsSinceEpoch() - 3 * 86400 - 60;
+            e["at"] = then;
+            all[fs] = e;
+            write_atomic(fileops::dirsizes::cache_file(), QJsonDocument(all).toJson());
+            write_text(join(fs, "new.bin"), QByteArray(66, 'z'));
+            d = new PropertiesDialog(w, {fs});
+            QString at = QDateTime::fromSecsSinceEpoch(then).toString("yyyy-MM-dd HH:mm");
+            check(size_text(d).contains("1,234 bytes") && d->size_age->text() == "Calculated 3 days ago (" + at + ")" &&
+                      d->recalc->isEnabled(),
+                  "a remembered size shows at once, without counting, saying how old it is (" + d->size_age->text() + ")");
+        }
+        // Recalculate waits its turn like any job: stopped while it waits, nothing is stored
+        auto held = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> holder = fileops::queue_job(w, "Holding", {fs}, [held](Task *t) {
+            while (*held) {
+                t->check();
+                QThread::msleep(20);
+            }
+            return QVariant();
+        });
+        spin(150);
+        d->recalc->click();
+        QPointer<Task> count;
+        wait_for([&]() {
+            for (Task *t : w->task_panel->tasks)
+                if (t->title == "Counting the size of “fsizes”")
+                    count = t;
+            return count;
+        });
+        bool job = count && count->queued && !d->recalc->isEnabled();
+        if (count)
+            count->cancel();
+        wait_for([&]() { return !count; });
+        check(job && fileops::dirsizes::get(fs)->stats.size == 1234 && size_text(d).startsWith("Not calc"),
+              "Recalculate is a job in the job queue; stopped, it stores nothing (" + size_text(d) + ")");
+        *held = false;
+        wait_for([&]() { return !holder; });
+        d->recalc->click();
+        bool again = wait_for([&]() { return size_text(d).contains("1,300 bytes"); });
+        check(again && d->size_age->text() == "Calculated just now" && fileops::dirsizes::get(fs)->stats.size == 1300,
+              "Recalculate counts again and replaces the remembered size (" + size_text(d) + ")");
+        delete d;
+        // Kestrel's own copy into a folder below drops the entry of it and of the folders above
+        fileops::dirsizes::put(join(fs, "deep"), fileops::dirsizes::get(fs)->stats);
+        run_ops(w, {{"copy", join(fs, "one.bin"), join(fs, "deep/er/copy.bin")}});
+        check(!fileops::dirsizes::get(fs) && !fileops::dirsizes::get(join(fs, "deep")),
+              "a copy into a folder drops the remembered sizes of the folders it's in");
+        // another folder under the same name later isn't given the old one's size
+        fileops::dirsizes::put(join(fs, "deep"), fileops::DirStats{5, 1, 0});
+        util::rename(join(fs, "deep"), join(fs, "deep-old"));
+        makedirs(join(fs, "deep"), true);
+        check(!fileops::dirsizes::get(join(fs, "deep")), "a different folder later under the same name isn't given the "
+                                                         "remembered size (device and inode checked)");
+    }
+
+    // ---- New Folder with Selection: a free window for the name, the folder made beside the items, them moved in;
+    // a taken name isn't replaced; Undo puts them back and removes the folder; a move failing part-way keeps all
+    {
+        QString nf = P("nfsel");
+        makedirs(join(nf, "sub"), true);
+        write_text(join(nf, "a.txt"), "a");
+        write_text(join(nf, "b.txt"), "b");
+        write_text(join(nf, "sub/in.txt"), "in");
+        QStringList items{join(nf, "a.txt"), join(nf, "b.txt"), join(nf, "sub")};
+        w->new_folder_with(items);
+        QInputDialog *ask = nullptr;
+        wait_for([&]() { return (ask = shown_window<QInputDialog>()) != nullptr; });
+        bool asked = ask && ask->textValue() == "New Folder" && is_free_window(ask);
+        if (ask) {
+            ask->setTextValue("Box");
+            ask->accept();
+        }
+        QString box = join(nf, "Box");
+        bool moved = wait_for([&]() {
+            return isfile(join(box, "a.txt")) && isfile(join(box, "b.txt")) && isfile(join(box, "sub/in.txt")) &&
+                   !lexists(join(nf, "a.txt")) && !lexists(join(nf, "sub"));
+        }, 10000);
+        check(asked && moved, "New Folder with Selection asks for a name in a free window (a free “New Folder” "
+                              "offered) and moves every selected item into the new folder beside them");
+        wait_for([&]() { return undo::label() == "New Folder with Selection"; }, 3000);
+        check(undo::label() == "New Folder with Selection" &&
+                  undo_and_wait(w, [&]() { return isfile(join(nf, "a.txt")) && isdir(join(nf, "sub")) && !lexists(box); }),
+              "Undo puts the items back where they were and removes the folder it made");
+
+        write_text(join(nf, "Taken"), "keep me");
+        w->move_into_new({join(nf, "a.txt")}, nf, "Taken");
+        wait_for([&]() { return (ask = shown_window<QInputDialog>()) != nullptr; });
+        bool again = ask && ask->textValue() == "Taken" && ask->labelText().contains("already");
+        if (ask)
+            ask->reject();
+        spin(300);
+        check(again && text_of(join(nf, "Taken")) == "keep me" && isfile(join(nf, "a.txt")),
+              "a taken name isn't replaced: the name window comes back with it kept, and nothing moves");
+
+        // a folder can't move to another parent without write permission on it: that one fails, the rest move
+        ::chmod(enc(join(nf, "sub")).constData(), 0555);
+        w->move_into_new(items, nf, "Part");
+        QString part = join(nf, "Part");
+        bool partway = wait_for([&]() { return isfile(join(part, "a.txt")) && isfile(join(part, "b.txt")); }, 10000);
+        spin(500);
+        ::chmod(enc(join(nf, "sub")).constData(), 0755);
+        check(partway && isdir(join(nf, "sub")) && isfile(join(nf, "sub/in.txt")) && !lexists(join(part, "sub")) &&
+                  isdir(part),
+              "a move failing part-way keeps everything: what moved stays in the new folder, the rest where it was");
     }
     finish();
 }

@@ -65,14 +65,14 @@ static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"queue", {{"jobs", JOBS}, {"mode", STR}}},   // keep (the tower's): the job queue of every Kestrel, in order
     {"lane_open", {{"flight", STR}, {"task", STR}}},   // (the tower's) that flight's job may start
     {"job_control", {{"flight", STR}, {"task", STR}, {"action", STR}}},   // pause, resume, start_now, up, down, cancel
-    {"queue_mode", {{"mode", STR}}},   // "drive" or "one" (jobs.h)
+    {"queue_mode", {{"mode", STR}}},   // "drive", "one" or "all" (jobs.h)
 };
 static const QList<QPair<QString, Field>> JOB_FIELDS = {{"flight", STR}, {"id", STR},      {"title", STR}, {"state", STR},
                                                         {"drives", STRS}, {"paused", BOOL}, {"admin", BOOL}};
 static const QList<QPair<QString, Field>> TASK_FIELDS = {{"id", STR},          {"title", STR},      {"text", STR},
                                                          {"fraction", NUM},    {"cancellable", BOOL},
                                                          {"cancelling", BOOL}, {"admin", BOOL}, {"state", STR}};
-static const QStringList UNDO_KINDS = {"move", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
+static const QStringList UNDO_KINDS = {"move", "move_into", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
 
 static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
 
@@ -333,7 +333,7 @@ static void tower_call(GDBusConnection *conn, const gchar *sender, const gchar *
                                           nullptr);
             QString type = msg.value("type").toString();
             if (type == "queue_mode") {
-                tower->mode = msg.value("mode").toString() == "one" ? "one" : "drive";
+                tower->mode = jobs::known_mode(msg.value("mode").toString());
                 run_queue(conn);
             } else if (type == "job_control") {   // the queue's part of it (the flight running the job does the rest)
                 QString flight = msg.value("flight").toString(), id = msg.value("task").toString(),
@@ -424,6 +424,7 @@ struct RadioState {
     guint sub = 0;
     qint64 last_launch = 0;
     bool started = false;
+    bool caught_up = false;   // the tower's answer to Kept heard (Radio::caught_up)
 };
 static RadioState rs;
 
@@ -457,6 +458,7 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
     if (!rs.conn)
         rs.conn = G_DBUS_CONNECTION(g_object_ref(conn));
     rs.tower = QString::fromUtf8(owner);
+    rs.caught_up = false;   // a new tower: until its Kept answer comes
     if (!rs.sub)
         rs.sub = g_dbus_connection_signal_subscribe(conn, nullptr, IFACE, "Broadcast", PATH, nullptr,
                                                     G_DBUS_SIGNAL_FLAGS_NONE, on_broadcast, nullptr, nullptr);
@@ -487,6 +489,8 @@ static void tower_appeared(GDBusConnection *conn, const gchar *, const gchar *ow
                 m["from"] = from;
                 Q_EMIT radio()->heard(m);
             }
+            rs.caught_up = true;
+            Q_EMIT radio()->kept_heard();
         },
         nullptr);
 }
@@ -508,6 +512,7 @@ static void launch_tower()
 static void tower_vanished(GDBusConnection *conn, const gchar *, gpointer)
 {
     rs.tower.clear();
+    rs.caught_up = false;   // the others' jobs aren't known again until a new tower tells them
     if (conn)
         launch_tower();
 }
@@ -543,6 +548,8 @@ QString hand_off(const QStringList &folders, const QStringList &select)
 }
 
 bool Radio::tower_up() const { return rs.conn && !rs.tower.isEmpty(); }
+
+bool Radio::caught_up() const { return tower_up() && rs.caught_up; }
 
 QString Radio::request(const QString &method, const QString &arg)
 {

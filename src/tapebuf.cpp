@@ -1,6 +1,7 @@
 #include "tapebuf.h"
 
 #include "fileops.h"
+#include "prefs.h"
 #include "util.h"
 
 #include <QElapsedTimer>
@@ -46,15 +47,22 @@ Memory memory()
     return m;
 }
 
+qint64 safe_size(const Memory &m, qint64 in_use)
+{
+    double keep = std::clamp(settings().value("tape_buffer_keep", 10).toDouble(), 0.0, 95.0) / 100.0;
+    qint64 spare = m.available + in_use;   // what the buffer may draw on: what's available, and what it already holds
+    // half of it at most (the rest of the system keeps at least as much as the buffer takes, for its own growth, the
+    // page cache, other copies), and never so much that less than the share kept free is left
+    qint64 b = std::min(spare / 2, spare - qint64(keep * double(m.total)));
+    return std::max(b, FLOOR);
+}
+
 qint64 budget(const Memory &m, qint64 in_use)
 {
-    QSettings &s = settings();
-    double keep = std::clamp(s.value("tape_buffer_keep", 10).toDouble(), 0.0, 95.0) / 100.0;
-    qint64 most = s.value("tape_buffer_gb", 0).toLongLong() * 1024 * MB;
-    qint64 b = m.available + in_use - qint64(keep * double(m.total));
-    if (most > 0)
-        b = std::min(b, most);
-    return std::max(b, FLOOR);
+    // (16 GB unless chosen, plenty to stream; GB as Kestrel shows sizes: 10^9 bytes)
+    qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1000000000;
+    qint64 safe = safe_size(m, in_use);
+    return most > 0 ? std::max(std::min(most, safe), FLOOR) : safe;   // the largest size, only where it's safe
 }
 
 qint64 min_stream_rate()
@@ -208,6 +216,15 @@ void Buffer::read_all()
     cv.notify_all();
 }
 
+void Buffer::tell(std::unique_lock<std::mutex> &l, const QString &text)
+{
+    if (!waiting)
+        return;
+    l.unlock();   // the callback may ask the buffer for its figures (source_rate takes the lock): not while holding it
+    waiting(text);
+    l.lock();
+}
+
 void Buffer::wait_a_little(std::unique_lock<std::mutex> &l)
 {
     cv.wait_for(l, std::chrono::milliseconds(200));
@@ -243,9 +260,9 @@ bool Buffer::begin(const QString &path, dev_t dev, ino_t ino)
             break;
         if (reader_done && queue.empty())
             return false;
+        l.unlock();   // (the callback may ask the buffer for its figures: not under its lock)
         if (waiting && filling)
             waiting(QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
-        l.unlock();
         cv.notify_all();
         l.lock();
         wait_a_little(l);
@@ -282,15 +299,13 @@ qint64 Buffer::next(const char **data)
                 if (filling)
                     ++wait_count;
             }
-            if (waiting)
-                waiting(filling ? QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
-                                : QString("Waiting for the source"));
+            tell(l, filling ? QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
+                            : QString("Waiting for the source"));
             wait_a_little(l);
             continue;
         }
         if (filling && !reader_done && held.load() < cap.load() - chunk_size()) {
-            if (waiting)
-                waiting(QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
+            tell(l, QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
             wait_a_little(l);
             continue;
         }

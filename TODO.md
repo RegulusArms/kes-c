@@ -30,316 +30,243 @@ into.
   - So something during a long session breaks that window's state. Still to find out: does the window follow the
     mouse until the next click, or jump away at once?
 
+- [ ] **Tape copies: short dips left, and fewer questions to the drive.** Copies onto an LTFS tape used to drop to
+  about a quarter of the drive's speed for long stretches; the cause was programs asking the tape for its free space
+  (see Done). Still open:
+  - A few short dips (about 5 seconds) with no such question from any program; cause unknown.
+  - Kestrel could interrupt the drive less still: before every file on a tape, `copy_file_at` (src/fileops.cpp) checks
+    the free space (fstatvfs: on LTFS probably a command to the drive); once per job and counting down would do.
+  - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
+    (sg_logs gets EBUSY on the sg one).
+
+- [ ] **Kestrel freezes when a drive is busy with another program.** When another program loads a drive heavily
+  and Kestrel does something on that drive, its window stops responding until GNOME's "not responding" (force quit)
+  dialog appears. Kestrel's own jobs on that drive don't cause it.
+  - Likely: something on the GUI thread waits on the drive (a stat, listing, free-space check, thumbnail or metadata
+    read, file watcher), which is fast normally but blocks for seconds when the drive's queue is full.
+  - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
+    updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
+
 ## New features
 
 ### Jobs
 
-- [ ] **Jobs run in the background, apart from the Kestrel windows.** Jobs (copies, moves, extractions, checksums,
-  preview builds…) run in a background process of their own, like the tower, instead of inside the window that
-  started them. The Jobs window is a view onto that process: it can be opened at any time and closed without
-  stopping anything.
-  - All Kestrel windows can be closed while jobs keep running.
-  - Closing the last Kestrel window while jobs are running asks something like "Exit and open the Jobs window, or
-    stop all jobs?"
-    - **Exit and open the Jobs window:** the Jobs window opens, the Kestrel windows close, and the jobs go on.
-    - **Stop all jobs:** they're stopped (each one leaving things as a cancel does today) and Kestrel exits.
-  - If the Jobs window is already open, the last Kestrel window just closes, without asking: the jobs carry on and
-    can still be watched there.
-  - Today closing a window that runs jobs asks whether to stop them or keep going, and they live in that window's
-    process. With this, a job no longer depends on the window that started it.
-  - Messages a job needs to show when it ends or needs an answer (a conflict, a password, a summary) would then come
-    from the Jobs window, or a window opened for them, since the window that started it may be gone.
-
 ### Archives
-
-- [ ] **Better archive window QoL.** Follow-ups to Open as Archive (`src/archivewin.cpp`):
-  - Open a file from inside the archive (double-click): extract it to a temporary copy and open that with its app.
-    The temporary copies need a cache folder, cleaned up afterwards and added to the BleachBit cleaner.
-  - Drag items out of the window into a Kestrel folder, the desktop or another app, extracted as they're dropped.
-  - A test for the unzip path (used only when 7-Zip isn't installed), which the test environment never takes because
-    7-Zip is always there: listing, extracting single items (names with `[ ] * ?` escaped) and testing.
-
-- [ ] **Split sizes to pick from when compressing.** In Compress…, when the chosen program can split an archive into
-  volumes (7z, rar, zip with 7-Zip; the **Split into volumes** box, shown only then), the size becomes a dropdown of
-  standard sizes plus **Custom…** with a box for any size. Today it's a number box and an MB / GB unit
-  (`src/archive_ui.cpp`).
-  - Standard sizes, named by what they fit: 25 MB (email), 100 MB, 650 MB (CD), 700 MB (CD), 1 GB, 2 GB, 4 GB (just under
-    4 GiB: a FAT32 USB stick's largest file, 4095 MB), 4.7 GB (DVD), 8.5 GB (dual-layer DVD), 25 GB (Blu-ray),
-    50 GB (dual-layer Blu-ray). Exact byte sizes for the discs (a "4.7 GB" DVD holds 4,700,372,992 bytes, not
-    4.7 GiB), so a volume really fits; to settle when it's built.
-  - **Custom…** shows the number box with a unit (KB, MB, GB) again; the last custom size is remembered, and the
-    choice (standard or custom) is remembered per format as now.
-  - The Command preview shows the exact size passed to the program (`-v` for 7z and rar).
-  - The size is passed around in whole megabytes today (`volume_mb`): exact disc sizes and a KB unit need it in bytes
-    (or KB) all the way to the command.
 
 ### Drives, the sidebar and the Overview
 
-- [ ] **Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
+- [ ] ~~**Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
   **Rename in Kestrel…** to give it a name of your own, such as "Camera SD card" or "Backup HDD". Kestrel only shows
-  that name; the drive's own label is never changed.
-  - Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
+  that name; the drive's own label is never changed.~~ *Struck for now.*
+  - ~~Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
     `g_mount_get_uuid()`, or the volume's UUID identifier), so the name follows the drive to any port or mount point,
     also before it's mounted. Phones and cameras have no UUID: use the most stable id GIO offers for them (the
-    device's serial, else its gvfs address), and say in the dialog when the name may not stick.
-  - Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
+    device's serial, else its gvfs address), and say in the dialog when the name may not stick.~~
+  - ~~Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
     drive's top folder, the window title, Properties. The real label stays visible where it matters (a tooltip, or
-    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").
-  - Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
+    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").~~
+  - ~~Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
     Kestrels through the tower (a new message, so bump PROTOCOL), and added to BleachBit's cleaner. **Reset Name**
-    puts the drive's own name back.
-  - Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than guessing.
+    puts the drive's own name back.~~
+  - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
+    guessing.~~
 
-- [ ] **A sidebar section (dropdown) for mounts.** A collapsible **Mounts** section in the sidebar, like Places,
-  Bookmarks and Devices (moved and collapsed the same way), listing the mounts GNOME Files shows that Kestrel's
-  sidebar leaves out.
-  - Found on this machine (2026-10-14): GNOME Files lists `~/dataset-a` and `~/dataset-b` (ZFS datasets
-    `tank/secure/…` mounted inside the home folder); Kestrel's sidebar doesn't. Its Devices list (`Sidebar::mount_list`
-    in `src/widgets.cpp`) only takes a mount whose device is a `/dev/…` disk, or one under `/media`, `/run/media` or
-    `/mnt`, so anything else is dropped: ZFS datasets, bind mounts, and FUSE mounts (rclone, sshfs, gocryptfs,
-    Cryptomator…) in the home folder or elsewhere.
-  - Use GIO's own rule for what to show (`g_unix_mount_guess_should_display()`, or the volume monitor's mounts, as
-    GNOME Files does), so Kestrel lists the same mounts, including those in the home folder.
-  - Network shares (SMB, SFTP, NFS, FTP: GVFS mounts) aren't in the sidebar either, only on the Overview: list them in
-    this section too, with Unmount on the entry or its menu. Recently used servers that aren't mounted could show
-    greyed, a click reconnecting them.
-  - Each entry: its name (and the friendly name, see that item), an icon by kind (ZFS dataset, network share, FUSE,
-    disk), and opening on click. Check the Overview's Drives section for the same gap.
-  - Also compare with GNOME Files in the user's real session (unmounted partitions it offers to mount), which a
-    shell without the desktop's udisks volume monitor can't show.
-
-- [ ] **Overview page improvements, chosen in Preferences.** Let the user pick what the Overview shows, in
-  Preferences → Overview. Today it always shows the same four sections: Drives, Phones & Cameras, Network, Bookmarks.
-  - Show or hide each section, and put them in any order (as the sidebar's sections can be).
-  - New sections to choose from (ideas to settle when this is picked up): Starred, Recent files, Pinned folders,
-    frequently used folders, and the drives' friendly names (see the item above).
-  - Per section: card size, and for Drives whether to show system and hidden drives, the usage bar, free space as
-    a number or a percentage, and unmounted drives.
-  - Details still to decide with the user: which new sections and options are actually wanted.
-
-- [ ] **Drive health on the Overview.** Each drive card (and Properties of a drive) shows its health from S.M.A.R.T.:
-  "Healthy", or a warning such as "3 bad sectors" or "failing", plus its temperature and power-on time.
-  - Read through udisks (`org.freedesktop.UDisks2.Drive.Ata`: SmartFailing, SmartTemperature, SmartPowerOnSeconds,
-    SmartNumBadSectors), which works without root for ATA/SATA drives; NVMe through udisks' NVMe interface where the
-    installed udisks has it. `smartctl` needs root, so it isn't used. USB enclosures often don't pass S.M.A.R.T.
-    through: show "health not available" rather than nothing.
-  - A failing drive gets a red warning on its card and a notification the first time Kestrel sees it.
-  - Details on click: the attributes udisks reports, in plain words (reallocated sectors, pending sectors, CRC errors).
-
-
-- [ ] **LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
-  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index sync,
-  the Overview card and safer unmounting. Still to do:
-  - Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads (`user.ltfs.startblock`,
-    `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*` also tried): with the tape
-    mounted, `getfattr -d -m - /media/tape` and on a file. Fix the names where they differ.
-  - Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that browsing
-    it no longer freezes.
-  - Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
+- [ ] ~~**LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
+  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index
+  sync, the Overview card and safer unmounting. Still to do:~~ *Struck for now.*
+  - ~~Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads
+    (`user.ltfs.startblock`, `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*`
+    also tried): with the tape mounted, `getfattr -d -m -` on the tape's mount point and on a file. Fix the names
+    where they differ.~~
+  - ~~Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that
+    browsing it no longer freezes.~~
+  - ~~Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
-    what's on which tape).
+    what's on which tape).~~
 
 ### Views and search
 
-- [ ] **Collapse a date group from anywhere in it.** With Group by Period / Group by Day, a large group means scrolling
-  all the way back up to its header to collapse it. Make it collapsible from the bottom too, and without scrolling:
-  - **A footer at the end of each group:** a slim row ("▴ Collapse Today (1,240)") after the group's last item that
-    collapses it, then keeps the view on that group's header so the user doesn't lose their place. A new row kind in
-    `DateGroupProxy` (`src/groups.cpp`), drawn like the header, not selectable, spanning the list's columns and taking
-    a whole line in the grid, as headers do.
-  - **A sticky header:** the header of the group at the top of the view stays pinned there while scrolling through it
-    (as phones' photo apps and many file managers do), still clickable to collapse. Collapsing from it scrolls so the
-    collapsed header is at the top. Could replace the footer, or come with it (to decide; maybe a preference).
-  - **From anywhere:** right-click an item → **Collapse This Group**, plus **Collapse All Groups** / **Expand All
-    Groups** (Sort menu and right-click on empty space); a key for it, e.g. Ctrl+Left / Ctrl+Right or
-    Ctrl+Shift+Minus / Plus, on the current item's group.
-  - Keep: a collapsed group still counts its items, and selecting an item in it opens it (as now).
-
-- [ ] **Better search: filters, and grep.** The search bar gains filters, and a way to search inside files that
-  doesn't depend on the desktop's index.
-  - **Filters** (what `find` does): type (images, videos, audio, documents, archives, folders), size (over / under),
-    modified/created date (today, this week, a range), combined with the name; usable with "search subfolders".
-    Shown as chips or a small filter row, and remembered for the session.
-  - **grep** (search file contents directly): today *File contents* uses the desktop's search index (`localsearch`),
-    which only covers indexed folders (not external drives, network shares or folders it skips) and doesn't do regular
-    expressions. Add a direct content search with `grep -r` (or `ripgrep` when installed, much faster): plain text or
-    a regular expression, case-sensitive or not, skipping binary files, on a thread with ✕. Results show the matching
-    line and line number, and open the file (in a text editor at that line where possible).
-  - Use the index when it covers the folder (instant), grep otherwise, or let the user pick.
-
 ### File tools
 
-- [ ] **Find duplicate files.** Right-click a folder (or several, or a drive) → **Find Duplicates…**: lists groups of
-  identical files and lets the user choose which copies to keep and move the rest to the trash.
-  - Fast: group by size first, then hash only same-size files (Kestrel already hashes for checksums), with byte-by-byte
-    comparison or a strong hash to be sure. Runs on a thread with progress and ✕. Optionally `jdupes`/`rmlint` when
-    installed, but not needed.
-  - Options: minimum size, include hidden files, skip hard links (already the same file), follow into subfolders.
-  - Results: each group with thumbnails, path, date and size; "keep the oldest / newest / in this folder" helpers;
-    Move to Trash (undoable) or replace duplicates with hard links (same drive only, asking first). Space to be freed
-    shown at the top.
-  - Later: similar images (not identical bytes), e.g. the same photo at another size.
+- [ ] ~~**Find similar images** (the part of Find Duplicates left for later): the same photo at another size or
+  quality, not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates
+  window.~~ *Struck for now.*
 
-- [ ] **Compare and sync folders.** Right-click a folder → **Compare With…** and **Sync To…**.
-  - **Compare:** two folders side by side, the differences listed: only on the left, only on the right, newer on one
-    side, same name but different contents (by size and date, or by contents for a deep compare). Open, copy across
-    or trash from the list.
-  - **Sync:** make a destination match a source (one way, e.g. Pictures → backup drive): a preview of exactly what will
-    be copied, replaced and (optionally) deleted, then run it. With `rsync` when installed (resumes interrupted
-    copies, only sends changes), else Kestrel's own copy engine. Deleting on the destination is off by default and
-    asks again.
-  - Saved sync pairs ("Pictures → Backup HDD") to run again in one click, recognising the drive by its id (see the
-    friendly drive names item).
-  - Every replacement still goes through part files (nothing half-copied over a good file).
-
-- [ ] **Verify signatures.** Double-click a `.sig` / `.asc` / `.gpg` signature (or `SHA256SUMS.gpg`, `*.asc` next to a
-  download) → **Verify Signature**: checks it with `gpg --verify` against the file it signs (the same name without
-  the extension, or the one inside a clearsigned file) and says plainly: valid, signed by *name / key ID*, on *date*;
-  or bad signature; or the signer's key isn't in your keyring (with its key ID and fingerprint, and a button to fetch
-  it from a keyserver, asking first).
-  - Ties in with the checksum files Kestrel already verifies: a signed `SHA256SUMS` (+ `.gpg`/`.asc`) checks the
-    signature first, then every file it lists.
-  - Trust in plain terms: a valid signature from a key you haven't marked as trusted is still "valid, but this key
-    isn't verified by you", not a scary wall of gpg output.
-  - Optional, later: **Encrypt / Decrypt** with gpg (to a recipient or with a password).
+- [ ] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
 
 ### Images, video and audio
 
-- [ ] **Image viewer: quality-of-life improvements.** The viewer (`src/viewer.cpp`) covers the basics today: arrows,
-  wheel and mouse back/forward to move between images, Ctrl+wheel zoom at the pointer, drag to pan, fit (0) and
-  actual size (1), fullscreen, slideshow, the info overlay (I), trash, copy, and a cache of the nearby images.
-  Rotate and flip only change the display. Ideas, to choose from when this is picked up:
-  - **Saving rotation:** R / L / H can save the change to the file, losslessly (see the rotate item above), with an
-    "always save" choice so it doesn't ask each time.
-  - **A filmstrip** of thumbnails along the bottom (toggle), to jump to any image; the current one highlighted.
-  - **Same order as the folder:** the images in the order the folder is sorted (and grouped) in Kestrel, and only the
-    selection when several were selected.
-  - **Zoom:** the zoom level shown briefly when it changes; double-click toggles fit / 100% at the pointer;
-    pinch-to-zoom on touchpads; keep the zoom and position when moving to the next image (an option, for comparing).
-  - **Faster:** preload the next and previous images in the background at screen size (larger cache for big folders),
-    full-resolution decode only when zoomed in; show the embedded/thumbnail preview first for RAW and huge files.
-  - **Info:** a side panel option for the full EXIF (camera, lens, exposure, GPS with a map link, the image-generation
-    prompt) instead of only the overlay; a histogram.
-  - **Quick actions:** star / pin (the badges Kestrel shows elsewhere), rate, set as wallpaper, open the containing
-    folder with the file selected, Open With, copy to / move to a recent folder with one key (for sorting a card of
-    photos), and undo for trash from inside the viewer.
-  - **Light edits:** crop (saved under a new name or over the original, asking), resize, and auto-straighten the
-    orientation flag; anything bigger stays with a real editor (Open With).
-  - **Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default app),
-    with play/pause and a seek bar.
-  - **Compare:** two images side by side (or A/B toggle) with linked zoom, for picking the better shot.
-  - **Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.
-  - **Remembered:** window size and position, fullscreen, filmstrip and info panel state.
+- [ ] ~~**Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen
+  then:~~ *Struck for now.*
+  - ~~**Rate** images (stars 1–5, as XMP Rating), next to star / pin.~~
+  - ~~**Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default
+    app), with play/pause and a seek bar.~~
+  - ~~**Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.~~
 
-- [ ] **Drag an image out of the viewer.** With an image open in Kestrel's image viewer, drag it out and drop a copy
-  anywhere that takes files: the desktop, another Kestrel or GNOME Files window, a browser's upload field, a chat or
-  mail app.
-  - What's dragged: the file itself (`text/uri-list`, the `file://` URL, as the file views drag it), offered as a
-    **copy** (never a move: the original stays), plus the image data (`image/png` or the original's type) for apps that
-    only take pasted pixels. The drag shows the image's thumbnail under the pointer (Kestrel's own drag picture on
-    Wayland, as the file views do), and the app it's dropped into gets the focus (the drop focus extension), as for
-    drags from the file views.
-  - Telling a drag-out from panning: left-drag pans the image today. Options: start a drag-out when the image fits the
-    window (nothing to pan) and pan when zoomed in; or drag-out with a modifier (Alt or Ctrl) or the middle button; or
-    from a small handle / the filmstrip thumbnail (see the viewer improvements item). To decide; maybe the first plus a
-    modifier for zoomed images.
-  - A rotated or flipped view that hasn't been saved: drag the file as it is on disk (and say so), or the image as
-    shown (a temporary copy) — to decide with the rotation-saving item.
-  - Related: Ctrl+C already copies the image's pixels; it could also put the file on the clipboard, so Ctrl+V in a
-    folder pastes a copy of the file.
+### Desktops
 
-- [ ] **Rotate images losslessly.** Right-click one image or a selection → **Rotate** → **90° clockwise**, **180°**,
-  **90° counter-clockwise (270°)**, and **Flip horizontally / vertically**, saved to the files. Today rotating only
-  exists in the image viewer (R / L), and only for display.
-  - JPEG: lossless (`jpegtran -rotate 90 -perfect -copy all`, or `exiftran`; package `libjpeg-turbo-progs` /
-    `exiftran`): the picture data is turned without re-compressing, so no quality is lost. Where a JPEG's size isn't a
-    multiple of its block size, `-perfect` refuses; then offer either trimming the odd edge pixels (`-trim`) or, as an
-    option, just setting the EXIF orientation flag instead.
-  - **Or only change the orientation flag** (EXIF Orientation, through exiftool or by rewriting the tag): instant,
-    changes nothing else, and every modern viewer honours it. Possibly the default for JPEGs that already have one.
-  - Other formats: PNG, WebP (lossless), TIFF are re-saved losslessly (Qt or the format's tool); lossy WebP, HEIC and
-    AVIF re-encoding loses a little quality, so say so (or only set the orientation where the format has one).
-  - Keeps the metadata (EXIF, dates) and resets the orientation flag to "normal" after turning the pixels, so the photo
-    isn't turned twice. Written under a hidden part name and renamed over the original when done (fsync first, as it
-    replaces data); a batch in the status bar with ✕. Thumbnails and folder mosaics refresh.
-  - The viewer's R / L could then offer to save the rotation too.
+- [ ] **Kubuntu 26.04 (KDE Plasma) support.** The .deb already installs on 26.04 (CI's `package` job), and Kubuntu
+  uses the same archive, so this is desktop integration: everywhere Kestrel assumes GNOME or Cinnamon. Kubuntu 26.04
+  is Wayland-only. Test in a Kubuntu VM, the way Mint was done.
+  - **Probably fine already, to confirm:** Breeze colours and fonts come through KDE's Qt integration
+    (plasma-integration), dark mode through the portal's colour scheme (`desktop_prefers_dark`), cut/paste with Dolphin
+    (`application/x-kde-cutselection`), trash (`g_file_trash`), the shared thumbnail cache, `recently-used.xbel`
+    (KDE Frameworks write it too), archive passwords in KWallet (Secret Service).
+  - **File chooser portal (kes-setup):** `PORTAL_DESKTOP` becomes `kde` (right), but the FileChooser line falls back
+    to `kestrel;gnome;gtk;`. On KDE the fallback should be `kestrel;kde;`. Check `restart_portal` and `--undo` with
+    xdg-desktop-portal-kde.
+  - **Default file manager:** remember and restore Dolphin (`org.kde.dolphin.desktop`), not Nautilus. Today that's
+    `prev:-org.gnome.Nautilus.desktop` and the `pgrep nautilus`/`nemo` handling. A running Dolphin takes
+    `org.freedesktop.FileManager1` ("Show in folder"), so `--default` has to deal with it the way it quits Nautilus.
+  - **`--dock`:** Plasma's taskbar pins (launchers in `plasma-org.kde.plasma.desktop-appletsrc`). Change them through
+    plasmashell's `evaluateScript` over D-Bus, not by editing the file. This is the same open item as Cinnamon's panel.
+  - **Drag focus on Wayland:** the GNOME Shell extension does nothing under KWin. The equivalent is a small KWin
+    script loaded through `org.kde.KWin /Scripting` that activates the window under the pointer (a new path in
+    src/focus.cpp). It may not need a log-out.
+  - **gsettings-only desktop settings** (`desktop_schema()` only maps Cinnamon):
+    - wallpaper: `set_wallpaper()` → `plasma-apply-wallpaperimage`;
+    - File History privacy switch: KDE keeps it in its activity manager settings, not `org.gnome.desktop.privacy`;
+    - icon theme: `setup_icon_theme()` reads gsettings, which KDE's GTK-config module usually fills in. Reading
+      `kdeglobals` `[Icons] Theme=` is safer.
+  - **Drives, network shares and phones without gvfs:** src/overview.cpp uses GIO's volume monitor, and the udisks2
+    and MTP monitors come from gvfs, which Kubuntu may not install. Without it, unmounted USB drives, `smb://`/`sftp://`
+    and phones wouldn't appear or mount. Either add gvfs-backends/gvfs-daemons to Recommends (and install.sh's
+    RECOMMENDED) or add a udisks2 path. Check this first; it's the item most likely to change the plan.
+  - **Terminal:** `konsole` is in `open_terminal()` but comes after ptyxis and gnome-terminal. Try the desktop's own
+    terminal first.
+  - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
+    `~/.config/baloofilerc`). Without it, Kestrel falls back to its own search, which is fine.
+  - **Tests:** a `XDG_CURRENT_DESKTOP=KDE` case in `installer` (portal fallback, Dolphin restore, dock script), plus
+    unit checks for the wallpaper and icon-theme choice. No new CI job: the 26.04 package check covers installing.
+  - **Docs:** a Kubuntu section in docs/install.md, like the Mint one.
+  - Order: walk through the app in the VM (drives first), then kes-setup (portal, Dolphin, FileManager1), then the
+    wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
 
-- [ ] **Convert images.** Right-click one or more images → **Convert Image…**: to JPEG, PNG, WebP, AVIF, HEIC or TIFF
-  (only formats something installed can write), e.g. iPhone HEIC photos to JPEG.
-  - Options in plain terms: quality slider for lossy formats, resize (keep, a longest side, a percentage), keep or strip
-    the metadata (EXIF, location), and what to do with transparency when the target has none (a background colour).
-  - Decoding: Qt's image plugins first (Kestrel already reads HEIC, AVIF, JPEG XL and camera RAW through
-    `kimageformat6-plugins`); ffmpeg where Qt can't. Encoding: Qt's writers where they exist, ffmpeg (or the
-    format's own tool) for the rest. Offer only the targets that can actually be written on this system.
-  - Keep the photo's orientation right (apply the EXIF rotation, or carry it over), and its colour profile where the
-    target supports one.
-  - Output beside the originals (or a chosen folder), never replacing a file; part names; progress and ✕ in the status
-    bar for a batch; optionally move the originals to the trash afterwards.
+### Translations
 
-- [ ] **Convert videos with ffmpeg.** Right-click one or more video files → **Convert Video…** (shown only when `ffmpeg`
-  is installed, like the other tool-dependent entries) opens a settings window with the options in plain terms, the
-  way Compress… presents an archive tool's options.
-  - **Presets first:** e.g. "MP4 (H.264), plays everywhere", "Smaller file (H.265)", "WebM for the web", "Audio only
-    (MP3 / M4A / Opus)", "GIF", "Same format, just smaller". Choosing one fills in the options below; changing any
-    option makes it "Custom".
-  - **Options, in an easy form:** container (MP4, MKV, WebM, MOV, GIF, audio-only), video codec (H.264, H.265, VP9,
-    AV1, copy as is), quality as a slider from "smaller file" to "better quality" (CRF underneath) or a target size,
-    resolution (keep, 4K, 1080p, 720p, 480p, or a width), frame rate (keep, 60, 30, 24), audio (keep, re-encode with a
-    bitrate, remove), speed vs. size (ffmpeg's preset), trim (start and end time), rotate/flip, and **Extra options**
-    passed straight to ffmpeg for anything else.
-  - Only what the installed ffmpeg can do is offered (ask it for its encoders: `ffmpeg -encoders`); hardware encoding
-    (VAAPI / NVENC) when available, off by default.
-  - Shows the source's details (`ffprobe`: length, resolution, codecs, size) and a rough estimate of the new size
-    where it can.
-  - **Command preview** at the bottom showing exactly what will run, as the Compress dialog does; the last settings are
-    remembered (per preset).
-  - Output: beside the original as `name.converted.mp4` (or a chosen folder and name), never replacing the original
-    unless asked; written under a hidden part name and renamed when finished, so a cancel or failure leaves no
-    half-made video. Optionally move the original to the trash afterwards.
-  - Runs in the status bar with a real percentage (ffmpeg's `-progress` output against the length from ffprobe), the
-    time left, and ✕ to cancel. Several files are converted one after another as one job, with one summary at the end.
+- [ ] **Make Kestrel translatable, still English only.** Kestrel is set up as if it were translated, but ships only
+  English, so nothing changes for users. Afterwards, adding a language means writing one .ts file and nothing in the
+  code. Nothing goes through `tr()` today, and every text is an English literal in src/.
+  - **Build:** add `LinguistTools` to `find_package(Qt6 …)` and `qt_add_translations` (on Qt 6.4, CI's oldest). Build
+    the .qm files into kes as resources, the way the icon is (data/kestrel.qrc), so the .deb and install.sh need no new
+    paths. Add `qt6-l10n-tools` to the build deps (install.sh, CI, docs/dependencies.md).
+  - **Loading:** install a `QTranslator` for the UI language at startup.
+  - **An English .ts:** plurals need it. Once `n == 1 ? "file" : "files"` becomes `tr("%n file(s)", "", n)`, the
+    English file turns it back into "1 file" / "2 files" (`lupdate -pluralonly`). So "English only" is still one real
+    translation file.
+  - **Mark the strings:** wrap every user-visible text in `tr()`/`QCoreApplication::translate()`: menus,
+    Preferences labels (src/prefs.cpp's `label` and choice labels), messages, job logs, status line, Overview, archive
+    window, viewer, tooltips. Leave out settings keys, menu ids (`menus::tag`), file names, command lines and what
+    goes to other programs. Do it file by file, menus and Preferences first.
+  - **Things that break when translated:**
+    - **Plurals:** about 37 `n == 1 ? "file" : "files"` spots, changed to `%n` (languages have different plural
+      rules, and CJK has none).
+    - **Sentences built from pieces** (`"Copying " + name + " to " + dest`): turn each into one string with `%1 %2`
+      in a single multi-argument `.arg()`, so translators can reorder the parts. This matches the existing rule
+      against chained `.arg()` after user text.
+    - **Numbers, sizes and dates:** `group_digits` hardcodes `,`, `human_size` prints `1.5 MB` with a `.` and
+      English units, and about 10 `toString("…")` calls use fixed date formats. Move them to `QLocale` (`toString`,
+      `formattedDataSize`, `dateFormat`). Check the date groups (src/groups.cpp) and sorting. Decide whether formats
+      follow the UI language or the system's number/date locale (`LC_NUMERIC`/`LC_TIME`, as GNOME does). The latter
+      changes what users see in this item already.
+    - **Code that compares displayed text** (`name->text() == …` and similar) or finds things by label: change these
+      to compare data, not translations.
+  - **Workflow:** add a script (or CMake target) that runs `lupdate` to refresh the .ts files, and a section in
+    docs/development.md on marking new strings and adding a language.
+  - **Pseudo-translation (a test tool, not shipped):** a generated .ts that pads and accents every text
+    (`[Ǫρéñ ƒöłðéř······]`). With only English, the app looks the same whether a string is marked or not, so this is
+    how missed strings and clipped layouts show up.
+  - **Tests:** a check in `ui` (like the modal-call check) that fails on a user-visible literal in a widget call
+    (`setText("…")`, `QAction("…")`, `warn(…, "…")`) not wrapped in `tr()`, so new code stays translatable. A check
+    that the .ts files build and that no translation drops a `%1`/`%n`. A run with the pseudo-translation.
+  - Order: build + loading + English .ts + pseudo-translation, then the `ui` check (warning only until the strings
+    are done), then mark strings one area at a time, then plurals and locale formats.
 
-- [ ] **Extract audio from videos.** Right-click one or more videos → **Extract Audio…** (shown when `ffmpeg` is
-  installed).
-  - **Keep the original audio** (default when it fits a common container): the audio stream copied out unchanged
-    (`-vn -c:a copy`), instant and lossless, into the matching file type (AAC → `.m4a`, Opus → `.opus`/`.ogg`, MP3 →
-    `.mp3`, anything else → `.mka`).
-  - **Or convert it:** MP3, M4A (AAC), Opus, FLAC or WAV, with a quality choice in plain terms (e.g. "Good (192 kbps)").
-  - A video with several audio tracks: choose which (language/title from `ffprobe`), or all of them.
-  - Same handling as Convert Video: written under a hidden part name, beside the video by default, never replacing a
-    file, progress and ✕ in the status bar, several files as one job.
+- [ ] **Translate Kestrel, the major languages first:** French, German, Italian, Spanish, Portuguese (both Brazilian
+  and European), Russian, Korean, Japanese and Chinese (Simplified). Needs the item above.
+  - **The files:** `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`. Translation itself: Qt Linguist,
+    or a hosted service such as Weblate (free for open source) so others can contribute.
+  - **Portuguese** comes in two versions, pt_BR and pt_PT. Check that the locale picks the right one (`pt_BR` →
+    pt_BR; `pt_PT` and plain `pt` → pt_PT).
+  - **Loading:** pick the translation from `QLocale::system()`, plus Qt's own `qtbase_*.qm` for the standard buttons
+    and dialogs (qt6-translations-l10n, a Recommends). Optionally add a Preferences setting to choose the language
+    (in src/prefs.cpp, applied on restart).
+  - **Russian** has three plural forms (1 файл, 2 файла, 5 файлов), which the `%n` plurals from the item above
+    handle; check a few counts (1, 2, 5, 11, 21) in it.
+  - **Widths:** German, French and Russian run about 30% longer. Check fixed-width buttons, Preferences rows, the status line
+    and column headers. CJK needs a font with the glyphs (the desktop's usually has them).
+  - **Outside kes:** the desktop entry (`Name[fr]=`, `Comment[…]`, `GenericName`), data/kestrel.portal, the GNOME
+    Shell extension's metadata, kes-setup's and the admin helper's messages (these could stay English at first; say
+    so in the docs).
+  - **Tests:** a run under `LANG=de_DE.UTF-8` (and Russian and one CJK locale) that checks the translation loads, plus the
+    `%1`/`%n` check from the item above over the real files.
 
-- [ ] **Convert audio files.** Right-click one or more audio files → **Convert Audio…** (with `ffmpeg`): FLAC, WAV,
-  ALAC, MP3, M4A (AAC), Opus or OGG, e.g. a FLAC album to MP3 or Opus for a phone or music player.
-  - Quality in plain terms (bitrate or VBR level), sample rate and channels (keep, or 44.1/48 kHz, stereo/mono).
-  - Tags and cover art kept (title, artist, album, track number; embedded cover where the target supports it).
-  - Optional **loudness normalisation** (ffmpeg's `loudnorm`, two passes) so a batch plays at the same volume.
-  - A whole folder at once, keeping its subfolders in the output folder.
-  - Same handling as the other conversions: part names, never replacing, progress and ✕, one summary for a batch.
+### Tests and CI — beta release blocker
 
-### The file chooser
+*Everything in this section is to be done before the first beta.*
 
-- [ ] **File chooser: its own Overview for downloads, and free names when changing folders.** For the Save dialogs other
-  apps open in Kestrel (a browser's downloads, "Save image as"…).
-  - **Its own start page:** a Save chooser can open on an Overview of its own, with quick-access save locations the user
-    sets up for the chooser only (like Starred, but separate: adding one doesn't star the folder in Kestrel), e.g.
-    Downloads, Pictures/Saved, a project folder. Managed from the page itself (add the current folder, remove, reorder)
-    and from the chooser's preferences.
-  - **Or keep today's behaviour:** a setting in the chooser's preferences chooses where a Save chooser starts: that
-    Overview, or as now (the folder the app suggests, else where the last chooser saved; `chooser_folder` in
-    `src/app.cpp` / `src/chooser.cpp`). Open choosers keep starting as now unless this should apply to them too
-    (to decide).
-  - **A free name in each folder:** when the user goes to another folder while saving, Kestrel checks the name in the
-    name box against that folder and, if a file of that name is already there, changes it to the next free one
-    (`photo.jpg` → `photo (1).jpg`, then `(2)`…), as browsers name repeated downloads. Going back to a folder where the
-    original name is free puts the original name back. Only names Kestrel changed itself are changed back: once the
-    user edits the name, it's theirs (still checked, with today's "Replace?" question when saving over a file).
-    Several files saved at once: each name made free the same way.
-  - Numbering: `util::unique_path(..., "number")` starts at ` (2)`; downloads want ` (1)` first, so it needs a style
-    for that (and it already strips an existing ` (n)` before numbering).
+- [ ] **A tool check: which external tools work, in its own CI job.** Kestrel wraps the standard command-line tools
+  (7-Zip, unrar/rar, zpaq, tar's compressors, gpg, rsync, ffmpeg/ffprobe, exiftool, jpegtran, heif-enc, ripgrep,
+  BleachBit…), and the test suite skips a tool's checks when it isn't installed, so CI only covers the tools it
+  happens to have (unrar, rar, zpaq, ripgrep, pigz, the parallel compressors and heif-enc aren't installed; zstd, xz
+  and bzip2 only come with GitHub's runner image). A separate job installs every tool Kestrel can use, runs each of
+  them through Kestrel's own code, and reports what works and what doesn't.
+  - Its own job (or workflow), run on its own: nothing waits for it, and a failure there never stops the build, the
+    package, the release or the apt update.
+  - A report of each tool: installed or not, its version, and works / broken / missing, with the error for a broken
+    one (in the run's summary page, and kept as an artifact).
+  - Both 7-Zips: `7zip` (what the docs recommend) and the older `p7zip-full` (what the test jobs install now).
+  - On ubuntu:24.04 and 26.04 containers (pulled through mirror.gcr.io), so a newer tool that behaves differently
+    shows up before users find it.
+  - Also on a schedule (e.g. weekly), not only on pushes: tools change when the distro updates them, not when
+    Kestrel does.
 
 ## Done
+- [x] **Drag-selecting from empty space selected nothing in the grid when dragged up and to the left** (0.3.2-alpha.26). The grid's `setSelection` (src/pane.cpp `FileView`, 0.3.2-alpha.17) told a press from a band by the rect's width and height, which are negative for `QRect(press, pointer)` dragged up-left, so the band was taken for a press on empty space; it now tests the normalized rect. Test: `ui`.
+- [x] **apt suites by Ubuntu release, so dropping one doesn't strand its users** (0.3.2-alpha.25; a .deb per release: alpha.26). Suites `noble`, `resolute` and their `-dev` ones beside `stable`/`dev`, in `.github/apt/distributions`; the apt job copies it and the page (`.github/apt/index.html`) to gh-pages and runs `reprepro includedeb` for each release's .deb into its suite and `APT_GENERAL`'s (noble) into `stable`/`dev` (`deb.yml`). A .deb per release, built in its container (`deb` matrix), version `…~ubuntu24.04`/`~ubuntu26.04`, Depends' libc/libstdc++/Qt minimums from the build system (CMakeLists.txt); `publish` makes the GitHub releases with both. Install instructions (page, docs/install.md, README): a block per release naming its suite (alpha.26; alpha.25's picked it from `/etc/os-release` and fell back to `stable`/`dev`, which could hand 26.04 the 24.04 package), how to switch from `stable`/`dev`, which GitHub download is whose; the page is copied to gh-pages only with a release. `apt-check` installs from each suite on its release's container (`check_package.sh --apt`), with a place for frozen suites. Dropping a release, the runner image's retirement and the signing key: docs/development.md "The apt repository and Ubuntu releases". Still to do when the time comes: the in-Kestrel notice for `stable`/`dev` users on a dropped release, and extending the signing key (expires 2029-10-04).
+- [x] **Compare two images in the viewer with a slider** (0.3.2-alpha.24). `compare == 3`: B's canvas draws A (`under`, the hidden `pinned`, kept at its size) right of the divider (`split`, `divider_x`) and itself left of it; a press near the divider, or anywhere while the images fit, moves it (Alt+drag still drags out). Zoom and pan linked by `link_view`; images of different sizes are each fitted to the window. D toggles it (`toggle_slider`); Compare in Viewer (`compare_images`, two images) → `MainWindow::compare_in_viewer` → `compare_first_two(3)`, A: the first in the folder's order. Test: `viewer`.
+- [x] **Drag an image out of the viewer** (0.3.2-alpha.18). `ViewerCanvas::fits()`: with the whole image in view a left-drag drags out (`drag_out`), zoomed in it pans and Alt+drag drags out (chosen with the user). `ImageViewer::image_data`: the file's URL, its own bytes and PNG made on request (`ImageMime`), marked `COPY_ONLY_MIME` so Kestrel's drop targets (`handle_drop`, the folder model, tabs, sidebar) copy, never move; turned or edited and not saved, a copy as shown in `~/.cache/kestrel-explorer/viewer-copies` (chosen with the user; a day old: deleted). Kestrel's drag picture on Wayland (`DragGhost`, moved to widgets.h), the focus given to the app dropped into. Ctrl+C now puts the file on the clipboard too (copied files). Test: `viewer`.
+- [x] **Rotate images losslessly** (0.3.2-alpha.18). Rotate ▸ (`rotate`, `rotate_cw`, `rotate_180`, `rotate_ccw`, `flip_horizontal`, `flip_vertical`) → `convert::rotate` (a queued job) → `imgedit::rotate_file`: JPEG through jpegtran `-perfect -copy all` from how it's shown (`compose` with its tag), the tag set to 1 (chosen with the user over the tag only; without jpegtran: the tag); `NotWholeBlocks` asks once (Trim the Edge / Set the Orientation Tag); PNG, BMP, TIFF, lossless WebP written again (`save_edit` with `keep_meta`: exiftool copies EXIF/XMP); HEIC, AVIF, lossy WebP asked first (`reencode`). Part files, fsynced. Not done: the viewer's R/L still save through the tag. Test: `media`.
+- [x] **Convert images** (0.3.2-alpha.18). Convert Image… (`convert_image`, `convert::ImageDialog`, `media::convert_image`): targets Qt can write plus heif-enc (libheif-examples, new optional package) for HEIC/AVIF; ffmpeg reads what Qt can't; quality, resize (longest side, percentage), metadata kept (`imgedit::with_metadata`: exiftool, or a JPEG's APP1) or stripped, a background for transparency; upright by orientation, colour space kept. Beside or into a folder, never replacing (`write_parts` new_only), trash afterwards. Test: `media`.
+- [x] **Convert videos with ffmpeg** (0.3.2-alpha.18). Convert Video… (`convert_video`, `convert::VideoDialog`): presets (`media::video_presets`), Custom on any change, the last preset and Custom's settings remembered (`convert/video`); options as listed (container, codec from `ffmpeg -encoders`, quality → CRF or a target size, resolution, frame rate, audio, speed → preset, trim, rotate/flip, VAAPI/NVENC when a device is there, extra options); ffprobe details, a rough size (`estimate_mb`), the command shown. `media::run`: ffmpeg `-progress pipe:1` into a part file (`-f` from `muxer`), `put_new`, percentage and time left, ✕. One job for several, one summary (`run_batch`). Test: `media`.
+- [x] **Extract audio from videos** (0.3.2-alpha.18). Extract Audio… (`extract_audio`, `convert::AudioDialog` from_video): kept as it is (`-c:a copy`, `audio_ext`: AAC → .m4a, Opus → .opus, MP3, FLAC, others → .mka) or converted; one track (named with language/title) or every track (a file each). Test: `media`.
+- [x] **Convert audio files** (0.3.2-alpha.18). Convert Audio… (`convert_audio`, files or folders): FLAC, WAV (24-bit kept), ALAC, MP3, M4A, Opus, OGG; quality, sample rate, channels; tags and cover (`attached_pic`) kept where the format takes them; loudnorm in two passes (`measure_loudness`, `loudnorm_filter`); a folder into "<name> (converted)" with its subfolders. Test: `media`.
+- [x] **Overview page improvements, chosen in Preferences** (0.3.2-alpha.18). Preferences → Overview: `overview_sections` (the sections in order, a hidden one as `-id`; `overview::section_order`), `overview_card_size` (small / normal / large: `CardLook`, also bookmark and save-location cards), `overview_system` (the system drive only, with /boot and /efi mounts, or none: `scan_filesystems(system_mounts)`), `overview_usage_bar`, `overview_free_as`. New sections, off at first: Starred (`places::starred()`; a file opens in its app through `open_file`, Unstar) and Frequent Folders (`places::visit_folder` from `Pane::set_path`, not in choosers or the trash, only with File History on; `frequent.json`, merged with the file when written 5 s later, 200 kept; 12 shown that still exist; Remove from Frequent Folders; in BleachBit's History). Chosen with the user: Starred and Frequent Folders (not Recent files or pinned items); card size, system drives and the usage display (not hiding single drives). Not done: friendly names (struck). A rescan asked during a scan now runs after it (`scan_again`). Test: `overview`, `prefs`, `installer`.
+- [x] **Drive health on the Overview** (0.3.2-alpha.18). `src/health.cpp`: udisks' GetManagedObjects on the system bus (worker, in `scan_filesystems(with_health)`), each device matched to its drive (a block's Drive, a LUKS volume's backing device, a dm device's /sys slaves on one drive; a ZFS pool through `zpool list -vHP`, its worst disk), `from_ata` / `from_nvme` (failing, bad sectors, values past their limit, a failed self-test; NVMe critical warnings), the card's line (red with a red border when failing), Drive Health… (free window, `SmartGetAttributes` in plain words), Properties' Health row, a notification once per drive id (`health_warned`). `overview_health` turns it off. Not done: health for unmounted drives' cards. Test: `overview`.
 
+- [x] **Find duplicate files** (0.3.2-alpha.17). `src/dupes.cpp`: `dupes::find` groups by size, then the first 64 KB (SHA-256), then the whole file (`hashcheck::hash_file`, SHA-256), each root on its own drive, symlinks never followed; hard links collapsed to one name unless asked (then `freed` counts each inode once). `DupesWindow` (a free window; a queued job, so it waits for its drive): options as prefs (`dupes_*`, Files → Find Duplicates), thumbnails through `ThumbnailManager::get_icon` (owner: the window), Keep boxes, keep oldest / newest / in a folder, Move the Others to Trash (`MainWindow::trash_paths`: undoable), Replace with Hard Links (`link_over`: a link under a part name renamed over the file; size, date and inode checked again first). A group with no copy kept is skipped. In the menus of folders, several folders, sidebar drives and Overview cards. Not done: jdupes / rmlint (not needed), similar images (its own item). Test: `tools`.
+- [x] **Compare and sync folders** (0.3.2-alpha.17). `src/compare.cpp`: `compare::diff` (parallel walk; a folder on one side is one item; dates within 1 s are the same; deep: byte by byte; Kestrel's part files and rsync's partial folder ignored), `plan` (copies, replacements, then deletes), `jobs_for` (Kestrel's `start_ops`, replacing through parts) or `run_rsync` (`rsync -a --modify-window=1 --partial-dir=.kes-rsync-partial --info=progress2`, no `--inplace`; its output in the job's log). `CompareWindow` (Copy across asks before replacing; Trash per side), `SyncWindow` (Preview, deleting off and asked again, Sync Now). Saved pairs in `sync-pairs.json` (write_atomic; in BleachBit's cleaner) with each folder's file system UUID (`fs_uuid`, from /dev/disk/by-uuid) and path inside it, `resolve`d wherever the drive is mounted. ☰ → Sync Folders… opens the window for the saved pairs. rsync is an optional package. Test: `tools`, `installer`.
+- [x] **Verify signatures** (0.3.2-alpha.17). `src/signature.cpp`: `kind_of` (clearsigned, detached, inline, or not a signature: keys and encrypted files open as usual), `verify` (`gpg --batch --status-fd 1 --verify`), `parse_status` (GOODSIG / BADSIG / EXPKEYSIG / REVKEYSIG / ERRSIG rc 9 / NO_PUBKEY / VALIDSIG / TRUST_*), `headline` and `plain` texts; `SignatureWindow` with Fetch Key… (asks, then `--recv-keys` from keyserver.ubuntu.com, which keeps user IDs) and gpg's output. Opening a signature or a checksum file with one beside it (`signature_for`) checks the signature, then `hashcheck::open_dialog`. Right-click entry `verify_signature` for files with a signature's name (not encrypted tar archives). Not done: Encrypt / Decrypt (its own item). Test: `tools`.
+
+- [x] **A selection box only as big as the item** (0.3.2-alpha.17). `GridDelegate::shape` (src/widgets.cpp): the icon as drawn (`layout`: a thumbnail's scaled size, else the icon square) padded 4 px, and each name line as wide as its text, centred, as one path (WindingFill). `paint` fills it for selected / hovered, the grid's drop target is drawn with it, and the grid's `FileView::indexAt` (src/pane.cpp) returns nothing outside it, which covers clicks, middle-click, hover, tooltips, `MainWindow::context_menu` (split into `menu_at`, which the test uses) and drops. `setSelection`: a press selects only by `indexAt`; the rubber band (DragSelectingState) selects the items whose shape it touches (a pass over the rows, cells first); Shift ranges stay Qt's. The list view is unchanged. Test: `ui`.
+
+- [x] **Drag files and folders from one tab to another** (0.3.2-alpha.17). `TabDrop` (src/app.cpp), an event filter on the tab bar (which now takes drops): resting on a tab for 500 ms shows it; a drop onto a tab goes through `handle_drop` (the same keys as any drop), an archive window's items through `ArchiveWindow::drop_members`. A tab takes a drop when its pane has one folder (`Pane::dir()`, not search results; the Trash, listed as results, does) and the items aren't all in it already; that tab is highlighted (a `Light` widget over its rect; the tab bar's `drop_tab` property for the tests). Found along the way: a drop onto the sidebar's Trash moved files into `Trash/files` without a .trashinfo; `handle_drop` now sends any drop onto the Trash to `trash_paths`. Test: `ui`.
+
+- [x] **The Jobs window: each list with its own controls, and choices for thumbnailing** (0.3.2-alpha.17). The job buttons are in a box with the jobs list (the upper part of the `lists` splitter), the thumbnail list's Pause, Stop and a **Thumbnailing** choice below it. `thumb_mode` (src/prefs.cpp, Images & Videos; applied by `apply_settings` without the rest of `apply_preferences`, so the previews made stay; other Kestrels through the "settings" message, no new tower message): "wait" (default: `jobs::Queue::busy`, as before), "drive" (`ThumbnailManager::update_holds`: per drive (`ThumbJob::drive`, `drives::drive_ids`), the running job keeps it until it ends or is paused; a new runner is the newest job still shown, before a lowered one; the rest `behind`), "paused" (`held()` holds every request, also those without a job; jobs listed "Paused (all thumbnailing)"). Tapes and floppies still need Show Previews on This Drive (`drives::reads_allowed`, before any request). Test: `theme`, `ui`.
+
+- [x] **Thumbnailing is a job in the Jobs window** (0.3.2-alpha.15). Each view and folder that asks for thumbnails and folder previews is a `ThumbJob` (src/thumbs.h), listed in the Jobs window's lower part (a vertical splitter, 3:1, `jobs_window_lists`) as "Thumbnails: Pictures/2024, 312 of 840", with the window it's for, its state, progress, Pause and Stop. A request (`ThumbRequest`) takes its pool priority from its highest job; leaving a folder (`ThumbnailManager::lower`, from `Pane::set_path`) puts its jobs below every other, coming back (the view asking again) raises them, and a lowered job stops after `thumb_job_minutes` (Preferences → Images & Videos, default 3). Pause, and another job using the drive (`jobs::Queue::busy`, checked every 2 s and on the queue's changes), hold its queued requests out of the pool (`place`, `tryTake`); Stop drops them and isn't undone by the view drawing the folder again (until it leaves it). Its view closing still stops them (0.3.2-alpha.14). Decided along the way: thumbnail jobs wait for other jobs on their drive, but not the other way round (browsing would otherwise hold up copies); they're this Kestrel's only (not in the tower's shared queue). Test: `theme`.
+- [x] **Jobs run in the background, apart from the Kestrel windows** (0.3.2-alpha.15). Decided: the Kestrel process stays alive rather than a separate jobs process. A job the user sees holds a `QEventLoopLocker` (`Task::keeps_running`), so Kestrel quits only once its last window and its jobs are gone; quiet helper tasks don't. Closing a window that isn't the last doesn't ask: its jobs go on in another window's status bar. The last window asks (`MainWindow::closeEvent`: Exit and Open the Jobs Window / Stop All Jobs and Exit / Cancel) unless the Jobs window is open; Quit (Ctrl+Q) closes every window that way. The Jobs window is a window of its own (no parent). `start_ops` finishes without its window (undo, the tape's index, what failed: `queue_job`'s `outlives_parent`), and a job's error is shown with no parent when its window is gone. Not done: a password question that's open on a window that then closes goes with it (the job takes it as cancelled). Test: `jobs`.
+- [x] **Better archive window QoL** (0.3.2-alpha.15). Double-click (or Open in its menu) extracts the file to `~/.cache/kestrel-explorer/archive-files/<random>/` (read-only) and opens it with its app; copies older than a day are deleted when the next is made; in the BleachBit cleaner's cache option. Dragging items out (`MemberTree`, `MembersMime`): `archive::MEMBERS_MIME` ({"archive", "members"}), which the folder model and the sidebar take first (extracted straight into the folder, `ArchiveWindow::drop_members`, by the archive's window when it's open, for its password), and a `text/uri-list` filled only when a drop asks for it (`retrieveData`: extracted on a thread then, the windows kept drawing), offered up to 500 MB and not for encrypted items whose password isn't known. The unzip path is tested with `KESTREL_TEST_HIDE_TOOLS=7z` (`archive::tool`); unzip added to CI's test packages. Test: `archives`, `installer`.
+- [x] **Split sizes to pick from when compressing** (0.3.2-alpha.15). `archive::volume_sizes()`: 18 MB (a 25 MB email: its limit counts the attachment after base64), 100 MB, 650 / 700 MB CDs (333,000 / 360,000 sectors of 2,048 bytes), 1 GB, 2 GB, 4 GB (FAT32: 4,095 MiB), 4.7 GB DVD (4,700,372,992 bytes), 8.5 GB DVD (8,543,666,176), 25 / 50 GB Blu-ray (25,025,314,816 / 50,050,629,632); the discs less 4 MiB for their file system. Custom… shows the number and KB / MB / GB (binary). `Spec::volume_bytes` replaces `volume_mb`, passed as `-v<n>b` to 7z and rar (exact, shown in the Command preview). Saved per format: `volume_choice` (a size saved before counts as Custom), the custom number and unit as before. Test: `archives`.
+- [x] **Remember folder sizes for Properties** (0.3.2-alpha.15). `fileops::dirsizes` (src/fileops.h): `~/.cache/kestrel-explorer/folder-sizes.json` (write_atomic, re-read when another Kestrel wrote it), by path with the device and inode checked, trimmed to 5,000 entries and a year. Properties shows a remembered size at once with "Calculated 3 days ago (2026-10-21 14:05)" and Recalculate; decided (by the user): it never counts again on its own, Recalculate does, as a queued job in the Jobs window (a stopped one stores nothing). A folder not seen yet is counted as before (quietly) and remembered. Several items: each folder's own entry, the rest counted. Kestrel's copies, moves, deletes and Move to Trash drop the entries of the folders they change and those above. In the BleachBit cleaner's cache option. Not in Clear Folder Preview Cache (only previews). Test: `fileops`, `installer`.
+- [x] **New Folder with Selection** (0.3.2-alpha.15). `menus::tag` "new_folder_with", after Duplicate in a file's, a folder's and several items' menus (`menus::defaults`). `MainWindow::new_folder_with` asks (ask_text, a free "New Folder" offered) for a name; `move_into_new` re-reads what's still there (the rest left out and said), claims the name with mkdir (a taken one asks again, the name kept; no permission: the admin helper's mkdir), then `start_move_into` moves them as a queued job (its log says what was left out and that a stop keeps what moved). Undo: the new undo kind "move_into" (the folder, then the moves; PROTOCOL 5), which moves them back and removes the folder if it's empty. Test: `fileops`, `ui`.
+
+- [x] **A closed window's folder previews kept being made** (fixed in 0.3.2-alpha.14). The queue (`ThumbnailManager`, src/thumbs.cpp) is the process's, and closing a window cancelled nothing; moving to another folder ran `cancel_pending()`, which emptied every window's requests. Now each request (`ThumbRequest`) has owners: whoever asked (a pane's `FSModel` and `SearchModel`, the `InfoPanel`, the viewer's canvas and filmstrip, Properties, a bookmark card). `cancel_for(owner)` drops what no one else wants: `QThreadPool::tryTake` while it's queued (a pointer kept only until the job starts, under `run_lock`, so it's never stale), otherwise skipped when its turn comes; one already being made is finished and cached. `Pane::cancel_thumbs` on leaving a folder and in `~Pane`, `MainWindow::closeEvent` for its panes and info panel, and an owner's `destroyed()` for the rest. `cancel_pending()` stays for everyone's (previews turned off, the caches deleted). Why the process lived on wasn't seen; most likely another window of it. Test: `theme`.
+- [x] **The scroll wheel over the image viewer's info panel went to the next image** (fixed in 0.3.2-alpha.14). The panel's scroll bar ignores a turn it can't use (the details fit, or at an end; mid-scroll it was fine), and Qt passed it on to `ImageViewer::wheelEvent`. `ViewerInfo::wheelEvent` now keeps every one, and the viewer ignores a turn over the panel (one from its scroll bar comes up another way). Test: `viewer`.
+- [x] **A job queued behind another failed per file when its destination was moved while it waited, and nothing said what it was** (fixed in 0.3.2-alpha.14; investigated 2026-10-25: most likely Paste Into Folder by mistake, with the files copied for a tape copy still on the clipboard). Titles name what goes where (`fileops::transfer_title`: "Copying 2 items to Photos (with dd)"). The log starts with `Task::intro` (what started it, given by `transfer`'s `how`: Paste, Paste Into Folder, Drop, Copy To…, Move To…, the image viewer; the window's title; the time; From / To) and, after a wait of a second or more, "Waited 2 min for: …" (the jobs ahead in its lanes when it was queued, `Queue::submit`). `start_ops` checks the destination folders when the turn comes and fails once ("…isn't there any more: it was moved or deleted while this job waited. Nothing was copied."). Decided: stop, not follow the folder (an O_PATH fd and openat in every copy path). Decided: copied files are forgotten once pasted (`MainWindow::paste`, not paths copied as text); Paste Into Folder keeps its place and name. Test: `jobs`.
+- [x] **A drive or mount sometimes showed in the sidebar only later** (fixed in 0.3.2-alpha.14; which kind was late wasn't found out). Found in the code: every change restarted the 300 ms timer, so changes coming faster than that (containers, an automounter) put the refresh off until they stopped; and a step with no event of its own after the refresh (udev's by-label link: an empty label was also cached until the next change) was missed. Now `Sidebar::drives_changed` refreshes 300 ms after the first change of a burst, then `check_mounts` 1 s and 3 s after the last (`drives::reread_mounts`, the mount table only; nothing is asked, nothing polled); an empty label isn't cached. The shared `mounts_stale` flag was fine (whoever uses it reads a table that has the change). `MountWatch` now attaches GIO's monitor to the default main context and lives on the UI thread, whichever thread makes it first. Test: `sidebar`.
+
+- [x] **Dragging 800+ selected folders into another folder froze the window for several seconds** (fixed in 0.3.2-alpha.13; not grouped, same drive, the desktop offered to force quit). Cause: each folder leaving the view deselects it, and every selection change ran `MainWindow::update_status`, which counted the whole selection through `Pane::selected_paths()`, whose duplicate check was a list search over every row × column index (quadratic per call, so cubic in all). Now `selected_paths` uses a set, and the status line is updated once per burst (30 ms single-shot); the file chooser's update stays immediate (its OK button follows it). Measured in a CI-like container with 1,500 folders: the window held 5.7 s before, about 0.4 s now. Not changed: date grouping's full regroup per removed row (`DateGroupProxy::after`), still quadratic for big grouped folders. Test: `ui`.
+- [x] **Kestrel froze when Open as Archive finished reading a big archive** (fixed in 0.3.2-alpha.13). Cause: `show_entries` built the QTreeWidget items (icons, dates, sorting) on the UI thread, about 1.9 s per 100,000 files. Now `ArchiveWindow::Listing::build` makes them in the reading job, sorted there (QCollator sort keys), icons looked up in `EntryItem::data` only for drawn rows; the tree isn't kept sorted (the header's clicks sort it) so adding them doesn't re-sort. The listing itself was slow too: `QDateTime::fromString` (~0.2 ms each) replaced by a hand parser in `archive.cpp` `parse_time`, and listings no longer run under `stdbuf -o0`. Test: `archives`.
+- [x] **Password-encrypted tar archives (through gpg)** (0.3.2-alpha.12). Compress… offers a password for tar and every tar.*: the stream goes on through `gpg --symmetric` (AES-256, `-z 0`) to `name.tar.zst.gpg`, the password on gpg's fd 3 (`proc::Options::fd3`), `--no-symkey-cache`. `archive::kind` / `gpg_encrypted` recognise `.tar…gpg`; `tar_pipe` reads through `gpg -d` for listing, testing and extracting; probe calls them encrypted, `password_opens` waits for gpg's first byte or "Bad session key", which is a WrongPassword. gnupg in Suggests, OPTIONAL_PACKAGES and docs/dependencies.md; the password is greyed out with an install hint without gpg. Test: `archives`, `fileops`.
+- [x] **Open as Archive left out part of a big archive's contents** (0.3.2-alpha.9). `run_reporting()` (src/archive.cpp) kept only the last 1–2 MB of a tool's output, and `archive::list()` and the quick password test read listings through it. Now they pass an `on_line` callback that gets every line as it's printed, and parse as they go (`SmallestEncrypted` for the password test); the returned text keeps the cap, for messages. 7z and rar failures are judged by whether the listing started, not by text near its top. Found along the way: `tar_pipe()` read tar's output only after feeding it the whole archive, so a listing (or `-tf` test, or many errors) over a pipe's worth hung; it's read on a thread now. Test: `archives`.
+- [x] **Copies onto an LTO tape slowed to about a quarter of the drive's speed for long stretches** (0.3.2-alpha.7). Found by elimination: a raw dd to the drive, dd through LTFS with 512 KB and with 16 MB writes, and with reading and writing overlapped all held full speed; Kestrel's writer only writes (strace), each write waiting on LTFS; the page cache wasn't it. The cause: other programs asking every mount for its free space. GNOME System Monitor (its File Systems tab, every few seconds) caused the long slow stretches; GNOME's low-disk-space check (gsd-housekeeping, once a minute) caused shorter drops. On LTFS each such question is commands to the drive, which then leaves streaming (as Kestrel's own polling did before 0.3.2-alpha.6). Fixed in Kestrel: while a job writes to a tape, the tape's mount point is on GNOME's check's ignore list (`drives::quiet_tape`, taken off after if Kestrel put it there), and a system monitor that's running is named in the job's log (`drives::free_space_pollers`). Left: "Tape copies: short dips left" above. Test: `slow`.
+- [x] **Image viewer: quality-of-life improvements** (0.3.2-alpha.7). `src/viewer.cpp`: `ViewerCanvas` (one image: zoom, pan, rotation, crop selection, on-screen zoom level; double-click fit ↔ 100% at the pointer, pinch), `ImageViewer` with a second canvas for Compare (X; V side by side ↔ A/B, B switches; zoom linked relative to fitting), `Filmstrip` (T; thumbnails from the thumbnail manager, not on slow drives unless allowed) and `ViewerInfo` (I; details, GPS map link to OpenStreetMap, generation prompts, all metadata, histogram). Decoding at screen size ahead (next, previous, +2) and full size when zoomed past it; the thumbnail cache's preview meanwhile. Quick actions: * star, P pin, G show in folder, O Open With, M / C move or copy to a folder, Ctrl+1–9 / Alt+1–9 to the last nine (`viewer_recent_folders`, in the BleachBit cleaner's History), Delete records undo and Ctrl+Z puts the image back in the list (`undo::undo` gained an after-callback). `src/imgedit.cpp`: rotations saved losslessly (the EXIF orientation tag patched in a part file; exiftool adds one to a JPEG without; PNG/BMP re-written; others refused), asked when leaving the image (`viewer_save_rotation`: ask / always / never; Ctrl+S now), Straighten (jpegtran, now optional: libjpeg-turbo-progs), crop and resize (previewed at once as `steps`, `imgedit::preview` on the screen-size copy; saved with Ctrl+S or on leaving the image: new file or replace, asked; a JPEG's APP1 segments copied with the tag set to 1, a PNG's text kept). Remembered: geometry (`viewer_geometry`), full screen, filmstrip, info panel, keep zoom. A selection opens in the view's order. Its right-click menu is a kind in Preferences → Menus (`menus::VIEWER`, `ImageViewer::build_menu`; View and Rotate and Edit are containers). Changed: I is now the info panel (Tab the info line); double-click no longer goes full screen. Not done: see "Image viewer: what's left". Test: `viewer`.
+- [x] **Better search: filters, and grep** (0.3.2-alpha.3). Filters: `SearchFilter` (src/search.h; type by name, size, date modified or created) in a row under the search bar (`Pane::build_filter_row`), kept for the session, applied by `SearchThread` (also with no name, and without subfolders). Inside files: `ContentSearch` (Automatic / Search index / Read the files, Regular expression, Match case); `SearchThread::run_read` streams ripgrep (else grep, `--null`) with a few lines per file into a Match column, stopped with ✕; Automatic uses localsearch where its settings cover the folder (`index_covers`) for plain words, and reads the files when it finds nothing. Opening a result at its line: gedit and forks, Geany, VS Code and forks, Kate, Sublime, Zed (GNOME Text Editor has no line option). Decided: chips weren't used (a row of drop-downs); File contents now follows Include subfolders (it always searched subfolders); nothing is read on tapes or floppies. ripgrep is optional (kes-setup, Suggests). Test: `search`.
+- [x] **Collapse a date group from anywhere in it** (0.3.2-alpha.3). A footer row in `DateGroupProxy` (src/groups.cpp: a row kind of its own after an open group's last item, "Collapse Today (1,240)", drawn quieter like a header, not selectable, spanning the list's columns and a whole line in the grid); `Pane::collapse_group` keeps the view on the header (the current row). Ctrl+Left / Ctrl+Right on the current item's group (Ctrl+Shift+Minus / Plus would clash with zoom on many layouts); Collapse This Group on an item's menu (`collapse_group`), Collapse / Expand All Groups in the Sort menu and on empty space's (`collapse_groups`, `expand_groups`). Not done: the sticky header (the footer was chosen). Test: `groups`.
+- [x] **Write straight to the file on a tape, without a part file** (0.3.2-alpha.3; tapes only, by the user's choice: floppies keep the part file, which works as intended on FAT). `copy_file_at` (src/fileops.cpp) and the admin helper's `Job::copy` (it recognises a tape from the mount table, `on_tape`) open a new name on a tape with O_CREAT|O_EXCL and write it there; a cancel or failure deletes it; a taken name is a conflict, kept. Decided: replacing a file on a tape keeps the part file and rename (the old one is never lost first). Test: `slow`, `admin_helper` (inotify: `DirWatch`).
+- [x] **File chooser: its own Overview for downloads, and free names when changing folders** (0.3.2-alpha.3). Free names: `ChooserBar::folder_changed` (src/chooser.cpp) makes the suggested name free in each folder shown, also the one it opens in, with `util::unique_path(..., "download")` (from (1)); the original comes back where it's free; a name typed or a file picked is the user's; an app replacing a file (current_file) keeps its name; SaveFiles gives each file a free name (the portal allows it) instead of asking to replace; not on tapes or floppies (not looked up there). Save locations: `chooser_places`, shown first on a Save window's Overview (`OverviewPage::save_places_section`), managed there (Add Folder…, Move Earlier / Later, Remove) and in Preferences → Windows; `chooser_start` (default: as before) can open Save windows there. Decided: Open windows start as before; an app replacing a file opens in its folder; Add Folder… starts where the last Save window saved. BleachBit cleaner: a Save locations option. Test: `chooser`, `installer`.
+- [x] **A sidebar section for mounts** (0.3.2-alpha.3). A **Mounts** section (`Sidebar::user_mount_list`, src/widgets.cpp) lists what file managers show that Devices doesn't: GIO's rule (`drives::user_mount`: in the home folder, /media or /run/media/<user>, not a system file system, device or path, not inside a hidden folder), from the mount table only (GIO also tries to enter /media mounts, which can ask the drive, and hides bind mounts; GNOME Files' udisks2 monitor lists them, as a folder in the home folder mounted elsewhere). Plus GVFS network shares (`overview::network_infos`, shared with the Overview) with Unmount, and recent servers that aren't connected, greyed, with Remove from Recent Servers. An icon and a tooltip by kind (ZFS dataset, network share, encrypted folder, FUSE, disk). Not done: friendly names (their own item); the Overview still shows one card per ZFS pool (datasets in the home folder aren't cards of their own) and leaves out FUSE mounts that aren't network ones (gocryptfs…); comparing with GNOME Files in the real session (unmounted partitions it offers to mount) is still to do by hand. Test: `sidebar` (`KESTREL_TEST_MOUNTS`).
 - [x] **Double-clicking a checksum file on a tape still froze Kestrel while the drive sought** (0.3.1-alpha.16). Caught with a trace of the window's thread: adding the file to Recent asked GIO for its content type (`util::content_type`, `g_file_query_info`), which reads the file's start, right after a write to the tape when the drive winds back from the index. On slow drives the type is now by name (Recent, Open With, `open_default` starts the type's app itself). Test: `slow`.
 - [x] **Prevent shoe-shining on tapes as much as possible: a RAM write buffer, and more** (0.3.1-alpha.13). `src/tapebuf.cpp` (the buffer: memory available less a share kept free, re-checked; a reader thread in the copy's order; fill first, then stream at the source's pace within the drive's speed-matching range or refill-and-burst below it; posix_fadvise; status and log figures), used by copies onto a tape (`Ops::start_tape_buffer`, src/fileops.cpp); room checked before each file; no fsync on tapes; Properties no longer reads a tape file to name its type; LTFS's timed index sync read from its command line (Overview card, the copy's log). Preferences → Files → Tapes. Not done: mounting tapes from Kestrel with `sync_type=unmount` (in "LTFS and slow drives: what's left"); not yet measured on the real drive. Test: `slow`.
 - [x] **A better Preferences window that shows every setting** (0.3.1-alpha.13). `src/prefs.cpp` (every setting: tab, label, default, where else it's changed; set() applies it to every window and tells the other Kestrels, "settings" with its keys, PROTOCOL 4), `src/prefswin.cpp` (tabs General, Views, Sidebar, Images & Videos, Files, Archives, Windows, Menus; live changes, search, Reset This Tab / Reset All). Not done: the Overview's contents ("Overview page improvements"); conflict and trash choices (Kestrel keeps none). Test: `prefs`.

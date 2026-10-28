@@ -5,10 +5,13 @@
 #include "drives.h"
 #include "groups.h"
 #include "hashcheck.h"
+#include "jobs.h"
 #include "places.h"
 #include "tapebuf.h"
 
 #include <QElapsedTimer>
+#include <QRegularExpression>
+#include <sys/resource.h>
 #include <QImage>
 #include <QLabel>
 #include <QMessageBox>
@@ -58,6 +61,7 @@ int main(int argc, char **argv)
     int rc;
     if (is_tower(argc, argv, &rc))
         return rc;
+    qputenv("GSETTINGS_BACKEND", "memory");   // GNOME's settings that tape copies change: the test's own, in memory
     QApplication app(argc, argv);
     QString tape = home_path("tape"), floppy = home_path("floppy"), out = home_path("out");
     for (const QString &d : {tape, floppy, out})
@@ -87,6 +91,28 @@ int main(int argc, char **argv)
     w->sidebar->refresh();
     QStringList devices = w->sidebar->entry_keys("devices");
     check(devices.contains(tape) && devices.contains(floppy), "the sidebar lists the tape and the floppy under Devices");
+
+    // ---- a tape isn't asked anything until the tower has told this process the others' jobs: the file chooser, which
+    // never joins it, sent a health query into a tape another Kestrel was writing (and its size every 30 s). Once the
+    // tower has answered, the tape is asked without anything asking again.
+    {
+        drives::Sizes *sizes = drives::Sizes::instance();
+        int answers = 0;
+        QMetaObject::Connection counted =
+            QObject::connect(sizes, &drives::Sizes::changed, [&](const QString &root) { answers += root == tape; });
+        sizes->get(tape);
+        sizes->once(tape);
+        spin(1500);
+        bool held = answers == 0 && !atc::radio()->caught_up();
+        atc::radio()->start();
+        bool joined = wait_for([]() { return atc::radio()->caught_up(); }, 10000);
+        bool asked = wait_for([&]() { return answers > 0; }, 5000);
+        QObject::disconnect(counted);
+        check(held && joined && asked && sizes->get(tape).total > 0,
+              QString("a tape isn't asked its size or health before the tower has told this process the others' jobs, "
+                      "and is asked once it has (answers before: %1, tower: %2, asked after: %3)")
+                  .arg(held ? "none" : "some", joined ? "joined" : "not joined", asked ? "yes" : "no"));
+    }
 
     // ---- nothing on the UI thread waits for a slow drive's size (a tape asked for its capacity waits behind the
     // reads another program makes: the whole window froze every 4 s)
@@ -320,19 +346,31 @@ int main(int argc, char **argv)
         const qint64 GiB = 1024LL * 1024 * 1024, kGiB = 1024 * 1024;
         meminfo(32 * kGiB, 20 * kGiB);
         tapebuf::Memory m = tapebuf::memory();
-        qint64 b10 = tapebuf::budget(m);
-        settings().setValue("tape_buffer_keep", 20);
-        qint64 b20 = tapebuf::budget(m);
+        qint64 mid = tapebuf::budget(m);   // 20 GB available of 32: half of it, under the 16 GB limit
         settings().setValue("tape_buffer_gb", 4);
         qint64 b4 = tapebuf::budget(m);
-        settings().remove("tape_buffer_keep");
+        settings().setValue("tape_buffer_gb", 0);   // no limit of its own: still only what's safe
+        qint64 unlimited = tapebuf::budget(m);
         settings().remove("tape_buffer_gb");
+        meminfo(64 * kGiB, 50 * kGiB);   // a big machine: 16 GB, the limit, is safe
+        qint64 big_box = tapebuf::budget(tapebuf::memory());
+        meminfo(32 * kGiB, 5 * kGiB);    // squeezed: the 10% of 32 GB kept free leaves 1.8 GB of the 5 available
+        qint64 squeezed = tapebuf::budget(tapebuf::memory());
+        qint64 holding = tapebuf::budget(tapebuf::memory(), 10 * GiB);   // what it holds counts: 15 GB, half of it
+        settings().setValue("tape_buffer_keep", 20);
+        meminfo(32 * kGiB, 10 * kGiB);
+        qint64 keep20 = tapebuf::budget(tapebuf::memory());   // 10 - 6.4 = 3.6 GB, under half (5)
+        settings().remove("tape_buffer_keep");
         meminfo(32 * kGiB, 50 * 1024);   // 50 MB available
         qint64 low = tapebuf::budget(tapebuf::memory());
-        check(m.total == 32 * GiB && m.available == 20 * GiB && b10 == 20 * GiB - qint64(0.1 * 32 * GiB) &&
-                  b20 == 20 * GiB - qint64(0.2 * 32 * GiB) && b4 == 4 * GiB && low == 64LL * 1024 * 1024,
-              "the tape buffer is the memory available less 10% of the total kept free (20 GB of 32: 16.8 GB), follows "
-              "the share kept free and the largest size chosen, and gets at least 64 MB");
+        auto in_gb = [](qint64 b) { return QString::number(double(b) / (1 << 30), 'f', 2); };
+        check(m.total == 32 * GiB && m.available == 20 * GiB && mid == 10 * GiB && b4 == 4000000000LL &&
+                  unlimited == 10 * GiB && big_box == 16000000000LL && squeezed == 5 * GiB - qint64(0.1 * 32 * GiB) && holding == 15 * GiB / 2 &&
+                  keep20 == 10 * GiB - qint64(0.2 * 32 * GiB) && low == 64LL * 1024 * 1024,
+              "the tape buffer is what's safe: half the memory available at most (counting what it holds), never leaving "
+              "less than the share kept free, and the 16 GB limit (or the one chosen) only where that's safe; at least "
+              "64 MB (" + in_gb(mid) + ", " + in_gb(b4) + ", " + in_gb(unlimited) + ", " + in_gb(big_box) + ", " +
+                  in_gb(squeezed) + ", " + in_gb(holding) + ", " + in_gb(keep20) + " GB)");
 
         // the buffer itself: files in order, whole, also ones larger than it; skipped ones dropped
         QString bs = home_path("bufsrc");
@@ -437,8 +475,10 @@ int main(int argc, char **argv)
                 for (const QString &n : listdir(into)) {
                     if (!n.startsWith(".kes-") && !appeared.contains(n))
                         appeared << n;
-                    if (filling && !appeared.isEmpty() && clock.elapsed() < 400)
-                        early = true;   // written before the buffer could have filled (8 pieces × 120 ms)
+                    // data written before the buffer could have filled (8 pieces × 120 ms); a new file on a tape is
+                    // made under its name when it's opened, empty until then
+                    if (filling && !n.startsWith(".kes-") && QFileInfo(join(into, n)).size() > 0 && clock.elapsed() < 400)
+                        early = true;
                 }
             texts << t->text;
             spin(20);
@@ -448,7 +488,7 @@ int main(int argc, char **argv)
                 if (!n.startsWith(".kes-") && !appeared.contains(n))
                     appeared << n;
         bool intact = true, in_order = true;
-        auto ctime_ns = [&](const QString &n) {   // when it got its name (each file is renamed into place when whole)
+        auto ctime_ns = [&](const QString &n) {   // when it was finished (its times and permissions set when whole)
             struct stat st;
             return ::stat(enc(join(into, n)).constData(), &st) == 0 ? qint64(st.st_ctim.tv_sec) * 1000000000 + st.st_ctim.tv_nsec
                                                                      : -1;
@@ -545,6 +585,183 @@ int main(int argc, char **argv)
               "sync_type says), so a copy's log and the Overview can say each one stops the drive");
     }
 
+    // ---- programs asking the tape for its free space stop it streaming: GNOME's low-disk-space check skips it while a
+    // job writes to it, and a system monitor that's open is named in the job's log
+    {
+        GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+        GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, "org.gnome.settings-daemon.plugins.housekeeping", TRUE) : nullptr;
+        bool gnome = schema != nullptr;   // (without it, GSettings aborts on the key)
+        if (schema)
+            g_settings_schema_unref(schema);
+        auto ignored = [gnome]() {
+            QStringList out;
+            if (!gnome)
+                return out;
+            GSettings *gs = g_settings_new("org.gnome.settings-daemon.plugins.housekeeping");
+            gchar **v = g_settings_get_strv(gs, "ignore-paths");
+            for (gchar **p = v; p && *p; ++p)
+                out << QString::fromUtf8(*p);
+            g_strfreev(v);
+            g_object_unref(gs);
+            return out;
+        };
+        auto set_ignored = [](const QStringList &l) {
+            GSettings *gs = g_settings_new("org.gnome.settings-daemon.plugins.housekeeping");
+            QList<QByteArray> b;
+            QVector<const gchar *> p;
+            for (const QString &x : l)
+                b << x.toUtf8();
+            for (const QByteArray &x : b)
+                p << x.constData();
+            p << nullptr;
+            g_settings_set_strv(gs, "ignore-paths", p.constData());
+            g_object_unref(gs);
+        };
+        QString proc = home_path("proc2");
+        makedirs(join(proc, "4242"), true);
+        write_text(join(join(proc, "4242"), "comm"), "gnome-system-mo\n");
+        makedirs(join(proc, "4243"), true);
+        write_text(join(join(proc, "4243"), "comm"), "bash\n");
+        write_text(home_path("quiet.bin"), QByteArray(40 * 1024 * 1024, 'q'));
+        // a copy onto the tape, lasting a moment (a slow source); whether the tape was skipped while it ran, and its log
+        auto copy = [&](const QString &name, bool *skipped_meanwhile, const char *delay = "150") {
+            qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", delay);
+            QPointer<Task> t = fileops::start_ops(w, {{"copy", home_path("quiet.bin"), join(tape, name)}}, "Quiet", []() {});
+            *skipped_meanwhile = false;
+            while (t) {
+                if (gnome && ignored().contains(tape))
+                    *skipped_meanwhile = true;
+                spin(20);
+            }
+            qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+            spin(300);
+            QString log;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == "Quiet" && f.log.contains(name))
+                    log = f.log;
+            return log;
+        };
+        if (!gnome) {
+            skip("GNOME's low-disk-space check skips a tape while a job writes to it (GNOME's settings aren't installed)");
+        } else {
+            set_ignored({"/srv/keep"});
+            bool during = false;
+            QString log = copy("quiet1.bin", &during);
+            check(during && ignored() == QStringList({"/srv/keep"}) && log.contains("low-disk-space check skips this tape"),
+                  "while a job writes to a tape, GNOME's low-disk-space check skips it (it asks the drive for its free "
+                  "space once a minute), and afterwards its list is as it was (" + ignored().join(", ") + ")");
+            set_ignored({"/srv/keep", tape});
+            log = copy("quiet2.bin", &during);
+            check(ignored() == QStringList({"/srv/keep", tape}) && !log.contains("low-disk-space check skips this tape"),
+                  "a tape the user put on that list stays there after the job");
+            set_ignored({});
+        }
+        qputenv("KESTREL_TEST_PROC", proc.toUtf8());
+        QStringList pollers = drives::free_space_pollers();
+        bool during = false;
+        QString log = copy("quiet3.bin", &during, "2500");   // past a 5-second check: still said once
+        qunsetenv("KESTREL_TEST_PROC");
+        check(pollers == QStringList({"GNOME System Monitor"}) && log.count("Note: GNOME System Monitor is running") == 1,
+              "a system monitor that's open (it asks every drive for its free space every few seconds) is named in a "
+              "tape copy's log, once, also when it runs on (" + pollers.join(", ") + ")");
+    }
+
+    // ---- writing onto a tape with Kestrel's copy or with dd, as asked (or as Preferences say)
+    {
+        QString data_file = home_path("ddsrc.bin");
+        QByteArray payload(3 * 1024 * 1024 + 12345, '\0');
+        for (int i = 0; i < payload.size(); ++i)
+            payload[i] = char((i * 7 + i / 4096) & 0xff);
+        write_text(data_file, payload);
+        QList<fileops::Job> planned{{"copy", data_file, join(tape, "dd1.bin")}, {"copy", data_file, home_path("not-tape.bin")}};
+        settings().setValue("tape_writer", "ask");
+        QList<fileops::Job> got;
+        bool went = false;
+        auto run = [&]() {
+            went = false;
+            fileops::choose_tape_writer(w, planned, [&](const QList<fileops::Job> &jobs) {
+                got = jobs;
+                went = true;
+            });
+        };
+        auto question = [&]() {
+            QMessageBox *b = nullptr;
+            wait_for([&]() { return (b = shown_window<QMessageBox>()) && b->text().contains("write to the tape"); }, 3000);
+            return b;
+        };
+        auto press = [&](QMessageBox *b, const QString &text) {
+            for (QAbstractButton *x : b ? b->buttons() : QList<QAbstractButton *>())
+                if (x->text() == text)
+                    x->click();
+        };
+        run();
+        QMessageBox *q = question();
+        bool asked = q && is_free_window(q) && q->text().contains(basename(tape)) && !went;
+        press(q, "Cancel");
+        spin(100);
+        bool cancelled = !went;
+        run();
+        q = question();
+        press(q, "dd");
+        spin(100);
+        check(asked && cancelled && went && got.size() == 2 && got[0].dd && !got[1].dd,
+              "a copy onto a tape asks (a free window) whether Kestrel's copy or dd writes it; dd marks only the jobs "
+              "onto the tape, and Cancel starts nothing");
+        run();
+        q = question();
+        if (q && q->checkBox())
+            q->checkBox()->setChecked(true);
+        press(q, "Kestrel's Copy");
+        spin(100);
+        bool kestrel = went && !got[0].dd && settings().value("tape_writer").toString() == "kestrel";
+        run();
+        spin(200);
+        bool silent = went && !got[0].dd && !shown_window<QMessageBox>();
+        settings().setValue("tape_writer", "dd");
+        run();
+        spin(200);
+        check(kestrel && silent && went && got[0].dd && !got[1].dd,
+              "“Don't ask again” saves the choice (Preferences → Files → Tapes), and then nothing is asked");
+        settings().setValue("tape_writer", "ask");
+
+        // dd writing a file onto the tape, in a job: its command and its output are in the job's log
+        fileops::Job job{"copy", data_file, join(tape, "dd1.bin")};
+        job.dd = true;
+        QPointer<Task> t = fileops::start_ops(w, {job}, "With dd", []() {});
+        wait_for([&]() { return !t; }, 20000);
+        spin(300);
+        QString log;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == "With dd")
+                log = f.log;
+        check(read_file(join(tape, "dd1.bin")) == payload && log.contains("dd bs=512K iflag=fullblock status=progress") &&
+                  log.contains("records out") && !log.contains("Tape buffer:"),
+              "with dd, the file is written whole by dd (512 KB blocks), with no buffer of Kestrel's, and the job's log "
+              "has dd's command and its output");
+
+        // a dd write that fails part-way (a file-size limit, as a full tape) leaves no half-written file
+        fileops::Job job2{"copy", data_file, join(tape, "dd2.bin")};
+        job2.dd = true;
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1024 * 1024;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);   // (dd inherits it)
+        QPointer<Task> t2 = fileops::start_ops(w, {job2}, "With dd 2", []() {});
+        wait_for([&]() { return !t2; }, 20000);
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QMessageBox *box = nullptr;
+        wait_for([&]() { return (box = shown_window<QMessageBox>()) != nullptr; }, 5000);
+        QString said = box ? box->text() + "\n" + box->detailedText() : QString();
+        if (box)
+            box->close();
+        check(!lexists(join(tape, "dd2.bin")) && said.contains("dd couldn't write") && said.contains("dd2.bin"),
+              "a dd write that fails part-way (a file-size limit) leaves no half-written file on the tape, and says dd "
+              "failed (" + said.simplified().left(160) + ")");
+    }
+
     // ---- Properties names a file's type on a tape by its name (its contents would make the drive seek)
     {
         QByteArray pdf = "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n";
@@ -579,6 +796,153 @@ int main(int argc, char **argv)
         QString entry = at >= 0 ? xbel.mid(at, xbel.indexOf("</bookmark>", at) - at) : QString();
         check(!entry.isEmpty() && entry.contains("application/octet-stream") && !entry.contains("application/pdf"),
               "opening a file on a tape adds it to Recent without reading it (its type by name)");
+    }
+
+    // ---- onto a tape, a new file is written straight to its name (no part file: LTFS never reuses tape anyway, and has
+    // no RENAME_NOREPLACE or link() for a part's claim); a replaced one, and anything onto a floppy, still go through one
+    {
+        auto run = [&](const QList<fileops::Job> &jobs) {
+            QPointer<Task> t = fileops::start_ops(w, jobs, "Test", []() {});
+            wait_for([&]() { return !t; }, 30000);
+            spin(200);
+            if (auto *box = shown_window<QMessageBox>())   // a conflict or failure says so: answered
+                box->close();
+        };
+        QByteArray data(3 * 1024 * 1024, 'd');
+        write_text(home_path("direct.bin"), data);
+        QString on_tape = join(tape, "direct.bin");
+        QStringList seen;
+        {
+            DirWatch watch(tape);
+            run({{"copy", home_path("direct.bin"), on_tape}});
+            seen = watch.events();
+        }
+        check(seen == QStringList{"+direct.bin"} && read_file(on_tape) == data,
+              "a new file copied onto a tape is written under its own name, with no part file (" + seen.join(" ") + ")");
+        write_text(home_path("direct.bin"), QByteArray(1024, 'n'));
+        {
+            DirWatch watch(tape);
+            run({{"copy", home_path("direct.bin"), on_tape, true}});
+            seen = watch.events();
+        }
+        check(seen.size() == 2 && seen[0].startsWith("+.kes-") && seen[1] == ">direct.bin" &&
+                  read_file(on_tape) == QByteArray(1024, 'n'),
+              "replacing a file on a tape still goes through a part file, renamed over it when whole (" + seen.join(" ") + ")");
+        QString on_floppy = join(floppy, "direct.bin");
+        {
+            DirWatch watch(floppy);
+            run({{"copy", home_path("direct.bin"), on_floppy}});
+            seen = watch.events();
+        }
+        check(seen.size() == 2 && seen[0].startsWith("+.kes-") && seen[1] == ">direct.bin" && isfile(on_floppy),
+              "a new file onto a floppy still goes through a part file (" + seen.join(" ") + ")");
+
+        // a name taken by the time the copy runs is kept, and nothing is put in its place
+        write_text(join(tape, "taken.bin"), "theirs");
+        run({{"copy", home_path("direct.bin"), join(tape, "taken.bin")}});
+        check(read_file(join(tape, "taken.bin")) == "theirs", "a name on the tape taken meanwhile is kept as it is");
+
+        // a write that fails part-way (a file-size limit standing for a full tape): nothing left under the name
+        auto leftovers = [&]() {
+            QStringList out;
+            for (const QString &n : listdir(tape))
+                if (n.startsWith(".kes-") || n == "full.bin")
+                    out << n;
+            return out;
+        };
+        write_text(home_path("full.bin"), QByteArray(4 * 1024 * 1024, 'f'));
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run({{"copy", home_path("full.bin"), join(tape, "full.bin")}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(leftovers().isEmpty(), "a write onto a tape that fails part-way leaves no half-written file under its name, "
+                                     "and no part file (" + leftovers().join(", ") + ")");
+
+        // cancelled while it writes: the half-written file goes too
+        write_text(home_path("cancel.bin"), QByteArray(100 * 1024 * 1024, 'c'));
+        qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "120");   // a slow source: writing spans a while
+        bool writing = false;
+        {
+            DirWatch watch(tape);
+            QPointer<Task> t = fileops::start_ops(w, {{"copy", home_path("cancel.bin"), join(tape, "cancel.bin")}},
+                                                  "Test", []() {});
+            writing = wait_for([&]() { return watch.events().contains("+cancel.bin"); }, 30000);
+            if (t)
+                t->cancel();
+            wait_for([&]() { return !t; }, 30000);
+        }
+        qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+        spin(200);
+        check(writing && !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(),
+              "cancelling a copy onto a tape while it writes deletes the half-written file");
+
+        // the job's log gets a line every 5 seconds: the time, the tape's speed (or that it waits for the buffer), the
+        // source's, the buffer and how far the copy is. A small buffer (64 MB), a slow source (8 MB a second) and a low
+        // streaming speed: it fills for ~8 s, then the tape writes at the source's pace for a few seconds more
+        {
+            QString mi2 = home_path("meminfo-small");
+            write_text(mi2, "MemTotal:       1048576 kB\nMemFree:        1000 kB\nMemAvailable:   102400 kB\n");
+            qputenv("KESTREL_TEST_MEMINFO", mi2.toUtf8());
+            qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "1000");
+            settings().setValue("tape_min_speed", 1);
+            write_text(home_path("rated.bin"), QByteArray(120 * 1024 * 1024, 'r'));
+            QPointer<Task> rt = fileops::start_ops(w, {{"copy", home_path("rated.bin"), join(tape, "rated.bin")}},
+                                                   "Rated", []() {});
+            wait_for([&]() { return !rt; }, 60000);
+            qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+            qunsetenv("KESTREL_TEST_MEMINFO");
+            settings().remove("tape_min_speed");
+            spin(300);
+            QString log;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == "Rated")
+                    log = f.log;
+            static const QRegularExpression line(
+                R"(^  \d\d:\d\d:\d\d  tape (waiting for the buffer|[\d.]+ [kMG]?B/s) · source \S+ \S+ · buffer .+ of .+ \(\d+%\) · .+ of .+ written$)");
+            QStringList lines, waiting, rated;
+            for (const QString &l : log.split('\n'))
+                if (line.match(l).hasMatch()) {
+                    lines << l;
+                    (l.contains("waiting for the buffer") ? waiting : rated) << l;
+                }
+            check(lines.size() >= 2 && !waiting.isEmpty() && !rated.isEmpty() && read_file(join(tape, "rated.bin")).size() == 120 * 1024 * 1024,
+                  "a copy onto a tape logs its speed every 5 seconds: while the buffer fills, and while the tape writes (" +
+                      lines.join(" | ") + ")");
+        }
+
+        // nothing is asked of a tape while a job uses it (each question is a command to the drive, which interrupts its
+        // writing); once the job has ended, it's asked again. (A slow source: the job outlasts the checks.)
+        qputenv("KESTREL_TEST_TAPEBUF_DELAY_MS", "1000");
+        drives::Sizes *sizes = drives::Sizes::instance();
+        int answers = 0;
+        QMetaObject::Connection counted = QObject::connect(sizes, &drives::Sizes::changed, [&](const QString &root) {
+            answers += root == tape;
+        });
+        QPointer<Task> busy_job = fileops::start_ops(w, {{"copy", home_path("cancel.bin"), join(tape, "held.bin")}},
+                                                     "Test", []() {});
+        wait_for([&]() { return jobs::Queue::instance()->busy(tape); }, 10000);
+        spin(1000);   // (a question sent before the job held the drive may still be answered)
+        answers = 0;
+        sizes->forget(tape);   // nothing known: would be asked at once
+        sizes->get(tape);
+        sizes->once(tape);
+        spin(1500);
+        bool held = jobs::Queue::instance()->busy(tape);   // (still, at the end of the wait)
+        int while_busy = answers;
+        if (busy_job)
+            busy_job->cancel();
+        wait_for([&]() { return !busy_job && !jobs::Queue::instance()->busy(tape); }, 30000);
+        qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
+        sizes->get(tape);
+        bool asked_after = wait_for([&]() { return answers > while_busy; }, 5000);
+        QObject::disconnect(counted);
+        check(held && while_busy == 0 && asked_after,
+              "a tape isn't asked its size or health while a job uses it, and is asked again once the job has ended");
     }
     finish();
 }

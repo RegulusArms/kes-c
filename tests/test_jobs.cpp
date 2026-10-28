@@ -8,9 +8,12 @@
 #include "towerwin.h"
 #include "windiag.h"
 
+#include <QClipboard>
+#include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -62,6 +65,11 @@ int main(int argc, char **argv)
     check(starts({{"run", {"a"}, true}, {"f", {"a"}, false, false, true}}, "drive") == "f", "...a job started now starts anyway");
     check(starts({{"run", {"a"}, true}, {"b", {"b"}}}, "one") == "" && starts({{"x", {"a"}}, {"y", {"b"}}}, "one") == "x",
           "one at a time: nothing starts while a job runs, then only the first");
+    check(starts({{"run", {"a"}, true}, {"w1", {"a"}}, {"p", {"a"}, false, true}, {"w2", {"a", "b"}}}, "all") == "w1,w2",
+          "all at once: every waiting job starts, also on a drive in use, except a paused one");
+    check(jobs::known_mode("all") == "all" && jobs::known_mode("one") == "one" && jobs::known_mode("rip") == "drive" &&
+              jobs::known_mode(QString()) == "drive",
+          "...the queue modes known are by drive, one at a time and all at once; anything else is by drive");
 
     // ---- drives: the physical disk, the same in every Kestrel
     QString tape = home_path("tape");
@@ -71,6 +79,12 @@ int main(int argc, char **argv)
     check(!home_ids.isEmpty() && home_ids == drives::drive_ids(HOME()) && tape_ids == QStringList{"mount:fuse:ltfs:test"} &&
               home_ids != tape_ids,
           "paths on one drive share its id (also a file not made yet); a tape is a drive of its own (" + home_ids.join(",") + ")");
+    QStringList many;   // a job's items: thousands on one drive, then one on the tape
+    for (int i = 0; i < 2000; ++i)
+        many << home_path("x/item" + QString::number(i));
+    many << join(tape, "z") << home_path("y");
+    check(drives::drive_ids(many) == home_ids + tape_ids && drives::drive_ids(QStringList{}).isEmpty(),
+          "a job's items give each drive they're on once, in order (" + drives::drive_ids(many).join(",") + ")");
     QString part_src, disk;
     for (const drives::Mount &m : drives::mounts()) {
         QString name = basename(realpath(m.source));
@@ -113,6 +127,21 @@ int main(int argc, char **argv)
     bool waited_one = other && other->queued;
     *held = false;
     check(waited_one && wait_for([&]() { return !other && !h; }), "one at a time: a job on another drive waits too");
+
+    // all at once
+    jobs::set_mode("all");
+    check(jobs::mode() == "all" && settings().value("jobs_mode").toString() == "all",
+          "all at once is kept as the queue's mode");
+    *held = true;
+    h = holder(w, "Holding, all at once", HOME(), held);
+    spin(150);
+    QPointer<Task> same = fileops::start_ops(w, {{"copy", home_path("a.txt"), home_path("a-rip.txt")}}, "Copy, all at once");
+    bool rip = wait_for([&]() { return !same && exists(home_path("a-rip.txt")); }) && h && !h->queued;
+    *held = false;
+    check(rip && wait_for([&]() { return !h; }),
+          "all at once: a job on a drive another job is using starts at once instead of waiting");
+    jobs::set_mode("rip");
+    check(jobs::mode() == "drive", "...and an unknown mode is stored as by drive");
     jobs::set_mode("drive");
 
     // cancel, start now, reorder, start paused
@@ -219,6 +248,60 @@ int main(int argc, char **argv)
               done.last().log.contains("Copy s2.txt → ") && done.last().log.contains("done") &&
               done.last().log.contains("Finished."),
           "a finished job is kept with its log: each step, how it went, and the end");
+
+    // ---- a paste queued behind another job: its title and log say what it is (what started it, in which window,
+    // from where to where, what it waited for); its destination moved meanwhile, it fails once, clearly
+    {
+        makedirs(home_path("pq-dest"), true);
+        makedirs(home_path("pq-elsewhere"), true);
+        write_text(home_path("pq1.txt"), "1");
+        write_text(home_path("pq2.txt"), "2");
+        auto *md = new QMimeData;
+        md->setData("x-special/gnome-copied-files",
+                    ("copy\n" + file_uri(home_path("pq1.txt")) + "\n" + file_uri(home_path("pq2.txt"))).toUtf8());
+        QGuiApplication::clipboard()->setMimeData(md);
+        *held = true;
+        h = holder(w, "Holding the drive", HOME(), held);
+        spin(150);
+        w->paste(home_path("pq-dest"));   // Paste Into Folder on it
+        QPointer<Task> pq;
+        wait_for([&]() {
+            for (Task *t : w->task_panel->tasks)
+                if (t->title == "Copying 2 items to pq-dest")
+                    pq = t;
+            return pq;
+        });
+        check(pq && pq->queued, "a copy's title names how much it copies and where to (" +
+                                    (pq ? pq->title : QString("no such job")) + ")");
+        check(w->read_clipboard().second.isEmpty(), "copied files are forgotten once pasted (no second paste of them by "
+                                                    "mistake)");
+        ::rename(enc(home_path("pq-dest")).constData(), enc(home_path("pq-elsewhere/pq-dest")).constData());
+        spin(1100);   // a wait the log mentions (from 1 s)
+        *held = false;
+        check(wait_for([&]() { return !pq; }), "...it runs once the drive is free");
+        wait_for([]() { return shown_window<QMessageBox>() != nullptr; }, 3000);
+        spin(200);   // (a message for each item would come together)
+        QStringList shown;
+        for (QWidget *top : QApplication::topLevelWidgets())
+            if (auto *box = qobject_cast<QMessageBox *>(top); box && box->isVisible()) {
+                if (box->windowTitle().startsWith("Copying"))
+                    shown << box->text();
+                box->close();
+            }
+        const FinishedTask &f = done.last();
+        QString msg = shown.value(0);
+        check(shown.size() == 1 && msg.contains("“" + home_path("pq-dest") + "”, isn't there any more") &&
+                  msg.contains("while this job waited") && !msg.contains("No such file") && f.state == "failed" &&
+                  !exists(home_path("pq-elsewhere/pq-dest/pq1.txt")),
+              "a copy whose destination was moved while it waited fails once, saying so, and copies nothing (" +
+                  shown.join(" | ") + ")");
+        check(f.log.contains("Copy of 2 items, started by Paste Into Folder in the window “" + w->windowTitle() + "” at ") &&
+                  f.log.contains("From: " + HOME()) && f.log.contains("To: " + home_path("pq-dest")) &&
+                  f.log.contains(QRegularExpression("Waited [12] s for: Holding the drive")) &&
+                  f.log.indexOf("From: ") < f.log.indexOf("Waited"),
+              "its log starts with what started it, in which window and when, from where to where, and how long it "
+              "waited for which job:\n" + f.log.left(400));
+    }
 
     // ---- the Jobs window: opened from the status bar's job panel, every job, its log, Delete cancels
     *held = true;
@@ -366,6 +449,69 @@ int main(int argc, char **argv)
         if (auto *b = qobject_cast<QMessageBox *>(x); b && b->isVisible())
             b->close();
     tw->close();
+
+    // ---- jobs belong to Kestrel, not to a window: closing the window that started one doesn't stop it (nor ask);
+    // the last window asks; with every window closed Kestrel runs on until its jobs have ended
+    {
+        for (QWidget *x : QApplication::topLevelWidgets())
+            if (x != w && x->isVisible() && x->isWindow())
+                x->close();
+        spin(100);
+        MainWindow *w2 = open_window({HOME()});
+        spin(200);
+        auto hold = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> job = holder(w, "Keeps going", home_path("x"), hold);
+        spin(200);
+        QPointer<MainWindow> first = w;
+        w->close();
+        spin(300);
+        bool asked = shown_window<QMessageBox>() != nullptr;
+        check((!first || !first->isVisible()) && job && !job->isFinished() && !asked && w2->task_panel->tasks.contains(job.data()),
+              "closing a window that started a job doesn't ask or stop it: it goes on, shown in another window's "
+              "status bar");
+        QPointer<MainWindow> last = w2;
+        w2->close();
+        QMessageBox *q = nullptr;
+        wait_for([&]() { return (q = shown_window<QMessageBox>()) != nullptr; }, 2000);
+        QStringList buttons;
+        QAbstractButton *keep = nullptr;
+        if (q)
+            for (QAbstractButton *b : q->buttons()) {
+                buttons << b->text();
+                if (b->text() == "Exit and Open the Jobs Window")
+                    keep = b;
+            }
+        check(last && last->isVisible() && q && q->text().contains("Keeps going") &&
+                  buttons.contains("Stop All Jobs and Exit") && keep,
+              "closing the last window while a job runs asks: exit and open the Jobs window, or stop all jobs (" +
+                  buttons.join(", ") + ")");
+        if (keep)
+            keep->click();
+        spin(300);
+        check((!last || !last->isVisible()) && JobsWindow::is_open() && job && !job->isFinished() && !shown_window<JobsWindow>()->parentWidget(),
+              "...Exit and Open the Jobs Window: the window closes, the Jobs window (a window of its own) opens, and the "
+              "job goes on");
+        QPointer<Task> quiet = fileops::queue_job(nullptr, "quiet", {}, [](Task *) { return QVariant(); }, nullptr, true,
+                                                  {}, true);
+        check(job && job->keeps_running && (!quiet || !quiet->keeps_running),
+              "a job the user sees keeps Kestrel running; a quiet helper task doesn't");
+        // the Jobs window closed too: Kestrel quits only once the job has ended
+        QElapsedTimer since;
+        since.start();
+        qint64 job_ended = -1, quit_at = -1;
+        QTimer::singleShot(300, []() {
+            if (JobsWindow *jw = shown_window<JobsWindow>())
+                jw->close();
+        });
+        QTimer::singleShot(1500, [&]() { *hold = false; });
+        QObject::connect(job.data(), &QThread::finished, [&]() { job_ended = since.elapsed(); });
+        QTimer::singleShot(15000, []() { QApplication::exit(9); });   // (a safety net)
+        int rc = app.exec();
+        quit_at = since.elapsed();
+        check(rc == 0 && job_ended >= 1400 && quit_at >= job_ended,
+              QString("with every window closed, Kestrel goes on until its jobs have ended, then quits (job ended "
+                      "at %1 ms, quit at %2 ms)").arg(job_ended).arg(quit_at));
+    }
 
     finish();
 }

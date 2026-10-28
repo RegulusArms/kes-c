@@ -1,6 +1,7 @@
 #include "archive.h"
 
 #include "fileops.h"
+#include "hashcheck.h"
 #include "proc.h"
 #include "stats.h"
 
@@ -19,7 +20,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <functional>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace util;
@@ -30,6 +33,9 @@ static const QStringList SYSTEM_PATH = {"/usr/local/bin", "/usr/bin", "/bin"};
 
 QString tool(const QString &name)
 {
+    // tests: KESTREL_TEST_HIDE_TOOLS="7z,…" act as if those weren't installed (the unzip path is taken only without 7z)
+    if (qEnvironmentVariable("KESTREL_TEST_HIDE_TOOLS").split(',', Qt::SkipEmptyParts).contains(name))
+        return QString();
     // the system's copy over e.g. conda's (unless started from an explicitly activated conda env; see util.h)
     if (explicit_conda_env())
         return QStandardPaths::findExecutable(name);
@@ -116,6 +122,7 @@ QList<Format> formats()
     out << f;
     f = Format{};
     f.id = "tar", f.label = "tar (no compression)", f.ext = ".tar", f.tools = {"tar"};
+    f.password = true;   // through gpg
     out << f;
     for (const auto &[suf, tools] : STREAMS) {
         f = Format{};
@@ -124,6 +131,7 @@ QList<Format> formats()
         f.ext = ".tar." + suf;
         f.tools = tools;
         f.stream = suf;
+        f.password = true;
         out << f;
     }
     for (const auto &[suf, tools] : STREAMS) {
@@ -166,7 +174,8 @@ QString install_hint(const QString &name)
     static const QMap<QString, QString> hints = {
         {"7z", "7zip"},     {"rar", "rar"},   {"zpaq", "zpaq"},     {"pigz", "pigz"}, {"pbzip2", "pbzip2"},
         {"lbzip2", "lbzip2"}, {"plzip", "plzip"}, {"lzip", "lzip"}, {"lz4", "lz4"},   {"zstd", "zstd"},
-        {"xz", "xz-utils"}, {"unrar", "unrar"}, {"zip", "zip"},     {"gzip", "gzip"}, {"bzip2", "bzip2"}};
+        {"xz", "xz-utils"}, {"unrar", "unrar"}, {"zip", "zip"},     {"gzip", "gzip"}, {"bzip2", "bzip2"},
+        {"gpg", "gnupg"}};
     return hints.value(name, name);
 }
 
@@ -191,6 +200,13 @@ QPair<QString, QString> kind(const QString &path)
         return {"rar", ""};
     if (low.endsWith(".zpaq"))
         return {"zpaq", ""};
+    if (low.endsWith(".gpg")) {   // only a tar archive through gpg (see gpg_encrypted) is one of Kestrel's
+        low.chop(4);
+        for (const auto &[ext, suf] : TAR_EXTS)
+            if (low.endsWith(ext))
+                return {"tar", suf};
+        return {"", ""};
+    }
     auto tars = TAR_EXTS;
     std::stable_sort(tars.begin(), tars.end(), [](const auto &a, const auto &b) { return a.first.size() > b.first.size(); });
     for (const auto &[ext, suf] : tars)
@@ -205,6 +221,30 @@ QPair<QString, QString> kind(const QString &path)
     if (split7.match(low).hasMatch())
         return {"7z", ""};
     return {"", ""};
+}
+
+bool is_tar(const Format &fmt) { return fmt.id == "tar" || fmt.id.startsWith("tar."); }
+
+bool gpg_encrypted(const QString &path) { return path.toLower().endsWith(".gpg") && kind(path).first == "tar"; }
+
+const QList<VolumeSize> &volume_sizes()
+{
+    static const qint64 MiB = 1024 * 1024, DISC_FS = 4 * MiB;
+    static const QList<VolumeSize> sizes = {
+        // an email's 25 MB limit counts the attachment after encoding (base64: a third more), and the message
+        {"email", "18 MB (a 25 MB email)", 18 * 1000 * 1000},
+        {"100m", "100 MB", 100 * 1000 * 1000},
+        {"cd650", "650 MB (CD)", 333000LL * 2048 - DISC_FS},   // 74 minutes: 333,000 sectors of 2,048 bytes
+        {"cd700", "700 MB (CD)", 360000LL * 2048 - DISC_FS},   // 80 minutes
+        {"1g", "1 GB", 1000LL * 1000 * 1000},
+        {"2g", "2 GB", 2000LL * 1000 * 1000},
+        {"fat32", "4 GB (FAT32 USB stick)", 4095 * MiB},       // a FAT32 file's largest: 4 GiB less a byte
+        {"dvd", "4.7 GB (DVD)", 4700372992LL - DISC_FS},
+        {"dvd_dl", "8.5 GB (dual-layer DVD)", 8543666176LL - DISC_FS},
+        {"bd", "25 GB (Blu-ray)", 25025314816LL - DISC_FS},
+        {"bd_dl", "50 GB (dual-layer Blu-ray)", 50050629632LL - DISC_FS},
+    };
+    return sizes;
 }
 
 QString first_volume(const QString &path)
@@ -248,6 +288,8 @@ QString extract_tool(const QString &path)
     if (k == "zpaq")
         return tool("zpaq").isEmpty() ? QString() : "zpaq";
     if (k == "tar" || k == "single") {
+        if (gpg_encrypted(path) && tool("gpg").isEmpty())
+            return QString();
         if (suf.isEmpty())
             return tool("tar").isEmpty() ? QString() : "tar";
         for (const QString &t : stream_tools(suf))
@@ -281,6 +323,8 @@ QString missing_extract_tool(const QString &path)
         return "7zip";
     if (k == "zpaq")
         return "zpaq";
+    if (gpg_encrypted(path) && tool("gpg").isEmpty())
+        return "gnupg";
     return install_hint(suf.isEmpty() ? "tar" : stream_tools(suf).last());
 }
 
@@ -288,6 +332,8 @@ QString archive_stem(const QString &path)
 {
     // name for the folder an archive extracts into: photos.tar.gz -> photos, a.part1.rar -> a
     QString name = basename(path);
+    if (gpg_encrypted(path))
+        name.chop(4);
     QString low = name.toLower();
     QStringList exts;
     for (const auto &e : TAR_EXTS)
@@ -387,19 +433,24 @@ static std::unique_ptr<proc::Process> spawn_logged(const QStringList &argv, cons
 // busy bar. Percentages never go backwards, and a number split across two reads isn't misread.
 //
 // The tool runs under stdbuf so its progress lines arrive as they're printed: in a pipe, programs like zpaq
-// otherwise hold their output back until a buffer fills or they exit, which freezes the bar. Long jobs show the
+// otherwise hold their output back until a buffer fills or they exit, which freezes the bar. Not a listing (on_line,
+// no progress): unbuffered, its millions of lines would arrive one by one, which doubled a big archive's listing time. Long jobs show the
 // elapsed time so it's clear they're still working when a tool goes quiet.
 //
 // read_phase: for tools whose percentage only counts input *read* (zpaq add), the text to show once it reaches
 // 100% while the real work carries on silently; the bar then shows busy instead of a stuck number.
+//
+// The returned text keeps only the last 1-2 MB of output, enough for the messages at the end. A listing, which can
+// be far longer, is read through on_line instead: every line in full as it's printed (without its "\r\n").
 static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QString &label, const QString &cwd,
                                          const QString *stdin_text, const QString &read_phase,
-                                         const QString &progress, const QStringList &env = QStringList())
+                                         const QString &progress, const QStringList &env = QStringList(),
+                                         const std::function<void(const QString &)> &on_line = {})
 {
     static const QRegularExpression percent_re("(\\d{1,3})(?:\\.\\d+)?%");
     static const QRegularExpression zip_count_re("(\\d+)/\\s*(\\d+) ");
     QString stdbuf = tool("stdbuf");
-    if (!stdbuf.isEmpty())
+    if (!stdbuf.isEmpty() && !(on_line && progress.isEmpty()))   // a listing has no progress to show: read in blocks
         argv = QStringList{stdbuf, "-o0", "-e0"} + argv;
     proc::Options o = tool_opts(cwd, stdin_text ? proc::PIPE : proc::DEVNULL);
     o.env = env;
@@ -408,7 +459,24 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
     QElapsedTimer start;
     start.start();
     int pct = -1;
-    QByteArray carry;
+    QByteArray carry, partial;   // partial: on_line's unfinished last line
+    auto lines = [&](const QByteArray &chunk, bool end) {
+        partial += chunk;
+        qsizetype from = 0;
+        for (qsizetype nl; (nl = partial.indexOf('\n', from)) >= 0; from = nl + 1) {
+            QByteArray line = partial.mid(from, nl - from);
+            if (line.endsWith('\r'))
+                line.chop(1);
+            on_line(QString::fromUtf8(line));
+        }
+        partial.remove(0, from);
+        if (end && !partial.isEmpty()) {
+            if (partial.endsWith('\r'))
+                partial.chop(1);
+            on_line(QString::fromUtf8(partial));
+            partial.clear();
+        }
+    };
     try {
         if (stdin_text) {
             QByteArray data = stdin_text->toUtf8();
@@ -435,6 +503,8 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
                     break;
                 QByteArray chunk(buf, n);
                 task->log_output(chunk);   // the Jobs window shows it live
+                if (on_line)
+                    lines(chunk, false);
                 out += chunk;
                 if (out.size() > 2000000)
                     out.remove(0, 1000000);
@@ -468,6 +538,8 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
             else
                 task->report(0, 0, label + clock);
         }
+        if (on_line)
+            lines(QByteArray(), true);
         p->wait();
     } catch (...) {   // cancelled, or any other error: the tool mustn't carry on unseen
         p->kill_group();
@@ -476,8 +548,10 @@ static QPair<int, QString> run_reporting(Task *task, QStringList argv, const QSt
     return {p->returncode, QString::fromUtf8(out)};
 }
 
-// Copy bytes from fd src to fd dst, reporting progress against `total`. Returns bytes copied.
-static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &label, qint64 done = 0)
+// Copy bytes from fd src to fd dst, reporting progress against `total`, and hashing them when given a hasher. Returns
+// bytes copied.
+static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &label, qint64 done = 0,
+                    hashcheck::Hasher *hasher = nullptr)
 {
     std::vector<char> buf(1 << 20);
     for (;;) {
@@ -490,6 +564,8 @@ static qint64 relay(Task *task, int src, int dst, qint64 total, const QString &l
         if (n == 0)
             return done;
         write_all(dst, buf.data(), n);
+        if (hasher)
+            hasher->add(buf.data(), n);
         done += n;
         task->report(double(done), double(total),
                      QString("%1 — %2 of %3").arg(label, human_size(done), human_size(total)));
@@ -512,6 +588,68 @@ static QString tail(const QString &text, int n = 8)
     }
     const QStringList &src = useful.isEmpty() ? lines : useful;
     return src.mid(std::max<qsizetype>(0, src.size() - n)).join('\n');
+}
+
+// ---------------------------------------------------------------- gpg
+
+// A tar archive with a password is the archive's stream piped through gpg --symmetric (name.tar.zst.gpg), and read back
+// through gpg -d. The password goes to gpg on a pipe (its fd 3), never on its command line, and gpg's agent isn't let
+// keep it (--no-symkey-cache): a password typed once mustn't open the archive later for a wrong one.
+static const QStringList GPG_OPTS = {"--batch", "--no-tty", "--quiet", "--pinentry-mode", "loopback",
+                                     "--no-symkey-cache", "--passphrase-fd", "3"};
+// AES-256; no compression of gpg's own (the stream is compressed already, or was meant not to be)
+static const QStringList GPG_ENCRYPT = {"--symmetric", "--cipher-algo", "AES256", "-z", "0", "-o", "-"};
+
+static bool gpg_spec(const Spec &spec) { return is_tar(spec.format) && !spec.password.isEmpty(); }
+
+static std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
+{
+    int p[2];
+    if (::pipe2(p, O_CLOEXEC) != 0)
+        throw_errno();
+    QByteArray line = password.toUtf8() + '\n';
+    try {   // far less than a pipe holds: written whole before gpg starts
+        write_all(p[1], line.constData(), line.size());
+    } catch (...) {
+        ::close(p[0]);
+        ::close(p[1]);
+        throw;
+    }
+    ::close(p[1]);
+    o.fd3 = p[0];
+    o.c_utf8 = true;
+    std::unique_ptr<proc::Process> g;
+    try {
+        g = spawn_logged(QStringList{exe("gpg")} + GPG_OPTS + args, o);
+    } catch (...) {
+        ::close(p[0]);
+        throw;
+    }
+    ::close(p[0]);
+    return g;
+}
+
+// gpg -d, writing the archive's stream to its stdout pipe
+static std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, const QString &password)
+{
+    proc::Options o;
+    o.out = proc::PIPE;
+    o.err = proc::PIPE;
+    return spawn_gpg({"-d", "-o", "-", "--", path}, password, o);
+}
+
+static bool gpg_wrong_password(const QString &err) { return err.contains("Bad session key"); }
+
+// After gpg has exited: WrongPassword or Error if it failed
+static void check_gpg(proc::Process *g)
+{
+    if (g->returncode == 0)
+        return;
+    QString err = QString::fromUtf8(g->read_all_err());
+    if (gpg_wrong_password(err))
+        throw WrongPassword();
+    QString t = tail(err);
+    throw Error(t.isEmpty() ? QString("gpg failed (exit code %1)").arg(g->returncode) : t);
 }
 
 // ---------------------------------------------------------------- compress
@@ -571,8 +709,8 @@ static Command compress_command(const Spec &spec)
             if (fmt.id == "zip")
                 c.argv << "-mem=" + (spec.zip_encryption.isEmpty() ? QString("AES256") : spec.zip_encryption);
         }
-        if (spec.volume_mb)
-            c.argv << QString("-v%1m").arg(spec.volume_mb);
+        if (spec.volume_bytes)
+            c.argv << QString("-v%1b").arg(spec.volume_bytes);   // b: bytes, exactly
         c.argv << spec.extra << "--" << spec.out << rels;
     } else if (t == "zip") {
         c.argv = QStringList{exe("zip"), "-r", "-y", "-dc", QString("-%1").arg(lvl)};   // -dc: "done/remaining" count
@@ -587,8 +725,8 @@ static Command compress_command(const Spec &spec)
             c.argv << "-s";
         if (spec.recovery)
             c.argv << QString("-rr%1%").arg(spec.recovery);
-        if (spec.volume_mb)
-            c.argv << QString("-v%1m").arg(spec.volume_mb);
+        if (spec.volume_bytes)
+            c.argv << QString("-v%1b").arg(spec.volume_bytes);   // b: bytes (rar's plain number is thousands)
         if (!pw.isEmpty()) {   // -p / -hp without a value: rar reads the password from stdin
             c.argv << (spec.encrypt_names ? "-hp" : "-p");
             c.stdin_text = pw + "\n" + pw + "\n";
@@ -628,7 +766,20 @@ static QStringList stream_compressor(const Spec &spec)
     return argv + spec.extra;
 }
 
+static QString command_text(const Spec &spec);
+
 QString command_preview(const Spec &spec)
+{
+    QString text = command_text(spec);
+    QStringList sums;
+    for (const QString &c : checksum_paths(spec))
+        sums << basename(c);
+    if (!sums.isEmpty())
+        text += "\n(and " + sums.join(", ") + ", made from the archive as it's written)";
+    return text;
+}
+
+static QString command_text(const Spec &spec)
 {
     const Format &fmt = spec.format;
     if (!fmt.stream.isEmpty()) {
@@ -638,6 +789,9 @@ QString command_preview(const Spec &spec)
         QString src = shlex_join(spec.rels);
         if (fmt.single)
             return QString("%1 < %2 > %3").arg(comp, src, shlex_quote(basename(spec.out)));
+        if (gpg_spec(spec))
+            return QString("tar -cf - -- %1 | %2 | %3 > %4    (password passed on a pipe)")
+                .arg(src, comp, shlex_join(QStringList{"gpg"} + GPG_ENCRYPT.mid(0, 5)), shlex_quote(basename(spec.out)));
         return QString("tar -cf - -- %1 | %2 > %3").arg(src, comp, shlex_quote(basename(spec.out)));
     }
     Command c = compress_command(spec);
@@ -646,7 +800,10 @@ QString command_preview(const Spec &spec)
     for (int i = 1; i < c.display.size(); ++i)
         shown << (c.display[i] == spec.out ? out_rel : c.display[i]);
     QString text = shlex_join(shown);
-    if (fmt.id == "tar")
+    if (fmt.id == "tar" && gpg_spec(spec))
+        text += " | " + shlex_join(QStringList{"gpg"} + GPG_ENCRYPT.mid(0, 5)) + " > " + shlex_quote(basename(spec.out)) +
+                "    (password passed on a pipe)";
+    else if (fmt.id == "tar")
         text += " > " + shlex_quote(basename(spec.out));
     if (!spec.password.isEmpty() && (spec.tool == "7z" || spec.tool == "rar"))
         text += "    (password passed on stdin)";
@@ -676,33 +833,146 @@ static QStringList volume_files(const QString &out)
     return res;
 }
 
+static void wait_finishing(Task *task, proc::Process *p, const QString &label, const QString &name,
+                           const QString &doing = "compressing");
+
+// Checksums made while compressing: the last program in the pipe (the compressor, or gpg) writes to this pipe instead
+// of the archive's file, and a thread copies what comes into the file, hashing it on the way. A write that fails (a
+// full disk) closes the pipe, which stops the programs; finish() then throws that error.
+class HashingSink {
+public:
+    HashingSink(int file, const QString &path, const QStringList &algos) : path(path), hasher(algos)
+    {
+        fd = ::fcntl(file, F_DUPFD_CLOEXEC, 0);
+        if (fd < 0)
+            throw_errno();
+        if (::pipe2(p, O_CLOEXEC) != 0) {
+            int e = errno;
+            ::close(fd);
+            throw_errno(QString(), e);
+        }
+        th = std::thread([this]() { run(); });
+    }
+    ~HashingSink()
+    {
+        close_write();
+        if (th.joinable())
+            th.join();
+    }
+    int write_end() const { return p[1]; }
+    void close_write()   // once the program writing to it has its copy
+    {
+        if (p[1] >= 0)
+            ::close(p[1]);
+        p[1] = -1;
+    }
+    // After the programs writing to it have ended: the hashes (in algos' order). Throws the file's write error.
+    QStringList finish()
+    {
+        close_write();
+        if (th.joinable())
+            th.join();
+        if (err)
+            throw_errno(path, err);
+        return hasher.results();
+    }
+
+private:
+    void run()
+    {
+        std::vector<char> buf(1 << 20);
+        for (;;) {
+            ssize_t n = ::read(p[0], buf.data(), buf.size());
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
+            try {
+                write_all(fd, buf.data(), n);
+            } catch (const OSError &e) {
+                err = e.code;
+                break;
+            }
+            hasher.add(buf.data(), n);
+        }
+        ::close(p[0]);
+        ::close(fd);
+    }
+    QString path;   // the file's, for its error
+    hashcheck::Hasher hasher;
+    int fd = -1, p[2] = {-1, -1}, err = 0;
+    std::thread th;
+};
+
+// password: when given, tar's output goes through gpg (see GPG_OPTS) on its way to `out`. sums: when given, the
+// archive's bytes are hashed with `algos` as they're written (by relay(), or a HashingSink after gpg).
 static void compress_tar_plain(Task *task, const QStringList &argv, const QString &cwd, const QString &out,
-                               qint64 total, const QString &label)
+                               qint64 total, const QString &label, const QString &password, const QStringList &algos,
+                               QStringList *sums)
 {
     auto p = spawn_logged(argv, tool_opts(cwd));
+    std::unique_ptr<proc::Process> gpg;
+    std::unique_ptr<HashingSink> sink;
+    std::unique_ptr<hashcheck::Hasher> hasher;
     try {
         int fo = ::open(enc(out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
         if (fo < 0)
             throw_errno(out);
-        try {
-            relay(task, p->out, fo, total, label);
-        } catch (...) {
+        if (!password.isEmpty()) {
+            proc::Options o;
+            o.in = proc::PIPE;
+            o.out = fo;
+            o.err = proc::PIPE;
+            try {
+                if (sums) {
+                    sink = std::make_unique<HashingSink>(fo, out, algos);
+                    o.out = sink->write_end();
+                }
+                gpg = spawn_gpg(GPG_ENCRYPT, password, o);
+            } catch (...) {
+                ::close(fo);
+                throw;
+            }
             ::close(fo);
+            fo = -1;
+            if (sink)
+                sink->close_write();
+        } else if (sums) {
+            hasher = std::make_unique<hashcheck::Hasher>(algos);
+        }
+        try {
+            relay(task, p->out, gpg ? gpg->in : fo, total, label, 0, hasher.get());
+        } catch (...) {
+            if (fo >= 0)
+                ::close(fo);
             throw;
         }
-        ::close(fo);
+        if (fo >= 0)
+            ::close(fo);
         p->wait();
+        if (gpg) {
+            gpg->close_in();
+            wait_finishing(task, gpg.get(), label, "gpg", "encrypting");
+        }
     } catch (...) {
-        p->kill_group();
+        kill_all({p.get(), gpg.get()});
+        if (sink)
+            sink->finish();   // throws its write error, when that's what stopped gpg
         throw;
     }
+    if (sink)
+        *sums = sink->finish();
+    else if (hasher)
+        *sums = hasher->results();
     if (p->returncode != 0 && p->returncode != 1)
         throw Error(QString("tar failed (exit code %1)").arg(p->returncode));
+    if (gpg)
+        check_gpg(gpg.get());
 }
 
 // After all input is handed over: multi-threaded compressors (xz, zstd -T) buffer a lot of it and may need much
 // longer to finish than it took to feed them, so show that instead of a bar stuck at 100%.
-static void wait_finishing(Task *task, proc::Process *p, const QString &label, const QString &name)
+static void wait_finishing(Task *task, proc::Process *p, const QString &label, const QString &name, const QString &doing)
 {
     QElapsedTimer start;
     start.start();
@@ -710,12 +980,13 @@ static void wait_finishing(Task *task, proc::Process *p, const QString &label, c
         task->check();
         double secs = start.elapsed() / 1000.0;
         if (secs >= 0.5)
-            task->report(0, 0, QString("%1 — %2 is compressing the last data · %3").arg(label, name, elapsed(secs)));
+            task->report(0, 0, QString("%1 — %2 is %3 the last data · %4").arg(label, name, doing, elapsed(secs)));
         QThread::msleep(100);
     }
 }
 
-static void compress_stream(Task *task, const Spec &spec, const QString &label)
+// sums: when given, the archive's bytes are hashed with spec.checksums as they're written (a HashingSink)
+static void compress_stream(Task *task, const Spec &spec, const QString &label, QStringList *sums)
 {
     QStringList comp_argv = stream_compressor(spec);
     int fo = ::open(enc(spec.out).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
@@ -726,14 +997,35 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
     co.out = fo;
     co.err = proc::PIPE;
     co.c_utf8 = true;
-    std::unique_ptr<proc::Process> comp, src;
+    std::unique_ptr<proc::Process> comp, src, gpg;   // gpg: tar | compressor | gpg > out, with a password
+    std::unique_ptr<HashingSink> sink;                // between the last of them and the file
     try {
+        int last_out = fo;
+        if (sums) {
+            sink = std::make_unique<HashingSink>(fo, spec.out, spec.checksums);
+            last_out = sink->write_end();
+        }
+        co.out = last_out;
+        if (gpg_spec(spec)) {
+            proc::Options go;
+            go.in = proc::PIPE;
+            go.out = last_out;
+            go.err = proc::PIPE;
+            gpg = spawn_gpg(GPG_ENCRYPT, spec.password, go);
+            co.out = gpg->in;
+        }
         comp = spawn_logged(comp_argv, co);
     } catch (...) {
+        if (gpg)
+            gpg->kill_group();
         ::close(fo);
         throw;
     }
     ::close(fo);
+    if (gpg)
+        gpg->close_in();   // the compressor has it: gpg's input ends when the compressor's output does
+    if (sink)
+        sink->close_write();   // the last program has it
     try {
         if (spec.format.single) {
             QString in_path = join(spec.base, spec.rels.first());
@@ -754,10 +1046,16 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
         }
         comp->close_in();
         wait_finishing(task, comp.get(), label, spec.tool);
+        if (gpg)
+            wait_finishing(task, gpg.get(), label, "gpg", "encrypting");
     } catch (...) {
-        kill_all({src.get(), comp.get()});
+        kill_all({src.get(), comp.get(), gpg.get()});
+        if (sink)
+            sink->finish();   // throws its write error, when that's what stopped the programs
         throw;
     }
+    if (sink)   // first: a write that failed (a full disk) is why the programs stopped
+        *sums = sink->finish();
     if (src && src->returncode != 0 && src->returncode != 1)
         throw Error(QString("tar failed (exit code %1)").arg(src->returncode));
     if (comp->returncode != 0) {
@@ -765,6 +1063,8 @@ static void compress_stream(Task *task, const Spec &spec, const QString &label)
         QString t = tail(err);
         throw Error(!t.isEmpty() ? t : QString("%1 failed (exit code %2)").arg(basename(comp_argv[0]), QString::number(comp->returncode)));
     }
+    if (gpg)
+        check_gpg(gpg.get());
 }
 
 // KESTREL_STATS: how long a compress or extract job took (however it ends)
@@ -781,18 +1081,22 @@ QString compress(Task *task, const Spec &spec_in)
 {
     JobClock clock;
     const QString final_out = spec_in.out, dir = dirname(final_out);
-    QString ext = final_out.endsWith(spec_in.format.ext) ? spec_in.format.ext : QString();
+    QString fext = spec_in.format.ext + (gpg_spec(spec_in) ? ".gpg" : "");
+    QString ext = final_out.endsWith(fext) ? fext : QString();
     Spec spec = spec_in;
     spec.out = join(dir, part_name() + ext);
     const QString out = spec.out;
     QString label = "Compressing " + basename(final_out);
+    bool hashing = !checksum_paths(spec_in).isEmpty();
+    QStringList sums;
     try {
         if (!spec.format.stream.isEmpty()) {
-            compress_stream(task, spec, label);
+            compress_stream(task, spec, label, hashing ? &sums : nullptr);
         } else {
             Command c = compress_command(spec);
             if (spec.format.id == "tar") {
-                compress_tar_plain(task, c.argv, c.cwd, out, spec.total, label);
+                compress_tar_plain(task, c.argv, c.cwd, out, spec.total, label, gpg_spec(spec) ? spec.password : QString(),
+                                   spec.checksums, hashing ? &sums : nullptr);
             } else {
                 QString read_phase =
                     spec.tool == "zpaq" ? "compressing (zpaq reports no progress for this step)" : QString();
@@ -842,7 +1146,28 @@ QString compress(Task *task, const Spec &spec_in)
     for (const QString &o : old)
         if (!placed.contains(o))
             ::unlink(enc(o).constData());
-    return placed.isEmpty() ? final_out : placed.first();
+    QString made_out = placed.isEmpty() ? final_out : placed.first();
+    // the checksum files once the archive is in place (each in one step), so they never describe one that isn't there;
+    // if they can't be written, the old ones (an older archive's) are deleted rather than left wrong
+    if (hashing) {
+        try {
+            hashcheck::write_checksums(dir, basename(made_out), {{basename(made_out), sums}}, spec_in.checksums,
+                                       spec_in.checksum_one_file);
+        } catch (const std::exception &e) {
+            for (const QString &c : checksum_paths(spec_in))
+                ::unlink(enc(c).constData());
+            throw Error("“" + basename(made_out) + "” was made, but its checksum file couldn't be written: " +
+                        QString::fromStdString(e.what()));
+        }
+    }
+    return made_out;
+}
+
+QStringList checksum_paths(const Spec &spec)
+{
+    if (!is_tar(spec.format) || spec.checksums.isEmpty())
+        return {};
+    return hashcheck::output_paths(dirname(spec.out), basename(spec.out), spec.checksums, spec.checksum_one_file);
 }
 
 // ---------------------------------------------------------------- extract
@@ -853,6 +1178,8 @@ ProbeResult probe(const QString &path_in)
     QString t = extract_tool(path);
     if (t.isEmpty())
         return {false, QString("No tool to open this archive. Install %1.").arg(missing_extract_tool(path))};
+    if (gpg_encrypted(path))   // all of it, names and all
+        return {true, QString()};
     proc::Options o;
     o.c_utf8 = true;
     if (t == "7z") {
@@ -882,15 +1209,18 @@ ProbeResult probe(const QString &path_in)
     return {};
 }
 
-// The smallest encrypted file in a `7z l -slt` or `unrar lt` listing (the quickest one to test), or empty
-static QString smallest_encrypted(const QString &listing, bool rar)
-{
-    QString best;
-    qint64 best_size = -1;
-    QString name;
-    qint64 size = 0;
+// The smallest encrypted file in a `7z l -slt` or `unrar lt` listing (the quickest one to test), fed line by line;
+// result() is empty when there's none
+struct SmallestEncrypted {
+    bool rar;
+    bool started = rar;   // 7z: the archive's own block comes before the "----------" line
+    QString best, name;
+    qint64 best_size = -1, size = 0;
     bool enc = false, dir = false;
-    auto flush = [&]() {
+
+    explicit SmallestEncrypted(bool rar) : rar(rar) {}
+    void flush()
+    {
         if (!name.isEmpty() && enc && !dir && (best_size < 0 || size < best_size)) {
             best = name;
             best_size = size;
@@ -898,13 +1228,13 @@ static QString smallest_encrypted(const QString &listing, bool rar)
         name.clear();
         size = 0;
         enc = dir = false;
-    };
-    bool started = rar;   // 7z: the archive's own block comes before the "----------" line
-    for (const QString &raw : listing.split('\n')) {
+    }
+    void line(const QString &raw)
+    {
         QString line = raw.trimmed();
         if (!started) {
             started = line.startsWith("----------");
-            continue;
+            return;
         }
         if (line.isEmpty()) {
             flush();
@@ -919,9 +1249,12 @@ static QString smallest_encrypted(const QString &listing, bool rar)
             dir = true;
         }
     }
-    flush();
-    return best;
-}
+    QString result()
+    {
+        flush();
+        return best;
+    }
+};
 
 bool password_opens(Task *task, const QString &path_in, const QString &password)
 {
@@ -933,13 +1266,49 @@ bool password_opens(Task *task, const QString &path_in, const QString &password)
         QString l = text.toLower();
         return l.contains("wrong password") || l.contains("password incorrect") || l.contains("incorrect password");
     };
+    if (gpg_encrypted(path)) {   // gpg knows at once: its first bytes come out, or it says "Bad session key"
+        task->report(0, 0, label);
+        auto g = spawn_gpg_decrypt(path, password);
+        try {
+            for (;;) {
+                task->check();
+                fd_set rf;
+                FD_ZERO(&rf);
+                FD_SET(g->out, &rf);
+                struct timeval tv = {0, 200000};
+                int r = ::select(g->out + 1, &rf, nullptr, nullptr, &tv);
+                if (r < 0 && errno == EINTR)
+                    continue;
+                if (r < 0)
+                    throw_errno();
+                if (r == 0)
+                    continue;
+                char c;
+                ssize_t n = ::read(g->out, &c, 1);
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n == 1) {
+                    g->kill_group();
+                    return true;
+                }
+                break;
+            }
+            g->wait();
+        } catch (...) {
+            g->kill_group();
+            throw;
+        }
+        return g->returncode == 0 || !gpg_wrong_password(QString::fromUtf8(g->read_all_err()));
+    }
     if (t == "7z") {
         // encrypted names: the listing itself needs the password; otherwise test the smallest encrypted file (with -spd
         // its name isn't a wildcard). Only a solid block's files before it are unpacked along with it.
-        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "");
+        SmallestEncrypted smallest(false);
+        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "",
+                                        {}, [&](const QString &line) { smallest.line(line); });
         if (wrong_text(text) || text.contains("Cannot open encrypted archive"))
             return false;
-        QString one = smallest_encrypted(text, false);
+        QString one = smallest.result();
         if (one.isEmpty())
             return true;
         auto [rc2, text2] = run_reporting(task, {tool("7z"), "t", "-spd", "--", path, one}, label, QString(), &in, QString(),
@@ -947,10 +1316,12 @@ bool password_opens(Task *task, const QString &path_in, const QString &password)
         return !(wrong_text(text2) || (rc2 == 2 && text2.contains("encrypted")));
     }
     if (t == "unrar") {   // -p without a value: the password comes from stdin; rc 11 is "incorrect password"
-        auto [rc, text] = run_reporting(task, {tool("unrar"), "lt", "-p", "--", path}, label, QString(), &in, QString(), "");
+        SmallestEncrypted smallest(true);
+        auto [rc, text] = run_reporting(task, {tool("unrar"), "lt", "-p", "--", path}, label, QString(), &in, QString(), "",
+                                        {}, [&](const QString &line) { smallest.line(line); });
         if (rc == 11 || wrong_text(text))
             return false;
-        QString one = smallest_encrypted(text, true);
+        QString one = smallest.result();
         if (one.isEmpty())
             return true;
         auto [rc2, text2] = run_reporting(task, {tool("unrar"), "t", "-p", "-idq", "--", path, one}, label, QString(), &in,
@@ -967,7 +1338,7 @@ bool password_opens(Task *task, const QString &path_in, const QString &password)
                                         {env_password("UNZIP", password)});
         return !(rc == 82 || wrong_text(text));
     }
-    return true;   // tar and single-file formats have no passwords
+    return true;   // single-file formats and tar without gpg have no passwords
 }
 
 struct ExtractCommand {
@@ -1071,12 +1442,19 @@ static QStringList decompressor(const QString &suf)
     return argv;
 }
 
-// Feed the (decompressed) tar archive at `path` to tar with tar_args (reading it from "-"), with progress. Returns
-// tar's output; throws Error when the decompressor or tar fails.
+// Feed the (decrypted, decompressed) tar archive at `path` to tar with tar_args (reading it from "-"), with progress.
+// Returns tar's output; throws Error when gpg, the decompressor or tar fails, WrongPassword when gpg_encrypted(path)
+// and the password doesn't open it.
 static QString tar_pipe(Task *task, const QString &path, const QString &suf, const QStringList &tar_args,
-                        const QString &label)
+                        const QString &label, const QString &password)
 {
     qint64 total = std::max<qint64>(getsize(path), 1);
+    std::unique_ptr<proc::Process> gpg;   // gpg -d reads the file; what it writes is fed on instead
+    if (gpg_encrypted(path)) {
+        if (password.isEmpty())
+            throw WrongPassword();
+        gpg = spawn_gpg_decrypt(path, password);
+    }
     QStringList dec_argv = decompressor(suf);
     QStringList tar_argv = QStringList{tool("tar")} + tar_args;
     int fi = ::open(enc(path).constData(), O_RDONLY | O_CLOEXEC);
@@ -1086,6 +1464,7 @@ static QString tar_pipe(Task *task, const QString &path, const QString &suf, con
         int fd;
         ~CloseFd() { ::close(fd); }
     } close_fi{fi};
+    int from = gpg ? gpg->out : fi;
     std::unique_ptr<proc::Process> dec, tar;
     int feed;
     if (!suf.isEmpty()) {
@@ -1094,45 +1473,66 @@ static QString tar_pipe(Task *task, const QString &path, const QString &suf, con
         o.out = proc::PIPE;
         o.err = proc::PIPE;
         o.c_utf8 = true;
-        dec = spawn_logged(dec_argv, o);
         try {
+            dec = spawn_logged(dec_argv, o);
             tar = spawn_logged(tar_argv, tool_opts(QString(), dec->out));
         } catch (...) {
-            dec->kill_group();
+            kill_all({gpg.get(), dec.get()});
             throw;
         }
         dec->close_out();
         feed = dec->in;
     } else {
-        tar = spawn_logged(tar_argv, tool_opts(QString(), proc::PIPE));
+        try {
+            tar = spawn_logged(tar_argv, tool_opts(QString(), proc::PIPE));
+        } catch (...) {
+            kill_all({gpg.get()});
+            throw;
+        }
         feed = tar->in;
     }
-    QString out;
+    // tar's output is read while it's being fed: a long listing would otherwise fill the pipe, tar would stop reading
+    // its input to wait for room, and relay() would wait for tar
+    QByteArray tar_out;
+    std::thread reader([&]() { tar_out = tar->read_all_out(); });
+    struct Join {
+        std::thread &t;
+        ~Join() { if (t.joinable()) t.join(); }   // on a throw, after tar is killed (which ends its output)
+    } join_reader{reader};
+    bool gpg_stopped = false;   // killed here once tar had stopped reading: not a failure of its own
     try {
         try {
-            relay(task, fi, feed, total, label);
+            relay(task, from, feed, total, label);
+            if (gpg)
+                gpg->wait();
             if (dec)
                 dec->close_in();
             else
                 tar->close_in();
             if (dec)
                 dec->wait();
-            out = QString::fromUtf8(tar->read_all_out());
             tar->wait();
         } catch (const BrokenPipe &) {
+            if (gpg && !gpg->poll()) {
+                gpg->kill_group();
+                gpg_stopped = true;
+            }
             if (dec)
                 dec->kill_group();
             if (dec)
                 dec->close_in();
             else
                 tar->close_in();
-            out = QString::fromUtf8(tar->read_all_out());
             tar->wait();
         }
     } catch (...) {
-        kill_all({dec.get(), tar.get()});
+        kill_all({gpg.get(), dec.get(), tar.get()});
         throw;
     }
+    reader.join();
+    if (gpg && !gpg_stopped)   // first: with a wrong password, the decompressor and tar fail for want of data
+        check_gpg(gpg.get());
+    QString out = QString::fromUtf8(tar_out);
     if (dec && dec->returncode != 0) {
         QString t = tail(QString::fromUtf8(dec->read_all_err()));
         throw Error(t.isEmpty() ? QString("decompression failed") : t);
@@ -1147,7 +1547,7 @@ static QString tar_pipe(Task *task, const QString &path, const QString &suf, con
 
 static QString extract_stream(Task *task, const QString &path, const QString &dest, const QString &k,
                               const QString &suf, const QString &overwrite, const QString &label,
-                              const QStringList &members = QStringList())
+                              const QString &password = QString(), const QStringList &members = QStringList())
 {
     qint64 total = std::max<qint64>(getsize(path), 1);
     QStringList dec_argv = decompressor(suf);
@@ -1238,7 +1638,7 @@ static QString extract_stream(Task *task, const QString &path, const QString &de
     if (!members.isEmpty())
         args << "--" << members;   // literal names (GNU tar matches extracted members without wildcards); a folder brings
                                    // what's inside
-    tar_pipe(task, path, suf, args, label);
+    tar_pipe(task, path, suf, args, label, password);
     return dest;
 }
 
@@ -1429,7 +1829,7 @@ QString extract(Task *task, const QString &path_in, const QString &dest, const Q
     QString label = "Extracting " + basename(path);
     if (k == "tar") {
         EscapingLinkSweep sweep(dest, "tar", report);
-        return extract_stream(task, path, dest, k, suf, overwrite, label, plain_members(members));
+        return extract_stream(task, path, dest, k, suf, overwrite, label, password, plain_members(members));
     }
     if (k == "single")
         return extract_stream(task, path, dest, k, suf, overwrite, label);
@@ -1481,9 +1881,29 @@ static bool says_wrong_password(const QString &text)
            l.contains("incorrect password") || l.contains("wrong password :") || l.contains("specified password is incorrect");
 }
 
+// A listing's time, in `format` (only digits for y, M, d, H, m and s, and the other characters as they are). Read by
+// hand: QDateTime::fromString takes about 0.2 ms, which was most of a big archive's listing time (40 s for 200,000
+// files); anything else is left to it.
 static QDateTime parse_time(const QString &text, const QString &format, bool utc = false)
 {
-    QDateTime t = QDateTime::fromString(text, format);
+    QDateTime t;
+    if (text.size() == format.size()) {
+        int v[128] = {};
+        bool ok = true;
+        for (int i = 0; ok && i < text.size(); ++i) {
+            QChar f = format[i], c = text[i];
+            if (!QStringView(u"yMdHms").contains(f))
+                ok = c == f;
+            else if ((ok = c >= '0' && c <= '9'))
+                v[f.unicode()] = v[f.unicode()] * 10 + (c.unicode() - '0');
+        }
+        QDate d(v['y'], v['M'], v['d']);
+        QTime tm(v['H'], v['m'], v['s']);
+        if (ok && d.isValid() && tm.isValid())
+            t = QDateTime(d, tm);
+    }
+    if (!t.isValid())
+        t = QDateTime::fromString(text, format);
     if (utc && t.isValid()) {
         t.setTimeSpec(Qt::UTC);
         t = t.toLocalTime();
@@ -1503,34 +1923,27 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
         QString tl = tail(text);
         return Error(tl.isEmpty() ? QString("%1 failed (exit code %2)").arg(t, QString::number(rc)) : tl);
     };
+    // each listing is parsed line by line as the tool prints it: a big archive's runs to many megabytes
     if (t == "7z") {
-        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "");
-        if (says_wrong_password(text))
-            throw WrongPassword();
-        if (rc != 0 && !text.contains("----------"))
-            throw failed(rc, text, t);
         Entry e;
-        bool started = false;
+        bool started = false;   // the archive's own block comes before the "----------" line
         auto flush = [&]() {
             if (!e.path.isEmpty())
                 out << e;
             e = Entry{};
         };
-        for (const QString &raw : text.split('\n')) {
-            QString line = raw;
-            if (line.endsWith('\r'))
-                line.chop(1);
+        auto on_line = [&](const QString &line) {
             if (!started) {
                 started = line.startsWith("----------");
-                continue;
+                return;
             }
             int eq = line.indexOf(" = ");
             if (line.isEmpty()) {
                 flush();
-                continue;
+                return;
             }
             if (eq < 0)
-                continue;
+                return;
             QString key = line.left(eq), value = line.mid(eq + 3);
             if (key == "Path")
                 e.path = value;
@@ -1546,27 +1959,31 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
                 e.modified = parse_time(value.left(19), "yyyy-MM-dd HH:mm:ss");
             else if (key == "Encrypted")
                 e.encrypted = value == "+";
-        }
+        };
+        auto [rc, text] = run_reporting(task, {tool("7z"), "l", "-slt", "--", path}, label, QString(), &in, QString(), "",
+                                        {}, on_line);
+        if (says_wrong_password(text))
+            throw WrongPassword();
+        if (rc != 0 && !started)
+            throw failed(rc, text, t);
         flush();
     } else if (t == "unrar") {
-        QStringList argv{tool("unrar"), "lt", password.isEmpty() ? "-p-" : "-p", "--", path};
-        auto [rc, text] = run_reporting(task, argv, label, QString(), password.isEmpty() ? nullptr : &in, QString(), "");
-        if (rc == 11 || says_wrong_password(text))
-            throw WrongPassword();
-        if (rc != 0 && !text.contains("Name: "))
-            throw failed(rc, text, t);
         Entry e;
+        bool named = false, header_encrypted = false;
         auto flush = [&]() {
             if (!e.path.isEmpty())
                 out << e;
             e = Entry{};
         };
-        for (const QString &raw : text.split('\n')) {
+        auto on_line = [&](const QString &raw) {
             QString line = raw.trimmed();
+            if (line.contains("encrypted headers"))
+                header_encrypted = true;
             if (line.isEmpty()) {
                 flush();
             } else if (line.startsWith("Name: ")) {
                 flush();
+                named = true;
                 e.path = raw.mid(raw.indexOf("Name: ") + 6);
             } else if (line.startsWith("Type: ")) {
                 e.dir = line == "Type: Directory";
@@ -1579,25 +1996,24 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
             } else if (line.startsWith("Flags:") && line.contains("encrypted")) {
                 e.encrypted = true;
             }
-        }
+        };
+        QStringList argv{tool("unrar"), "lt", password.isEmpty() ? "-p-" : "-p", "--", path};
+        auto [rc, text] = run_reporting(task, argv, label, QString(), password.isEmpty() ? nullptr : &in, QString(), "",
+                                        {}, on_line);
+        if (rc == 11 || says_wrong_password(text))
+            throw WrongPassword();
+        if (rc != 0 && !named)
+            throw failed(rc, text, t);
         flush();
-        if (password.isEmpty() && text.contains("encrypted headers"))
+        if (password.isEmpty() && header_encrypted)
             throw WrongPassword();
     } else if (t == "zpaq") {
-        QStringList argv{tool("zpaq"), "l", path};
-        if (!password.isEmpty())
-            argv << "-key" << password;
-        auto [rc, text] = run_reporting(task, argv, label, QString(), nullptr, QString(), "");
-        if (says_wrong_password(text))
-            throw WrongPassword();
-        if (rc != 0)
-            throw failed(rc, text, t);
         // "- 2026-10-17 17:25:48            6  0664 dir/name" (UTC; a folder's name ends in "/")
         static const QRegularExpression re("^- (\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d) +(\\d+) +\\S+ (.+)$");
-        for (const QString &line : text.split('\n')) {
+        auto on_line = [&](const QString &line) {
             auto m = re.match(line);
             if (!m.hasMatch())
-                continue;
+                return;
             Entry e;
             e.path = m.captured(3);
             e.dir = e.path.endsWith('/');
@@ -1605,17 +2021,22 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
             e.modified = parse_time(m.captured(1), "yyyy-MM-dd HH:mm:ss", true);
             e.encrypted = !password.isEmpty();
             out << e;
-        }
-    } else if (t == "unzip") {
-        // zipinfo: "-rw-rw-r--  6.3 unx  6 Bx  18 stor 20261017.132550 dir/name" (an uppercase T/B: encrypted)
-        auto [rc, text] = run_reporting(task, {tool("unzip"), "-Z", "-l", "-T", path}, label, QString(), nullptr, QString(), "");
+        };
+        QStringList argv{tool("zpaq"), "l", path};
+        if (!password.isEmpty())
+            argv << "-key" << password;
+        auto [rc, text] = run_reporting(task, argv, label, QString(), nullptr, QString(), "", {}, on_line);
+        if (says_wrong_password(text))
+            throw WrongPassword();
         if (rc != 0)
             throw failed(rc, text, t);
+    } else if (t == "unzip") {
+        // zipinfo: "-rw-rw-r--  6.3 unx  6 Bx  18 stor 20261017.132550 dir/name" (an uppercase T/B: encrypted)
         static const QRegularExpression re("^(\\S)\\S* +\\S+ +\\S+ +(\\d+) +(\\S)\\S +(\\d+|-) +\\S+ +(\\d{8}\\.\\d{6}) (.+)$");
-        for (const QString &line : text.split('\n')) {
+        auto on_line = [&](const QString &line) {
             auto m = re.match(line);
             if (!m.hasMatch())
-                continue;
+                return;
             Entry e;
             e.path = m.captured(6);
             e.dir = m.captured(1) == "d" || e.path.endsWith('/');
@@ -1624,10 +2045,15 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
             e.encrypted = m.captured(3) == "T" || m.captured(3) == "B";
             e.modified = parse_time(m.captured(5), "yyyyMMdd.HHmmss");
             out << e;
-        }
+        };
+        auto [rc, text] = run_reporting(task, {tool("unzip"), "-Z", "-l", "-T", path}, label, QString(), nullptr, QString(),
+                                        "", {}, on_line);
+        if (rc != 0)
+            throw failed(rc, text, t);
     } else if (k == "tar") {
         // "drwxr-xr-x user/group  0 2026-10-17 13:25:48 dir/" (a link: "name -> target")
-        QString text = tar_pipe(task, path, suf, {"-tv", "--full-time", "--quoting-style=literal", "-f", "-"}, label);
+        QString text = tar_pipe(task, path, suf, {"-tv", "--full-time", "--quoting-style=literal", "-f", "-"}, label,
+                                password);
         static const QRegularExpression re("^(\\S)\\S* +\\S+ +(\\d+|\\d+, *\\d+) +(\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d) (.+)$");
         for (const QString &line : text.split('\n')) {
             auto m = re.match(line);
@@ -1642,6 +2068,7 @@ QList<Entry> list(Task *task, const QString &path_in, const QString &password)
             e.dir = m.captured(1) == "d";
             e.size = e.dir ? -1 : m.captured(2).toLongLong();
             e.modified = parse_time(m.captured(3), "yyyy-MM-dd HH:mm:ss");
+            e.encrypted = gpg_encrypted(path);
             out << e;
         }
     } else {
@@ -1696,10 +2123,12 @@ TestResult test(Task *task, const QString &path_in, const QString &password)
     } else if (k == "tar" || k == "single") {
         try {
             if (k == "tar")   // the compression's checksums and tar's own structure: read through to the end
-                tar_pipe(task, path, suf, {"-tf", "-"}, label);
+                tar_pipe(task, path, suf, {"-tf", "-"}, label, password);
             else
                 std::tie(rc, text) = run_reporting(task, {decompressor(suf).value(0), "-t", path}, label, QString(),
                                                    nullptr, QString(), "");
+        } catch (const WrongPassword &) {
+            throw;
         } catch (const Error &e) {
             rc = 2;
             text = QString::fromStdString(e.what());

@@ -30,6 +30,8 @@ bool enabled(const QString &path)
 {
     if (!drives::reads_allowed(path))   // a tape or floppy: playing reads the file over and over
         return false;
+    if (thumbs::in_app_cache(path))   // its own previews among them: they'd be previewed again
+        return false;
     QString ext = ext_of(path);
     if (ext == ".gif")
         return settings().value("play_gifs", false).toBool();

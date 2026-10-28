@@ -3,6 +3,7 @@
 #pragma once
 
 #include "places.h"
+#include "search.h"
 
 #include <QPointer>
 #include <QWidget>
@@ -13,6 +14,11 @@ class FSModel;
 class GridDelegate;
 class MainWindow;
 class OverviewPage;
+class QToolButton;
+class QProgressBar;
+class QComboBox;
+class QDoubleSpinBox;
+class QDateEdit;
 class SearchModel;
 class SearchThread;
 class PinSortProxy;
@@ -49,6 +55,7 @@ public:
     bool is_grid() const;
     QAbstractItemView *view() const;
     bool is_overview() const;
+    OverviewPage *overview_page() const { return overview; }
     bool is_trash() const;
     bool is_virtual() const;   // Starred or Recent: files from anywhere, not a folder
     bool is_listing() const;   // a list of files from many folders (Trash, Starred, Recent) in the results model
@@ -59,6 +66,16 @@ public:
     int zoom_value() const;
     void set_sizes(int grid, int list);   // both zooms (Preferences); saved by whoever changed them
     void set_search_options(bool subfolders, bool contents);   // the search bar's switches (Preferences)
+    // The search bar's Filters (type, size, date) and how File contents searches: kept for this session, in every
+    // tab and window. Setting one updates the bar and searches again.
+    SearchFilter search_filter() const;
+    void set_search_filter(const SearchFilter &f);
+    ContentSearch content_search() const;
+    void set_content_search(const ContentSearch &c);
+    void search_for(const QString &text);   // as if typed in the search bar (shown), searched at once
+    int match_line(const QString &path) const;   // a content search's first matching line in that file (0: none)
+    QString view_message() const;     // what the view says in place of items ("Nothing found"…), as seen (over the view)
+    bool search_busy_shown() const;   // the search's progress bar is showing
     void update_grid_size();
     bool set_path(const QString &path, bool record = true, const QString &select = QString());
     void show_trash();
@@ -74,6 +91,8 @@ public:
     void start_search();
     void close_search(bool refocus = true, bool navigating = false);
     void stop_search();
+    void cancel_thumbs();   // drop the thumbnails and folder previews this pane asked for that no one else wants
+    const QObject *thumb_owner() const;   // whom its folder's thumbnails are asked for (ThumbnailManager::get)
     QStringList selected_paths() const;
     // the selected items as the view knows them (kind: KindRole's bits, -1 if it doesn't know; size: -1 likewise),
     // without asking the file system: on a busy tape, a stat waits until the drive gets there
@@ -91,6 +110,14 @@ public:
     int grouping() const { return group_mode; }     // groups::Mode
     int grouping_by() const { return group_by; }   // groups::DateBy
     void set_grouping(int mode, int by);   // for this folder (or place) only, like its sort
+    // Collapsing date groups from anywhere in them (not only their header): the group of the current item (or header,
+    // or footer), -1 if not grouped; collapsing keeps the view on the group's header, which becomes the current row
+    int current_group() const;
+    int group_of_path(const QString &path) const;   // the group an item shown here is in (-1: none)
+    void collapse_group(int key);
+    void expand_group(int key);
+    void set_all_groups_collapsed(bool on);
+    QList<int> group_keys() const;   // in order (none when not grouped)
     void set_pinned_first(bool on);   // pinned and starred items first
     bool pinned_first() const;
     QString title() const;
@@ -156,6 +183,17 @@ private:
     QLineEdit *search_edit;
     QCheckBox *search_sub;
     QCheckBox *search_contents;
+    QToolButton *filters_btn;
+    QProgressBar *search_progress;   // busy while a search runs
+    QString search_error;            // why the last search found nothing it should have (shown in the view)
+    QWidget *filter_row, *content_opts;
+    QComboBox *f_type, *f_size_mode, *f_unit, *f_when, *f_date_by, *c_engine;
+    QDoubleSpinBox *f_size;
+    QDateEdit *f_from, *f_to;
+    QCheckBox *c_regex, *c_case;
+    bool loading_filters = false;
+    void build_filter_row();
+    void filters_changed();   // the widgets → the session's filters, then search again
     QTimer *search_timer;
     QStackedWidget *stack;
     QAbstractItemView *mode_view;   // grid or tree; stays set while the overview page is shown

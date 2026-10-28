@@ -2,9 +2,424 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.0
+## 0.3.2-alpha.26
 
-- Nothing yet.
+- **A package for each Ubuntu release.** Each release now gets a .deb built on it, with its own Qt and libraries,
+  instead of one 24.04 build for all: Ubuntu 26.04 gets the build its tests ran on. The release suites get their
+  own (`stable` and `dev` keep the 24.04 one, which installs everywhere), and the GitHub releases have both, named
+  `…~ubuntu24.04` and `…~ubuntu26.04`: take the one for your release (`ubuntu24.04` on Linux Mint 22). A system
+  upgraded to a newer Ubuntu release upgrades to that release's build.
+- **Install instructions for each Ubuntu release.** The README, the install guide and the apt repository's page
+  now give Ubuntu 26.04 and Ubuntu 24.04 / Linux Mint 22 their own commands, each naming its release's suite, so
+  nobody ends up with another release's package. The previous commands fell back to `stable` when a release's suite
+  wasn't there yet, which gave 26.04 the 24.04 package. They also explain how to switch from `stable` or `dev` (set
+  up before 0.3.2-alpha.25), and which .deb to take when downloading one by hand.
+- **Automated builds run on Node.js 24.** GitHub's actions for checking out the code and passing packages between
+  jobs moved to their Node.js 24 versions, so the runs no longer warn that Node.js 20 is deprecated.
+- **Drag-selecting up and to the left works again in the grid.** Pressing in empty space and dragging up and to the
+  left selected nothing (since 0.3.2-alpha.17); the other directions, and the list view, worked.
+
+## 0.3.2-alpha.25 (2026-10-27)
+
+- **apt suites for each Ubuntu release.** The apt repository now has a suite for each Ubuntu release Kestrel
+  supports, named after its codename: `noble` (Ubuntu 24.04, Linux Mint 22) and `resolute` (Ubuntu 26.04), each with a
+  `-dev` one for development builds. When Kestrel stops supporting a release, its suites keep the last version that
+  installs there, so people on it keep a working Kestrel and new installs still succeed, instead of updates stopping
+  without a word and installs failing on missing dependencies. The install commands pick the suite from
+  `/etc/os-release`, so Linux Mint and every Ubuntu flavour get the right one; they fall back to `stable` or `dev`
+  on a release without its own. `stable` and `dev` keep working and get every build too, but if you added the
+  repository before, run the install commands again to switch to your release's suite.
+- **Tested on Ubuntu 26.04 too.** The automated tests now run on Ubuntu 26.04 as well as 24.04, and a package is only
+  built when both pass, so a change that breaks only with 26.04's newer Qt or tools is caught before it reaches you.
+
+## 0.3.2-alpha.24 (2026-10-27)
+
+- **The image viewer picks up new images in the folder** without being reopened. Opened on an image of a folder, it
+  adds images that appear there later (for example from a program generating them) to its list and filmstrip, in
+  their place in the folder's order, without changing the image you're looking at. Files still being written wait
+  until they're finished. Not on tapes and floppies.
+- **Compare two images with a slider.** Select two images and right-click → **Compare in Viewer**: the viewer shows
+  them over each other with a divider in the middle, B on its left and A on its right. Drag it fully left to see only
+  A, fully right to see only B; zooming and panning move both, so the same spot stays under the divider. In the
+  viewer, **D** switches any comparison (X) to the slider and back.
+
+## 0.3.2-alpha.23 (2026-10-27)
+
+- **Fixed: the file chooser asked a tape questions while Kestrel was writing to it.** The file chooser Kestrel
+  provides to other apps didn't know about Kestrel's running jobs, so opening one asked the tape for its cartridge's
+  health, and then for its size every 30 seconds, in the middle of a write; each question is a command to the drive
+  that interrupts its writing. It now never asks a tape anything. A Kestrel window that has just opened also waits
+  until it knows the other windows' jobs before asking a tape.
+- **Faster builds:** the automated builds now install their packages from Ubuntu's main archive instead of the
+  build machines' default Azure mirror, which was very slow and made every run take much longer. New test and dev
+  builds (and their apt updates) arrive sooner after each change.
+
+## 0.3.2-alpha.22 (2026-10-27)
+
+- Version bump only.
+
+## 0.3.2-alpha.21 (2026-10-27)
+
+- **Calculate Folder Size** in a folder's right-click menu (also for several folders): opens Properties and counts the
+  size afresh, also when a size was remembered from before.
+- **Open Metadata** in a file's right-click menu: opens Properties straight on its Metadata tab. Shown for images, and
+  with exiftool installed also for videos, audio, PDFs, e-books and office documents.
+- **Kestrel's own cache folder gets no thumbnails** (`~/.cache/kestrel-explorer`: its folder previews, animated
+  previews and temporary copies). Browsing it, or generating previews over it, made thumbnails of those previews
+  and wrote them back into the caches; files and folders there now show plain icons.
+- **Fixed: unlocking an encrypted drive failed** with "Expected G_MOUNT_OPERATION_HANDLED but got 2" as soon as the
+  password window opened, and entering the password then did nothing. The drive now waits for the password and
+  unlocks with it. The same applied to questions asked while mounting.
+
+## 0.3.2-alpha.20 (2026-10-27)
+
+- **Fixed: a drive's health could show billions of bad sectors** (e.g. "4294967299 bad sectors" on the Overview and
+  sidebar) when its details listed only 3. Some drives put extra bits in the S.M.A.R.T. counters that udisks adds up;
+  the health line now shows the real count.
+
+## 0.3.2-alpha.19 (2026-10-26)
+
+- Version bump only.
+
+## 0.3.2-alpha.18 (2026-10-26)
+
+- **Choose what the Overview shows** (Preferences → Overview): tick the sections to show and put them in any order;
+  the card size (small, normal, large); whether the system drive is shown alone (as before), with its other mounts
+  (`/boot`, `/boot/efi`), or not at all; the usage bar; and free space as a size or a percentage.
+- **Two new Overview sections**, off until chosen: **Starred** (your starred files and folders; click a file to open
+  it, right-click to unstar) and **Frequent Folders** (the 12 folders you open most in Kestrel, counted while the
+  desktop's File History switch is on; right-click one to remove it). `kes-setup --bleachbit`'s History option now
+  deletes that count too.
+- **Drive health on the Overview.** Each drive's card shows its health from S.M.A.R.T., as udisks reports it (no root
+  needed): "Healthy", or a warning such as "3 bad sectors", with its temperature and how long it has been powered on.
+  A failing drive's card turns red, and a notification says so the first time Kestrel sees it. Click the health line
+  (or right-click → Drive Health…) for what the drive reports, in plain words. NVMe drives are read too; drives in USB
+  enclosures that don't pass it through say "Health not available"; a ZFS pool shows its worst disk. A drive's
+  Properties shows the same line.
+- Bookmarks on a tape or floppy no longer ask the drive anything to draw their Overview card.
+- **Drag an image out of the image viewer** and drop a copy anywhere that takes files: the desktop, a folder, a
+  browser's upload field, a chat or mail app (apps that only take pictures get its pixels). With the whole image in
+  view just drag it; zoomed in, hold Alt (a plain drag pans). It's always a copy, never a move, even into a folder on
+  the same drive; turned or edited and not saved, a copy as shown is dragged. **Ctrl+C** in the viewer now copies the
+  file too, so Ctrl+V in a folder pastes it.
+- **Rotate ▸** in an image's right-click menu (one or several): 90° either way, 180°, or flipped, saved in the files.
+  JPEGs are turned without re-compressing them (jpegtran), keeping their metadata; one whose size isn't whole JPEG
+  blocks asks whether to trim its edge or only set its orientation. PNG, BMP, TIFF and lossless WebP are saved again
+  losslessly; HEIC, AVIF and lossy WebP ask first.
+- **Convert Image…**: to JPEG, PNG, WebP, AVIF, HEIC or TIFF (what's installed can write), with a quality, a new
+  size, the metadata kept or not, and a background for transparency; e.g. iPhone photos to JPEG.
+- **Convert Video…**, **Extract Audio…** and **Convert Audio…** (with ffmpeg installed): presets and every option in
+  plain terms, the exact command shown, the video's details and a rough size; a real percentage and time left in the
+  status bar with ✕; several files as one job with one summary. Extract Audio keeps the sound as it is (instant,
+  lossless) or converts it, from one track or each. Convert Audio keeps tags and cover art, can even out the volume
+  across a batch, and converts a whole folder with its subfolders. Nothing half-made is ever left, and no file is
+  replaced; the originals can go to the trash afterwards. `libheif-examples` (HEIC and AVIF output) is a new optional
+  package.
+
+## 0.3.2-alpha.17 (2026-10-26)
+
+- **Find Duplicates…** (right-click a folder, several folders, or a drive in the sidebar or on the Overview): finds the
+  files with the same contents, quickly (only files of the same size are read: their beginnings, then the whole file),
+  as a job with progress and Stop. Options: the smallest size, subfolders, hidden files, skipping hard links. The
+  groups show each file's thumbnail, folder, date and size, and the space that can be freed; keep the oldest, the
+  newest or those in a folder, then **Move the Others to Trash** (undoable) or **Replace the Others with Hard Links…**
+  (same drive, asking first). A group with no copy kept, or a file changed since the search, is never touched.
+- **Compare With…** (right-click a folder): lists what differs between two folders, through their subfolders: only on
+  one side, newer on one side, or other contents (by size and date, or byte by byte). Open, copy across (asking before
+  replacing) or trash from the list.
+- **Sync To…** (right-click a folder, or ☰ → Sync Folders…): makes a destination match a source, one way, after a
+  preview of exactly what will be copied, replaced and (if chosen) deleted. With rsync when it's installed (it resumes
+  an interrupted sync and only sends what changed), or Kestrel's own copy; a file being replaced is kept until its new
+  copy is complete. Deleting on the destination is off by default and asks again. Save a pair ("Pictures → Backup
+  HDD") to run it again in one click; a pair on a removable drive is found wherever the drive is mounted. `kes-setup
+  --bleachbit`'s cleaner has a new option for the saved pairs, and `rsync` is among the optional packages.
+- **Verify Signature.** Double-click a `.sig`, `.asc`, `.gpg` or `.sign` signature (or right-click → Verify
+  Signature): gpg checks it against the file it signs, and Kestrel says plainly what that means: valid, signed by whom
+  and when (and, if you haven't verified that key, that anyone can make a key with that name, with its fingerprint to
+  compare); a bad signature; or the signer's key isn't in your keyring, with **Fetch Key…** (asking first). A signed
+  checksum file (`SHA256SUMS` with `SHA256SUMS.gpg`) is checked first, then every file it lists.
+- **Choose when thumbnails are made.** Under the Jobs window's thumbnail list (and in Preferences → Images & Videos),
+  **Thumbnailing**: wait until the drive is free of other jobs (as before, the default); one per drive, even while
+  it's in use (a folder's previews come during a long copy on that drive, one folder at a time); or paused (no
+  thumbnailing until switched back; what's made still shows, and the folders' jobs carry on afterwards). It applies to
+  every Kestrel window.
+- **Drag files from one tab to another.** Hold them over a tab for a moment and it opens, so the drag can go on into
+  its folder or a folder there; drop them onto the tab itself to put them in its folder. The same keys as any drop
+  (none: move on the same drive, copy to another; Ctrl copies, Shift moves, Ctrl+Shift links, Alt asks), and the tab
+  is highlighted while it would take them. The Overview, Starred, Recent and search results open but take no drop.
+- **A selection box only as big as the item.** In the grid, the highlight of a selected or hovered file fits around
+  its icon (a wide or tall picture's own shape) and its name, instead of filling the whole cell; and only that counts
+  as the item. So a full folder still has empty space to right-click for its own menu (New Folder, Paste…), click to
+  clear the selection, or drop files into. A selection rectangle picks the items whose icon or name it touches.
+- **Dropping files onto the Trash moves them to the trash** (its tab or the sidebar's Trash), so they can be restored
+  and undone. A drop onto the sidebar's Trash used to move them into the trash's folder without the record of where
+  they came from.
+- **The Jobs window's buttons are where they belong**: Pause, Stop, Start Now, Up, Down and Clear Finished right under
+  the jobs list, the thumbnail jobs' Pause and Stop under theirs. They used to sit below both lists, as if they were
+  for the thumbnails too.
+
+## 0.3.2-alpha.16 (2026-10-26)
+
+- **Wipe Metadata…** in the right-click menu of one or more images: takes out all of their metadata (camera details,
+  GPS location, dates, comments, image-generation prompts) without touching the pixels, as a job in the Jobs window.
+  By default the originals are kept and a copy without metadata is made beside each (`photo (no metadata).jpg`; Undo
+  moves the copies to the trash). Preferences → Images & Videos can make it wipe the originals instead, with no backup
+  (it asks first), and choose whether the orientation and colour profile are kept (on by default, so photos don't
+  turn sideways). Needs exiftool; not for camera raw files. A failure or cancel leaves each image as it was.
+- **Run jobs all at once.** A third way for the job queue to run jobs, besides by drive and one at a time: every job
+  starts as soon as it's queued, also on a drive another job is using (paused jobs still wait). Not the default:
+  choose it in the Jobs window's **Run jobs** or Preferences → Files. Jobs on the same drive then compete for it,
+  which can be slower overall, and makes a tape or floppy seek back and forth. Kestrels of this version don't share
+  the job queue with earlier ones still running.
+- **A page listing every right-click menu** ([Right-click menus](docs/context-menus.md)): what each entry does and
+  when it shows.
+
+## 0.3.2-alpha.15 (2026-10-26)
+
+- **Jobs no longer belong to the window that started them.** Closing a Kestrel window doesn't ask about its jobs
+  or stop them: they go on, shown in another window's status bar. Closing the last window while jobs run asks
+  whether to **exit and open the Jobs window** (the jobs go on, and Kestrel exits once they're done and the Jobs
+  window is closed) or **stop all jobs and exit**. With the Jobs window open, the last window just closes. A copy or
+  move finishes its work (undo, writing a tape's index, saying what failed) even when its window has gone. Quit
+  (Ctrl+Q) closes every window the same way.
+- **Making thumbnails and folder previews is a job in the Jobs window.** Each folder you look at gets one ("Thumbnails:
+  Pictures/2024, 312 of 840"), with the window it's for, progress, Pause and Stop, in a part of the Jobs window of
+  its own below the copies, moves and extractions. Leaving a folder no longer throws away its previews: its job waits
+  behind the folder you're in now, carries on when nothing newer is waiting, and stops after 3 minutes (Preferences →
+  Images & Videos). Going back to the folder puts it first again. A thumbnail job also waits while another job (a
+  copy, an extraction…) uses its drive.
+- **Remembered folder sizes in Properties.** A folder's size, once counted, shows at once the next time, with when
+  it was counted ("Calculated 3 days ago (2026-10-21 14:05)") and a **Recalculate** button, which counts it again as
+  a job in the Jobs window. It isn't counted again on its own. Kestrel's own copies, moves and deletes forget the
+  sizes of the folders they change. The sizes are kept in Kestrel's cache, which the BleachBit cleaner empties.
+- **New Folder with Selection…** in the right-click menu of one or more items: it asks for a name, makes the folder
+  beside them (never over a name that's taken) and moves them into it. Undo puts them back and removes the folder.
+- **Open as Archive: open and drag out.** Double-click a file in the archive window to open it with its app (it's
+  extracted to a temporary copy first; copies are cleaned up after a day). Drag items out onto a Kestrel folder or
+  the sidebar to extract them there, or onto another app or the desktop (extracted as they're dropped; up to 500 MB,
+  and not encrypted items whose password hasn't been given yet).
+- **Volume sizes to pick from in Compress….** When an archive can be split, the size is a list of standard sizes
+  named by what they fit (a CD, a DVD, a Blu-ray, a FAT32 USB stick's largest file, an email), each the exact size
+  that really fits, or **Custom…** with a size in KB, MB or GB. The size is passed to the program in bytes.
+- **Fixed: the Jobs window and the archive window reopened as nothing just after being closed.** Opening one again
+  right after closing it could raise the closed one instead of showing a new one.
+
+## 0.3.2-alpha.14 (2026-10-25)
+
+- **Fixed: a closed window's folder previews kept being made.** Thumbnails and folder previews are made by one queue
+  for all of a Kestrel's windows, and closing a window took nothing out of it. With another window still open, the
+  closed one's hundreds of folder previews went on being made, reading one folder after another, for minutes. Each
+  window, tab, viewer and info panel now asks for its own, and closing it, or moving to another folder, cancels what
+  it asked for. That also fixes the other way round: moving to another folder dropped every window's previews still
+  waiting, not just its own.
+- **Fixed: the scroll wheel over the image viewer's info panel went to the next image.** It now scrolls the panel,
+  and does nothing when the panel has nowhere left to scroll. Only the wheel over the picture or the filmstrip changes
+  images.
+- **A job says what it is and where it came from.** A copy or move is titled with what it copies and where to
+  ("Copying 2 items to Photos", "Copying “a.txt” to Backup (with dd)"), not just "Copying". Its log in the Jobs window
+  starts with what started it (Paste, Paste Into Folder, a drop, Copy To…, Move To…, the image viewer), in which
+  window and when, from where to where, and, if it had to wait, for how long and for which jobs.
+- **Fixed: a job whose destination was moved while it waited gave one error for each file.** A copy or move queued
+  behind another job now checks its destination folder when its turn comes. If the folder was moved or deleted in the
+  meantime, the job fails once with a message saying so, and nothing is copied.
+- **Copied files are forgotten once pasted.** After a paste of copied files (Paste or Paste Into Folder), the clipboard
+  is cleared, so an old copy can't be pasted again by a slip of the mouse. To paste the same files somewhere else, copy
+  them again. Cut and paste already worked this way. Paths copied as text are left alone.
+- **Fixed: a drive or mount sometimes showed in the sidebar only later.** Mount changes coming in quick succession (a
+  container starting, an automounter) put off the sidebar's update until they stopped. It now updates within a
+  second, and checks again a little later (from the mount table, asking no drive anything) for a mount that settles
+  after the first update, or whose label appears late.
+
+## 0.3.2-alpha.13 (2026-10-25)
+
+- **Fixed: Kestrel froze for a while when Open as Archive finished reading a big archive.** The window's list was
+  built all at once on the UI thread, which held up every Kestrel window for 1–2 seconds per 100,000 files. It's now
+  built while the archive is read, and opening the window doesn't pause anything.
+- **Fixed: dragging hundreds of selected items into another folder froze the window for seconds.** As each item
+  left the folder, the status line counted the whole selection again (slowly), so 800 folders held the window long
+  enough for the desktop to offer to force quit. It's now counted once, and the move no longer holds the window.
+- **Open as Archive reads big archives up to 10× faster.** Reading the files' dates took most of the time (about
+  40 s for an archive of 200,000 files, now about 5 s), and listings are read in blocks instead of line by line.
+- **The benchmark now compares Kestrel with Thunar, Krusader and PCManFM too** (see
+  [Performance](docs/performance.md)), and every file manager is timed opening a folder of 10,000 files, until its
+  whole list is shown. That's how Krusader and PCManFM are compared on opening a folder, as they make no thumbnails
+  the benchmark can time; Kestrel lists those 10,000 files in 0.55 s, ahead of all but PCManFM (0.48 s).
+
+## 0.3.2-alpha.12 (2026-10-25)
+
+- **Tar archives can have a password.** In Compress…, tar and every tar.* format (tar.gz, tar.zst, tar.xz…) now offer
+  **Encrypt with a password**: the archive is encrypted whole with gpg (AES-256), names and all, and saved as
+  `name.tar.gz.gpg`. Kestrel opens, lists, tests and extracts these like its other encrypted archives (asking for the
+  password, trying saved ones, asking again when it's wrong), and they open anywhere with `gpg -d`. The password goes
+  to gpg privately, never on its command line. Needs `gnupg` (almost always installed; now among the optional
+  packages).
+- **A checksum file made while a tar archive is compressed.** Compress… has **Create a checksum file** for tar and
+  every tar.* format (with a password too): the archive's bytes are hashed as they're written (SHA-256, SHA-512, MD5,
+  SHA-1, BLAKE2b or CRC32; one file per algorithm or one with all of them), so `name.tar.zst.sha256` is there the
+  moment the archive is, with no second read of it, which saves a pass over a big archive or a tape. A failed or
+  cancelled job leaves no checksum file, and an older one for the archive it would have replaced is kept.
+
+## 0.3.2-alpha.11 (2026-10-24)
+
+- **The benchmark now compares Kestrel with Dolphin too** (KDE's file manager): see
+  [Performance: Kestrel vs Dolphin](docs/performance.md#performance-kestrel-vs-dolphin). Dolphin has no service for
+  other apps to ask for file operations, so its own Copy, Paste and Move to Trash are used, with keys pressed in its
+  window. The GNOME Files figures are from a new run too.
+
+## 0.3.2-alpha.10 (2026-10-24)
+
+- **Fixed: an image put back with Ctrl+Z could show "Cannot display this image"** in the viewer, if it was deleted (or
+  moved) while the viewer was still reading it: the read, failing once the file had gone, was kept for it. Reads that
+  were under way when an image was deleted, moved or saved over are now dropped.
+
+## 0.3.2-alpha.9 (2026-10-23)
+
+- **Fixed: Open as Archive left out part of a big archive's contents.** Only the last 1–2 MB of the program's listing
+  was read, so in an archive of more than about 10,000 files (7z, rar) or 20,000 (zpaq, zip) the first ones were
+  missing without a word, and a big 7z or zip could show as empty. The whole listing is now read, as it's printed.
+  The quick password test on big encrypted 7z and rar archives had the same problem and could take a wrong password.
+- **Fixed: opening, testing or extracting a big .tar archive (.tar.gz, .tar.xz…) could hang** once tar had printed
+  more than its output could hold while Kestrel was still feeding it the archive. Its output is now read as it comes.
+
+## 0.3.2-alpha.8 (2026-10-23)
+
+- **Write to a tape with Kestrel's copy or with dd.** Copying or moving files onto a tape asks which to use: Kestrel's
+  copy (a buffer in memory keeps the tape streaming when the source slows down) or dd (each file written straight from
+  the source in 512 KB blocks). A dd job is named "Copying with dd" in the Jobs window, which shows dd's command and its
+  output live; cancelling or pausing the job stops or pauses dd, and a file it couldn't finish is deleted, as with
+  Kestrel's copy. "Don't ask again" keeps the choice; Preferences → Files → Tapes → Write files with changes it.
+- **Fixed: the image viewer stayed open after answering its question on closing** (Save, Always Save, Don't Save, or
+  Discard for unsaved edits) on Ubuntu 24.04's Qt 6.4. It closes once the answer has been handled.
+
+## 0.3.2-alpha.7 (2026-10-23)
+
+- **Fixed: copies onto a tape slowed to about a quarter of the drive's speed for long stretches.** The cause wasn't
+  Kestrel: programs that ask every drive for its free space knock a tape out of streaming, because on LTFS each
+  question is commands to the drive. While a job writes to a tape, Kestrel now takes it off GNOME's low-disk-space
+  check (which asks once a minute), and puts it back afterwards. A system monitor that's open (GNOME System Monitor's
+  File Systems tab asks every few seconds) is named in the job's log, so you know to close it.
+- **The image viewer opens images faster.** The next and previous images are decoded ahead of time at the screen's
+  size, and the full image only when you zoom in past that. Until an image is ready, its preview from the thumbnail
+  cache shows (for RAW photos, made from the camera's embedded preview), instead of an empty window.
+- **A filmstrip** of thumbnails along the viewer's bottom (T); click one to jump to it.
+- **An info panel** (I): the file's details and the camera's settings, a GPS position with a link to a map,
+  image-generation prompts with Copy buttons, all of its metadata, and a histogram. The info line is now Tab.
+- **Better zoom:** double-click switches between fitting the window and 100% at the pointer (F still goes full
+  screen), a touchpad pinch zooms, the zoom level shows on screen as it changes, and K keeps the zoom from one image to
+  the next.
+- **Compare two images** (X): the current one and the next, side by side, or one at a time (V, then B switches
+  between them). Zooming or panning one does the same to the other.
+- **Rotations are saved without losing quality.** R, L and H used to be for viewing only. Now, leaving a turned image
+  asks whether to save it (with Always Save; Ctrl+S saves at once; Preferences → Images & Videos: ask, always or
+  never). Only a JPEG's or TIFF's orientation tag changes (exiftool adds one to a JPEG without it), and a PNG or BMP is
+  written again turned, keeping its generation prompts.
+- **Crop and resize** (Shift+C, Shift+S), shown in the viewer at once without touching the file: crop and resize again
+  as often as you like, and Esc undoes them. Ctrl+S saves the result as a new file beside the original or over it, as
+  you choose (leaving the image or closing the viewer asks the same, with Discard); a JPEG keeps its camera details, a
+  PNG its prompts. **Straighten** (Shift+O) turns a JPEG's pixels the way its orientation tag says
+  (jpegtran, from libjpeg-turbo-progs, now among the optional packages), for programs that ignore the tag.
+- **Quick actions in the viewer:** star (*), pin (P), show in its folder (G), Open With (O), move or copy to a folder
+  (M, C) or to one of the last nine folders in one key (Ctrl+1–9 moves, Alt+1–9 copies), and undo (Ctrl+Z), which puts
+  a trashed or moved image back in the viewer too. The viewer's Move to Trash can now be undone in Kestrel's windows as
+  well.
+- **The viewer's right-click menu can be laid out in Preferences → Menus**, like the others: hide entries, reorder
+  them, move them into or out of its View and Rotate and Edit submenus, and add separators and submenus of your own.
+- **The viewer remembers** its size and position, full screen, and whether the filmstrip and info panel were shown.
+- **Several selected images open in the folder's order**, not the order you clicked them in.
+- The info panel and Properties show a photo's GPS position as coordinates instead of "yes".
+
+## 0.3.2-alpha.6 (2026-10-22)
+
+- **Fixed: copies onto a tape could crawl at about a quarter of the drive's speed.** Every open Kestrel window asked
+  the tape for its size and its cartridge's health about every 8 seconds, also while it was writing; LTFS answers
+  those with commands to the drive (on an HP drive, a rejected one followed by eleven drive-dump attempts), which
+  knocked it out of streaming. Now a tape is asked nothing while a job of any Kestrel window uses it, and otherwise its
+  size every 30 seconds and its health every 10 minutes.
+- **The tape buffer only takes what the system can spare.** The 16 GB limit is used where it's safe; otherwise the
+  buffer takes half the memory available at most (and still leaves the share kept free), checked when a copy starts
+  and every second while it runs. Preferences → Files → Tapes shows the size it would get now, and says when the limit
+  is more than the system can spare. The limit is now in GB as Kestrel shows sizes (16 GB, not 17.2).
+- **A tape copy's log shows its speed every 5 seconds**: the time, how fast the tape took the data (or that it's
+  waiting for the buffer), the source's speed, the buffer and how far the copy is, in the Jobs window as it runs and
+  in the saved log. A drive that slows down for a while shows when and for how long, to set beside the drive's own
+  logs.
+- **Drives are no longer polled.** Every window asked every drive in the sidebar for its size every few seconds, to show
+  a total that never changes. Now Kestrel hears from the kernel when a drive is mounted or unmounted (nothing checked
+  on a timer), reads a disk's size from the system (as `lsblk` does, without asking the drive) and anything else's
+  once, and asks for the free space in the status bar when you open a folder or a job ends. An idle Kestrel also
+  uses less CPU.
+
+## 0.3.2-alpha.5 (2026-10-21)
+
+- **The tape buffer takes at most 16 GB by default** (it took as much as the memory allowed, less 10% of it):
+  Preferences → Files → Tapes → Largest buffer changes it; 0 lets it use as much as the memory allows, as before.
+
+## 0.3.2-alpha.4 (2026-10-21)
+
+- Version bump only.
+
+## 0.3.2-alpha.3 (2026-10-21)
+
+- **A Mounts section in the sidebar** lists the mounts GNOME Files shows and Kestrel's sidebar left out: ZFS datasets,
+  FUSE mounts (sshfs, rclone, gocryptfs…) and other mounts in your home folder, and network shares (SMB, SFTP, FTP…)
+  connected through the desktop, which until now only showed on the Overview. Hover over one to see what it is;
+  right-click to unmount it. Recently used servers that aren't connected show greyed: click one to connect, or
+  right-click → Remove from Recent Servers. It moves and collapses like the other sections, and Preferences → Sidebar
+  lists it too.
+- **Other apps' Save windows give free names, as browsers do with downloads.** When the folder already has a file of
+  the suggested name, the name becomes the next free one (photo.jpg → photo (1).jpg, then (2)…), in every folder you
+  go to, and the original comes back where it's free. A name you type or a file you pick stays yours (with the
+  "Replace?" question as before). Saving several files at once gives each a free name instead of asking to replace.
+- **Save locations for other apps' Save windows:** Preferences → Windows → "A Save window starts in" can open them on
+  an Overview of their own, which lists first the folders you keep for saving (Downloads, a project folder…), separate
+  from Starred and bookmarks. Add Folder… on that page or in Preferences; right-click one to move or remove it. The
+  default stays as before (the folder the app suggests), an app saving over an existing file always opens in its
+  folder, and Open windows aren't affected. BleachBit's cleaner (`kes-setup --bleachbit`) gets a Save locations option.
+
+- **Copies onto an LTFS tape write each new file straight to its name**, without the hidden part file renamed into
+  place afterwards. On a tape that part file protected nothing (LTFS never gives back what a failed write used,
+  whatever the file is called), and the tape can't claim a name safely the way other drives do. A file already there
+  is never replaced, and a cancel or failed write deletes the half-written file. Replacing a file on a tape still keeps
+  the old one until the new one is whole, and floppies are unchanged. Also with the admin session.
+
+- **Collapse a date group from anywhere in it.** Grouped by Period or by Day, a long group no longer needs scrolling
+  back to its header: each open group ends with a "Collapse Today (1,240)" line, Ctrl+Left on any of its items
+  collapses it (Ctrl+Right expands it), and an item's right-click menu has Collapse This Group. The view stays on the
+  group's header. Collapse All Groups and Expand All Groups are in the Sort menu and on empty space's right-click menu.
+
+- **Search filters:** the search bar's Filters button finds by type (images, videos, audio, documents, archives,
+  folders), size and date (today, this week, this month, this year, or between two days; modified or created), with
+  or without a name, here or in subfolders. They're kept for the session in every tab and window.
+- **Searching inside files works everywhere now.** File contents used only the desktop's search index, which covers only
+  the folders it indexes. Now Automatic uses the index where it covers the folder and otherwise reads the files with
+  ripgrep (or grep), so external drives, network shares and skipped folders are searched too, as are folders the
+  index hasn't got to. Reading the files offers regular expressions and Match case, skips binary files, shows the
+  matching line and its number, and stops with ✕. Opening a result starts the text editor at that line where the
+  editor allows it (gedit, VS Code, Kate…). `kes-setup --install-optional` now offers ripgrep.
+
+- **Searching shows its progress, and "Nothing found" in the window.** A thin progress bar runs under the search bar
+  while a search is going ("Searching…" in the view until something turns up). A search that finds nothing says
+  "Nothing found" in the view, with the reason when there is one (a regular expression that doesn't parse), instead of
+  only in the status bar; filtering the folder by name no longer says "Folder is empty".
+- **Fixed:** the view's own messages ("Folder is empty", search messages) could be hidden behind the list view.
+
+## 0.3.2-alpha.2 (2026-10-19)
+
+- **Faster again with many files** (slower since 0.3.1-alpha.11, when tapes and floppies came in, which made Kestrel
+  ask for every file whether it was on a tape):
+  - Deleting, emptying the trash or acting on thousands of items at once no longer freezes the window before the job
+    starts: about 0.7 s for every 10,000 items on an SSD, now a few hundredths of a second.
+  - Copying and moving many small files is a third faster (20,000 files: 1.54 s → 1.04 s), and emptying a trash of
+    10,000 files more than twice as fast (1.08 s → 0.44 s). With no tape or floppy mounted, nothing is looked up.
+
+## 0.3.2-alpha.1 (2026-10-19)
+
+- The benchmark (`bench/`) works again: its Empty Trash step waited for a modal question, which Kestrel no longer
+  shows since its windows became free. [Performance](docs/performance.md) has new figures against GNOME Files.
+
+## 0.3.2-alpha.0 (2026-10-18)
+
+- Version bump only.
 
 ## 0.3.1-alpha.16 (2026-10-18)
 

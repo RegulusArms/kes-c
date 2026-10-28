@@ -6,6 +6,7 @@
 #include "metadata.h"
 
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMimeData>
 #include <QUrl>
 
@@ -22,16 +23,45 @@ static void set_mtime(const QString &p, const QDateTime &t)
     ::utimensat(AT_FDCWD, p.toUtf8().constData(), ts, 0);
 }
 
-// what the view shows, top to bottom: "# <header>" or an item's name
-static QStringList shown(Pane *p)
+// what the view shows, top to bottom: "# <header>" or an item's name (with footers: "^ <footer>")
+static QStringList shown(Pane *p, bool footers = false)
 {
     QAbstractItemModel *m = p->view()->model();
     QStringList out;
     for (int r = 0; r < m->rowCount(p->view()->rootIndex()); ++r) {
         QModelIndex i = m->index(r, 0, p->view()->rootIndex());
-        out << (i.data(GroupRole).isValid() ? "# " + i.data().toString() : basename(i.data(PathRole).toString()));
+        if (i.data(GroupFooterRole).toBool())
+            out << (footers ? QStringList{"^ " + i.data().toString()} : QStringList());
+        else
+            out << (i.data(GroupRole).isValid() ? "# " + i.data().toString() : basename(i.data(PathRole).toString()));
     }
     return out;
+}
+
+static QModelIndex footer(Pane *p, const QString &title)   // the footer of the group titled so
+{
+    QAbstractItemModel *m = p->view()->model();
+    for (int r = 0; r < m->rowCount(); ++r)
+        if (m->index(r, 0).data(GroupFooterRole).toBool() && m->index(r, 0).data().toString() == "Collapse " + title)
+            return m->index(r, 0);
+    return QModelIndex();
+}
+
+static QModelIndex item_of(Pane *p, const QString &name)
+{
+    QAbstractItemModel *m = p->view()->model();
+    for (int r = 0; r < m->rowCount(); ++r)
+        if (basename(m->index(r, 0).data(PathRole).toString()) == name)
+            return m->index(r, 0);
+    return QModelIndex();
+}
+
+static QAction *action_in(QMenu *m, const QString &text)
+{
+    for (QAction *a : m->actions())
+        if (a->text() == text)
+            return a;
+    return nullptr;
 }
 
 static QModelIndex header(Pane *p, const QString &title)
@@ -256,6 +286,60 @@ int main(int argc, char **argv)
     QApplication::sendEvent(p->view(), &enter);
     check(shown(p).size() == 7, "...and expands it");
 
+    // collapsing from anywhere in a group: its footer, Ctrl+Left on an item, the menus
+    QString y = "Yesterday (1)", o = old_year + " (1)";
+    want = {"# Today (2)", "a.txt", "b.txt", "^ Collapse Today (2)", "# " + y, "c.txt", "^ Collapse " + y, "# " + o, "d.txt",
+            "^ Collapse " + o};
+    check(shown(p, true) == want, "each open group ends with a footer that names it and counts its items");
+    p->view()->selectAll();
+    QModelIndex foot = footer(p, y);
+    check(foot.isValid() && !(foot.flags() & Qt::ItemIsSelectable) && !p->view()->selectionModel()->isSelected(foot) &&
+              p->selected_paths().size() == 4,
+          "...and isn't selectable (Select All leaves it out)");
+    p->view()->clearSelection();
+    Q_EMIT p->view()->clicked(foot);
+    want = {"# Today (2)", "a.txt", "b.txt", "^ Collapse Today (2)", "# " + y, "# " + o, "d.txt", "^ Collapse " + o};
+    check(shown(p, true) == want && p->view()->currentIndex() == header(p, "Yesterday"),
+          "clicking a footer collapses its group (without a footer then), and its header becomes the current row");
+    Q_EMIT p->view()->clicked(header(p, "Yesterday"));
+    p->view()->setCurrentIndex(item_of(p, "b.txt"));
+    QKeyEvent ctrl_left(QEvent::KeyPress, Qt::Key_Left, Qt::ControlModifier);
+    QApplication::sendEvent(p->view(), &ctrl_left);
+    bool left_folded = header(p, "Today").data(GroupFoldedRole).toBool() && p->view()->currentIndex() == header(p, "Today");
+    QKeyEvent ctrl_right(QEvent::KeyPress, Qt::Key_Right, Qt::ControlModifier);
+    QApplication::sendEvent(p->view(), &ctrl_right);
+    {   // Ctrl let go: Qt keeps the modifiers of the last key event (a drop or a click would think it still held)
+        QWidget elsewhere;
+        QKeyEvent plain(QEvent::KeyPress, Qt::Key_F35, Qt::NoModifier);
+        QApplication::sendEvent(&elsewhere, &plain);
+    }
+    check(left_folded && !header(p, "Today").data(GroupFoldedRole).toBool() && shown(p).size() == 7,
+          "Ctrl+Left on an item collapses its group (its header current), Ctrl+Right expands it again");
+    QMenu *im = w->build_menu(p, {join(fs, "c.txt")});
+    QAction *this_group = action_in(im, "Collapse This Group");
+    if (this_group)
+        this_group->trigger();
+    delete im;
+    check(this_group && header(p, "Yesterday").data(GroupFoldedRole).toBool() &&
+              !header(p, "Today").data(GroupFoldedRole).toBool(),
+          "an item's right-click menu has Collapse This Group, for its own group");
+    QMenu *bg = w->build_menu(p, {});
+    QAction *all = action_in(bg, "Collapse All Groups"), *none = action_in(bg, "Expand All Groups");
+    if (all)
+        all->trigger();
+    QStringList all_shut = shown(p, true);
+    if (none)
+        none->trigger();
+    delete bg;
+    check(all && none && all_shut == QStringList({"# Today (2)", "# " + y, "# " + o}) && shown(p).size() == 7,
+          "empty space's menu collapses all groups (only their headers) and expands them all");
+    QMenu *bg2 = w->build_menu(p, {});
+    QAction *sort_by = action_in(bg2, "Sort By");
+    QMenu *sm = sort_by ? sort_by->menu() : nullptr;   // the Sort menu's items (MainWindow::add_sort_items)
+    check(sm && action_in(sm, "Collapse All Groups") && action_in(sm, "Expand All Groups"),
+          "...and so does the Sort menu");
+    delete bg2;
+
     // the grid: a header takes a line of its own
     p->set_view_mode("grid");
     QListView *g = p->grid;
@@ -339,5 +423,30 @@ int main(int argc, char **argv)
     check(wait_for([&]() { return shown(p).size() == 2 && !shown(p).join(",").contains("#"); }),
           "turning it off shows the plain list again");
 
+    // collapsing a big group from its footer keeps the view on its header (above, out of view, before)
+    {
+        QString big = home_path("big");
+        makedirs(big, true);
+        for (int i = 0; i < 450; ++i) {
+            QString f = join(big, QString("f%1.txt").arg(i, 3, 10, QChar('0')));
+            write_text(f, "x");
+            set_mtime(f, i < 150 ? now : i < 300 ? yesterday : old);
+        }
+        p->set_path(big);
+        p->set_view_mode("list");
+        p->set_grouping(groups::PERIOD, groups::MODIFIED);
+        wait_for([&]() { return footer(p, "Yesterday (150)").isValid(); }, 10000);
+        QModelIndex end = footer(p, "Yesterday (150)");
+        p->view()->scrollTo(end, QAbstractItemView::PositionAtBottom);
+        QApplication::processEvents();
+        bool header_hidden = !p->view()->viewport()->rect().intersects(p->view()->visualRect(header(p, "Yesterday")));
+        Q_EMIT p->view()->clicked(end);
+        QApplication::processEvents();
+        QRect h = p->view()->visualRect(header(p, "Yesterday"));
+        check(header_hidden && header(p, "Yesterday").data(GroupFoldedRole).toBool() &&
+                  h.top() >= 0 && h.bottom() <= p->view()->viewport()->height() &&   // in view top to bottom (a spanned
+                  p->view()->currentIndex() == header(p, "Yesterday"),               // row can be wider than the view)
+              "collapsing a long group from its footer brings its header into view, as the current row");
+    }
     finish();
 }

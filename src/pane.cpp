@@ -14,9 +14,17 @@
 #include "thumbs.h"
 #include "stats.h"
 #include "util.h"
+#include "archivewin.h"
 #include "widgets.h"
+#include "dupes.h"
 #include "windows.h"
 
+#include <QComboBox>
+#include <QDateEdit>
+#include <QDoubleSpinBox>
+#include <QStandardItemModel>
+#include <QProgressBar>
+#include <QStatusBar>
 #include <QCheckBox>
 #include <QDrag>
 #include <QMouseEvent>
@@ -46,63 +54,6 @@
 using namespace util;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
-
-// The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
-// drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
-// over any of its windows, following the drag events Qt delivers to them (watched on the whole application).
-class DragGhost : public QObject {
-public:
-    DragGhost(const QPixmap &pm, const QPoint &hot) : pm(pm), hot(hot) { qApp->installEventFilter(this); }
-    ~DragGhost() override { delete label; }
-
-protected:
-    bool eventFilter(QObject *obj, QEvent *ev) override
-    {
-        auto *w = qobject_cast<QWidget *>(obj);
-        if (!w)
-            return false;
-        switch (ev->type()) {
-        case QEvent::DragEnter:
-        case QEvent::DragMove: {
-            QWidget *top = w->window();
-            QPoint pos = w->mapTo(top, static_cast<QDropEvent *>(ev)->position().toPoint());
-            if (!label || label->parentWidget() != top) {   // into another Kestrel window
-                delete label;
-                label = new QLabel(top);
-                label->setAttribute(Qt::WA_TransparentForMouseEvents);   // drops go to what's under it
-                label->setPixmap(pm);
-                auto *fade = new QGraphicsOpacityEffect(label);
-                fade->setOpacity(0.8);
-                label->setGraphicsEffect(fade);
-                label->resize(pm.deviceIndependentSize().toSize());
-            }
-            label->move(pos - hot);
-            label->show();
-            label->raise();
-            break;
-        }
-        case QEvent::DragLeave:   // out of one widget, maybe into the next: hidden unless the next one moves it
-            if (label && w->window() == label->parentWidget())
-                QTimer::singleShot(30, label, [l = label, seen = label->pos()]() {
-                    if (l && l->pos() == seen)
-                        l->hide();
-                });
-            break;
-        case QEvent::Drop:
-            if (label)
-                label->hide();
-            break;
-        default:
-            break;
-        }
-        return false;
-    }
-
-private:
-    QPixmap pm;
-    QPoint hot;
-    QPointer<QLabel> label;
-};
 
 // The file views. Their drags are Qt's, apart from giving the focus to the app the files are dropped into (focus.h),
 // highlighting the folder a drag is over (where the files will go), and what a drag that starts here does in the view
@@ -141,6 +92,71 @@ protected:
     {
         press_pos = ev->position().toPoint();   // where a drag starts (on Wayland, QCursor::pos() isn't reliable)
         View::mousePressEvent(ev);
+    }
+
+public:
+    // The grid: an item is its icon and name (GridDelegate::shape), not its whole cell. A point elsewhere in its cell
+    // is the folder's empty space, for whatever asks what's under the pointer (clicks, middle-click, the right-click
+    // menu, hover, tooltips, drops). The list: the whole row, as Qt has it.
+    QModelIndex indexAt(const QPoint &pos) const override
+    {
+        QModelIndex i = View::indexAt(pos);
+        if constexpr (std::is_base_of_v<QListView, View>)
+            if (i.isValid() && !item_shape(i).contains(QPointF(pos) + QPointF(0.5, 0.5)))
+                return QModelIndex();
+        return i;
+    }
+
+    QPainterPath item_shape(const QModelIndex &i) const
+    {
+        QRect cell = this->visualRect(i);
+        auto *d = qobject_cast<GridDelegate *>(this->itemDelegate());
+        if (!d) {
+            QPainterPath whole;
+            whole.addRect(cell);
+            return whole;
+        }
+        QStyleOptionViewItem opt;
+        this->initViewItemOption(&opt);
+        opt.rect = cell;
+        if (this->selectionModel() && this->selectionModel()->isSelected(i))
+            opt.state |= QStyle::State_Selected;   // (its name bold: a little wider)
+        return d->shape(opt, i);
+    }
+
+protected:
+    // Selecting by position (QListView's setSelection takes the cells): a press selects the item under it as
+    // indexAt has it, and the rubber band selects the items it touches the shape of. Shift and Ctrl ranges (from item
+    // to item) stay Qt's.
+    void setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags command) override
+    {
+        if constexpr (std::is_base_of_v<QListView, View>) {
+            // QRect(pos, pos); a band is QRect(press, pointer), its width and height negative when dragged up-left
+            QRect n = rect.normalized();
+            bool press = n.width() <= 1 && n.height() <= 1;
+            if ((press || this->state() == QAbstractItemView::DragSelectingState) && this->selectionModel()) {
+                QItemSelection sel;
+                if (press) {
+                    QModelIndex i = indexAt(rect.topLeft());
+                    if (i.isValid() && (this->model()->flags(i) & Qt::ItemIsSelectable))
+                        sel.select(i, i);
+                } else {
+                    QRectF band = QRectF(rect.normalized());
+                    QAbstractItemModel *m = this->model();
+                    for (int row = 0, n = m->rowCount(this->rootIndex()); row < n; ++row) {
+                        QModelIndex i = m->index(row, 0, this->rootIndex());
+                        QRect cell = this->visualRect(i);
+                        if (!cell.intersects(rect.normalized()) || !(m->flags(i) & Qt::ItemIsSelectable))
+                            continue;
+                        if (item_shape(i).intersects(band))
+                            sel.select(i, i);
+                    }
+                }
+                this->selectionModel()->select(sel, command);
+                return;
+            }
+        }
+        View::setSelection(rect, command);
     }
 
     // Only the left button drags. Qt starts a drag on a move with any button held once an item was pressed: with the
@@ -203,20 +219,18 @@ protected:
         if (!drop_target.isValid())
             return;
         QRectF r = this->visualRect(drop_target);
-        qreal radius = 8;   // as the grid's selection
-        if constexpr (std::is_base_of_v<QTreeView, View>) {
-            r = QRectF(0, r.top(), this->viewport()->width(), r.height());   // the whole row
-            radius = 4;
-        } else {
-            r = r.adjusted(3, 3, -3, -3);
-        }
+        QPainterPath shape;
+        if constexpr (std::is_base_of_v<QTreeView, View>)
+            shape.addRoundedRect(QRectF(0, r.top(), this->viewport()->width(), r.height()).adjusted(1, 1, -1, -1), 4, 4);   // the whole row
+        else
+            shape = item_shape(drop_target).simplified();   // as the grid's selection
         QPainter p(this->viewport());
         p.setRenderHint(QPainter::Antialiasing);
         QColor c = this->palette().color(QPalette::Highlight);
         p.setPen(QPen(c, 2));
         c.setAlpha(70);
         p.setBrush(c);
-        p.drawRoundedRect(r.adjusted(1, 1, -1, -1), radius, radius);
+        p.drawPath(shape);
     }
 
     void startDrag(Qt::DropActions supported) override
@@ -353,8 +367,12 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     lay->setSpacing(0);
     // search bar
     search_bar = new QWidget;
-    auto *sl = new QHBoxLayout(search_bar);
-    sl->setContentsMargins(6, 4, 6, 4);
+    auto *bar_lay = new QVBoxLayout(search_bar);
+    bar_lay->setContentsMargins(6, 4, 6, 4);
+    bar_lay->setSpacing(4);
+    auto *sl = new QHBoxLayout;
+    sl->setContentsMargins(0, 0, 0, 0);
+    bar_lay->addLayout(sl);
     search_edit = new QLineEdit;
     search_edit->setPlaceholderText("Search… (supports * and ? wildcards)");
     search_edit->setAccessibleName("Search");
@@ -369,19 +387,58 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(close, &QToolButton::clicked, this, [this]() { close_search(); });
     sl->addWidget(search_edit, 1);
     search_contents = new QCheckBox("File contents");
-    search_contents->setToolTip("Search inside files too, using the desktop's search index (localsearch).\n"
-                                "Includes subfolders; only finds files in indexed folders.");
+    search_contents->setToolTip("Search inside files: with the desktop's search index where it covers the folder "
+                                "(instant), else by reading them (ripgrep or grep)");
     search_contents->setChecked(win->view_value("search_contents", false).toBool());
     connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
         this->win->set_view_value("search_contents", v);
+        content_opts->setVisible(v);
         do_search();
     });
+    // how File contents searches (shown while it's on)
+    content_opts = new QWidget;
+    auto *cl = new QHBoxLayout(content_opts);
+    cl->setContentsMargins(0, 0, 0, 0);
+    c_engine = new QComboBox;
+    c_engine->setAccessibleName("Search inside files with");
+    c_engine->addItems({"Automatic", "Search index", "Read the files"});
+    c_engine->setToolTip("Automatic: the desktop's search index where it covers this folder and the search is plain "
+                         "words, else reading the files (any folder, regular expressions, match case)");
+    if (!can_search_contents())   // (localsearch isn't installed)
+        qobject_cast<QStandardItemModel *>(c_engine->model())->item(ContentSearch::INDEX)->setEnabled(false);
+    c_regex = new QCheckBox("Regular expression");
+    c_case = new QCheckBox("Match case");
+    cl->addWidget(c_engine);
+    cl->addWidget(c_regex);
+    cl->addWidget(c_case);
+    for (QCheckBox *b : {c_regex, c_case})
+        connect(b, &QCheckBox::toggled, this, &Pane::filters_changed);
+    connect(c_engine, &QComboBox::currentIndexChanged, this, &Pane::filters_changed);
+    filters_btn = new QToolButton;
+    filters_btn->setText("Filters");
+    filters_btn->setCheckable(true);
+    filters_btn->setAutoRaise(true);
+    filters_btn->setToolTip("Find by type, size and date too (also with an empty name)");
+    filters_btn->setAccessibleName("Filters");
     sl->addWidget(search_sub);
     sl->addWidget(search_contents);
-    // only once it has a parent: showing a parentless widget opens it as a window of its own, which on Wayland
-    // uses up the launch's activation token and leaves GNOME's busy cursor spinning until it times out
-    search_contents->setVisible(can_search_contents());
+    sl->addWidget(content_opts);
+    sl->addWidget(filters_btn);
     sl->addWidget(close);
+    build_filter_row();
+    bar_lay->addWidget(filter_row);
+    search_progress = new QProgressBar;   // a search's progress: busy (how much is left isn't known) until it ends
+    search_progress->setRange(0, 0);
+    search_progress->setTextVisible(false);
+    search_progress->setFixedHeight(4);
+    search_progress->setAccessibleName("Searching");
+    bar_lay->addWidget(search_progress);
+    connect(filters_btn, &QToolButton::toggled, filter_row, &QWidget::setVisible);
+    // only once they have a parent: showing a parentless widget opens it as a window of its own, which on Wayland
+    // uses up the launch's activation token and leaves GNOME's busy cursor spinning until it times out
+    content_opts->setVisible(search_contents->isChecked());
+    filter_row->setVisible(false);
+    search_progress->setVisible(false);
     search_bar->hide();
     search_timer = new QTimer(this);
     search_timer->setSingleShot(true);
@@ -409,10 +466,13 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(overview, &OverviewPage::sidebar_changed, win, [win]() { win->sidebar->refresh(); });
     connect(overview, &OverviewPage::add_bookmark, win, [win](const QString &t) { win->sidebar->add_bookmark(t); });
     connect(overview, &OverviewPage::properties, win, [win](const QString &t) { win->properties({t}); });
+    connect(overview, &OverviewPage::find_duplicates, win, [win](const QString &t) { dupes::open_window(win, {t}); });
+    connect(overview, &OverviewPage::open_file, win, [win](const QString &t) { win->open_file(t); });
     stack->addWidget(overview);
     lay->addWidget(stack);
     empty = new QLabel("Folder is empty", stack);
     empty->setAlignment(Qt::AlignCenter);
+    empty->setWordWrap(true);
     empty->setStyleSheet("color: palette(placeholder-text); font-size: 16px; background: transparent");
     empty->setAttribute(Qt::WA_TransparentForMouseEvents);
     empty->hide();
@@ -427,8 +487,10 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(places::signals_(), &places::Signals::sorts_changed, this, &Pane::apply_folder_sort);
     attach(proxy);
     set_view_mode(win->view_value("view_mode", "grid").toString());
-    if (win->chooser)
+    if (win->chooser) {   // a new tab in a chooser window
         set_type_filter(win->chooser->type_filter());
+        overview->set_save_places(win->chooser->saving());
+    }
     set_path(start);
 }
 
@@ -444,10 +506,20 @@ void Pane::set_type_filter(const QStringList &globs)
 
 Pane::~Pane()
 {
+    cancel_thumbs();
     if (search_thread) {
         search_thread->stop = true;
         search_thread->wait();
     }
+}
+
+const QObject *Pane::thumb_owner() const { return model; }
+
+void Pane::cancel_thumbs()
+{
+    // only this pane's: other tabs and windows of this process keep theirs
+    thumbs->cancel_for(model);
+    thumbs->cancel_for(search_model);
 }
 
 // -- setup
@@ -524,7 +596,10 @@ FSModel *Pane::make_model()
     proxy = new PinSortProxy(m);
     proxy->set_pinned_first(win->view_value("pinned_first", false).toBool());
     MainWindow *w = win;
-    m->drop_handler = [w](const QStringList &paths, const QString &target) { w->handle_drop(paths, target); };
+    m->drop_handler = [w](const QStringList &paths, const QString &target, bool copy_only) {
+        w->handle_drop(paths, target, copy_only);
+    };
+    m->members_handler = [w](const QMimeData *data, const QString &target) { ArchiveWindow::drop_members(w, data, target); };
     QDir::Filters f = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System;
     if (win->show_hidden)
         f |= QDir::Hidden;
@@ -719,6 +794,172 @@ void Pane::set_sizes(int grid, int list)
     view()->viewport()->update();
 }
 
+// ---------------------------------------------------------------- the search bar's filters
+
+// for the session: every tab and window starts its searches with the filters and content options last chosen
+static SearchFilter session_filter;
+static ContentSearch session_content;
+
+void Pane::build_filter_row()
+{
+    filter_row = new QWidget;
+    auto *fl = new QHBoxLayout(filter_row);
+    fl->setContentsMargins(0, 0, 0, 0);
+    f_type = new QComboBox;
+    f_type->setAccessibleName("Type");
+    f_type->addItems({"Any type", "Images", "Videos", "Audio", "Documents", "Archives", "Folders"});
+    f_size_mode = new QComboBox;
+    f_size_mode->setAccessibleName("Size");
+    f_size_mode->addItems({"Any size", "Larger than", "Smaller than"});
+    f_size = new QDoubleSpinBox;
+    f_size->setAccessibleName("Size limit");
+    f_size->setRange(0, 1e6);
+    f_size->setDecimals(1);
+    f_size->setValue(10);
+    f_unit = new QComboBox;
+    f_unit->setAccessibleName("Size unit");
+    f_unit->addItems({"KB", "MB", "GB"});
+    f_unit->setCurrentIndex(1);
+    f_when = new QComboBox;
+    f_when->setAccessibleName("Date");
+    f_when->addItems({"Any time", "Today", "This week", "This month", "This year", "Between…"});
+    f_date_by = new QComboBox;
+    f_date_by->setAccessibleName("Date of");
+    f_date_by->addItems({"modified", "created"});
+    f_from = new QDateEdit(QDate::currentDate().addMonths(-1));
+    f_to = new QDateEdit(QDate::currentDate());
+    f_from->setAccessibleName("From");
+    f_to->setAccessibleName("To");
+    for (QDateEdit *d : {f_from, f_to}) {
+        d->setCalendarPopup(true);
+        d->setDisplayFormat(QLocale().dateFormat(QLocale::ShortFormat));
+    }
+    auto *clear = new QToolButton;
+    clear->setText("Clear");
+    clear->setAutoRaise(true);
+    clear->setToolTip("Clear the filters");
+    connect(clear, &QToolButton::clicked, this, [this]() { set_search_filter(SearchFilter()); });
+    fl->addWidget(f_type);
+    fl->addSpacing(8);
+    fl->addWidget(f_size_mode);
+    fl->addWidget(f_size);
+    fl->addWidget(f_unit);
+    fl->addSpacing(8);
+    fl->addWidget(f_when);
+    fl->addWidget(f_from);
+    fl->addWidget(f_to);
+    fl->addWidget(f_date_by);
+    fl->addWidget(clear);
+    fl->addStretch(1);
+    for (QComboBox *c : {f_type, f_size_mode, f_unit, f_when, f_date_by})
+        connect(c, &QComboBox::currentIndexChanged, this, &Pane::filters_changed);
+    connect(f_size, &QDoubleSpinBox::valueChanged, this, &Pane::filters_changed);
+    for (QDateEdit *d : {f_from, f_to})
+        connect(d, &QDateEdit::dateChanged, this, &Pane::filters_changed);
+    set_search_filter(session_filter);   // what this session chose last
+    ContentSearch c = session_content;
+    c.on = search_contents->isChecked();   // (on or off: its own setting)
+    set_content_search(c);
+}
+
+SearchFilter Pane::search_filter() const
+{
+    SearchFilter f;
+    f.type = f_type->currentIndex();
+    f.size_mode = f_size_mode->currentIndex();
+    f.size = qint64(f_size->value() * double(qint64(1) << (10 * (f_unit->currentIndex() + 1))));
+    f.when = f_when->currentIndex();
+    f.from = f_from->date();
+    f.to = f_to->date();
+    f.by_created = f_date_by->currentIndex() == 1;
+    return f;
+}
+
+void Pane::set_search_filter(const SearchFilter &f)
+{
+    loading_filters = true;
+    f_type->setCurrentIndex(f.type);
+    f_size_mode->setCurrentIndex(f.size_mode);
+    if (f.size_mode != SearchFilter::ANY_SIZE) {   // in the largest unit it's a whole number of
+        int unit = f.size >= (qint64(1) << 30) && f.size % (qint64(1) << 30) == 0 ? 2 : f.size >= (1 << 20) ? 1 : 0;
+        f_unit->setCurrentIndex(unit);
+        f_size->setValue(double(f.size) / double(qint64(1) << (10 * (unit + 1))));
+    }
+    f_when->setCurrentIndex(f.when);
+    if (f.from.isValid())
+        f_from->setDate(f.from);
+    if (f.to.isValid())
+        f_to->setDate(f.to);
+    f_date_by->setCurrentIndex(f.by_created ? 1 : 0);
+    loading_filters = false;
+    filters_changed();
+}
+
+ContentSearch Pane::content_search() const
+{
+    ContentSearch c;
+    c.on = search_contents->isChecked();
+    c.engine = c_engine->currentIndex();
+    c.regex = c_regex->isChecked();
+    c.match_case = c_case->isChecked();
+    return c;
+}
+
+void Pane::set_content_search(const ContentSearch &c)
+{
+    loading_filters = true;
+    c_engine->setCurrentIndex(c.engine);
+    c_regex->setChecked(c.regex);
+    c_case->setChecked(c.match_case);
+    loading_filters = false;
+    if (search_contents->isChecked() != c.on)
+        search_contents->setChecked(c.on);   // (searches again itself)
+    else
+        filters_changed();
+}
+
+void Pane::filters_changed()
+{
+    SearchFilter f = search_filter();
+    f_size->setVisible(f.size_mode != SearchFilter::ANY_SIZE);
+    f_unit->setVisible(f.size_mode != SearchFilter::ANY_SIZE);
+    f_from->setVisible(f.when == SearchFilter::RANGE);
+    f_to->setVisible(f.when == SearchFilter::RANGE);
+    f_date_by->setVisible(f.when != SearchFilter::ANY_TIME);
+    filters_btn->setText(f.active() ? "Filters •" : "Filters");
+    if (loading_filters)
+        return;
+    session_filter = f;
+    ContentSearch c = content_search();
+    session_content = c;
+    if (search_bar->isVisible() || !search_edit->text().isEmpty())
+        search_timer->start();
+}
+
+void Pane::search_for(const QString &text)
+{
+    if (!search_bar->isVisible())
+        start_search();
+    search_edit->setText(text);
+    search_timer->stop();
+    do_search();
+}
+
+QString Pane::view_message() const   // as seen: shown, and on top of the view (not behind it)
+{
+    QObjectList z = stack->children();   // bottom to top
+    bool seen = !empty->isHidden() && z.indexOf(empty) > z.indexOf(stack->currentWidget());
+    return seen ? empty->text() : QString();
+}
+
+bool Pane::search_busy_shown() const { return !search_progress->isHidden(); }
+
+int Pane::match_line(const QString &p) const
+{
+    QStandardItem *item = in_search ? search_model->rows.value(p) : nullptr;
+    return item ? item->data(LineRole).toInt() : 0;
+}
+
 void Pane::set_search_options(bool subfolders, bool contents)
 {
     for (auto [box, on] : {std::pair{search_sub, subfolders}, std::pair{search_contents, contents}}) {
@@ -816,8 +1057,12 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     if (in_search || search_bar->isVisible())
         close_search(false, true);
     path = p;
+    if (p != prev && !win->chooser && !is_trash())   // (a chooser's folders are the other app's choice)
+        places::visit_folder(p);
     stack->setCurrentWidget(mode_view);
-    thumbs->cancel_pending();
+    // the folder left: its thumbnail jobs wait behind what's shown now (and stop after a while), not stopped at once
+    thumbs->lower(model);
+    thumbs->lower(search_model);
     animator->clear();
     model->setNameFilters(type_filters);
     QModelIndex src_root = model->setRootPath(p);
@@ -1149,16 +1394,23 @@ void Pane::update_empty()
         if (!search_model->rowCount())
             text = searching_text ? QString("No matches") : none;
     } else if (in_search) {
-        if (search_model->rowCount() == 0 && !searching())
-            text = "No results";
+        // in the view itself, never a window: searching, or nothing found (and why, when something went wrong)
+        if (search_model->rowCount() == 0)
+            text = searching() ? QString("Searching…")
+                               : "Nothing found" + (search_error.isEmpty() ? QString() : "\n" + search_error);
     } else {
-        int n = path.isEmpty() ? 0 : model->rowCount(model->index(path));
+        bool named = !search_bar->isHidden() && !search_edit->text().trimmed().isEmpty();
+        // filtered by the name in the search bar: what the view shows; else the folder's items
+        int n = path.isEmpty() ? 0
+                : named        ? view()->model()->rowCount(view()->rootIndex())
+                               : model->rowCount(model->index(path));
         if (n == 0)
-            text = "Folder is empty";
+            text = named ? QString("Nothing found") : QString("Folder is empty");
     }
     empty->setText(text);
     empty->setVisible(!text.isEmpty());
     empty->setGeometry(stack->rect());
+    empty->raise();   // over the view (the stack raises the page it shows)
 }
 
 bool Pane::searching() const { return search_thread && search_thread->isRunning(); }
@@ -1205,6 +1457,7 @@ void Pane::stop_search()
         search_thread->wait(2000);
         search_thread = nullptr;
     }
+    search_progress->hide();
 }
 
 void Pane::record_search()
@@ -1231,8 +1484,10 @@ void Pane::unrecord_search()
 void Pane::do_search()
 {
     QString text = search_edit->text().trimmed();
+    SearchFilter filter = search_filter();
+    bool filtering = filter.active() && !search_bar->isHidden();   // (the filters count while the bar is open)
     stop_search();
-    if (!text.isEmpty())
+    if (!text.isEmpty() || filtering)
         record_search();
     else
         unrecord_search();
@@ -1240,7 +1495,7 @@ void Pane::do_search()
         show_trash();
         return;
     }
-    if (text.isEmpty()) {
+    if (text.isEmpty() && !filtering) {
         model->setNameFilters(type_filters);
         if (in_search) {
             in_search = false;
@@ -1250,30 +1505,41 @@ void Pane::do_search()
         update_empty();
         return;
     }
-    bool contents = can_search_contents() && search_contents->isChecked();
-    if (search_sub->isChecked() || contents) {
+    ContentSearch how = content_search();
+    bool contents = how.on && !text.isEmpty();
+    if (contents && drives::slow_kind(path) != drives::Slow::None) {   // it would read every file on the drive
+        contents = false;
+        win->statusBar()->showMessage("File contents isn't searched on a tape or floppy: it would read every file", 8000);
+    }
+    if (search_sub->isChecked() || contents || filtering) {
         if (!in_search) {
             in_search = true;
             attach(search_model);
             set_root(QModelIndex());
         }
+        tree->setColumnHidden(4, !contents);   // Match: the matching line (reading the files)
         search_model->clear_results();
-        auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents);
-        connect(t, &SearchThread::found, this, [this, t](const QStringList &paths) {
+        auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents, search_sub->isChecked(),
+                                   filtering ? filter : SearchFilter(), how);
+        connect(t, &SearchThread::found, this, [this, t](const QStringList &paths, const QVariantMap &matches) {
             if (t != search_thread)
                 return;   // a search that was replaced
-            search_model->add_paths(paths);
+            search_model->add_paths(paths, {}, matches);
             try_select();
             update_empty();
         });
         connect(t, &QThread::finished, this, [this, t]() {
             if (t == search_thread) {
+                search_error = t->error;
+                search_progress->hide();
                 update_empty();
                 win->update_status();
             }
         });
         connect(t, &QThread::finished, t, &QObject::deleteLater);
         search_thread = t;
+        search_error.clear();
+        search_progress->show();
         t->start();
     } else {
         if (in_search) {
@@ -1283,6 +1549,7 @@ void Pane::do_search()
         }
         bool wild = text.contains('*') || text.contains('?') || text.contains('[');
         model->setNameFilters({wild ? text : "*" + text + "*"});
+        QTimer::singleShot(50, this, &Pane::update_empty);   // once the model has applied it
     }
     update_empty();
     win->update_status();
@@ -1334,10 +1601,13 @@ QStringList Pane::selected_paths() const
     if (!sm)
         return {};
     QList<QPair<int, QModelIndex>> rows;
+    QSet<QPair<int, QModelIndex>> seen;   // (a set: each row comes once per column, and 800 rows made a list slow)
     for (const QModelIndex &i : sm->selectedIndexes()) {
         QPair<int, QModelIndex> key(i.row(), i.parent());
-        if (!rows.contains(key))
+        if (!seen.contains(key)) {
+            seen.insert(key);
             rows << key;
+        }
     }
     std::stable_sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     QAbstractItemModel *m = view()->model();
@@ -1441,13 +1711,61 @@ void Pane::sort_by(int col, int order)
 void Pane::clicked(const QModelIndex &idx)
 {
     if (grouper->is_header(idx)) {
-        if (QGuiApplication::keyboardModifiers() == Qt::NoModifier)
-            grouper->toggle(idx);
+        if (QGuiApplication::keyboardModifiers() == Qt::NoModifier) {
+            if (grouper->is_footer(idx))   // collapsed from its end: the view goes to its header
+                collapse_group(grouper->group_of(idx));
+            else
+                grouper->toggle(idx);
+        }
         return;
     }
     if (settings().value("single_click", false).toBool() && QGuiApplication::keyboardModifiers() == Qt::NoModifier)
         win->open_paths(this, {idx.siblingAtColumn(0).data(PathRole).toString()});
 }
+
+int Pane::current_group() const
+{
+    return grouped ? grouper->group_of(view()->currentIndex()) : -1;
+}
+
+void Pane::collapse_group(int key)
+{
+    if (!grouped || key < 0)
+        return;
+    grouper->set_collapsed(key, true);
+    // its header stays in view and becomes the current row (nothing selected), so the user keeps their place
+    QModelIndex h = grouper->header_index(key);
+    if (h.isValid()) {
+        view()->selectionModel()->setCurrentIndex(h, QItemSelectionModel::NoUpdate);
+        view()->scrollTo(h);
+    }
+}
+
+void Pane::expand_group(int key)
+{
+    if (grouped && key >= 0)
+        grouper->set_collapsed(key, false);
+}
+
+void Pane::set_all_groups_collapsed(bool on)
+{
+    if (!grouped)
+        return;
+    int cur = current_group();
+    grouper->set_all_collapsed(on);
+    QModelIndex h = on ? grouper->header_index(cur) : QModelIndex();
+    if (h.isValid()) {
+        view()->selectionModel()->setCurrentIndex(h, QItemSelectionModel::NoUpdate);
+        view()->scrollTo(h);
+    }
+}
+
+int Pane::group_of_path(const QString &path) const
+{
+    return grouped ? grouper->group_of(index_for(path)) : -1;
+}
+
+QList<int> Pane::group_keys() const { return grouped ? grouper->group_keys() : QList<int>(); }
 
 void Pane::double_clicked(const QModelIndex &idx)
 {
@@ -1485,7 +1803,18 @@ bool Pane::eventFilter(QObject *obj, QEvent *ev)
         QModelIndex cur = view()->currentIndex();   // a group's header, with nothing selected: Enter or Space folds it
         if ((k == Qt::Key_Return || k == Qt::Key_Enter || k == Qt::Key_Space) && mods == Qt::NoModifier &&
             grouper->is_header(cur) && !view()->selectionModel()->hasSelection()) {
-            grouper->toggle(cur);
+            if (grouper->is_footer(cur))
+                collapse_group(grouper->group_of(cur));
+            else
+                grouper->toggle(cur);
+            return true;
+        }
+        // grouped: Ctrl+Left collapses the current item's group (from anywhere in it), Ctrl+Right expands it
+        if ((k == Qt::Key_Left || k == Qt::Key_Right) && mods == Qt::ControlModifier && grouped && current_group() >= 0) {
+            if (k == Qt::Key_Left)
+                collapse_group(current_group());
+            else
+                expand_group(current_group());
             return true;
         }
         if ((k == Qt::Key_Return || k == Qt::Key_Enter) && !(mods & Qt::AltModifier)) {

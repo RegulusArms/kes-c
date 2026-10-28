@@ -12,6 +12,8 @@
 #include <QPair>
 #include <QStringList>
 
+#include <functional>
+
 class MainWindow;
 
 namespace undo {
@@ -23,11 +25,13 @@ Q_SIGNALS:
 };
 Signals *signals_();
 
-// kind "move": pairs (src, dst) · "rename": (old, new) · "trash": (original, -) · "create": (path, -) ·
+// kind "move": pairs (src, dst) · "move_into": (folder, -) the folder made for them, then the moves (src, dst): undone
+// by moving them back and removing the folder if it's left empty · "rename": (old, new) · "trash": (original, -) · "create": (path, -) ·
 // "none": no items (what was done can't be undone)
 void record(const QString &kind, const QString &label, const QList<QPair<QString, QString>> &items);
 void record_paths(const QString &kind, const QString &label, const QStringList &paths);   // "trash" / "create"
 QString label();   // what Ctrl+Z would undo, e.g. "Move", or empty
-void undo(MainWindow *win);
+// after: runs once the undo has finished (also when there was nothing to undo)
+void undo(MainWindow *win, std::function<void()> after = {});
 
 }  // namespace undo

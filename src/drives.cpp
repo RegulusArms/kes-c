@@ -1,19 +1,26 @@
 #include "drives.h"
 
+#include "atc.h"
 #include "fileops.h"
+#include "jobs.h"
 #include "util.h"
 #include "windows.h"
 
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QMutex>
 #include <QPointer>
 #include <QSettings>
 #include <QThread>
 
+#include <gio/gio.h>
+#include <gio/gunixmounts.h>
 #include <sys/statvfs.h>
 #include <sys/xattr.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cerrno>
 
 using namespace util;
@@ -50,6 +57,12 @@ static QList<QPair<Slow, QString>> test_slow()
     return out;
 }
 
+static Slow kind_of(const Mount &mt);
+static std::atomic<bool> slow_mounted{false};   // a tape or floppy is in the mount list (kept with it, below)
+static std::atomic<bool> mounts_stale{false};   // the kernel said the mount table changed (MountWatch)
+
+void reread_mounts() { mounts_stale = true; }
+
 QList<Mount> mounts()
 {
     static QMutex m;
@@ -57,7 +70,7 @@ QList<Mount> mounts()
     static qint64 read_ms = -10000;
     QMutexLocker l(&m);
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (now - read_ms < 1000)
+    if (now - read_ms < 1000 && !mounts_stale.exchange(false))
         return cached;
     read_ms = now;
     cached.clear();
@@ -74,13 +87,50 @@ QList<Mount> mounts()
     }
     for (const auto &[kind, path] : test_slow())
         cached << Mount{path, kind == Slow::Floppy ? "/dev/test-floppy" : "ltfs:test", kind == Slow::Floppy ? "vfat" : "fuse"};
+    // Tests add mounts of their own: KESTREL_TEST_MOUNTS="/path|fstype|source;…"
+    for (const QString &part : qEnvironmentVariable("KESTREL_TEST_MOUNTS").split(';', Qt::SkipEmptyParts)) {
+        QStringList f = part.split('|');
+        if (f.size() == 3)
+            cached << Mount{f[0], f[2], f[1]};
+    }
+    slow_mounted = std::any_of(cached.begin(), cached.end(), [](const Mount &mt) { return kind_of(mt) != Slow::None; });
     return cached;
 }
+
+static QMutex labels_lock;
+static QHash<QString, QString> labels;   // device -> its label, until the mount table changes (MountWatch)
+
+static QString read_label(const QString &device);
 
 QString device_label(const QString &device)
 {
     if (!device.startsWith("/dev/"))
         return QString();
+    {
+        QMutexLocker l(&labels_lock);
+        auto it = labels.constFind(device);
+        if (it != labels.constEnd())
+            return *it;
+    }
+    QString label = read_label(device);
+    QMutexLocker l(&labels_lock);
+    if (!label.isEmpty())   // none yet may be udev not having made the by-label link of a drive just mounted
+        labels.insert(device, label);
+    return label;
+}
+
+qint64 device_bytes(const QString &device)
+{
+    // the kernel's own figure (what lsblk shows): /sys, no I/O to the drive
+    if (!device.startsWith("/dev/"))
+        return -1;
+    bool ok = false;
+    qint64 sectors = read_file("/sys/class/block/" + basename(realpath(device)) + "/size", &ok).trimmed().toLongLong();
+    return ok && sectors > 0 ? sectors * 512 : -1;
+}
+
+static QString read_label(const QString &device)
+{
     QString real = realpath(device);
     QDir byl("/dev/disk/by-label");
     for (const QString &n : byl.entryList(QDir::System | QDir::Files | QDir::NoDotAndDotDot)) {
@@ -107,12 +157,33 @@ QString device_label(const QString &device)
 static const Mount *mount_of(const QList<Mount> &all, const QString &path)
 {
     const Mount *best = nullptr;
-    for (const Mount &mt : all) {
-        bool under = path == mt.root || mt.root == "/" || path.startsWith(mt.root + "/");
+    for (const Mount &mt : all) {   // called for every item of a job: no string built per mount
+        qsizetype n = mt.root.size();
+        bool under = mt.root == "/" || (path.startsWith(mt.root) && (path.size() == n || path[n] == '/'));
         if (under && (!best || mt.root.size() >= best->root.size()))
             best = &mt;
     }
     return best;
+}
+
+bool network_fs(const QString &fstype)
+{
+    static const QSet<QString> NET = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "sshfs", "davfs",
+                                      "fuse.rclone", "9p", "fuse.davfs2", "afs", "ceph", "glusterfs"};
+    return NET.contains(fstype);
+}
+
+bool user_mount(const Mount &mt)
+{
+    QByteArray root = mt.root.toUtf8(), fs = mt.fstype.toUtf8(), dev = mt.source.toUtf8();
+    if (g_unix_is_mount_path_system_internal(root.constData()) || g_unix_is_system_fs_type(fs.constData()) ||
+        g_unix_is_system_device_path(dev.constData()))
+        return false;
+    if (mt.root.contains("/."))   // inside a hidden folder: hidden on purpose
+        return false;
+    if (mt.root.startsWith("/media/") || mt.root.startsWith("/run/media/" + QString::fromUtf8(g_get_user_name()) + "/"))
+        return true;
+    return mt.root.startsWith(HOME() + "/");
 }
 
 QString mount_root(const QString &path)
@@ -120,6 +191,13 @@ QString mount_root(const QString &path)
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
     return mt ? mt->root : QString("/");
+}
+
+QString mount_fstype(const QString &path)
+{
+    QList<Mount> all = mounts();
+    const Mount *mt = mount_of(all, path);
+    return mt ? mt->fstype : QString();
 }
 
 // the whole disks under a block device: a partition's disk, the disks under a device-mapper or md device (its slaves)
@@ -139,18 +217,9 @@ static QStringList disks_of(const QString &name, int depth = 0)
     return {name};
 }
 
-QStringList drive_ids(const QString &path)
+// the ids of a mount's drives (not a GVFS mount's: those depend on the path)
+static QStringList mount_ids(const Mount *mt)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
-        return {};
-    QList<Mount> all = mounts();
-    const Mount *mt = mount_of(all, path);
-    if (!mt)
-        return {};
-    if (mt->fstype == "fuse.gvfsd-fuse") {   // one FUSE mount for every GVFS share and phone: each is its own drive
-        QString first = path.mid(mt->root.size() + 1).section('/', 0, 0);
-        return {first.isEmpty() ? QString("gvfs") : "gvfs:" + first};
-    }
     if (mt->source.startsWith("/dev/")) {
         QStringList out;
         for (const QString &d : disks_of(basename(realpath(mt->source))))
@@ -161,6 +230,32 @@ QStringList drive_ids(const QString &path)
         return {"zfs:" + mt->source.section('/', 0, 0)};
     return {"mount:" + mt->fstype + ":" + mt->source};
 }
+
+QStringList drive_ids(const QStringList &paths)
+{
+    QList<Mount> all = mounts();
+    QHash<const Mount *, QStringList> known;   // a mount's ids, looked up once (a job may name thousands of items on it)
+    QStringList out;
+    for (const QString &path : paths) {
+        const Mount *mt = path.startsWith('/') ? mount_of(all, path) : nullptr;
+        if (!mt)
+            continue;
+        QStringList ids;
+        if (mt->fstype == "fuse.gvfsd-fuse") {   // one FUSE mount for every GVFS share and phone: each is its own drive
+            QString first = path.mid(mt->root.size() + 1).section('/', 0, 0);
+            ids = {first.isEmpty() ? QString("gvfs") : "gvfs:" + first};
+        } else {
+            auto it = known.constFind(mt);
+            ids = it != known.constEnd() ? *it : *known.insert(mt, mount_ids(mt));
+        }
+        for (const QString &id : ids)
+            if (!out.contains(id))
+                out << id;
+    }
+    return out;
+}
+
+QStringList drive_ids(const QString &path) { return drive_ids(QStringList{path}); }
 
 // a floppy: the old /dev/fd*, or a removable disk (a USB floppy drive is an sd device) holding at most 4 MB (a 2.88 MB
 // disk, with room). Not loop, RAM or device-mapper devices, which can be as small (snap's squashfs images are)
@@ -202,9 +297,16 @@ static Slow kind_of(const Mount &mt)
     return Slow::None;
 }
 
+// none mounted (nearly always): asked for every file a job copies or deletes, so answered without looking up the path
+static bool any_slow()
+{
+    mounts();   // re-read if it's old
+    return slow_mounted;
+}
+
 Slow slow_kind(const QString &path)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
+    if (path.isEmpty() || !path.startsWith('/') || !any_slow())
         return Slow::None;
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
@@ -213,7 +315,7 @@ Slow slow_kind(const QString &path)
 
 QString slow_root(const QString &path)
 {
-    if (path.isEmpty() || !path.startsWith('/'))
+    if (path.isEmpty() || !path.startsWith('/') || !any_slow())
         return QString();
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
@@ -258,7 +360,9 @@ bool statfs_(const QString &path, qint64 *total, qint64 *free)
 }
 
 // LTFS shows its index through virtual extended attributes, "user.ltfs.<name>" on Linux (plain "ltfs.<name>" kept as
-// a fallback); answered from the index in memory
+// a fallback). Some are answered from the index in memory (volumeName, startblock, partition); the cartridge's
+// health (mediaLoads, mediaStorageAlert…) makes LTFS send the drive commands (log pages, and on an HP drive, which
+// rejects one of them, eleven drive-dump attempts): see Sizes::get for how rarely those are asked
 QString tape_attr(const QString &path, const QString &name)
 {
     QByteArray p = enc(path);
@@ -279,6 +383,84 @@ QPair<qint64, qint64> tape_position(const QString &path)
     QString part = tape_attr(path, "partition");
     qint64 partition = part.size() == 1 && part[0].isLetter() ? part[0].toLower().unicode() - 'a' : part.toLongLong();
     return {partition, block.toLongLong()};
+}
+
+static const char *HOUSEKEEPING = "org.gnome.settings-daemon.plugins.housekeeping";
+
+static GSettings *housekeeping()   // null where the desktop has no such setting
+{
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *schema = src ? g_settings_schema_source_lookup(src, HOUSEKEEPING, TRUE) : nullptr;
+    if (!schema)
+        return nullptr;
+    bool has = g_settings_schema_has_key(schema, "ignore-paths");
+    g_settings_schema_unref(schema);
+    return has ? g_settings_new(HOUSEKEEPING) : nullptr;
+}
+
+// Adds (on) or removes path in the check's ignore-paths; true if the list changed
+static bool set_ignored(const QString &path, bool on)
+{
+    static QMutex lock;   // jobs on two tapes at once: one read-modify-write at a time
+    QMutexLocker l(&lock);
+    GSettings *gs = housekeeping();
+    if (!gs)
+        return false;
+    QStringList list;
+    gchar **v = g_settings_get_strv(gs, "ignore-paths");
+    for (gchar **p = v; p && *p; ++p)
+        list << QString::fromUtf8(*p);
+    g_strfreev(v);
+    bool changed = on ? !list.contains(path) : list.removeAll(path) > 0;
+    if (on && changed)
+        list << path;
+    if (changed) {
+        QList<QByteArray> bytes;
+        QVector<const gchar *> ptrs;
+        for (const QString &s : list)
+            bytes << s.toUtf8();
+        for (const QByteArray &b : bytes)
+            ptrs << b.constData();
+        ptrs << nullptr;
+        g_settings_set_strv(gs, "ignore-paths", ptrs.constData());
+        g_settings_sync();
+    }
+    g_object_unref(gs);
+    return changed;
+}
+
+bool quiet_tape(const QString &root) { return !root.isEmpty() && set_ignored(rstrip(root, '/'), true); }
+
+void unquiet_tape(const QString &root)
+{
+    if (!root.isEmpty())
+        set_ignored(rstrip(root, '/'), false);
+}
+
+QStringList free_space_pollers()
+{
+    // their process names (as /proc/<pid>/comm has them, at most 15 characters)
+    static const QList<QPair<QString, QString>> KNOWN = {{"gnome-system-mo", "GNOME System Monitor"},
+                                                        {"plasma-systemmo", "KDE's System Monitor"},
+                                                        {"ksysguard", "KSysGuard"},
+                                                        {"conky", "Conky"}};
+    QString proc = qEnvironmentVariable("KESTREL_TEST_PROC", "/proc");
+    QStringList pids, out;
+    try {
+        pids = listdir(proc);
+    } catch (const OSError &) {
+    }
+    for (const QString &pid : pids) {
+        bool num = false;
+        pid.toLongLong(&num);
+        if (!num)
+            continue;
+        QString comm = QString::fromLocal8Bit(read_file(join(join(proc, pid), "comm"))).trimmed();
+        for (const auto &[name, shown] : KNOWN)
+            if (comm == name && !out.contains(shown))
+                out << shown;
+    }
+    return out;
 }
 
 QString ltfs_sync(const QString &root)
@@ -358,27 +540,101 @@ Sizes *Sizes::instance()
     return s;
 }
 
-Sizes::Sizes() { pool.setMaxThreadCount(4); }
+// ---------------------------------------------------------------- mount changes
+
+MountWatch *MountWatch::instance()
+{
+    static MountWatch *w = new MountWatch;
+    return w;
+}
+
+MountWatch::MountWatch()
+{
+    // GIO's watch on the kernel's mount table (it waits on /proc/self/mountinfo, which wakes it on every mount and
+    // unmount): nothing is polled, and no drive is asked anything
+    // The monitor belongs to the thread-default main context of the thread that asks for it, and signals there: the
+    // default one (Qt's UI thread runs it), whichever thread makes this first, so a worker's context that's never run
+    // again can't swallow its signals.
+    moveToThread(QCoreApplication::instance() ? QCoreApplication::instance()->thread() : thread());
+    g_main_context_push_thread_default(g_main_context_default());
+    GUnixMountMonitor *m = g_unix_mount_monitor_get();
+    g_main_context_pop_thread_default(g_main_context_default());
+    g_signal_connect(m, "mounts-changed", G_CALLBACK(+[](GUnixMountMonitor *, gpointer self) {
+                         static_cast<MountWatch *>(self)->mounts_changed();
+                     }),
+                     this);
+}
+
+void MountWatch::mounts_changed()
+{
+    mounts_stale = true;   // mounts() reads the table again at once
+    {
+        QMutexLocker l(&labels_lock);
+        labels.clear();   // (a drive mounted again may have been relabelled)
+    }
+    Q_EMIT changed();
+}
+
+Sizes::Sizes()
+{
+    pool.setMaxThreadCount(4);
+    connect(MountWatch::instance(), &MountWatch::changed, this, [this]() {   // drives gone: asked afresh if they come back
+        QSet<QString> roots;
+        for (const Mount &mt : mounts())
+            roots << mt.root;
+        for (auto it = cache.begin(); it != cache.end();)
+            it = !roots.contains(it.key()) && !it->running ? cache.erase(it) : std::next(it);
+    });
+    connect(atc::radio(), &atc::Radio::kept_heard, this, [this]() {   // the others' jobs known: tapes held back till now
+        QStringList waiting;
+        for (auto it = cache.cbegin(); it != cache.cend(); ++it)
+            if (it->asked_ms == 0 && slow_kind(it.key()) == Slow::Tape)
+                waiting << it.key();
+        for (const QString &root : waiting)
+            get(root);
+    });
+}
+
+Sizes::Info Sizes::once(const QString &root)
+{
+    auto it = cache.constFind(root);
+    if (it != cache.constEnd() && it->asked_ms > 0)
+        return it->info;
+    return get(root);
+}
+
+// A tape is asked as little as possible: LTFS answers its size and its cartridge's health with commands to the drive,
+// and while it writes they knock it out of streaming. So nothing at all while a job (of any Kestrel) uses it: the last
+// answers stand. Otherwise its size every 30 s, and its health (loads, storage alert) once, then every 10 minutes.
+// Nor before the tower has told this process the others' jobs (a Kestrel just started, the tower restarting): until
+// then a job writing the tape in another Kestrel looks like none. The file chooser never joins the tower, so it never
+// asks a tape anything (its dialogs used to send a health query into a tape being written, and every 30 s its size).
+static const qint64 TAPE_SIZE_MS = 30000, TAPE_HEALTH_MS = 600000;
 
 Sizes::Info Sizes::get(const QString &root)
 {
     Entry &e = cache[root];
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!e.running && now - e.asked_ms > 5000) {
+    bool tape = slow_kind(root) == Slow::Tape;
+    if (!e.running && now - e.asked_ms > (tape ? TAPE_SIZE_MS : 5000) &&
+        !(tape && (!atc::radio()->caught_up() || jobs::Queue::instance()->busy(root)))) {
         e.running = true;
         e.asked_ms = now;
         if (e.info.total < 0)
             e.info.busy = true;
-        bool tape = slow_kind(root) == Slow::Tape;
-        pool.start([this, root, tape]() {
+        bool health = tape && (e.health_ms == 0 || now - e.health_ms > TAPE_HEALTH_MS);
+        if (health)
+            e.health_ms = now;
+        Info before = e.info;
+        pool.start([this, root, tape, health, before]() {
             Info info;
             if (!statfs_(root, &info.total, &info.free))
                 info.total = info.free = -1;
             if (tape) {
-                info.volume_name = tape_attr(root, "volumeName");
-                info.loads = tape_attr(root, "mediaLoads");
-                info.alert = tape_attr(root, "mediaStorageAlert");
-                info.sync = ltfs_sync(root);
+                info.volume_name = tape_attr(root, "volumeName");   // (from the index)
+                info.loads = health ? tape_attr(root, "mediaLoads") : before.loads;
+                info.alert = health ? tape_attr(root, "mediaStorageAlert") : before.alert;
+                info.sync = ltfs_sync(root);   // (from ltfs's command line)
             }
             QMetaObject::invokeMethod(
                 this,

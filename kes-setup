@@ -40,9 +40,13 @@ STATE="$HOME/.config/kestrel-explorer/install-state"
 BLEACHBIT_CLEANER="$HOME/.config/bleachbit/cleaners/kestrel-explorer.xml"
 BLEACHBIT_MARK="Kestrel Explorer's cleaner, written by kes-setup"   # in an XML comment: no "--"
 # --install-optional: the packages the .deb suggests, and the extra archive tools; Kestrel hides or works around what's
-# missing (exiftool: the Metadata tab and editing; ffmpeg: video thumbnails; bleachbit: shredding; rar: making .rar;
-# pbzip2, lbzip2, plzip, lz4: multi-core .bz2 and .lz, and .lz4). zfsutils-linux too when a ZFS file system is mounted.
-OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4)
+# missing (exiftool: the Metadata tab and editing; ffmpeg: video thumbnails, Convert Video / Extract Audio / Convert
+# Audio; bleachbit: shredding; rar: making .rar; pbzip2, lbzip2, plzip, lz4: multi-core .bz2 and .lz, and .lz4;
+# libjpeg-turbo-progs: the image viewer's Straighten and Rotate; gnupg: tar archives with a password, Verify Signature;
+# rsync: Sync To…; libheif-examples: Convert Image to HEIC and AVIF where Qt's plugins can't write them).
+# zfsutils-linux too when a ZFS file system is mounted.
+OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg rsync
+                   libheif-examples)
 # The system's gsettings (an Anaconda copy earlier on PATH can't see the desktop's settings)
 GSETTINGS=/usr/bin/gsettings
 
@@ -103,14 +107,16 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
   <running type="exe">kes</running>
   <option id="cache">
     <label>Cache</label>
-    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, and exiftool's tag lists (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option)</description>
+    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, files opened from inside archives, copies of images dragged out of the image viewer as shown, the folder sizes Properties remembers, and exiftool's tag lists (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option)</description>
     <action command="delete" search="walk.all" path="\$XDG_CACHE_HOME/kestrel-explorer"/>
   </option>
   <option id="history">
     <label>History</label>
-    <description>Delete the list of recently connected servers and the folder the last Open or Save dialog was left in</description>
+    <description>Delete the list of recently connected servers, the folder the last Open or Save dialog was left in, the image viewer's recent Copy To / Move To folders, and the count of the folders opened most (the Overview's Frequent Folders)</description>
+    <action command="delete" search="file" path="$conf/frequent.json"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="recent_servers"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="chooser_folder"/>
+    <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="viewer_recent_folders"/>
   </option>
   <option id="starred">
     <label>Starred items</label>
@@ -123,6 +129,18 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <description>Delete the list of pinned files and folders</description>
     <warning>This unpins everything.</warning>
     <action command="delete" search="file" path="$conf/pinned.json"/>
+  </option>
+  <option id="save_places">
+    <label>Save locations</label>
+    <description>Delete the folders kept for other apps' Save windows (shown first on their Overview)</description>
+    <warning>A Save window's Overview no longer lists those folders.</warning>
+    <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="chooser_places"/>
+  </option>
+  <option id="sync_pairs">
+    <label>Saved sync pairs</label>
+    <description>Delete the folder pairs saved in Sync Folders, with their paths</description>
+    <warning>Sync Folders no longer lists them.</warning>
+    <action command="delete" search="file" path="$conf/sync-pairs.json"/>
   </option>
   <option id="folder_looks">
     <label>Folder covers, colours and sorts</label>
@@ -337,7 +355,7 @@ fi
 if (( BLEACHBIT )); then
     mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
     bleachbit_cleaner > "$BLEACHBIT_CLEANER"
-    echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder), Starred," \
-         "pinned items, and folder covers, colours and sorts."
+    echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder, frequent" \
+         "folders), Starred, pinned items, and folder covers, colours and sorts."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

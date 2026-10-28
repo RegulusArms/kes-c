@@ -26,9 +26,9 @@ using namespace util;
 namespace menus {
 
 // the built-in submenus whose entries can be moved one by one (others, like Open With or Send To, move as a whole)
-static const QSet<QString> CONTAINERS = {"links", "copy_path", "image", "previews"};
+static const QSet<QString> CONTAINERS = {"links", "copy_path", "image", "previews", "viewer_view", "viewer_edit"};
 
-QList<Kind> kinds() { return {FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND}; }
+QList<Kind> kinds() { return {FOLDER, FILE, ARCHIVE, SEVERAL, BACKGROUND, VIEWER}; }
 
 QString kind_key(Kind k)
 {
@@ -38,6 +38,7 @@ QString kind_key(Kind k)
     case ARCHIVE: return "archive";
     case SEVERAL: return "several";
     case BACKGROUND: return "background";
+    case VIEWER: return "viewer";
     }
     return QString();
 }
@@ -50,6 +51,7 @@ QString kind_label(Kind k)
     case ARCHIVE: return "An archive";
     case SEVERAL: return "Several items";
     case BACKGROUND: return "Empty space in a folder";
+    case VIEWER: return "The image viewer";
     }
     return QString();
 }
@@ -93,10 +95,37 @@ static QList<Entry> previews_menu()
 QList<Entry> defaults(Kind k)
 {
     QList<Entry> l;
+    if (k == VIEWER) {   // ImageViewer::build_menu
+        l << item("next", "Next") << item("previous", "Previous") << sep()
+          << submenu("viewer_view", "View",
+                     {item("fullscreen", "Fullscreen"), item("slideshow", "Start / Stop Slideshow"),
+                      item("fit", "Fit to Window"), item("actual_size", "Actual Size"),
+                      item("keep_zoom", "Keep Zoom Between Images"), sep(), item("filmstrip", "Filmstrip"),
+                      item("info_panel", "Info Panel"), item("info_line", "Info Line"), sep(),
+                      item("compare", "Compare With the Next Image"),
+                      item("compare_ab", "One at a Time (A/B)", "while comparing"),
+                      item("compare_slider", "Over Each Other, With a Slider", "while comparing"),
+                      item("compare_switch", "Show A / Show B", "comparing one at a time")})
+          << submenu("viewer_edit", "Rotate and Edit",
+                     {item("rotate_right", "Rotate Right"), item("rotate_left", "Rotate Left"),
+                      item("flip", "Flip Horizontally"), item("save_changes", "Save Rotation / Changes…"),
+                      item("undo_edits", "Undo the Edits", "with crops or resizes not saved"), sep(),
+                      item("crop", "Crop…"), item("resize", "Resize…"), item("straighten", "Straighten")})
+          << sep() << item("star", "Star / Unstar") << item("pin", "Pin / Unpin")
+          << item("viewer_copy_to", "Copy To ▸") << item("viewer_move_to", "Move To ▸")
+          << item("show_in_folder", "Show in Folder") << sep()
+          << item("open_default", "Open With Default Application") << item("open_with", "Open With…")
+          << item("copy_image", "Copy Image") << item("copy_full_path", "Copy Path") << item("wallpaper", "Set as Wallpaper")
+          << item("uwp_add", "Add to Selected UWP Monitor", "while UWP's editor is open") << sep()
+          << item("properties", "Properties") << item("trash", "Move to Trash") << item("undo", "Undo");
+        return l;
+    }
     if (k == BACKGROUND) {
         l << item("new_folder", "New Folder…") << item("new_document", "New Document ▸") << sep() << item("paste", "Paste")
           << item("paste_link", "Paste as Link") << item("select_all", "Select All") << sep()
-          << item("sort_by", "Sort By ▸") << item("show_hidden", "Show Hidden Files") << sep()
+          << item("sort_by", "Sort By ▸") << item("show_hidden", "Show Hidden Files")
+          << item("collapse_groups", "Collapse All Groups", "when grouped by date")
+          << item("expand_groups", "Expand All Groups", "when grouped by date") << sep()
           << item("open_terminal", "Open in Terminal") << item("bookmark_folder", "Bookmark This Folder")
           << previews_menu() << item("empty_trash", "Empty Trash", "in the Trash")
           << item("empty_trash_bleachbit", "Empty Trash with BleachBit…", "in the Trash, with BleachBit installed")
@@ -113,13 +142,15 @@ QList<Entry> defaults(Kind k)
         l << item("open_in_editor", "Open in (a code editor)", "when one is installed") << item("open_with", "Open With ▸");
     if (file || several)
         l << item("view_image", several ? "View Images" : "View Image", "for images");
-    l << item("show_in_folder", "Show in Folder", "in search results");
+    l << item("show_in_folder", "Show in Folder", "in search results")
+      << item("collapse_group", "Collapse This Group", "when grouped by date");
     if (file || arc)
         l << item("open_with", "Open With ▸");
     l << sep() << item("cut", "Cut") << item("copy", "Copy");
     if (folder)
         l << item("paste_into", "Paste Into Folder");
     l << item("move_to", "Move To…") << item("copy_to", "Copy To…") << item("duplicate", "Duplicate")
+      << item("new_folder_with", "New Folder with Selection…")
       << item("rename", "Rename…")
       << submenu("copy_path", "Copy Path / Name",
                  {item("copy_full_path", "Copy Full Path"), item("copy_name", "Copy Name"), item("copy_uri", "Copy URI")})
@@ -147,6 +178,12 @@ QList<Entry> defaults(Kind k)
           << item("test_archives", "Test Archives", "when all are archives");
     l << item("compress_quick", "Compress to “name.ext”", "once you've compressed something")
       << item("compress", "Compress…") << item("checksum_create", "Create Checksum File…");
+    if (folder || several)
+        l << item("find_duplicates", "Find Duplicates…", several ? "when all are folders" : QString());
+    if (folder)
+        l << item("compare_with", "Compare With…") << item("sync_to", "Sync To…");
+    if (file)
+        l << item("verify_signature", "Verify Signature", "for signatures (.sig, .asc, .gpg, .sign)");
     if (file)
         l << item("uwp_add", "Add to Selected UWP Monitor", "images and videos, while UWP's editor is open")
           << item("wallpaper", "Set as Wallpaper", "for videos, with UWP")
@@ -154,6 +191,24 @@ QList<Entry> defaults(Kind k)
                      {item("image_wallpaper", "Set as Wallpaper"), item("image_cover", "Use as Folder Cover"),
                       item("image_copy", "Copy Image to Clipboard")},
                      "for images");
+    if (several)
+        l << item("compare_images", "Compare in Viewer", "for two images");
+    if (file || several) {
+        QString all = several ? "when all are " : "for ";
+        l << submenu("rotate", "Rotate",
+                     {item("rotate_cw", "Rotate 90° Clockwise"), item("rotate_180", "Rotate 180°"),
+                      item("rotate_ccw", "Rotate 90° Counter-clockwise"), sep(), item("flip_horizontal", "Flip Horizontally"),
+                      item("flip_vertical", "Flip Vertically")},
+                     all + "images")
+          << item("convert_image", "Convert Image…", all + "images")
+          << item("convert_video", "Convert Video…", all + "videos, with ffmpeg installed")
+          << item("extract_audio", "Extract Audio…", all + "videos, with ffmpeg installed");
+    }
+    if (file || several || folder)
+        l << item("convert_audio", "Convert Audio…",
+                  folder ? QString("with ffmpeg installed") : several ? QString("when all are audio files or all are folders, with ffmpeg installed") : QString("for audio files, with ffmpeg installed"));
+    if (file || several)
+        l << item("wipe_metadata", "Wipe Metadata…", several ? "when images are selected" : "for images");
     if (folder || several) {
         QString n = several ? "when all are folders" : QString();
         l << item("folder_colour", "Folder Colour ▸", n) << item("show_image_previews", "Show Image Previews", n);
@@ -168,7 +223,12 @@ QList<Entry> defaults(Kind k)
     if (folder)
         l << item("regen_preview", "Regenerate Preview") << previews_menu() << item("open_terminal", "Open in Terminal");
     l << sep() << item("trash", "Move to Trash") << item("delete", "Delete Permanently…")
-      << item("shred", "Shred with BleachBit…", "with BleachBit installed") << sep() << item("properties", "Properties");
+      << item("shred", "Shred with BleachBit…", "with BleachBit installed") << sep();
+    if (folder || several)
+        l << item("calculate_size", "Calculate Folder Size", several ? "when all are folders" : QString());
+    if (file || arc)
+        l << item("open_metadata", "Open Metadata", "for images; with exiftool, videos, audio and documents too");
+    l << item("properties", "Properties");
     return l;
 }
 

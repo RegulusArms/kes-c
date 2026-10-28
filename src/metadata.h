@@ -20,7 +20,20 @@ struct MetaRow {
 
 Rows basic_info(const QString &path);   // fast summary for the info panel
 Rows ai_info(const QString &path);      // Stable Diffusion / ComfyUI generation info
+// A photo's GPS position from its EXIF (degrees, south and west negative); false if it has none
+bool gps_position(const QString &path, double *lat, double *lon);
+// The EXIF Orientation tag of a JPEG or TIFF file, found so its value can be changed without re-encoding the image
+struct OrientationTag {
+    qint64 offset = -1;   // where its 2-byte value is in the file; -1: the file has none (or isn't a JPEG or TIFF)
+    bool little_endian = true;
+    int value = 1;        // 1–8, as EXIF numbers them
+};
+OrientationTag orientation_tag(const QString &path);
+OrientationTag orientation_tag_in(const QByteArray &file);   // the same for a file's contents
 QList<MetaRow> full_metadata(const QString &path);
+// whether full_metadata has something to show for a file (by its name): images, and with exiftool also videos, audio,
+// PDFs, e-books and office documents (the right-click menu's Open Metadata)
+bool viewable(const QString &path);
 // When a photo or video was taken, from its metadata (EXIF DateTimeOriginal / DateTimeDigitized, a PNG's Creation Time,
 // an MP4 / MOV movie header's creation time); invalid when it has none. Reads the file: not on the UI thread.
 QDateTime taken(const QString &path);
@@ -44,6 +57,14 @@ struct Change {
 };
 QStringList set_tags(const QString &path, const QList<Change> &changes);   // warnings; raises Error
 QStringList clear_all(const QString &path, bool keep_basic = true);
+// Wipe Metadata…: every tag taken out (EXIF, XMP, IPTC, GPS, comments, a PNG's text…), the pixels untouched
+// (exiftool). For images Kestrel can wipe: not camera raw files, whose maker notes are needed to develop them.
+bool can_wipe(const QString &path);
+// path without its metadata (keep_basic: its orientation and colour profile stay), written over path itself (fsynced
+// first) or, with copy, as a new file beside it ("photo (no metadata).jpg", the next free name, with path's
+// permissions). Either way a part file renamed into place: a failure leaves path and the name as they were. Returns
+// the file written; raises Error.
+QString wipe(const QString &path, bool copy, bool keep_basic = true);
 
 // ---------------------------------------------------------------- tag catalog
 

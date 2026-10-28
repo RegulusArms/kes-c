@@ -6,6 +6,7 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QEventLoopLocker>
 #include <QJsonObject>
 #include <QMap>
 #include <QMutex>
@@ -20,6 +21,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 class QCheckBox;
@@ -53,8 +55,15 @@ public:
     QStringList steps;    // what it's going to do, for the Jobs window (e.g. each item of a copy)
     std::atomic<int> step{-1};   // the step it's on
     qint64 started_ms = 0;       // when its thread started (the job queue let it run)
+    qint64 queued_ms = 0;        // when it went into the job queue to wait (0: it started at once)
+    QStringList waited_for;      // the jobs ahead of it on its drives then (titles), for its log
+    QStringList intro;           // its log's first lines: what started it, when, from where to where
+    // A job the user sees (not a quiet helper task) keeps Kestrel running until it ends, also once every Kestrel
+    // window is closed (the Jobs window shows it then); released when it's deleted.
+    std::unique_ptr<QEventLoopLocker> keeps_running;
     bool failed = false;         // ended with an error
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
+    static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
 
     void cancel();
     void check();   // throws Cancelled; waits here while paused
@@ -120,6 +129,9 @@ public:
     QList<TaskInfo> others(const QList<Task *> &mine) const;   // all but `mine`: our other windows', then other Kestrels'
     QList<TaskInfo> all() const { return others({}); }        // every job running or waiting: ours, then the others'
     void cancel(const TaskInfo &task);   // another Kestrel's task: asks it to cancel
+    QList<Task *> mine() const { return local; }   // this Kestrel's, every window's
+    // the jobs that keep this Kestrel running (keeps_running), running or waiting
+    QList<Task *> keeping() const;
     QList<FinishedTask> finished;        // ours that have ended, newest last
     void clear_finished();
 
@@ -189,8 +201,12 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done =
 // The same for a job that reads or writes drives: it waits in the job queue (jobs.h) for lanes on the drives of
 // `paths` before its thread starts, so it doesn't compete with other jobs on them (in any Kestrel). `steps`: what it's
 // going to do, listed in the Jobs window (it sets task->step as it goes).
+// intro: the first lines of its log (Task::intro).
+// outlives_parent: on_done runs also when parent has gone meanwhile (it must then not need it).
+// Jobs don't belong to a window: closing it doesn't stop them, and their errors are shown without it.
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done = nullptr,
-                bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false);
+                bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false,
+                const QStringList &intro = QStringList(), bool outlives_parent = false);
 // Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet.
 Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done = nullptr,
                bool quiet = false);
@@ -201,6 +217,7 @@ struct Job {
     // the user chose Replace or Merge for a dst that was there. Otherwise dst must be new: one that's there when the job
     // starts, or appears while it runs (another program saving a file), is kept and the job fails with a conflict.
     bool replace = false;
+    bool dd = false;   // onto a tape: each file written by dd (the user's choice) instead of Kestrel's buffered copy
 };
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
@@ -209,15 +226,28 @@ struct Job {
 // into existing folders and copies that replaced something can't (what was replaced is gone): the status bar says so,
 // and when nothing else in the job can be undone an entry that can't be is recorded, so Ctrl+Z doesn't undo the action
 // before it instead.
+// A copy or move whose destination folder isn't there when its turn comes (moved or deleted while it waited) fails
+// at once, with one message, before anything is written. intro: its log's first lines (Task::intro).
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done = nullptr,
-                const QString &undo_label = QString());
+                const QString &undo_label = QString(), const QStringList &intro = QStringList());
 
 // Resolve conflicts interactively (a window for each, answered one after another); planned(jobs) then runs with the
 // job list for start_ops, unless the user cancels or parent is closed meanwhile.
 void plan_transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
                    std::function<void(const QList<Job> &)> planned);
+// Jobs writing files onto a tape: by Kestrel's buffered copy or by dd (Job::dd), as Preferences say (tape_writer), or as
+// asked in a free window; go(jobs) runs with the choice made (not at all when the question is cancelled).
+void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<void(const QList<Job> &)> go);
+// Copy or move sources into dest_dir (plan_transfer, choose_tape_writer, start_ops). how: what the user did ("Paste
+// Into Folder", "Drop", "Move To…"), for the job's log, which also names the window, the time, and from where to where.
+// on_started: once the job is made (not when planning was cancelled).
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
-              std::function<void()> on_done = nullptr);
+              std::function<void()> on_done = nullptr, const QString &how = QString(),
+              std::function<void()> on_started = nullptr);
+// The job's title: "Copying “a.txt” to Photos", "Moving 3 items to Backup (with dd)"
+QString transfer_title(const QStringList &sources, const QString &dest_dir, const QString &op, bool dd);
+// "45 s", "2 min 5 s", "1 h 3 min"
+QString wait_text(qint64 ms);
 
 // Copy files from a device (needs_local_copy) into ~/.cache/kestrel-explorer/device-files, as a busy task ("will
 // launch once ready") with Cancel, then call on_done(local paths) on the UI thread (not after a cancel or an error). A copy is reused while its
@@ -235,6 +265,23 @@ struct DirStats {
 };
 // (total bytes, file count, dir count) recursively, not following symlinks
 DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr);
+
+// Folder sizes worked out before (Properties), so they show at once: ~/.cache/kestrel-explorer/folder-sizes.json,
+// keyed by path and checked against the folder's device and inode (another folder later under the same name isn't
+// given them). Stored after a finished count only. Kestrel's own copies, moves and deletes drop the entries of the
+// folders they change and of the folders above them. UI thread.
+namespace dirsizes {
+struct Entry {
+    DirStats stats;
+    qint64 measured = 0;   // when (seconds since the epoch)
+};
+QString cache_file();
+std::optional<Entry> get(const QString &folder);
+void put(const QString &folder, const DirStats &stats);
+void drop_with_parents(const QStringList &paths);   // each path's own entry and every folder's above it
+QString age_text(qint64 measured, qint64 now);      // "Calculated 3 days ago (2026-10-21 14:05)", "Calculated just now"
+}  // namespace dirsizes
+
 // What emptying the trash removes: every entry in the trash folders on every drive (files, info and expunged)
 QStringList trash_contents();
 // Shredding with BleachBit (`bleachbit --shred`): files and folders are overwritten, then deleted, so they can't be

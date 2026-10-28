@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.0.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.2-alpha.26.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -49,12 +49,26 @@ This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.c
 
 ## Install
 
-**With apt** (Ubuntu 24.04, Linux Mint 22 and newer, amd64), from the releases channel:
+**With apt** (amd64), from the releases channel. Each Ubuntu release has its own package, so use your system's
+commands (`grep UBUNTU_CODENAME /etc/os-release` prints `resolute` on 26.04, `noble` on 24.04 and Linux Mint 22).
+
+**Ubuntu 26.04:**
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
 sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
-printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: resolute\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
+  | sudo tee /etc/apt/sources.list.d/kestrel.sources
+sudo apt update && sudo apt install kestrel-explorer
+kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)
+```
+
+**Ubuntu 24.04 and Linux Mint 22:**
+
+```bash
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/kestrel.asc https://regulusarms.github.io/kes-c/kestrel.asc
+printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: noble\nComponents: main\nSigned-By: /etc/apt/keyrings/kestrel.asc\n' \
   | sudo tee /etc/apt/sources.list.d/kestrel.sources
 sudo apt update && sudo apt install kestrel-explorer
 kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)
@@ -67,8 +81,9 @@ kes-setup --default   # optional: make it your file manager (kes-setup --undo pu
 ./install.sh --default   # ...and makes it your file manager
 ```
 
-The [install guide](docs/install.md) covers the development-builds channel, switching channels, what `--default` and
-`--dock` change, building by hand, BleachBit and uninstalling.
+The [install guide](docs/install.md) covers the development-builds channel, switching channels (and from the older
+`stable`/`dev` suites), which .deb to download by hand, what `--default` and `--dock` change, building by hand,
+BleachBit and uninstalling.
 
 ## Supported systems
 
@@ -83,9 +98,12 @@ The [install guide](docs/install.md) covers the development-builds channel, swit
 | [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint and Ubuntu 24.04 notes |
 | [Dependencies](docs/dependencies.md) | The packages needed to build, the recommended ones and the optional ones, and what each is used for |
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
+| [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
-| [Performance](docs/performance.md) | Benchmarks against GNOME Files and Nemo |
+| [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo, Dolphin, Thunar, Krusader and PCManFM |
+| [Bugs found elsewhere](docs/bugs-elsewhere.md) | Problems in the desktop and other programs that get in Kestrel's way, how they were found, and how to work around them |
+| [Design philosophy](docs/design-philosophy.md) | Why Kestrel wraps the standard command-line tools instead of rebuilding them, how it copes when a tool changes, and how it's tested |
 | [Development](docs/development.md) | Architecture, the source layout, tests and performance counters |
 | [Tests](tests/README.md) | Running the test suite, what each test checks, CI, and adding a test ([test changelog](tests/CHANGELOG.md)) |
 | [Changelog](CHANGELOG.md) | What changed in each version |

@@ -117,7 +117,7 @@ static QHash<QString, QString> trashed_index()
     return out;
 }
 
-void undo(MainWindow *win)
+void undo(MainWindow *win, std::function<void()> after)
 {
     Op op;
     QString got = shared() ? atc::radio()->request("UndoPop") : QString();
@@ -126,18 +126,25 @@ void undo(MainWindow *win)
         atc::valid_undo(QJsonDocument::fromJson(got.toUtf8()).object())) {
         op = from_json(got);
     } else {
-        if (stack.isEmpty())
+        if (stack.isEmpty()) {
+            if (after)
+                after();
             return;
+        }
         op = stack.takeLast();
     }
     Q_EMIT signals_()->changed();
     QString title = "Undo " + op.label;
     if (op.kind == "none") {
         win->statusBar()->showMessage("Can't undo that: what was replaced is gone.", 8000);
+        if (after)
+            after();
         return;
     }
     QPointer<MainWindow> w(win);
-    auto done = [w, title, op](const QVariant &res) {
+    auto done = [w, title, op, after](const QVariant &res) {
+        if (after)
+            after();
         if (!w)
             return;
         w->sidebar->refresh();
@@ -148,10 +155,13 @@ void undo(MainWindow *win)
             w->statusBar()->showMessage("Undid: " + op.label, 4000);
     };
 
-    if (op.kind == "move") {   // move each item back where it came from
+    if (op.kind == "move" || op.kind == "move_into") {   // move each item back where it came from
         QStringList errors;
         QList<fileops::Job> jobs;
+        QString made = op.kind == "move_into" && !op.items.isEmpty() ? op.items.first().first : QString();
         for (const auto &[src, dst] : op.items) {
+            if (dst.isEmpty())   // (move_into's folder)
+                continue;
             if (!lexists(dst))
                 errors << QString("%1: no longer at %2").arg(basename(dst), dirname(dst));
             else if (lexists(src))
@@ -161,8 +171,21 @@ void undo(MainWindow *win)
         }
         if (!errors.isEmpty())
             warn(win, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
-        if (!jobs.isEmpty())
-            fileops::start_ops(win, jobs, title, [done]() { done(QStringList()); });
+        // the folder made for them goes once it's empty again (rmdir: not if anything else is in it)
+        auto remove_made = [made]() {
+            if (!made.isEmpty())
+                ::rmdir(enc(made).constData());
+        };
+        if (!jobs.isEmpty()) {
+            fileops::start_ops(win, jobs, title, [done, remove_made]() {
+                remove_made();
+                done(QStringList());
+            });
+        } else {
+            remove_made();
+            if (after)
+                after();
+        }
         return;
     }
 

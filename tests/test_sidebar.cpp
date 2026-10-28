@@ -1,6 +1,11 @@
 // The sidebar: rearranging entries and sections, collapsing sections, and sharing that with other windows and Kestrels.
 #include "common.h"
 
+#include "drives.h"
+#include "proc.h"
+
+#include <QElapsedTimer>
+
 using namespace test;
 
 int main(int argc, char **argv)
@@ -24,8 +29,8 @@ int main(int argc, char **argv)
     QString trash = join(TRASH_DIR(), "files");
 
     // -- the order helpers
-    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices"}) &&
-              sidebar::section_order({"devices", "nonsense"}) == QStringList({"devices", "places", "bookmarks"}),
+    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices", "mounts"}) &&
+              sidebar::section_order({"devices", "nonsense"}) == QStringList({"devices", "places", "bookmarks", "mounts"}),
           "a saved section order ignores unknown sections and adds missing ones");
     check(sidebar::ordered({"a", "b", "c", "d"}, {"c", "gone", "a"}) == QStringList({"c", "a", "b", "d"}),
           "a saved order puts new entries after the saved ones, in their natural order");
@@ -85,6 +90,144 @@ int main(int argc, char **argv)
     fake.report({{"type", "sidebar"}});
     check(wait_for([&]() { return s->shown_sections() == QStringList({"bookmarks", "places", "devices"}); }),
           "a sidebar change from another Kestrel is picked up");
+
+    // -- Mounts: what file managers show of their own accord (GIO's rule) that Devices doesn't list
+    QString user = QString::fromUtf8(g_get_user_name());
+    auto shown = [](const QString &root, const QString &fs, const QString &source) {
+        return drives::user_mount(drives::Mount{root, source, fs});
+    };
+    check(shown(home_path("data"), "zfs", "pool/data") && shown(home_path("box"), "fuse.sshfs", "user@host:/srv") &&
+              shown("/media/" + user + "/stick", "vfat", "/dev/sdz1") && shown("/run/media/" + user + "/x", "exfat", "/dev/sdz2"),
+          "mounts in the home folder, /media and the user's /run/media are shown");
+    check(!shown(home_path(".hidden/x"), "zfs", "pool/x") && !shown(HOME(), "zfs", "pool/home") &&
+              !shown("/mnt/x", "ext4", "/dev/sdz3") && !shown(home_path("tmp"), "tmpfs", "tmpfs") &&
+              !shown("/run/media/someone-else/x", "exfat", "/dev/sdz4"),
+          "...not one inside a hidden folder, the home folder itself, /mnt, a system file system or another user's");
+    DriveInfo share;
+    share.uri = "smb://nas/photos/";
+    check(overview::connected("smb://nas/photos/2024", {share}) && overview::connected("smb://nas/photos", {share}) &&
+              !overview::connected("smb://nas/photos2", {share}) && !overview::connected("smb://nas/photos", {}),
+          "a recent server counts as connected when it's a mounted share or inside one");
+    QString stick = "/media/" + user + "/kestrel-test-stick";
+    qputenv("KESTREL_TEST_MOUNTS", (home_path("data") + "|zfs|pool/data;" + home_path("box") + "|fuse.sshfs|user@host:/srv;" +
+                                    home_path(".hidden/x") + "|zfs|pool/x;" + stick + "|vfat|/dev/kestrel-test")
+                                       .toUtf8());
+    settings().setValue("recent_servers", QStringList({"smb://nas/photos", "sftp://user@backup.local/srv"}));
+    QStringList mounts_expected = {home_path("box"), home_path("data"), "server:smb://nas/photos",
+                                   "server:sftp://user@backup.local/srv"};
+    bool listed = wait_for([&]() {
+        s->refresh();   // the mount list is re-read once it's a second old
+        return s->entry_keys("mounts") == mounts_expected;
+    });
+    check(listed, "the Mounts section lists them by place, then the recent servers (" + s->entry_keys("mounts").join(", ") + ")");
+    check(s->entry_keys("devices").contains(stick) && !s->entry_keys("mounts").contains(stick),
+          "a mount Devices lists isn't listed again under Mounts");
+    QListWidgetItem *data_item = nullptr, *server_item = nullptr;
+    for (int i = 0; i < s->count(); ++i) {
+        if (s->item(i)->data(PathRole).toString() == home_path("data"))
+            data_item = s->item(i);
+        if (s->item(i)->data(PathRole).toString() == "smb://nas/photos")
+            server_item = s->item(i);
+    }
+    check(data_item && data_item->text() == "data" && data_item->toolTip().contains("ZFS dataset pool/data"),
+          "a mount is named after its folder and says what it is");
+    check(server_item && server_item->text() == "photos on nas" &&
+              server_item->foreground().color() == s->palette().color(QPalette::PlaceholderText) &&
+              server_item->toolTip().contains("click to connect"),
+          "a recent server that isn't connected is greyed, named like GNOME Files names it, and connects on a click");
+    s->move_entry("mounts", home_path("data"), 0);
+    check(wait_for([&]() { return s->entry_keys("mounts").value(0) == home_path("data"); }) &&
+              settings().value("sidebar_mounts_order").toStringList().value(0) == home_path("data"),
+          "a mount can be moved within Mounts, and the order is saved");
+    s->toggle_section("mounts");
+    check(wait_for([&]() { return s->entry_keys("mounts").isEmpty() && s->shown_sections().contains("mounts"); }),
+          "Mounts collapses like the other sections");
+    s->toggle_section("mounts");
+    auto sidebar_reports = [&]() {
+        int n = 0;
+        for (const auto &[f, msg] : fake.heard)
+            n += f == me && msg.value("type").toString() == "sidebar";
+        return n;
+    };
+    wait_for([&]() { return s->entry_keys("mounts").size() == 4; });
+    int reports = sidebar_reports();
+    s->forget_server("smb://nas/photos");
+    check(wait_for([&]() {
+              return s->entry_keys("mounts").size() == 3 && !s->entry_keys("mounts").contains("server:smb://nas/photos") &&
+                     sidebar_reports() > reports;
+          }) && !settings().value("recent_servers").toStringList().contains("smb://nas/photos"),
+          "Remove from Recent Servers takes it out of the section and the saved list, and tells other Kestrels");
+    qunsetenv("KESTREL_TEST_MOUNTS");
+
+    // -- drives aren't polled: the mount table is read again when the kernel says it changed (MountWatch), a drive's
+    // total is asked once, the free space when a folder is opened or a job has ended
+    drives::MountWatch::instance()->mounts_changed();   // (the test's mounts gone)
+    wait_for([&]() { return !s->entry_keys("mounts").contains(home_path("data")); });
+    spin(2000);   // (the answers to the first questions)
+    int answers = 0;
+    QMetaObject::Connection counted =
+        QObject::connect(drives::Sizes::instance(), &drives::Sizes::changed, [&](const QString &) { answers += 1; });
+    QStringList devices_before = s->entry_keys("devices");
+    spin(7000);
+    check(answers == 0 && s->entry_keys("devices") == devices_before,
+          "left alone, no drive is asked anything (its size, its label) over 7 seconds (" + QString::number(answers) +
+              " answers)");
+    QString arrived = "/media/" + user + "/kestrel-arrived";
+    qputenv("KESTREL_TEST_MOUNTS", (arrived + "|vfat|/dev/kestrel-arrived").toUtf8());
+    drives::MountWatch::instance()->mounts_changed();   // the kernel: the mount table changed
+    bool shows = wait_for([&]() { return s->entry_keys("devices").contains(arrived); }, 3000);
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    bool goes = wait_for([&]() { return !s->entry_keys("devices").contains(arrived); }, 3000);
+    check(shows && goes, "a drive mounted shows in the sidebar, and one unmounted goes, as soon as the mount table changes");
+    // a mount that comes in steps: the kernel's event first, the mount in the table only after the sidebar's refresh
+    // has run, and nothing else said (udev's by-label link and the like have no event)
+    QString late = "/media/" + user + "/kestrel-late";
+    drives::MountWatch::instance()->mounts_changed();
+    spin(600);   // the refresh has run, without it
+    bool not_yet = !s->entry_keys("devices").contains(late);
+    qputenv("KESTREL_TEST_MOUNTS", (late + "|vfat|/dev/kestrel-late").toUtf8());
+    bool late_shows = wait_for([&]() { return s->entry_keys("devices").contains(late); }, 4000);
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    wait_for([&]() { return !s->entry_keys("devices").contains(late); }, 3000);
+    check(not_yet && late_shows, "a mount that's in the table only a moment after the event still shows, with no other "
+                                 "event");
+    // mount changes coming faster than the refresh's 300 ms (containers, an automounter) don't hold it off
+    QString busy = "/media/" + user + "/kestrel-busy";
+    qputenv("KESTREL_TEST_MOUNTS", (busy + "|vfat|/dev/kestrel-busy").toUtf8());
+    QElapsedTimer stream;
+    stream.start();
+    bool during = false;
+    while (stream.elapsed() < 2500 && !during) {
+        drives::MountWatch::instance()->mounts_changed();
+        spin(100);
+        during = s->entry_keys("devices").contains(busy);
+    }
+    qint64 took = stream.elapsed();
+    qunsetenv("KESTREL_TEST_MOUNTS");
+    drives::MountWatch::instance()->mounts_changed();
+    wait_for([&]() { return !s->entry_keys("devices").contains(busy); }, 3000);
+    check(during && took < 1000, QString("a drive mounted shows within a second while other mounts keep changing (%1 ms)")
+                                     .arg(took));
+    QString disk;   // a real block device, if this machine has one mounted
+    for (const drives::Mount &mt : drives::mounts())
+        if ((mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd")) &&
+            lexists(mt.source))   // (in a container the host's disk is in the mount table, but not its device)
+            disk = mt.source;
+    if (disk.isEmpty()) {
+        skip("a disk's size from /sys, as lsblk gives it (no disk mounted here)");
+    } else {
+        auto r = proc::run({"lsblk", "-bndo", "SIZE", disk});
+        check(r.rc == 0 && drives::device_bytes(disk) == r.out.trimmed().toLongLong(),
+              "a disk's size comes from /sys, as lsblk gives it, without asking the drive (" + disk + ")");
+    }
+    answers = 0;
+    write_text(home_path("job-src.bin"), QByteArray(4096, 'j'));
+    fileops::start_ops(w, {{"copy", home_path("job-src.bin"), home_path("job-dst.bin")}}, "Test", []() {});
+    check(wait_for([&]() { return answers > 0; }, 10000) && isfile(home_path("job-dst.bin")),
+          "when a job has ended, the free space of the folder's drive is asked again (the status bar)");
+    QObject::disconnect(counted);
 
     finish();
 }

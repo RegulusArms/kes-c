@@ -27,7 +27,7 @@ Right-click an archive:
 
 **Remembered passwords.** The password window has a **Remember this password** box (off by default; only shown when a keyring is running). Ticked, the password is saved in your desktop's login keyring (GNOME Keyring on Ubuntu and Mint, KWallet on KDE, through the Secret Service), as "Kestrel Explorer: archive password for photos.7z" in Passwords and Keys (Seahorse). It's saved only when you ask, because any app running as you can read the login keyring. Kestrel then finds a password in this order: the one typed last in this job, the one saved for this archive (recognised by its size and the start of its contents, so renaming or moving it doesn't matter), then each of the other saved ones, and only if none opens the archive does it ask. **Preferences → Forget Saved Archive Passwords…** deletes them all (or delete single ones in Passwords and Keys). Without a keyring everything works the same, without saving.
 
-**Looking inside: Open as Archive.** Right-click an archive → **Open as Archive** opens a window listing what's inside it, as a tree of its folders and files with their sizes, packed sizes and times (🔒 marks an encrypted file), with a filter box. Select files or folders and choose **Extract Here** (next to the archive) or **Extract To…**: each one is put right in that folder under its own name (`photos/2024/beach.jpg` → `beach.jpg`; a folder comes with everything inside it). A name that's taken gets a number; nothing is replaced. The items are extracted into a hidden folder first and moved into place only once all of them are complete, so a failure or ✕ leaves nothing half-made. **Extract All…** and **Test** are there too. It works for 7z, zip, rar, zpaq and tar archives (with any compression) and what 7-Zip opens (iso, deb, cab…), not for a single compressed file (`.gz`, `.xz`…), which holds one file anyway. An archive whose names are encrypted asks for its password before it can be listed (a saved one is found first); one with encrypted files asks when you extract one of them, once while the window is open.
+**Looking inside: Open as Archive.** Right-click an archive → **Open as Archive** opens a window listing what's inside it, as a tree of its folders and files with their sizes, packed sizes and times (🔒 marks an encrypted file), with a filter box. Select files or folders and choose **Extract Here** (next to the archive) or **Extract To…**: each one is put right in that folder under its own name (`photos/2024/beach.jpg` → `beach.jpg`; a folder comes with everything inside it). A name that's taken gets a number; nothing is replaced. The items are extracted into a hidden folder first and moved into place only once all of them are complete, so a failure or ✕ leaves nothing half-made. **Extract All…** and **Test** are there too. It works for 7z, zip, rar, zpaq and tar archives (with any compression) and what 7-Zip opens (iso, deb, cab…), not for a single compressed file (`.gz`, `.xz`…), which holds one file anyway. An archive whose names are encrypted asks for its password before it can be listed (a saved one is found first); one with encrypted files asks when you extract one of them, once while the window is open. Double-click a file (or right-click → **Open**) to open it with its app: it's extracted to a read-only temporary copy in `~/.cache/kestrel-explorer/archive-files` first (copies not used for a day are deleted). Drag items out of the window onto a Kestrel folder or the sidebar to extract them there (a job, as Extract To…), or onto the desktop or another app, which get them extracted to temporary copies as they're dropped (up to 500 MB; encrypted items whose password hasn't been given yet go only to Kestrel, which can ask for it).
 
 **Testing: Test Archive.** Right-click an archive → **Test Archive** (or several → **Test Archives**) decompresses everything in it and checks each file against its checksum, without writing anything: 7-Zip, `unrar`, `unzip` and `zpaq` test their formats, and for tar and single compressed files the compressor checks its data and tar reads the archive through. It runs as a job in the status bar, finds or asks for passwords as extracting does, and ends with one message: OK, or which files are damaged, with the program's own words under **Show Details**.
 
@@ -45,8 +45,9 @@ Select files and/or folders, right-click and choose **Compress…**. The dialog 
 | Compression level | The tool's own scale, e.g. 0–9 for 7z (Store … Ultra), 1–22 for zstd (20+ is "ultra"), 1–5 for zpaq. |
 | Method | 7z: LZMA2, LZMA, PPMd, BZip2, Deflate or Copy. zip with 7-Zip: Deflate, Deflate64, BZip2, LZMA, PPMd or Copy. |
 | CPU threads | Auto uses all cores. Shown for tools that support threads. |
-| Encrypt with a password | 7z (AES-256), zip (AES-256 or the weaker but universally readable ZipCrypto), rar and zpaq. **Also encrypt file names** (7z, rar) hides even the list of files. |
-| Split into volumes | Parts of a chosen size in MB or GB: `.7z.001`, `.zip.001`, `.part1.rar`, …. |
+| Encrypt with a password | 7z (AES-256), zip (AES-256 or the weaker but universally readable ZipCrypto), rar, zpaq, and tar with any compression (through `gpg`, AES-256: the whole archive is encrypted, names and all, and saved as `name.tar.gz.gpg`). **Also encrypt file names** (7z, rar) hides even the list of files. |
+| Create a checksum file | tar formats (also through gpg): `name.tar.zst.sha256` (or `.sfv`, `.md5`…, one per algorithm, or one `name.tar.zst-CHECKSUM` with every algorithm), made from the archive's bytes as they're written, so it's ready the moment the archive is, without reading it again. It's written once the archive is in place; a failed or cancelled job leaves neither. Not offered for 7z, zip, rar and zpaq, which go back and rewrite parts of the file as they finish. Use **Create Checksum File…** on those. |
+| Split into volumes | Parts of a size that fits what they're for: 18 MB (a 25 MB email, after encoding), 100 MB, 650 / 700 MB (CD), 1 GB, 2 GB, 4 GB (a FAT32 USB stick's largest file), 4.7 GB (DVD), 8.5 GB (dual-layer DVD), 25 / 50 GB (Blu-ray), each exactly what fits (a disc's capacity less 4 MiB for its file system), or **Custom…** in KB, MB or GB. Passed to the program in bytes (`-v4696178688b`). Parts are `.7z.001`, `.zip.001`, `.part1.rar`, …. |
 | Solid archive | 7z and rar: compress files together for a smaller archive, at the cost of slower single-file extraction. |
 | Recovery record | rar: extra data (1–10%) that lets `rar` repair a damaged archive. |
 | Extra options | Anything else, passed straight to the program, e.g. `-mfb=273` for 7z or `--long=27` for zstd. |
@@ -62,13 +63,13 @@ The **Command** box at the bottom shows exactly what will run (with the password
 | zip | `7z` or `zip` | `7z` (or `unzip`) | AES-256 or ZipCrypto (`zip`: ZipCrypto only) | with 7-Zip | Split zips are `.zip.001` parts, which 7-Zip joins |
 | rar | `rar` (non-free) | `unrar` | yes, optional hidden names | yes | Solid; recovery record. Ubuntu's 7-Zip can't decompress RAR, so extracting needs `unrar` |
 | zpaq | `zpaq` | `zpaq` | yes | no | Journaling, very high compression at levels 4–5 (and very slow) |
-| tar | `tar` | `tar` | no | no | |
-| tar.gz | `pigz` or `gzip` | same | no | no | pigz uses all cores |
-| tar.bz2 | `pbzip2`, `lbzip2` or `bzip2` | same | no | no | |
-| tar.xz | `xz` | `xz` | no | no | Multi-threaded |
-| tar.zst | `zstd` | `zstd` | no | no | Very fast; levels up to 22 |
-| tar.lz | `plzip` or `lzip` | same | no | no | |
-| tar.lz4 | `lz4` | `lz4` | no | no | Fastest, lowest ratio |
+| tar | `tar` | `tar` | with gpg | no | |
+| tar.gz | `pigz` or `gzip` | same | with gpg | no | pigz uses all cores |
+| tar.bz2 | `pbzip2`, `lbzip2` or `bzip2` | same | with gpg | no | |
+| tar.xz | `xz` | `xz` | with gpg | no | Multi-threaded |
+| tar.zst | `zstd` | `zstd` | with gpg | no | Very fast; levels up to 22 |
+| tar.lz | `plzip` or `lzip` | same | with gpg | no | |
+| tar.lz4 | `lz4` | `lz4` | with gpg | no | Fastest, lowest ratio |
 | gz, bz2, xz, zst, lz, lz4 | as above | as above | no | no | One file only, no folder structure |
 | iso, cab, deb, rpm, wim, cpio, msi, … | — | `7z` | — | — | Extract only |
 
@@ -89,6 +90,7 @@ Not every tool can report real progress, so the bar shows what each one can:
 
 - **7-Zip, `rar` and `unrar`** receive the password privately, on their standard input.
 - **`zip` and `unzip`** (used only when 7-Zip isn't installed, or when you pick `zip` as the tool) receive it in an environment variable (`ZIPOPT`, `UNZIP`), which only you and the administrator can read. `unzip` can't take a password that starts with `-`.
+- **`gpg`** (tar archives with a password) receives it privately, on a pipe of its own, and isn't let keep it in its agent: each time the archive is opened, the password is checked again. A `.tar.gz.gpg` opens with `gpg -d` too, anywhere: `gpg -d photos.tar.gz.gpg | tar xzf -`.
 - **`zpaq`** only accepts a password on its command line. While the job runs, another user logged in to the same computer could see it in the process list. The Compress dialog says so when you pick zpaq.
 - **ZipCrypto** is weak encryption; use AES-256 (the default) unless the archive must open in very old tools.
 - **Links that point outside the extraction folder** (for example to `/etc/...`) aren't recreated as-is: 7-Zip re-roots them inside the folder and `unrar` skips them. This protects you from malicious archives. Kestrel relies on the tools here (it doesn't extract archives itself), so the tests extract crafted archives (`../` names, absolute paths, a symlink and then a file written through it) with tar, 7-Zip and unrar, and check that nothing lands outside the destination (tested with tar 1.35, 7-Zip 23.01 and 26.00, unrar 7.00 and 7.20).

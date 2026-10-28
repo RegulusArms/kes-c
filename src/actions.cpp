@@ -6,6 +6,8 @@
 #include "admin.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "metadata.h"
+#include "prefs.h"
 #include "undo.h"
 #include "util.h"
 #include "widgets.h"
@@ -123,28 +125,44 @@ void MainWindow::paste(const QString &target_in, bool as_link)
         make_links(paths, target, "sym");
         return;
     }
+    QString how = target_in.isEmpty() ? "Paste" : "Paste Into Folder";
     if (op == "cut") {
         QPointer<MainWindow> self(this);
         fileops::transfer(this, paths, target, "move", [self]() {
             if (self)
                 self->cut_paths.clear();
             QGuiApplication::clipboard()->clear();
-        });
+        }, how);
     } else {
-        fileops::transfer(this, paths, target, "copy");
+        // copied files are forgotten once pasted, so an old copy isn't pasted again by mistake (Paste Into Folder is a
+        // click away from Move To…); not when the clipboard holds something else by then, or paths copied as text
+        QPointer<MainWindow> self(this);
+        fileops::transfer(this, paths, target, "copy", nullptr, how, [self, paths]() {
+            const QMimeData *md = QGuiApplication::clipboard()->mimeData();
+            bool files = md && (md->hasFormat("x-special/gnome-copied-files") || md->hasUrls());
+            if (self && files && self->read_clipboard() == qMakePair(QString("copy"), paths))
+                QGuiApplication::clipboard()->clear();
+        });
     }
 }
 
-void MainWindow::handle_drop(const QStringList &paths, const QString &target)
+void MainWindow::handle_drop(const QStringList &paths, const QString &target, bool copy_only)
 {
     if (paths.isEmpty())
         return;
+    if (target == join(TRASH_DIR(), "files")) {   // onto the Trash (its tab, its place in the sidebar): trashed properly
+        trash_paths(paths);
+        return;
+    }
     Qt::KeyboardModifiers mods = QGuiApplication::keyboardModifiers();
     bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier, alt = mods & Qt::AltModifier;
     if (alt) {
         QMenu m(this);
-        m.addAction("Move Here", this, [this, paths, target]() { fileops::transfer(this, paths, target, "move"); });
-        m.addAction("Copy Here", this, [this, paths, target]() { fileops::transfer(this, paths, target, "copy"); });
+        if (!copy_only)
+            m.addAction("Move Here", this,
+                        [this, paths, target]() { fileops::transfer(this, paths, target, "move", nullptr, "Drop (Move Here)"); });
+        m.addAction("Copy Here", this,
+                    [this, paths, target]() { fileops::transfer(this, paths, target, "copy", nullptr, "Drop (Copy Here)"); });
         m.addAction("Link Here", this, [this, paths, target]() { make_links(paths, target, "sym"); });
         m.exec(QCursor::pos());
         return;
@@ -154,7 +172,7 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
         return;
     }
     QString op;
-    if (ctrl) {
+    if (ctrl || copy_only) {
         op = "copy";
     } else if (shift) {
         op = "move";
@@ -163,13 +181,15 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target)
         bool same = lstat_(paths.first(), a) && stat_(target, b) && a.st_dev == b.st_dev;
         op = same ? "move" : "copy";
     }
-    fileops::transfer(this, paths, target, op);
+    fileops::transfer(this, paths, target, op, nullptr, "Drop");
 }
 
 void MainWindow::transfer_to(const QStringList &paths, const QString &op)
 {
     choose_folder(this, op == "move" ? "Move To" : "Copy To", cur_dir().isEmpty() ? HOME() : cur_dir(),
-                  [this, paths, op](const QString &d) { fileops::transfer(this, paths, d, op); });
+                  [this, paths, op](const QString &d) {
+                      fileops::transfer(this, paths, d, op, nullptr, op == "move" ? "Move To…" : "Copy To…");
+                  });
 }
 
 void MainWindow::duplicate(const QStringList &paths)
@@ -217,6 +237,111 @@ void MainWindow::make_folder(const QString &cur, const QString &name)
             warn(this, "New Folder", e.message());
         }
     }
+}
+
+void MainWindow::new_folder_with(const QStringList &paths)
+{
+    if (paths.isEmpty())
+        return;
+    // the folder they were selected in: the one shown, or theirs in search results and lists
+    QString dir = dirname(paths.first());
+    QString shown = cur_dir();
+    if (!shown.isEmpty() && std::all_of(paths.begin(), paths.end(), [&](const QString &p) { return dirname(p) == shown; }))
+        dir = shown;
+    QString def = basename(unique_path(dir, "New Folder", "num"));
+    QPointer<MainWindow> self(this);
+    ask_text(this, "New Folder with Selection",
+             paths.size() == 1 ? QString("Put “%1” in a new folder named:").arg(basename(paths.first()))
+                               : QString("Put the %1 selected items in a new folder named:").arg(paths.size()),
+             def, [self, paths, dir](const QString &name) {
+                 if (self)
+                     self->move_into_new(paths, dir, name);
+             });
+}
+
+void MainWindow::move_into_new(const QStringList &paths, const QString &dir, const QString &name_in)
+{
+    QString name = name_in.trimmed();
+    auto again = [this, paths, dir, name](const QString &why) {   // the name window again, the name kept
+        QPointer<MainWindow> self(this);
+        ask_text(this, "New Folder with Selection", why, name, [self, paths, dir](const QString &n) {
+            if (self)
+                self->move_into_new(paths, dir, n);
+        });
+    };
+    if (name.isEmpty())
+        return;
+    if (name.contains('/') || name == "." || name == "..") {
+        again(QString("“%1” can't be a folder's name. Another name:").arg(name));
+        return;
+    }
+    // what's still there (the window stayed open meanwhile: items may have been moved or deleted)
+    QStringList items, gone;
+    QString folder = join(dir, name);
+    for (const QString &p : paths)
+        (lexists(p) && p != folder ? items : gone) << p;
+    if (items.isEmpty()) {
+        warn(this, "New Folder with Selection", "None of the selected items is there any more.");
+        return;
+    }
+    // the name claimed without replacing anything: mkdir fails on a name that's taken
+    if (::mkdir(enc(folder).constData(), 0777) != 0) {
+        int err = errno;
+        if (err == EEXIST) {
+            again(QString("There's already something named “%1” in “%2”. Another name:").arg(name, basename(dir)));
+            return;
+        }
+        if (err == EACCES || err == EPERM) {
+            QPointer<MainWindow> self(this);
+            admin::retry_as_admin(
+                this, "New Folder with Selection",
+                QString("You don't have permission to create folders in “%1”.").arg(dir),
+                [folder](Task *task) {
+                    admin::session().call(task, "mkdir", {{"path", folder}});
+                    return QStringList();
+                },
+                [self, items, gone, folder](bool ok) {
+                    if (ok && self)
+                        self->start_move_into(items, gone, folder);
+                });
+            return;
+        }
+        warn(this, "New Folder with Selection", folder + ": " + QString::fromLocal8Bit(strerror(err)));
+        return;
+    }
+    start_move_into(items, gone, folder);
+}
+
+void MainWindow::start_move_into(const QStringList &items, const QStringList &gone, const QString &folder)
+{
+    QString name = basename(folder);
+    QList<fileops::Job> jobs;
+    for (const QString &p : items)
+        jobs << fileops::Job{"move", p, join(folder, basename(rstrip(p, '/')))};
+    QStringList intro{QString("New Folder with Selection in the window “%1”: %2 item(s) into the new folder “%3”")
+                          .arg(windowTitle(), QString::number(items.size()), folder),
+                      "Each item is moved whole; if this stops part-way, what was moved stays in the folder and the "
+                      "rest stays where it was."};
+    if (!gone.isEmpty())
+        intro << QString("Left out (moved or deleted meanwhile): %1").arg(gone.join(", "));
+    QPointer<MainWindow> self(this);
+    fileops::start_ops(
+        this, jobs, QString("Moving %1 into %2").arg(items.size() == 1 ? "“" + basename(items.first()) + "”" : QString("%1 items").arg(items.size()), name),
+        [self, jobs, folder]() {
+            // undone as one: moved back, and the folder removed once it's empty
+            QList<QPair<QString, QString>> undo_items{{folder, QString()}};
+            for (const fileops::Job &j : jobs)
+                if (lexists(j.dst) && !lexists(j.src))
+                    undo_items << qMakePair(j.src, j.dst);
+            undo::record("move_into", "New Folder with Selection", undo_items);
+            if (self && self->pane())
+                self->pane()->select_later(folder);
+        },
+        QString(), intro);
+    if (!gone.isEmpty())
+        inform(this, "New Folder with Selection",
+               QString("%1 of the selected items weren't there any more and were left out:\n\n%2")
+                   .arg(QString::number(gone.size()), gone.mid(0, 10).join('\n')));
 }
 
 void MainWindow::new_file(const QString &tmpl)
@@ -338,6 +463,7 @@ void MainWindow::trash_paths(const QStringList &selected)
     };
     auto done = [this, paths, trashed](const QVariant &res) {
         undo::record_paths("trash", "Move to Trash", *trashed);
+        fileops::dirsizes::drop_with_parents(*trashed);   // the folders they left are smaller now
         sidebar->refresh();
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
@@ -391,6 +517,95 @@ void MainWindow::delete_now(const QStringList &paths)
     for (const QString &p : paths)
         jobs << fileops::Job{"delete", p, QString()};
     fileops::start_ops(this, jobs, "Deleting", done);
+}
+
+void MainWindow::wipe_metadata(const QStringList &paths)
+{
+    QStringList imgs;
+    for (const QString &p : paths)
+        if (metadata::can_wipe(p))
+            imgs << p;
+    if (imgs.isEmpty())
+        return;
+    bool copy = prefs::get("metadata_wipe").toString() != "original";
+    bool keep = prefs::get("metadata_wipe_keep_basic").toBool();
+    QPointer<MainWindow> self(this);
+    auto start = [self, imgs, copy, keep]() {
+        if (!self)
+            return;
+        auto work = [imgs, copy, keep](Task *task) -> QVariant {
+            QStringList made;
+            QVariantList failed;
+            for (int i = 0; i < imgs.size(); ++i) {
+                if (task->cancelled)
+                    break;   // the images done so far stay done
+                task->step = i;
+                task->report(i, imgs.size(),
+                             QString("%1 of %2 — %3").arg(group_digits(i), group_digits(imgs.size()), basename(imgs[i])));
+                try {
+                    made << metadata::wipe(imgs[i], copy, keep);
+                    task->log((copy ? "Copied without metadata: " : "Wiped: ") + made.last());
+                } catch (const Error &e) {
+                    failed << QVariant(QStringList{imgs[i], e.message()});
+                    task->log("Failed: " + imgs[i] + ": " + e.message());
+                }
+            }
+            task->was_cancelled = task->cancelled;
+            return QVariantMap{{"made", made}, {"failed", failed}};
+        };
+        auto done = [self, copy](const QVariant &res) {
+            QVariantMap m = res.toMap();
+            QStringList made = m.value("made").toStringList();
+            if (copy)
+                undo::record_paths("create", "Wipe Metadata", made);   // undone: the copies go to the trash
+            if (!self)
+                return;
+            if (copy && self->pane())
+                for (const QString &p : made)
+                    self->pane()->select_later(p);
+            QVariantList failed = m.value("failed").toList();
+            if (!failed.isEmpty()) {
+                QStringList lines;
+                for (const QVariant &f : failed.mid(0, 10))
+                    lines << f.toStringList().value(1);
+                warn(self, "Wipe Metadata",
+                     QString("%1 image(s) couldn't be wiped:\n\n%2").arg(QString::number(failed.size()), lines.join('\n')));
+            } else if (res.isValid()) {
+                self->statusBar()->showMessage(
+                    QString(copy ? "Made %1 copy(ies) without metadata" : "Wiped the metadata of %1 image(s)")
+                        .arg(group_digits(made.size())),
+                    4000);
+            }
+        };
+        QStringList steps;
+        for (const QString &p : imgs)
+            steps << basename(p);
+        QStringList intro{copy ? QString("Wipe Metadata: %1 image(s), each copied beside it without its metadata")
+                                     .arg(imgs.size())
+                               : QString("Wipe Metadata: %1 image(s), wiped in place (no backup)").arg(imgs.size()),
+                          "Each image is written whole under a hidden name and then renamed into place; if this stops "
+                          "part-way, the images done so far stay done and the rest are as they were."};
+        QString title = imgs.size() == 1 ? "Wiping the metadata of “" + basename(imgs.first()) + "”"
+                                         : QString("Wiping the metadata of %1 images").arg(imgs.size());
+        fileops::queue_job(self, title, imgs, work, done, true, imgs.size() > 1 ? steps : QStringList(), false, intro, true);
+    };
+    if (copy) {
+        start();
+        return;
+    }
+    // the originals changed with no copy kept: asked first
+    QString what = imgs.size() == 1 ? "“" + basename(imgs.first()) + "”" : QString("these %1 images").arg(imgs.size());
+    auto *box = new QMessageBox(QMessageBox::Warning, "Wipe Metadata",
+                                "Wipe all metadata (camera details, GPS location, dates, comments, image-generation "
+                                "prompts…) from " + what + "?\n\nNo backup is kept, so this can't be undone.",
+                                QMessageBox::Cancel, this);
+    box->setInformativeText("Preferences → Images & Videos can keep the originals and make copies instead.");
+    QPushButton *ok = box->addButton("Wipe", QMessageBox::DestructiveRole);
+    box->setDefaultButton(QMessageBox::Cancel);
+    ask_box(box, [ok, start](QAbstractButton *b) {
+        if (b == ok)
+            start();
+    });
 }
 
 void MainWindow::restore(const QStringList &paths)

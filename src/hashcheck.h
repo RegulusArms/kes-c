@@ -8,8 +8,11 @@
 #include <QString>
 
 #include <functional>
+#include <memory>
+#include <vector>
 
 class MainWindow;
+class QCryptographicHash;
 class QCheckBox;
 class QLabel;
 class QLineEdit;
@@ -45,6 +48,18 @@ QStringList hash_files(const QString &path, const QStringList &algos,
                        const std::function<void(qint64, qint64)> &progress = nullptr,
                        const std::function<void()> &check = nullptr);
 QString algo_label(const QString &algo);   // "SHA256", "CRC32", "BLAKE2b"
+// Hashes of data given piece by piece, with several algorithms at once (bytes on their way somewhere: an archive as it's
+// written). Not thread-safe.
+class Hasher {
+public:
+    explicit Hasher(const QStringList &algos);
+    ~Hasher();
+    void add(const char *data, qint64 n);
+    QStringList results();   // lowercase hex, in algos' order
+private:
+    std::vector<std::unique_ptr<QCryptographicHash>> hashes;   // nullptr for CRC32
+    quint32 crc = 0;
+};
 
 // Each listed file's result: "ok", "failed", "missing" or "error" (with the message).
 struct Result {
@@ -104,6 +119,10 @@ QString format_line(const QString &name, const QString &algo, const QString &hex
 // be read are left out and named in *errors. Returns the files written. On a thread (task may be nullptr).
 QStringList create(Task *task, const QStringList &paths, const QString &dir, const QString &stem,
                    const QStringList &algos, bool one_file, QStringList *errors);
+// Write output_paths() for files already hashed: (name relative to dir, hashes in algos' order). Each file is written
+// in one step, replacing an older one. Returns the files written.
+QStringList write_checksums(const QString &dir, const QString &stem, const QList<QPair<QString, QStringList>> &hashed,
+                            const QStringList &algos, bool one_file);
 
 // Pick the algorithms, one file or one per algorithm, the name and the folder; settings remember the first two.
 class CreateDialog : public QDialog {

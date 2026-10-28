@@ -1,8 +1,10 @@
 #include "metadata.h"
 
+#include "convert.h"
 #include "proc.h"
 #include "util.h"
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QFile>
 #include <QHash>
@@ -16,6 +18,7 @@
 #include <QXmlStreamReader>
 
 #include <cmath>
+#include <sys/stat.h>
 #include <mutex>
 
 using namespace util;
@@ -184,6 +187,7 @@ private:
 
 struct FileMeta {
     QByteArray exif_blob;                   // TIFF-structured EXIF data
+    qint64 exif_offset = -1;                // where exif_blob starts in the file (JPEG and TIFF files)
     QList<QPair<QString, QString>> text;    // PNG text chunks, in order
 };
 
@@ -212,12 +216,9 @@ QByteArray inflate(const QByteArray &z)
 
 QByteArray strip_exif_header(const QByteArray &b) { return b.startsWith(QByteArray("Exif\0\0", 6)) ? b.mid(6) : b; }
 
-FileMeta read_file_meta(const QString &path, qint64 max_tiff = 32 << 20)
+FileMeta read_file_meta(QIODevice &f, qint64 max_tiff = 32 << 20)   // f: open for reading
 {
     FileMeta m;
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly))
-        return m;
     QByteArray head = f.read(16);
     if (head.startsWith("\x89PNG\r\n\x1a\n")) {
         f.seek(8);
@@ -275,8 +276,10 @@ FileMeta read_file_meta(const QString &path, qint64 max_tiff = 32 << 20)
                 break;
             if (marker == 0xE1 && m.exif_blob.isEmpty()) {
                 QByteArray data = f.read(len - 2);
-                if (data.startsWith(QByteArray("Exif\0\0", 6)))
+                if (data.startsWith(QByteArray("Exif\0\0", 6))) {
                     m.exif_blob = data.mid(6);
+                    m.exif_offset = f.pos() - data.size() + 6;
+                }
             } else {
                 f.seek(f.pos() + len - 2);
             }
@@ -297,8 +300,17 @@ FileMeta read_file_meta(const QString &path, qint64 max_tiff = 32 << 20)
     } else if (head.startsWith("II*\0") || head.startsWith("MM\0*")) {
         f.seek(0);
         m.exif_blob = f.read(max_tiff);
+        m.exif_offset = 0;
     }
     return m;
+}
+
+FileMeta read_file_meta(const QString &path, qint64 max_tiff = 32 << 20)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return FileMeta();
+    return read_file_meta(f, max_tiff);
 }
 
 const QHash<int, QString> &exif_tag_names()
@@ -461,6 +473,25 @@ QDateTime taken(const QString &path)
     return QDateTime();
 }
 
+// The GPS position in an EXIF block (degrees, south and west negative); false if it has none or it's nonsense
+static bool gps_of(const Exif &exif, double *lat, double *lon)
+{
+    ExifVal la = exif.gps.value(2), lo = exif.gps.value(4);
+    if (la.nums.size() < 3 || lo.nums.size() < 3)
+        return false;
+    auto deg = [](const ExifVal &v) { return v.nums[0] + v.nums[1] / 60 + v.nums[2] / 3600; };
+    double y = deg(la), x = deg(lo);
+    if (exif.gps.value(1).text().trimmed().startsWith('S'))
+        y = -y;
+    if (exif.gps.value(3).text().trimmed().startsWith('W'))
+        x = -x;
+    if (!std::isfinite(x) || !std::isfinite(y) || std::fabs(y) > 90 || std::fabs(x) > 180 || (x == 0 && y == 0))
+        return false;   // 0, 0: a camera that had no fix
+    *lat = y;
+    *lon = x;
+    return true;
+}
+
 Rows basic_info(const QString &path)
 {
     Rows out;
@@ -507,9 +538,55 @@ Rows basic_info(const QString &path)
         out << qMakePair(QString("ISO"), v->text());
     if (const ExifVal *v = g(0x920A); v && v->numeric() && v->num() > 0)
         out << qMakePair(QString("Focal length"), QString::number(v->num(), 'g', 6) + " mm");
-    if (!exif.gps.isEmpty())
+    if (double lat, lon; gps_of(exif, &lat, &lon))
+        out << qMakePair(QString("GPS"), QString("%1, %2").arg(QString::number(lat, 'f', 6), QString::number(lon, 'f', 6)));
+    else if (!exif.gps.isEmpty())
         out << qMakePair(QString("GPS"), QString("yes"));
     return out;
+}
+
+bool gps_position(const QString &path, double *lat, double *lon)
+{
+    FileMeta fm = read_file_meta(path);
+    return !fm.exif_blob.isEmpty() && gps_of(TiffReader(fm.exif_blob).parse(), lat, lon);
+}
+
+static OrientationTag orientation_of(const FileMeta &fm)
+{
+    OrientationTag out;
+    const QByteArray &d = fm.exif_blob;
+    if (fm.exif_offset < 0 || d.size() < 8 || !(d.startsWith("II") || d.startsWith("MM")))
+        return out;
+    bool le = d.startsWith("II");
+    auto byte = [&](qint64 o) { return quint32(uchar(d[o])); };
+    auto u16 = [&](qint64 o) { return o + 2 > d.size() ? 0u : le ? byte(o) | byte(o + 1) << 8 : byte(o) << 8 | byte(o + 1); };
+    auto u32 = [&](qint64 o) {
+        return o + 4 > d.size() ? 0u : le ? u16(o) | u16(o + 2) << 16 : u16(o) << 16 | u16(o + 2);
+    };
+    qint64 ifd = u32(4);
+    int n = int(u16(ifd));
+    for (int i = 0; i < n && i < 1000; ++i) {
+        qint64 e = ifd + 2 + qint64(i) * 12;
+        if (e + 12 > d.size())
+            break;
+        if (u16(e) == 0x0112 && u16(e + 2) == 3 && u32(e + 4) == 1) {   // SHORT, one value: in the entry itself
+            out.offset = fm.exif_offset + e + 8;
+            out.little_endian = le;
+            out.value = int(u16(e + 8));
+            break;
+        }
+    }
+    return out;
+}
+
+OrientationTag orientation_tag(const QString &path) { return orientation_of(read_file_meta(path)); }
+
+OrientationTag orientation_tag_in(const QByteArray &file)
+{
+    QBuffer b;
+    b.setData(file);
+    b.open(QIODevice::ReadOnly);
+    return orientation_of(read_file_meta(b));
 }
 
 
@@ -800,6 +877,15 @@ static const QSet<QString> READONLY_GROUPS = {"", "ExifTool", "System", "File", 
 
 bool can_edit() { return which("exiftool"); }
 
+bool viewable(const QString &path)
+{
+    static const QSet<QString> DOCS = {".pdf", ".epub", ".mobi", ".azw3", ".djvu", ".docx", ".xlsx", ".pptx", ".doc",
+                                       ".xls", ".ppt", ".odt", ".ods", ".odp", ".rtf", ".psd", ".svg", ".xmp"};
+    if (is_image(path))
+        return true;
+    return can_edit() && (is_video(path) || convert::is_audio(path) || DOCS.contains(ext_of(path)));
+}
+
 bool is_editable(const QString &group, const QString &value, const QString &tag)
 {
     if (group == "File" && tag == "Comment")   // JPEG comment segment
@@ -872,6 +958,54 @@ QStringList clear_all(const QString &path, bool keep_basic)
         if (!m.contains("No writable tags set"))
             out << m;
     return out;
+}
+
+bool can_wipe(const QString &path)
+{
+    static const QSet<QString> EXTS = {".jpg", ".jpeg", ".jpe", ".png", ".apng", ".webp", ".heic", ".heif", ".hif",
+                                       ".avif", ".jxl", ".gif", ".tif", ".tiff"};
+    return EXTS.contains(ext_of(path)) && isfile(path);
+}
+
+QString wipe(const QString &path, bool copy, bool keep_basic)
+{
+    // exiftool writes the wiped file to its output, which Kestrel puts in place itself (exiftool's own in-place write
+    // isn't fsynced, and a copy has to claim its name without replacing anything)
+    QStringList argv{"exiftool", "-charset", "filename=utf8", "-all="};
+    if (keep_basic)
+        argv << "-tagsfromfile" << "@" << "-icc_profile" << "-orientation";
+    argv << "-o" << "-" << abspath(path);
+    auto r = proc::run(argv, 300000);
+    if (r.failed)
+        throw Error("Wiping metadata needs exiftool (package libimage-exiftool-perl).");
+    if (r.rc != 0 || r.out.isEmpty()) {
+        QString err = QString::fromUtf8(r.err).trimmed();
+        throw Error(QString("Couldn't wipe the metadata of %1: %2").arg(basename(path), err.isEmpty() ? QString("exiftool failed") : err));
+    }
+    struct stat st;
+    bool have_mode = ::stat(enc(path).constData(), &st) == 0;
+    auto fill = [&](int fd) {
+        if (copy && have_mode)
+            ::fchmod(fd, st.st_mode & 0777);   // a copy of a private photo stays private
+        write_all(fd, r.out.constData(), r.out.size(), path);
+    };
+    if (!copy) {
+        write_parts(path, fill, false, true);
+        return path;
+    }
+    auto [stem, ext] = split_ext(basename(path));
+    for (int n = 1;; ++n) {
+        QString to = join(dirname(path), stem + " (no metadata" + (n > 1 ? " " + QString::number(n) : QString()) + ")" + ext);
+        if (lexists(to))
+            continue;
+        try {
+            write_parts(to, fill, true);
+            return to;
+        } catch (const OSError &e) {
+            if (e.code != EEXIST)   // taken meanwhile: the next name
+                throw;
+        }
+    }
 }
 
 // ---------------------------------------------------------------- tag catalog for "Add Tag"

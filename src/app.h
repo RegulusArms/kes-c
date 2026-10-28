@@ -12,6 +12,7 @@
 class Animator;
 class FSModel;
 class PreferencesDialog;
+class PropertiesDialog;
 class QMessageBox;
 class GridDelegate;
 class ImageViewer;
@@ -80,30 +81,41 @@ public:
     void toggle_hidden(bool on);
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
+    void open_checksums(const QString &path);   // Verify Checksums, its signature first when one is beside it
     bool open_file(const QString &path);
     void quick_view(Pane *pane, const QStringList &paths);
-    void open_viewer(Pane *pane, const QStringList &images, int idx);
+    ImageViewer *open_viewer(Pane *pane, const QStringList &images, int idx, bool whole_folder = false);   // whole_folder: follow it
+    void compare_in_viewer(Pane *pane, const QStringList &two);   // over each other, with a slider
     void context_menu(Pane *pane, QAbstractItemView *view, const QPoint &pos);
+    QMenu *menu_at(Pane *pane, QAbstractItemView *view, const QPoint &pos);   // what context_menu shows (and selects)
     QMenu *build_menu(Pane *pane, const QStringList &paths);
     void reveal(const QString &path);
     void copy_text(const QStringList &items);
     void clip(bool cut, const QStringList &paths);
     QPair<QString, QStringList> read_clipboard() const;
     void paste(const QString &target = QString(), bool as_link = false);
-    void handle_drop(const QStringList &paths, const QString &target);
+    void handle_drop(const QStringList &paths, const QString &target, bool copy_only = false);   // COPY_ONLY_MIME
     void transfer_to(const QStringList &paths, const QString &op);
     void duplicate(const QStringList &paths);
     void new_folder();
+    // New Folder with Selection…: asks for a name, makes the folder beside them (never over a taken name) and moves
+    // them into it as a queued job; Undo moves them back and removes the folder
+    void new_folder_with(const QStringList &paths);
+    void move_into_new(const QStringList &paths, const QString &dir, const QString &name);
+    void start_move_into(const QStringList &items, const QStringList &gone, const QString &folder);   // it's made
     void new_file(const QString &tmpl = QString());
     void rename(const QStringList &paths);
     void trash_paths(const QStringList &paths);
+    // Wipe Metadata…: the images' metadata taken out (metadata::wipe), as a queued job; copies beside them or the
+    // originals themselves (asked first), as Preferences says. Undo moves the copies to the trash.
+    void wipe_metadata(const QStringList &paths);
     void delete_paths(const QStringList &paths);
     void restore(const QStringList &paths);
     void empty_trash();
     void shred_paths(const QStringList &paths);   // with BleachBit
     void empty_trash_with_bleachbit();
     void make_links(const QStringList &paths, QString dest, const QString &kind);
-    void properties(const QStringList &paths, QWidget *parent = nullptr);
+    PropertiesDialog *properties(const QStringList &paths, QWidget *parent = nullptr);
     void preferences();
     void clear_cache();
     void purge_thumbnails();
@@ -151,7 +163,6 @@ private:
     QStringList open_with_choice(const QStringList &files, const QString &choice);
     void uwp_add(const QString &path);
     void folder_style_menu(QMenu *m, const QStringList &folders);
-    void close_when_idle();
     void sync_undo();
     void run_shred(const QStringList &targets, const QString &title);
     void rename_to(const QString &path, const QString &name);    // Rename, once the new name is given
@@ -159,12 +170,15 @@ private:
     void make_file(const QString &dir, const QString &name, const QString &tmpl);
     void delete_now(const QStringList &paths);   // Delete Permanently, once confirmed
     void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
-    QPointer<QMessageBox> close_box;             // "Operations Running", while it's asking
+    QPointer<QMessageBox> close_box;             // "Jobs Are Running" (the last window), while it's asking
+    bool close_confirmed = false;                // answered: close without asking again
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;
     QLabel *status_label, *free_label;
     QString free_root;   // the mount point free_label is about
+    bool status_pending = false;   // an update_status() is due (a burst of selection changes: one update)
+    qsizetype finished_seen = 0;   // jobs ended so far (TaskBoard): one more, the free space is asked again
     void update_free_label();
     QSlider *zoom_slider;
     QProgressBar *thumb_progress;

@@ -1,14 +1,15 @@
-# Runs the tests, then builds the .deb (on Ubuntu 24.04, whose Qt 6.4 is the oldest supported, so the package installs
-# there and on newer). A failing test stops the run: no package, release or apt update. The package is then installed
-# on clean 24.04 and 26.04 systems (tests/check_package.sh), and only one that passes goes into the apt repo. The tests
-# also run with AddressSanitizer and UndefinedBehaviorSanitizer, alongside (a finding fails the run, without holding up
-# the package).
-#   push to DEV           → replaces the "dev-latest" pre-release (one release, its .deb updated each time)
-#   pull request to main  → build only (the .deb is kept as a workflow artifact)
+# Runs the tests on Ubuntu 24.04 and 26.04, then builds a .deb for each, on it. A failing test on either stops the run:
+# no package, release or apt update. Each package is then installed on a clean system of its release
+# (tests/check_package.sh), and only packages that pass go into the apt repo. The tests also run with AddressSanitizer and UndefinedBehaviorSanitizer on both, alongside
+# (a finding fails the run, without holding up the package).
+#   push to DEV           → replaces the "dev-latest" pre-release (one release, its .debs updated each time)
+#   pull request to main  → build only (the .debs are kept as workflow artifacts)
 #   push to main (merge)  → release v<KES_VERSION from CMakeLists.txt>, unless that tag exists already
 # A push or pull request that only changes Markdown files (*.md) doesn't start it at all.
-# DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch, suites "dev" and "stable"),
-# signed with the APT_GPG_PRIVATE_KEY secret.
+# DEV builds and releases also go into the apt repo on GitHub Pages (the gh-pages branch), signed with the
+# APT_GPG_PRIVATE_KEY secret: each release's .deb into its suites ("noble-dev", "noble"…), and APT_GENERAL's into
+# "dev" and "stable". Its suites and page are .github/apt/, copied there with each build (the page only with a
+# release); "apt-check" then installs from what it serves, on each release's clean system.
 name: Build .deb
 
 on:
@@ -23,6 +24,15 @@ on:
 permissions:
   contents: write   # to create releases and tags
 
+env:
+  # The Ubuntu releases built for are the "deb" job's matrix; each one's .deb goes into its own apt suites (<codename>
+  # from main, <codename>-dev from DEV). This one's also goes into "stable" and "dev", for the sources files written
+  # before the release suites: the oldest supported, so it installs on every release they're used on.
+  # To stop supporting a release, take it out of "deb" and "package" before the first version that won't install there
+  # (its suites keep the last one that does; they stay in .github/apt/distributions), move its apt-check entry to the
+  # frozen ones, and if it's this one, put the next release here.
+  APT_GENERAL: noble
+
 concurrency:
   group: deb-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # never stop a release halfway
@@ -31,29 +41,72 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Install build and test dependencies
         # dbus: each test's private session bus; libglib2.0-bin, xdg-utils, desktop-file-utils: the installer test;
         # gnome-shell-common: GNOME Shell's settings, for the dock and extension checks (skipped without them);
+        # gnome-settings-daemon-common: its low-disk-space check's settings, for the slow test's (skipped without them);
         # bleachbit, libxml2-utils: the BleachBit cleaner's dry run and schema check (skipped without them)
         # gnome-keyring, p7zip-full: remembered archive passwords and Extract All (skipped without them)
+        # libimage-exiftool-perl, libjpeg-turbo-progs: the image viewer's rotation and Straighten checks (skipped without them)
+        # unzip: the archives test of the unzip path (used only without 7-Zip; skipped without it)
+        # rsync, gnupg: the tools test's sync with rsync and its signature checks (skipped without them)
+        # ffmpeg: the media test's video and audio conversions (skipped without it)
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
-            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full \
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg
 
       - name: Run the tests
         run: tests/run.sh
 
+  test-resolute:
+    # the same tests on Ubuntu 26.04 (a newer Qt, GLib and tools), so a change that only breaks there stops the package
+    # too. In a clean ubuntu:26.04 container (through Google's mirror, as in "package"), with the tests run as a
+    # normal user, as on a runner.
+    runs-on: ubuntu-24.04
+    container: mirror.gcr.io/library/ubuntu:26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build and test dependencies
+        # the same packages as "test", and zip, which GitHub's runner image has already. The container image leaves
+        # out /usr/share/doc when installing, where BleachBit keeps the schema its cleaner is checked against.
+        run: |
+          rm -f /etc/dpkg/dpkg.cfg.d/excludes
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev \
+            libxcb1-dev libsecret-1-dev dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common \
+            gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full libimage-exiftool-perl \
+            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg
+
+      - name: Run the tests
+        shell: bash
+        run: |
+          useradd -m -G users tester   # in a second group, as the runner's user is, for admin_helper's group ownership check
+          chown -R tester: "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 tests/run.sh"
+
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Install build and test dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev \
-            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common bleachbit libxml2-utils gnome-keyring p7zip-full
+            dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full \
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg
 
       - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
         # GCC 13's sanitizers can't start with the kernel's 32-bit address randomisation ("unexpected memory mapping")
@@ -61,14 +114,44 @@ jobs:
           sudo sysctl -w vm.mmap_rnd_bits=28
           KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh
 
-  deb:
-    needs: test
+  sanitizers-resolute:
+    # the sanitizer run on Ubuntu 26.04 too (GCC 15, Qt 6.10), set up as in "test-resolute". GCC 15's sanitizers start
+    # with the kernel's 32-bit address randomisation, so it needs no sysctl (which a container couldn't set anyway).
     runs-on: ubuntu-24.04
-    outputs:
-      artifact: kestrel-explorer-${{ steps.ver.outputs.deb }}
-      suite: ${{ steps.dev.outcome == 'success' && 'dev' || steps.release.outputs.released == 'true' && 'stable' || '' }}
+    container: mirror.gcr.io/library/ubuntu:26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Install build and test dependencies
+        run: |
+          rm -f /etc/dpkg/dpkg.cfg.d/excludes
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config qt6-base-dev libglib2.0-dev \
+            libxcb1-dev libsecret-1-dev dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common \
+            gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full libimage-exiftool-perl \
+            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg
+
+      - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
+        shell: bash
+        run: |
+          useradd -m -G users tester
+          chown -R tester: "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh"
+
+  deb:
+    # a .deb for each supported Ubuntu release, built on that release (in a clean container) so it uses that release's
+    # Qt and libraries; its Depends ask for them (CMakeLists.txt), so it won't install on an older one. The release
+    # number ends its version (0.3.2~alpha.25~ubuntu24.04): a system upgraded to the next release upgrades to that
+    # release's build. To stop supporting a release, take it out here and in "package" (see "apt").
+    needs: [test, test-resolute]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - { release: noble, ubuntu: "24.04" }
+          - { release: resolute, ubuntu: "26.04" }
+    container: mirror.gcr.io/library/ubuntu:${{ matrix.ubuntu }}   # through Google's mirror, as in "package"
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Version
         id: ver
@@ -78,11 +161,13 @@ jobs:
           deb="${version//-/\~}"
           # dev builds sort after the version's last release build: 0.2.0~alpha+dev42.g1a2b3c4
           [[ "$GITHUB_REF" == refs/heads/main ]] || deb="$deb+dev${GITHUB_RUN_NUMBER}.g${GITHUB_SHA::7}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "deb=$deb" >> "$GITHUB_OUTPUT"
+          echo "deb=$deb~ubuntu${{ matrix.ubuntu }}" >> "$GITHUB_OUTPUT"
+        shell: bash
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config dpkg-dev qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
+        run: |
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config dpkg-dev \
+            qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
 
       - name: Build
         run: |
@@ -92,10 +177,32 @@ jobs:
           cd build && cpack
           dpkg-deb -I ./*.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: kestrel-explorer-${{ steps.ver.outputs.deb }}
+          name: kestrel-explorer-${{ matrix.release }}
           path: build/*.deb
+
+  publish:
+    # the GitHub releases, with every release's .deb
+    needs: deb
+    runs-on: ubuntu-24.04
+    outputs:
+      channel: ${{ steps.dev.outcome == 'success' && 'dev' || steps.release.outputs.released == 'true' && 'stable' || '' }}
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version
+        id: ver
+        run: |
+          version=$(sed -n 's/^set(KES_VERSION "\(.*\)")/\1/p' CMakeLists.txt)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: kestrel-explorer-*
+          merge-multiple: true
+          path: debs
 
       - name: Replace the dev pre-release
         id: dev
@@ -104,9 +211,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete dev-latest --cleanup-tag --yes || true
-          gh release create dev-latest build/*.deb --prerelease --target "$GITHUB_SHA" \
-            --title "Development build (${{ steps.ver.outputs.deb }})" \
-            --notes "Latest build of the DEV branch, commit $GITHUB_SHA. Replaced on every push to DEV."
+          gh release create dev-latest debs/*.deb --prerelease --target "$GITHUB_SHA" \
+            --title "Development build (${{ steps.ver.outputs.version }}, run $GITHUB_RUN_NUMBER)" \
+            --notes "Latest build of the DEV branch, commit $GITHUB_SHA. Replaced on every push to DEV. One .deb for each Ubuntu release: take the one ending in yours (ubuntu24.04 for Linux Mint 22)."
 
       - name: Release
         id: release
@@ -121,58 +228,84 @@ jobs:
           fi
           prerelease=()
           [[ "$TAG" == *-* ]] && prerelease=(--prerelease)   # 0.2.0-alpha, -beta, -rc1…
-          gh release create "$TAG" build/*.deb "${prerelease[@]}" --target "$GITHUB_SHA" \
+          gh release create "$TAG" debs/*.deb "${prerelease[@]}" --target "$GITHUB_SHA" \
             --title "Kestrel Explorer ${{ steps.ver.outputs.version }}" --generate-notes
           echo "released=true" >> "$GITHUB_OUTPUT"
 
   package:
-    # the .deb on clean systems: installs with its dependencies, runs, is complete, removes cleanly
+    # each .deb on clean systems: installs with its dependencies, runs, is complete, removes cleanly. On its own
+    # release, and noble's on 26.04 too: "stable" and "dev" give it to every release.
     needs: deb
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        image: ["ubuntu:24.04", "ubuntu:26.04"]
+        include:
+          - { release: noble, image: "ubuntu:24.04" }
+          - { release: resolute, image: "ubuntu:26.04" }
+          - { release: noble, image: "ubuntu:26.04" }
     # Docker Hub's official image through Google's mirror: Docker Hub limits anonymous pulls per IP address, and
     # GitHub's runners share theirs, so a direct pull can fail with "toomanyrequests"
     container: mirror.gcr.io/library/${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.deb.outputs.artifact }}
+          name: kestrel-explorer-${{ matrix.release }}
           path: debs
 
       - name: Install and check the package
         run: bash tests/check_package.sh debs/*.deb
 
   apt:
-    needs: [deb, package]
-    if: needs.deb.outputs.suite != ''
+    needs: [publish, package]
+    if: needs.publish.outputs.channel != ''
     runs-on: ubuntu-24.04
     concurrency:
       group: apt-repo   # one update of gh-pages at a time, DEV and main alike
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7   # .github/apt: the repo's suites and page
+
+      - uses: actions/checkout@v7
         with:
           ref: gh-pages
           path: repo
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.deb.outputs.artifact }}
-          path: debs
+          pattern: kestrel-explorer-*
+          path: debs   # each release's in its own folder: debs/kestrel-explorer-noble/…
+
+      - name: Use Ubuntu's own archive
+        # the runners' apt points at Azure's mirror (in sources.list, ubuntu.sources or apt-mirrors.txt, depending on
+        # the image), which has been very slow: every installing job swaps it for archive.ubuntu.com first
+        run: grep -rl azure.archive.ubuntu.com /etc/apt | xargs -r sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g'
 
       - name: Add the package
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          CHANNEL: ${{ needs.publish.outputs.channel }}
         run: |
           sudo apt-get update && sudo apt-get install -y reprepro
           printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
-          # replaces the suite's previous version; reprepro deletes pool files nothing refers to any more
-          reprepro -b repo includedeb "${{ needs.deb.outputs.suite }}" debs/*.deb
-          reprepro -b repo list dev; reprepro -b repo list stable
+          cp .github/apt/distributions repo/conf/distributions
+          # the page only with a release, so it names only suites that releases have published (and matches the
+          # README and install guide on main, which come with the same merge)
+          if [[ "$CHANNEL" == stable ]]; then cp .github/apt/index.html repo/index.html; fi
+          # each release's .deb into its suite (noble from main, noble-dev from DEV), and APT_GENERAL's into "stable"
+          # or "dev" too. Each replaces the suite's previous version; the pool keeps one copy of a .deb however many
+          # suites have it, and reprepro deletes pool files nothing refers to any more. A release no longer built (a
+          # dropped one) has no .deb here, so its suites keep what they have.
+          general=
+          for dir in debs/kestrel-explorer-*/; do
+            release=${dir#debs/kestrel-explorer-}; release=${release%/}
+            suite=$release; [[ "$CHANNEL" == dev ]] && suite=$release-dev
+            reprepro -b repo includedeb "$suite" "$dir"*.deb
+            if [[ "$release" == "$APT_GENERAL" ]]; then reprepro -b repo includedeb "$CHANNEL" "$dir"*.deb; general=1; fi
+          done
+          [[ -n "$general" ]] || { echo "::error::No .deb for APT_GENERAL ($APT_GENERAL), so $CHANNEL wasn't updated"; exit 1; }
+          reprepro -b repo ls kestrel-explorer
 
       - name: Publish
         # one commit, force-pushed: old .debs would otherwise stay in the branch's history for good
@@ -182,5 +315,44 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan publish
           git add -A
-          git commit -q -m "apt repo: ${{ needs.deb.outputs.suite }} ${{ needs.deb.outputs.artifact }}"
+          git commit -q -m "apt repo: ${{ needs.publish.outputs.channel }} ${{ needs.publish.outputs.version }} (run $GITHUB_RUN_NUMBER)"
           git push --force origin publish:gh-pages
+
+  apt-check:
+    # what the apt repo serves now, installed from each release's suite on that release's clean system: the suite is
+    # there, signed with the published key, and its package installs and works (tests/check_package.sh --apt). From a
+    # copy of gh-pages (file:), so it doesn't wait for GitHub Pages to deploy.
+    needs: [publish, apt]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "ubuntu:24.04", release: noble }      # the channel's suite for the release: noble or noble-dev
+          - { image: "ubuntu:26.04", release: resolute }
+          - { image: "ubuntu:26.04" }                      # the channel's own: stable or dev (noble's build)
+          # a dropped release's frozen suites, checked whenever the repo is updated (they get no builds, but must still install), e.g.
+          # - { image: "ubuntu:24.04", frozen: noble }
+          # - { image: "ubuntu:24.04", frozen: noble-dev }
+    container: mirror.gcr.io/library/${{ matrix.image }}   # through Google's mirror, as in "package"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: repo
+
+      - name: Install and check the package from the suite
+        shell: bash
+        env:
+          CHANNEL: ${{ needs.publish.outputs.channel }}
+          RELEASE: ${{ matrix.release }}
+          FROZEN: ${{ matrix.frozen }}
+        run: |
+          if [[ -n "$FROZEN" ]]; then suite=$FROZEN
+          elif [[ -z "$RELEASE" ]]; then suite=$CHANNEL
+          elif [[ "$CHANNEL" == dev ]]; then suite=$RELEASE-dev
+          else suite=$RELEASE; fi
+          echo "Suite: $suite"
+          bash tests/check_package.sh --apt repo "$suite"

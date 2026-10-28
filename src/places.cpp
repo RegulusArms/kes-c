@@ -5,12 +5,14 @@
 #include "util.h"
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QTimer>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -294,6 +296,108 @@ static bool remember_recent()
     bool on = g_settings_get_boolean(s, "remember-recent-files");
     g_object_unref(s);
     return on;
+}
+
+// ---------------------------------------------------------------- frequent folders
+
+static QString frequent_file() { return join(CONFIG_DIR(), "frequent.json"); }
+
+struct Visits {
+    qint64 count = 0, last = 0;
+};
+static QHash<QString, Visits> pending_visits;   // counted here, not yet written
+static const int FREQUENT_KEPT = 200;
+
+static QHash<QString, Visits> read_frequent()
+{
+    QHash<QString, Visits> m;
+    bool ok = false;
+    QJsonObject o = QJsonDocument::fromJson(read_file(frequent_file(), &ok)).object();
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        QJsonArray a = it.value().toArray();
+        if (it.key().startsWith('/') && a.size() >= 2 && a[0].toDouble() > 0)
+            m.insert(it.key(), {qint64(a[0].toDouble()), qint64(a[1].toDouble())});
+    }
+    return m;
+}
+
+static QList<QPair<QString, Visits>> ranked(const QHash<QString, Visits> &m)
+{
+    QList<QPair<QString, Visits>> l;
+    for (auto it = m.begin(); it != m.end(); ++it)
+        l << qMakePair(it.key(), it.value());
+    std::sort(l.begin(), l.end(), [](const auto &a, const auto &b) {
+        return a.second.count != b.second.count ? a.second.count > b.second.count : a.second.last > b.second.last;
+    });
+    return l;
+}
+
+static QHash<QString, Visits> merged()
+{
+    QHash<QString, Visits> m = read_frequent();
+    for (auto it = pending_visits.begin(); it != pending_visits.end(); ++it) {
+        Visits &v = m[it.key()];
+        v.count += it.value().count;
+        v.last = std::max(v.last, it.value().last);
+    }
+    return m;
+}
+
+static void write_frequent(const QHash<QString, Visits> &m)
+{
+    QJsonObject o;
+    for (const auto &[dir, v] : ranked(m).mid(0, FREQUENT_KEPT))
+        o.insert(dir, QJsonArray{double(v.count), double(v.last)});
+    try {
+        makedirs(dirname(frequent_file()), true);
+        write_atomic(frequent_file(), QJsonDocument(o).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {
+    }
+}
+
+void save_frequent()
+{
+    if (pending_visits.isEmpty())
+        return;
+    QHash<QString, Visits> m = merged();
+    pending_visits.clear();
+    write_frequent(m);
+}
+
+bool remembers_history() { return remember_recent(); }
+
+void visit_folder(const QString &dir)
+{
+    if (!dir.startsWith('/') || !remember_recent())
+        return;
+    if (pending_visits.isEmpty()) {
+        static bool hooked = false;
+        if (!hooked && QCoreApplication::instance()) {
+            hooked = true;
+            QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, []() { save_frequent(); });
+        }
+        QTimer::singleShot(5000, []() { save_frequent(); });
+    }
+    Visits &v = pending_visits[dir];
+    v.count += 1;
+    v.last = QDateTime::currentSecsSinceEpoch();
+}
+
+QStringList frequent_folders(int limit)
+{
+    QStringList out;
+    for (const auto &[dir, v] : ranked(merged()).mid(0, limit))
+        out << dir;
+    return out;
+}
+
+void forget_frequent(const QStringList &dirs)
+{
+    QHash<QString, Visits> m = merged();
+    pending_visits.clear();
+    for (const QString &d : dirs)
+        m.remove(d);
+    write_frequent(m);
 }
 
 static void write_new_bookmark(QXmlStreamWriter &w, const QString &href, const QString &mime, const QString &now)

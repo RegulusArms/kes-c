@@ -8,6 +8,9 @@
 #include "chooser.h"
 #include "dialogs.h"
 #include "drives.h"
+#include "compare.h"
+#include "convert.h"
+#include "dupes.h"
 #include "fileops.h"
 #include "hashcheck.h"
 #include "fm1.h"
@@ -19,8 +22,10 @@
 #include "menus.h"
 #include "places.h"
 #include "prefswin.h"
+#include "metadata.h"
 #include "prefs.h"
 #include "sharing.h"
+#include "signature.h"
 #include "undo.h"
 #include "proc.h"
 #include "thumbs.h"
@@ -30,6 +35,7 @@
 #include "uwp.h"
 #include "viewer.h"
 #include "windiag.h"
+#include "archivewin.h"
 #include "widgets.h"
 #include "windows.h"
 
@@ -45,6 +51,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSlider>
@@ -74,6 +81,165 @@ static QIcon icon(const QStringList &names) { return theme_icon(names); }
 
 // ---------------------------------------------------------------- main window
 
+// Files dragged over the tab bar (or an archive window's items): resting on a tab for a moment shows it (as browsers
+// and GNOME Files do), so the drag goes on into its folder, a subfolder there or its empty space; dropped onto the tab
+// itself, they go into its folder, as any drop does (handle_drop: the keys held say move, copy, link or ask; into the
+// Trash, Move to Trash). A tab without one folder (the Overview, Starred, Recent, search results) is still shown, but
+// takes no drop. The tab that would take it is highlighted; its index is the tab bar's "drop_tab" property (-1: none).
+class TabDrop : public QObject {
+public:
+    static const int HOVER_MS = 500;
+    explicit TabDrop(MainWindow *w) : QObject(w), w(w)
+    {
+        QTabBar *bar = w->tabs->tabBar();
+        bar->setAcceptDrops(true);
+        bar->installEventFilter(this);
+        bar->setProperty("drop_tab", -1);
+        hover.setSingleShot(true);
+        hover.setInterval(HOVER_MS);
+        connect(&hover, &QTimer::timeout, this, [this]() {
+            if (over >= 0 && over < this->w->tabs->count())
+                this->w->tabs->setCurrentIndex(over);
+        });
+        light = new Light(bar);
+        light->hide();
+    }
+
+    // where a drop onto tab i goes: its folder; empty for none (no one folder, or the folder the items are in)
+    QString folder_of(int i, const QMimeData *md) const
+    {
+        auto *p = qobject_cast<Pane *>(w->tabs->widget(i));
+        QString dir = p && (!p->in_search || p->is_trash()) ? p->dir() : QString();   // (the Trash is listed as results)
+        if (dir.isEmpty() || md->hasFormat(archive::MEMBERS_MIME))
+            return dir;
+        QStringList paths = local_paths(md);
+        if (paths.isEmpty() || std::all_of(paths.begin(), paths.end(), [&](const QString &x) { return dirname(x) == dir; }))
+            return QString();   // already there
+        return dir;
+    }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override
+    {
+        QTabBar *bar = w->tabs->tabBar();
+        if (obj != bar)
+            return false;
+        switch (ev->type()) {
+        case QEvent::DragEnter:
+        case QEvent::DragMove: {
+            auto *e = static_cast<QDragMoveEvent *>(ev);
+            const QMimeData *md = e->mimeData();
+            if (!md->hasUrls() && !md->hasFormat(archive::MEMBERS_MIME)) {
+                e->ignore();
+                return true;
+            }
+            int i = bar->tabAt(e->position().toPoint());
+            if (i != over) {   // resting on another tab: shown after a moment
+                over = i;
+                if (i >= 0 && i != w->tabs->currentIndex())
+                    hover.start();
+                else
+                    hover.stop();
+            }
+            bool takes = i >= 0 && !folder_of(i, md).isEmpty();
+            show_light(takes ? i : -1);
+            if (ev->type() == QEvent::DragEnter || takes)
+                e->acceptProposedAction();   // (entered: so the moves keep coming, also over a tab that takes none)
+            if (ev->type() == QEvent::DragMove && !takes)
+                e->ignore(bar->tabRect(i));
+            return true;
+        }
+        case QEvent::DragLeave:
+            leave();
+            return true;
+        case QEvent::Drop: {
+            auto *e = static_cast<QDropEvent *>(ev);
+            int i = bar->tabAt(e->position().toPoint());
+            QString dir = i >= 0 ? folder_of(i, e->mimeData()) : QString();
+            leave();
+            if (dir.isEmpty()) {
+                e->ignore();
+                return true;
+            }
+            e->acceptProposedAction();
+            QPointer<MainWindow> win(w);
+            if (e->mimeData()->hasFormat(archive::MEMBERS_MIME)) {   // (before urls(): see FSModel::dropMimeData)
+                QByteArray members = e->mimeData()->data(archive::MEMBERS_MIME);
+                QTimer::singleShot(0, w, [win, members, dir]() {
+                    QMimeData md;
+                    md.setData(archive::MEMBERS_MIME, members);
+                    if (win)
+                        ArchiveWindow::drop_members(win, &md, dir);
+                });
+            } else {
+                QStringList paths = local_paths(e->mimeData());
+                bool copy_only = e->mimeData()->hasFormat(COPY_ONLY_MIME);
+                QTimer::singleShot(0, w, [win, paths, dir, copy_only]() {   // after the drag has finished
+                    if (win)
+                        win->handle_drop(paths, dir, copy_only);
+                });
+            }
+            return true;
+        }
+        default:
+            return false;
+        }
+    }
+
+private:
+    // the highlight over a tab: drawn as the views draw the folder under a drag
+    class Light : public QWidget {
+    public:
+        explicit Light(QWidget *parent) : QWidget(parent) { setAttribute(Qt::WA_TransparentForMouseEvents); }
+
+    protected:
+        void paintEvent(QPaintEvent *) override
+        {
+            QPainter p(this);
+            p.setRenderHint(QPainter::Antialiasing);
+            QColor c = palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, 2));
+            c.setAlpha(70);
+            p.setBrush(c);
+            p.drawRoundedRect(QRectF(rect()).adjusted(2, 2, -2, -2), 6, 6);
+        }
+    };
+
+    static QStringList local_paths(const QMimeData *md)
+    {
+        QStringList out;
+        for (const QUrl &u : md->urls())
+            if (u.isLocalFile())
+                out << u.toLocalFile();
+        return out;
+    }
+
+    void show_light(int i)
+    {
+        QTabBar *bar = w->tabs->tabBar();
+        bar->setProperty("drop_tab", i);
+        if (i < 0) {
+            light->hide();
+            return;
+        }
+        light->setGeometry(bar->tabRect(i));
+        light->raise();
+        light->show();
+    }
+
+    void leave()
+    {
+        over = -1;
+        hover.stop();
+        show_light(-1);
+    }
+
+    MainWindow *w;
+    QTimer hover;
+    int over = -1;
+    Light *light;
+};
+
 MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool chooser_mode_)
     : thumbs(thumbs_), chooser_mode(chooser_mode_)
 {
@@ -91,6 +257,12 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     sidebar = new Sidebar;
     connect(sidebar, &Sidebar::open_path, this, [this](const QString &p, bool nt) { open_location(p, nt); });
     connect(sidebar, &Sidebar::dropped, this, &MainWindow::handle_drop);
+    connect(sidebar, &Sidebar::dropped_members, this, [this](const QByteArray &members, const QString &target) {
+        QMimeData md;
+        md.setData(archive::MEMBERS_MIME, members);
+        ArchiveWindow::drop_members(this, &md, target);
+    });
+    connect(sidebar, &Sidebar::find_duplicates, this, [this](const QString &root) { dupes::open_window(this, {root}); });
     connect(sidebar, &Sidebar::empty_trash_requested, this, &MainWindow::empty_trash);
     connect(sidebar, &Sidebar::shred_trash_requested, this, &MainWindow::empty_trash_with_bleachbit);
     tabs = new QTabWidget;
@@ -102,6 +274,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     connect(tabs, &QTabWidget::currentChanged, this, &MainWindow::tab_changed);
     tabs->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(tabs->tabBar(), &QWidget::customContextMenuRequested, this, &MainWindow::tab_menu);
+    new TabDrop(this);
     info = new InfoPanel(thumbs);
     info->folder_previews = folder_previews;
     split = new QSplitter;
@@ -120,6 +293,14 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     connect(drives::Sizes::instance(), &drives::Sizes::changed, this, [this](const QString &root) {
         if (root == free_root)
             update_free_label();
+    });
+    // the free space is asked when a folder is opened and when a job has ended (it may have changed it), not on a timer
+    connect(TaskBoard::instance(), &TaskBoard::changed, this, [this]() {
+        qsizetype n = TaskBoard::instance()->finished.size();
+        if (n != finished_seen) {
+            finished_seen = n;
+            update_free_label();
+        }
     });
     zoom_slider = new QSlider(Qt::Horizontal);
     zoom_slider->setFixedWidth(140);
@@ -177,8 +358,11 @@ void MainWindow::make_chooser(const chooser::Request &req, std::function<void(co
     lay->addWidget(chooser);
     setCentralWidget(box);
     setWindowTitle(req.title.isEmpty() ? chooser::button_text(req) : req.title);
-    for (Pane *p : panes())
+    for (Pane *p : panes()) {
         p->set_type_filter(chooser->type_filter());
+        p->overview_page()->set_save_places(chooser->saving());   // a Save window's Overview: its save locations first
+    }
+    chooser->folder_changed();   // the suggested name made free in the folder it starts in
     if (chooser->name)
         chooser->name->setFocus();
 }
@@ -314,6 +498,16 @@ void MainWindow::add_sort_items(QMenu *m, Pane *p)
             d->setToolTip("When a photo or video was taken, from its metadata; the date created when it has none");
     }
     dm->setToolTipsVisible(true);
+    if (p->grouping() != groups::NONE) {   // also on empty space's right-click menu
+        m->addAction("Collapse All Groups", this, [pp]() {
+            if (pp)
+                pp->set_all_groups_collapsed(true);
+        });
+        m->addAction("Expand All Groups", this, [pp]() {
+            if (pp)
+                pp->set_all_groups_collapsed(false);
+        });
+    }
     m->addSeparator();
     m->addAction("Set as Default", this, [this, pp]() {
         if (pp)
@@ -433,7 +627,15 @@ void MainWindow::build_actions()
       },
       fm);
     fm->addSeparator();
-    A("Quit", {"Ctrl+Q"}, []() { QApplication::quit(); }, fm);
+    A("Quit", {"Ctrl+Q"}, [this]() {
+        // every window closes (the last asks first while jobs run: they can go on without one)
+        for (MainWindow *m : QList<MainWindow *>(WINDOWS))
+            if (m != this)
+                m->close();
+        close();
+        if (!isVisible() && TaskBoard::instance()->keeping().isEmpty())
+            QApplication::quit();   // the Jobs window and anything else too
+    }, fm);
 
     QMenu *em = menu->addMenu("Edit");
     a_undo = A("Undo", {"Ctrl+Z"}, [this]() { undo::undo(this); }, em, {"edit-undo"});
@@ -513,6 +715,7 @@ void MainWindow::build_actions()
     menu->addSeparator();
     A("Preferences…", {"Ctrl+,"}, [this]() { preferences(); }, menu, {"preferences-system"});
     A("Jobs…", {"Ctrl+Shift+J"}, [this]() { JobsWindow::open(this); }, menu);
+    A("Sync Folders…", {}, [this]() { compare::open_sync(this, QString()); }, menu, {"folder-sync", "view-refresh"});
     a_tower = A("Tower…", {}, [this]() { TowerWindow::open(this); }, menu);
     a_tower->setVisible(settings().value("developer_tools", false).toBool());
     A("Start Admin Session…", {}, [this]() { admin::start_session(this); }, menu, {"security-high", "dialog-password"});
@@ -551,11 +754,19 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
     int i = tabs->addTab(p, p->title());
     connect(p, &Pane::path_changed, this, [this, p]() { pane_path_changed(p); });
     connect(p, &Pane::selection_changed, this, [this, p]() {
-        if (p == pane()) {
-            update_status();
-            if (chooser)
-                chooser->selection_changed();
+        if (p != pane())
+            return;
+        // the status line once for a burst: moving 800 selected folders away deselects them one by one, and counting
+        // the whole selection for each held the window for seconds
+        if (!status_pending) {
+            status_pending = true;
+            QTimer::singleShot(30, this, [this]() {
+                status_pending = false;
+                update_status();
+            });
         }
+        if (chooser)   // at once: its OK button follows the selection
+            chooser->selection_changed();
     });
     if (activate) {
         tabs->setCurrentIndex(i);
@@ -655,8 +866,8 @@ void MainWindow::pane_path_changed(Pane *p)
     sync_zoom_slider();
     update_free_label();
     update_status();
-    if (chooser)   // Save needs a folder: re-checked in each place, not only when the name or the selection changes
-        chooser->update_button();
+    if (chooser)   // Save needs a folder, and the names a free one in each: re-checked in each place
+        chooser->folder_changed();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }
@@ -942,7 +1153,14 @@ void MainWindow::update_status()
 
 void MainWindow::context_menu(Pane *p, QAbstractItemView *view, const QPoint &pos)
 {
-    QModelIndex idx = view->indexAt(pos);
+    QMenu *m = menu_at(p, view, pos);
+    m->exec(view->viewport()->mapToGlobal(pos));
+    m->deleteLater();
+}
+
+QMenu *MainWindow::menu_at(Pane *p, QAbstractItemView *view, const QPoint &pos)
+{
+    QModelIndex idx = view->indexAt(pos);   // (the grid's: only on an item's icon or name, GridDelegate::shape)
     QStringList paths;
     if (idx.isValid() && !idx.siblingAtColumn(0).data(PathRole).toString().isEmpty()) {   // not a group's header
         QString x = idx.siblingAtColumn(0).data(PathRole).toString();
@@ -952,9 +1170,7 @@ void MainWindow::context_menu(Pane *p, QAbstractItemView *view, const QPoint &po
     } else {
         view->clearSelection();
     }
-    QMenu *m = build_menu(p, paths);
-    m->exec(view->viewport()->mapToGlobal(pos));
-    m->deleteLater();
+    return build_menu(p, paths);
 }
 
 QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
@@ -1011,6 +1227,19 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         QAction *a = T(m->addAction("Show Hidden Files", this, [this]() { a_hidden->trigger(); }), "show_hidden");
         a->setCheckable(true);
         a->setChecked(show_hidden);
+        if (p->grouping() != groups::NONE) {
+            QPointer<Pane> pp(p);
+            T(m->addAction("Collapse All Groups", this, [pp]() {
+                  if (pp)
+                      pp->set_all_groups_collapsed(true);
+              }),
+              "collapse_groups");
+            T(m->addAction("Expand All Groups", this, [pp]() {
+                  if (pp)
+                      pp->set_all_groups_collapsed(false);
+              }),
+              "expand_groups");
+        }
         m->addSeparator();
         T(m->addAction(icon({"utilities-terminal"}), "Open in Terminal", this, [cur]() { open_terminal(cur); }),
           "open_terminal");
@@ -1080,6 +1309,15 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     if (p->in_search)
         T(m->addAction(icon({"folder-open"}), "Show in Folder", this, [this, paths]() { reveal(paths.first()); }),
           "show_in_folder");
+    if (p->group_of_path(paths.value(0)) >= 0) {   // grouped by date: its group collapses from here, not only its header
+        QPointer<Pane> pp(p);
+        int key = p->group_of_path(paths.value(0));
+        T(m->addAction("Collapse This Group", this, [pp, key]() {
+              if (pp)
+                  pp->collapse_group(key);
+          }),
+          "collapse_group");
+    }
     if (!is_dir && !single.isEmpty()) {
         QMenu *ow = m->addMenu("Open With");
         T(ow->menuAction(), "open_with");
@@ -1108,6 +1346,8 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(m->addAction("Move To…", this, [this, paths]() { transfer_to(paths, "move"); }), "move_to");
     T(m->addAction("Copy To…", this, [this, paths]() { transfer_to(paths, "copy"); }), "copy_to");
     T(m->addAction("Duplicate", this, [this, paths]() { duplicate(paths); }), "duplicate");
+    T(m->addAction(icon({"folder-new"}), "New Folder with Selection…", this, [this, paths]() { new_folder_with(paths); }),
+      "new_folder_with");
     T(m->addAction(icon({"edit-rename"}), !single.isEmpty() ? QString("Rename…") : QString("Rename %1 Items…").arg(paths.size()),
                    this, [this, paths]() { rename(paths); }),
       "rename");
@@ -1219,6 +1459,22 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(m->addAction(icon({"security-high", "document-properties"}), "Create Checksum File…", this,
                    [this, paths]() { hashcheck::create_dialog(this, paths); }),
       "checksum_create");
+    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); }))
+        T(m->addAction(icon({"edit-find", "edit-copy"}), "Find Duplicates…", this,
+                       [this, paths]() { dupes::open_window(this, paths); }),
+          "find_duplicates");
+    if (is_dir) {
+        T(m->addAction(icon({"view-dual", "view-split-left-right"}), "Compare With…", this,
+                       [this, single]() { compare::open_compare(this, single); }),
+          "compare_with");
+        T(m->addAction(icon({"folder-sync", "view-refresh"}), "Sync To…", this,
+                       [this, single]() { compare::open_sync(this, single); }),
+          "sync_to");
+    }
+    if (!is_dir && !single.isEmpty() && signature::is_signature_name(single) && !archive::opens_as_archive(single))
+        T(m->addAction(icon({"security-high", "emblem-ok-symbolic"}), "Verify Signature", this,
+                       [this, single]() { signature::open_window(this, single); }),
+          "verify_signature");
     if (!single.isEmpty() && (is_image(single) || is_video(single)) && uwp::editor_open())
         T(m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), "Add to Selected UWP Monitor", this,
                        [this, single]() { uwp_add(single); }),
@@ -1235,6 +1491,45 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
           "image_cover");
         T(im->addAction("Copy Image to Clipboard", this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
           "image_copy");
+    }
+    auto all = [&paths](bool (*f)(const QString &)) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
+    if (paths.size() == 2 && all(&is_image))
+        T(m->addAction(icon({"view-dual", "image-x-generic"}), "Compare in Viewer", this, [this, p, paths]() { compare_in_viewer(p, paths); }),
+          "compare_images");
+    if (all(&is_image)) {
+        QMenu *rm = m->addMenu(icon({"object-rotate-right", "image-x-generic"}), "Rotate");
+        T(rm->menuAction(), "rotate");
+        auto turn = [this, paths](int deg, bool flip) { return [this, paths, deg, flip]() { convert::rotate(this, paths, deg, flip); }; };
+        T(rm->addAction(icon({"object-rotate-right"}), "Rotate 90° Clockwise", this, turn(90, false)), "rotate_cw");
+        T(rm->addAction("Rotate 180°", this, turn(180, false)), "rotate_180");
+        T(rm->addAction(icon({"object-rotate-left"}), "Rotate 90° Counter-clockwise", this, turn(270, false)), "rotate_ccw");
+        rm->addSeparator();
+        T(rm->addAction(icon({"object-flip-horizontal"}), "Flip Horizontally", this, turn(0, true)), "flip_horizontal");
+        T(rm->addAction(icon({"object-flip-vertical"}), "Flip Vertically", this, turn(180, true)), "flip_vertical");
+        T(m->addAction(icon({"image-x-generic"}), "Convert Image…", this, [this, paths]() { convert::image_dialog(this, paths); }),
+          "convert_image");
+    }
+    bool ffmpeg = media::have_ffmpeg();
+    if (ffmpeg && all(&is_video)) {
+        T(m->addAction(icon({"video-x-generic"}), "Convert Video…", this, [this, paths]() { convert::video_dialog(this, paths); }),
+          "convert_video");
+        T(m->addAction(icon({"audio-x-generic"}), "Extract Audio…", this,
+                       [this, paths]() { convert::extract_audio_dialog(this, paths); }),
+          "extract_audio");
+    }
+    if (ffmpeg && (all(&convert::is_audio) || all([](const QString &x) { return isdir(x); })))
+        T(m->addAction(icon({"audio-x-generic"}), "Convert Audio…", this, [this, paths]() { convert::audio_dialog(this, paths); }),
+          "convert_audio");
+    if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return metadata::can_wipe(x); })) {
+        if (metadata::can_edit()) {
+            T(m->addAction(icon({"edit-clear-all", "edit-clear"}), "Wipe Metadata…", this,
+                           [this, paths]() { wipe_metadata(paths); }),
+              "wipe_metadata");
+        } else {
+            QAction *a = T(m->addAction(icon({"edit-clear-all", "edit-clear"}), "Wipe Metadata (install exiftool)"),
+                           "wipe_metadata");
+            a->setEnabled(false);
+        }
     }
     QStringList folders;
     for (const QString &x : paths)
@@ -1272,6 +1567,17 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, paths]() { shred_paths(paths); }),
           "shred");
     m->addSeparator();
+    // shortcuts into Properties: its size counted afresh, its Metadata tab
+    if (all_dirs && std::none_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); }))
+        T(m->addAction(icon({"drive-harddisk", "document-properties"}), "Calculate Folder Size", this, [this, paths]() {
+            if (PropertiesDialog *d = properties(paths))
+                d->calculate_size();
+        }), "calculate_size");
+    if (!is_dir && !single.isEmpty() && metadata::viewable(single))
+        T(m->addAction(icon({"document-properties"}), "Open Metadata", this, [this, single]() {
+            if (PropertiesDialog *d = properties({single}))
+                d->show_metadata();
+        }), "open_metadata");
     T(m->addAction(icon({"document-properties"}), "Properties", this, [this, paths]() { properties(paths); }), "properties");
     menus::arrange(m, kind);
     return m;
@@ -1313,13 +1619,14 @@ void MainWindow::uwp_add(const QString &path)
         warn(this, "UWP", "Couldn't reach UWP. Is its editor window still open?");
 }
 
-void MainWindow::properties(const QStringList &paths, QWidget *parent)
+PropertiesDialog *MainWindow::properties(const QStringList &paths, QWidget *parent)
 {
     if (paths.isEmpty())
-        return;
+        return nullptr;
     auto *d = new PropertiesDialog(parent ? parent : this, paths);   // several can be open, each a window of its own
     connect(d, &QDialog::finished, this, &MainWindow::update_status);
     show_free(d);
+    return d;
 }
 
 // -- settings
@@ -1407,6 +1714,14 @@ void apply_settings(const QStringList &keys)
                 w->sidebar->refresh();
         } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
             // read each time a menu is built, or a copy onto a tape starts
+        } else if (key == "chooser_start" || key == "chooser_places") {
+            // read when a Save window opens; a Save window's Overview follows chooser_places itself (prefs::Notifier)
+        } else if (key.startsWith("dupes_")) {
+            // read when a Find Duplicates window opens
+        } else if (key.startsWith("overview_")) {
+            // each Overview page follows them itself (prefs::Notifier)
+        } else if (key == "thumb_mode") {   // (not the rest of apply_preferences: the previews made stay)
+            g_thumbs->set_mode(v.toString());
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
         } else {
@@ -1500,58 +1815,90 @@ void MainWindow::show_shortcuts()
 <tr><td><b>Delete / Shift+Delete</b></td><td>Trash / delete permanently</td></tr>
 <tr><td><b>Alt+Enter</b></td><td>Properties</td></tr>
 <tr><td><b>F3 / F9</b></td><td>Info panel / sidebar</td></tr>
+<tr><td><b>Ctrl+Left / Ctrl+Right</b></td><td>Grouped by date: collapse / expand the current item's group</td></tr>
 <tr><td><b>Drag + Ctrl / Shift / Ctrl+Shift / Alt</b></td><td>Copy / move / link / ask</td></tr>
 <tr><td colspan=2><br><b>Image viewer</b></td></tr>
 <tr><td><b>←/→, scroll wheel</b></td><td>Previous / next</td></tr>
-<tr><td><b>Ctrl+scroll, +/-, 0, 1</b></td><td>Zoom, fit, 100%</td></tr>
-<tr><td><b>F / double-click</b></td><td>Fullscreen</td></tr>
+<tr><td><b>Ctrl+scroll, pinch, +/-, 0, 1</b></td><td>Zoom, fit, 100%</td></tr>
+<tr><td><b>Double-click</b></td><td>Fit ↔ 100% at the pointer</td></tr>
+<tr><td><b>K</b></td><td>Keep the zoom from image to image</td></tr>
+<tr><td><b>F</b></td><td>Fullscreen</td></tr>
 <tr><td><b>S</b></td><td>Slideshow</td></tr>
-<tr><td><b>R / L / H</b></td><td>Rotate right / left, flip</td></tr>
-<tr><td><b>I</b></td><td>Toggle info overlay</td></tr>
-<tr><td><b>Delete</b></td><td>Move to trash</td></tr>
+<tr><td><b>T / I / Tab</b></td><td>Filmstrip / info panel / info line</td></tr>
+<tr><td><b>X, V, B, D</b></td><td>Compare with the next image; side by side ↔ A/B; show A or B; over each other with a slider</td></tr>
+<tr><td><b>R / L / H, Ctrl+S</b></td><td>Rotate right / left, flip; save the rotation</td></tr>
+<tr><td><b>Shift+C / Shift+S / Shift+O</b></td><td>Crop / resize / straighten</td></tr>
+<tr><td><b>* / P</b></td><td>Star / pin</td></tr>
+<tr><td><b>M / C</b></td><td>Move to / copy to a folder</td></tr>
+<tr><td><b>Ctrl+1–9 / Alt+1–9</b></td><td>Move / copy to a recent folder</td></tr>
+<tr><td><b>G / O</b></td><td>Show in folder / Open With</td></tr>
+<tr><td><b>Delete, Ctrl+Z</b></td><td>Move to trash, undo</td></tr>
 </table>)";
     inform(this, "Keyboard Shortcuts", text);
 }
 
 void MainWindow::closeEvent(QCloseEvent *ev)
 {
-    QList<Task *> tasks = task_panel->tasks;
-    if (!tasks.isEmpty()) {
-        // the worker threads report to this window; closing now would drop their results mid-operation
-        QStringList names;
-        for (int i = 0; i < std::min<qsizetype>(5, tasks.size()); ++i)
-            names << "• " + tasks[i]->title;
+    // Jobs belong to Kestrel, not to the window that started them: they go on when it closes. Only the last window
+    // asks, while jobs run and the Jobs window (where they can still be watched) isn't open.
+    QList<Task *> running = TaskBoard::instance()->keeping();
+    bool last = std::none_of(WINDOWS.begin(), WINDOWS.end(), [this](MainWindow *m) { return m != this && !m->chooser_mode; });
+    if (!close_confirmed && last && !chooser_mode && !running.isEmpty() && !JobsWindow::is_open()) {
         ev->ignore();
         if (close_box) {   // already asked
             close_box->raise();
             close_box->activateWindow();
             return;
         }
-        close_box = new QMessageBox(QMessageBox::Question, "Operations Running",
-                                    QString("These operations are still running:\n\n%1\n\n"
-                                            "Stop them and close the window? Items already processed stay processed.")
+        QStringList names;
+        for (int i = 0; i < std::min<qsizetype>(5, running.size()); ++i)
+            names << "• " + running[i]->title;
+        if (running.size() > 5)
+            names << QString("…and %1 more").arg(running.size() - 5);
+        close_box = new QMessageBox(QMessageBox::Question, "Jobs Are Running",
+                                    QString("These jobs are still running or waiting:\n\n%1\n\nThey can go on without "
+                                            "any Kestrel window: the Jobs window shows them, and Kestrel exits once "
+                                            "they're done (and the Jobs window is closed).")
                                         .arg(names.join('\n')),
                                     QMessageBox::NoButton, this);
-        QPushButton *stop = close_box->addButton("Stop and Close", QMessageBox::DestructiveRole);
-        close_box->addButton("Keep Running", QMessageBox::RejectRole);
-        ask_box(close_box, [this, stop](QAbstractButton *b) {
-            if (b != stop)
+        QPushButton *keep = close_box->addButton("Exit and Open the Jobs Window", QMessageBox::AcceptRole);
+        QPushButton *stop = close_box->addButton("Stop All Jobs and Exit", QMessageBox::DestructiveRole);
+        close_box->addButton(QMessageBox::Cancel);
+        close_box->setDefaultButton(keep);
+        ask_box(close_box, [this, keep, stop](QAbstractButton *b) {
+            if (b != keep && b != stop)
                 return;
-            for (Task *t : task_panel->tasks)
-                t->cancel();
-            task_panel->refresh();
-            centralWidget()->setEnabled(false);   // stay visible (showing "cancelling…") until stopped
-            close_when_idle();
+            if (b == keep) {
+                JobsWindow::open(nullptr);   // a window of its own: not closed with this one
+            } else {
+                // each stops as a cancel does (one that can't be cancelled runs to its end; Kestrel exits after)
+                for (Task *t : TaskBoard::instance()->keeping())
+                    t->cancel();
+            }
+            close_confirmed = true;
+            close();
         });
         return;
     }
+    // this window's jobs: shown in another window's status bar from now on
+    for (MainWindow *m : WINDOWS)
+        if (m != this && !m->chooser_mode) {
+            for (Task *t : task_panel->tasks)
+                m->task_panel->add(t);
+            break;
+        }
     if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
         set_view_value("geometry", saveGeometry());
     set_view_value("splitter", split->saveState());
     if (chooser)
         chooser->finish(false);   // closed without choosing: cancelled
-    for (Pane *p : panes())
+    // the thumbnails and folder previews it asked for (the queue is the process's, which other windows may keep
+    // running): none made for it from here on
+    for (Pane *p : panes()) {
         p->stop_search();
+        p->cancel_thumbs();
+    }
+    thumbs->cancel_for(info);
     for (const auto &v : viewers)
         if (v)
             v->close();
@@ -1567,15 +1914,6 @@ void MainWindow::sync_undo()
     a_undo->setEnabled(!what.isEmpty());
 }
 
-void MainWindow::close_when_idle()
-{
-    // finish closing once every task has stopped (tasks that can't be cancelled run to the end)
-    if (!task_panel->tasks.isEmpty())
-        QTimer::singleShot(100, this, &MainWindow::close_when_idle);
-    else
-        close();
-}
-
 // ---------------------------------------------------------------- entry
 
 void apply_thumb_settings(ThumbnailManager *t)
@@ -1587,6 +1925,8 @@ void apply_thumb_settings(ThumbnailManager *t)
     t->folder_accent = thumbs::follows_accent(color);
     t->folder_color = t->folder_accent ? accent_color().name() : color;
     t->max_file_mb = s.value("thumb_max_mb", 200).toInt();
+    t->job_minutes = std::max(1, s.value("thumb_job_minutes", 3).toInt());
+    t->set_mode(s.value("thumb_mode", "wait").toString());
     static ThumbnailManager *watched = nullptr;
     if (!watched) {   // runs before the windows' own updates, which then draw folders in the new accent
         watched = t;
@@ -1621,9 +1961,11 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
 {
     // not in WINDOWS: a chooser isn't a window other Kestrels hand folders to
     QString start = req.current_folder;
-    if (!isdir(start))
+    if (req.saving() && !req.replacing && prefs::get("chooser_start").toString() == "overview")
+        start = OVERVIEW;   // its own Overview, with the save locations (a file being replaced: its folder)
+    if (start != OVERVIEW && !isdir(start))
         start = settings().value("chooser_folder").toString();   // where the last chooser picked something
-    if (!isdir(start))
+    if (start != OVERVIEW && !isdir(start))
         start = HOME();
     auto *w = new MainWindow({start}, g_thumbs, true);
     w->make_chooser(req, std::move(done));

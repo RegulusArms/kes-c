@@ -7,6 +7,7 @@
 #include "jobs.h"
 #include "keyring.h"
 #include "menus.h"
+#include "overview.h"
 #include "prefs.h"
 #include "tapebuf.h"
 #include "thumbs.h"
@@ -25,6 +26,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -67,7 +69,7 @@ static void select_data(QComboBox *cb, const QVariant &v)
     cb->setCurrentIndex(std::max(i, 0));
 }
 
-static const QMap<QString, QString> SECTION_NAMES = {{"places", "Places"}, {"bookmarks", "Bookmarks"}, {"devices", "Devices"}};
+static const QMap<QString, QString> SECTION_NAMES = {{"places", "Places"}, {"bookmarks", "Bookmarks"}, {"devices", "Devices"}, {"mounts", "Mounts"}};
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
 {
@@ -100,8 +102,6 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
             }
             pl->addWidget(make_row(p));
         }
-        if (tab == "Sidebar")
-            pl->addWidget(note("What the Overview page shows will be chosen here too (planned)."));
         pl->addStretch(1);
         auto *scroll = new QScrollArea;
         scroll->setWidget(page);
@@ -350,6 +350,57 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         };
         return box;
     }
+    if (key == "overview_sections") {
+        auto *box = new QWidget;
+        auto *h = new QHBoxLayout(box);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto *list = new QListWidget;
+        list->setObjectName("overview_sections_list");
+        list->setMaximumHeight(150);
+        auto *bv = new QVBoxLayout;
+        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        bv->addWidget(up);
+        bv->addWidget(down);
+        bv->addStretch(1);
+        h->addWidget(list, 1);
+        h->addLayout(bv);
+        // each section, in order; ticked: shown
+        auto store = [this, list]() {
+            QList<QPair<QString, bool>> order;
+            for (int i = 0; i < list->count(); ++i)
+                order << qMakePair(list->item(i)->data(Qt::UserRole).toString(),
+                                   list->item(i)->checkState() == Qt::Checked);
+            if (!loading)
+                save("overview_sections", overview::save_order(order));
+        };
+        connect(list, &QListWidget::itemChanged, this, store);
+        auto move = [list, store](int by) {
+            int r = list->currentRow();
+            if (r < 0 || r + by < 0 || r + by >= list->count())
+                return;
+            QListWidgetItem *it = list->takeItem(r);
+            list->insertItem(r + by, it);
+            list->setCurrentRow(r + by);
+            store();
+        };
+        connect(up, &QPushButton::clicked, this, [move]() { move(-1); });
+        connect(down, &QPushButton::clicked, this, [move]() { move(1); });
+        loaders[key] = [list]() {
+            list->clear();
+            for (const auto &[id, shown] : overview::section_order(prefs::get("overview_sections").toStringList())) {
+                QString title;
+                for (const auto &[sid, stitle] : overview::SECTIONS)
+                    if (sid == id)
+                        title = stitle;
+                auto *it = new QListWidgetItem(title);
+                it->setData(Qt::UserRole, id);
+                it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+                it->setCheckState(shown ? Qt::Checked : Qt::Unchecked);
+                list->addItem(it);
+            }
+        };
+        return box;
+    }
     if (key == "slow_previews") {
         auto *box = new QWidget;
         auto *h = new QHBoxLayout(box);
@@ -371,6 +422,57 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             list->addItems(prefs::get("slow_previews").toStringList());
             remove->setEnabled(list->count() > 0);
             list->setToolTip(list->count() ? QString() : QString("None: no tape or floppy shows previews"));
+        };
+        return box;
+    }
+    if (key == "chooser_places") {   // a Save window's save locations (OverviewPage::save_places_section)
+        auto *box = new QWidget;
+        auto *h = new QHBoxLayout(box);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto *list = new QListWidget;
+        list->setObjectName("chooser_places_list");
+        list->setMaximumHeight(110);
+        auto *bv = new QVBoxLayout;
+        auto *add = new QPushButton("Add…"), *remove = new QPushButton("Remove");
+        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        for (QPushButton *b : {add, remove, up, down})
+            bv->addWidget(b);
+        bv->addStretch(1);
+        h->addWidget(list, 1);
+        h->addLayout(bv);
+        connect(add, &QPushButton::clicked, this, [this]() {
+            QPointer<PreferencesDialog> self(this);
+            choose_folder(this, "Add a Save Location", HOME(), [self](const QString &p) {
+                QStringList l = prefs::get("chooser_places").toStringList();
+                if (self && !l.contains(p))
+                    self->save("chooser_places", l << p);
+            });
+        });
+        connect(remove, &QPushButton::clicked, this, [this, list]() {
+            QStringList l = prefs::get("chooser_places").toStringList();
+            for (QListWidgetItem *it : list->selectedItems())
+                l.removeAll(it->text());
+            save("chooser_places", l);
+        });
+        auto move = [this, list](int by) {
+            QStringList l = prefs::get("chooser_places").toStringList();
+            int r = list->currentRow();
+            if (r < 0 || r + by < 0 || r + by >= l.size())
+                return;
+            l.move(r, r + by);
+            save("chooser_places", l);
+            list->setCurrentRow(r + by);
+        };
+        connect(up, &QPushButton::clicked, this, [move]() { move(-1); });
+        connect(down, &QPushButton::clicked, this, [move]() { move(1); });
+        loaders[key] = [list, remove, up, down]() {
+            int r = list->currentRow();
+            list->clear();
+            list->addItems(prefs::get("chooser_places").toStringList());
+            list->setCurrentRow(std::min(r, list->count() - 1));
+            for (QPushButton *b : {remove, up, down})
+                b->setEnabled(list->count() > 0);
+            list->setToolTip(list->count() ? QString() : QString("None yet: add the folders you save to most"));
         };
         return box;
     }
@@ -413,8 +515,13 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         l->setWordWrap(true);
         loaders[key] = [l]() {
             tapebuf::Memory m = tapebuf::memory();
-            l->setText(QString("Up to %1 (memory %2, %3 available now)")
-                           .arg(human_size(tapebuf::budget(m)), human_size(m.total), human_size(m.available)));
+            qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1000000000, b = tapebuf::budget(m);
+            QString text = QString("Up to %1 (memory %2, %3 available now)")
+                               .arg(human_size(b), human_size(m.total), human_size(m.available));
+            if (most > 0 && b < most)   // the largest size isn't safe here: what's used instead, and why
+                text += "\n" + human_size(most) + " is more than this system can spare now: the buffer takes half the "
+                        "memory available at most.";
+            l->setText(text);
         };
         return l;
     }
@@ -664,7 +771,7 @@ void PreferencesDialog::apply_filter()
         int shown = 0;
         if (tab == "Menus") {
             QString words = "menus right-click context menu entries layout submenu reorder " +
-                            QStringList{"folder", "file", "archive", "several", "empty space"}.join(' ');
+                            QStringList{"folder", "file", "archive", "several", "empty space", "image viewer"}.join(' ');
             shown = t.isEmpty() || words.contains(t, Qt::CaseInsensitive);
         } else {
             QHash<QString, int> in_group;

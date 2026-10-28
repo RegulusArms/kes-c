@@ -4,6 +4,7 @@
 #include "archive.h"
 
 #include <QDialog>
+#include <QMap>
 #include <QPointer>
 
 #include <functional>
@@ -43,13 +44,16 @@ private:
     bool loading = true;
     QLineEdit *name, *dest, *pw, *pw2, *extra;
     QLabel *ext, *level_lbl, *level_hint, *enc_note, *no_enc, *zip_enc_lbl;
-    QComboBox *fmt, *tool, *method, *zip_enc, *vol_unit;
+    QComboBox *fmt, *tool, *method, *zip_enc, *vol_size, *vol_unit;   // vol_size: a standard size or Custom…
     QSlider *level;
     QSpinBox *threads, *vol, *recovery;
-    QGroupBox *enc, *split;
-    QCheckBox *enc_names, *solid, *trash_after;
+    QGroupBox *enc, *split, *sums;   // sums: a checksum file made as it's written (tar formats)
+    QMap<QString, QCheckBox *> sum_boxes;   // by algorithm
+    QCheckBox *enc_names, *solid, *trash_after, *sum_one;
     QPlainTextEdit *preview;
     QList<QWidget *> tool_row, level_row, method_row, threads_row, recovery_row;
+    qint64 volume_bytes() const;   // the size chosen (standard, or Custom…'s number and unit)
+    void volume_choice_changed();
 };
 
 class ExtractDialog : public QDialog {

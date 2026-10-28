@@ -4,6 +4,7 @@
 #include "drives.h"
 #include "fileops.h"
 #include "places.h"
+#include "prefs.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -33,6 +34,7 @@
 #include <gio/gio.h>
 
 #include <memory>
+#include <utility>
 #include <sys/sysmacros.h>
 
 using namespace util;
@@ -43,8 +45,6 @@ const QString OVERVIEW_TITLE = "Overview";
 static const QSet<QString> LOCAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "vfat", "exfat", "ntfs",
                                        "ntfs3", "fuseblk", "f2fs", "iso9660", "udf", "hfsplus", "apfs", "bcachefs",
                                        "jfs", "reiserfs", "msdos"};
-static const QSet<QString> NET_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "sshfs", "davfs",
-                                     "fuse.rclone", "9p", "fuse.davfs2", "afs", "ceph", "glusterfs"};
 static const QStringList HIDDEN_ROOTS = {"/boot", "/efi", "/snap", "/var/snap", "/var/lib/docker",
                                          "/var/lib/containers", "/run/", "/sys", "/proc", "/dev", "/tmp"};
 // partitions that belong to a pool/array/LVM: GIO offers to "mount" them, but they can't be
@@ -87,7 +87,36 @@ static VolumeRef volume_ref(GVolume *v)
     return v ? VolumeRef(v, [](GVolume *x) { g_object_unref(x); }) : VolumeRef();
 }
 
-QVariantList scan_filesystems()
+// The system's own mounts beside "/", shown when chosen (overview_system "all")
+static bool system_mount(const QString &root)
+{
+    for (const QString &s : {QString("/boot"), QString("/efi")})
+        if (root == s || root.startsWith(s + "/"))
+            return true;
+    return false;
+}
+
+// a mount a test added (drives.cpp, KESTREL_TEST_MOUNTS): shown though it's in a test's folder under /tmp
+static bool test_mount(const QString &root)
+{
+    return qEnvironmentVariable("KESTREL_TEST_MOUNTS").split(';').filter(QRegularExpression("^" + QRegularExpression::escape(root) + "\\|")).size() > 0;
+}
+
+// a ZFS pool's disks, for its health (zpool's full paths: /dev/disk/by-id/… or /dev/sdX)
+static QStringList zpool_disks(const QString &pool)
+{
+    QStringList out;
+    auto r = proc::run({"zpool", "list", "-vHP", pool}, 10000);
+    for (const QString &line : QString::fromUtf8(r.out).split('\n', Qt::SkipEmptyParts))
+        for (const QString &f : line.split('\t', Qt::SkipEmptyParts)) {
+            if (f.startsWith("/dev/"))
+                out << f;
+            break;   // (only the first field names a disk)
+        }
+    return out;
+}
+
+QVariantList scan_filesystems(bool system_mounts, bool with_health)
 {
     QHash<QString, QPair<qint64, qint64>> zfs_pools;
     if (which("zfs")) {
@@ -108,12 +137,14 @@ QVariantList scan_filesystems()
             bool hidden = false;
             for (const QString &h : HIDDEN_ROOTS)
                 hidden = hidden || root.startsWith(h);
-            if (root != "/" && hidden && !root.startsWith("/run/media/"))
+            if (hidden && !system_mount(root) && test_mount(root))
+                hidden = false;
+            if (root != "/" && hidden && !root.startsWith("/run/media/") && !(system_mounts && system_mount(root)))
                 continue;
             if (dev.startsWith("/dev/loop"))
                 continue;
         }
-        bool net = NET_FS.contains(fs);
+        bool net = drives::network_fs(fs);
         if (slow == drives::Slow::None && !net && !LOCAL_FS.contains(fs))
             continue;
         qint64 total = -1, free = -1;
@@ -141,7 +172,10 @@ QVariantList scan_filesystems()
             }
             name = pool;
         }
-        QString kind = slow != drives::Slow::None ? drives::slow_name(slow) : net ? "network" : root == "/" ? "system" : "local";
+        QString kind = slow != drives::Slow::None ? drives::slow_name(slow)
+                       : net                       ? "network"
+                       : root == "/" || system_mount(root) ? "system"
+                                                            : "local";
         QVariantMap entry{{"name", name}, {"root", root}, {"fs", slow == drives::Slow::Tape ? QString("LTFS") : fs},
                           {"device", dev}, {"total", total}, {"free", free}, {"kind", kind}};
         // one card per device/pool: keep the shallowest mount (skips bind mounts, subvolumes, nested datasets)
@@ -160,6 +194,37 @@ QVariantList scan_filesystems()
         };
         return k(a) < k(b);
     });
+    if (with_health) {
+        QStringList devices;
+        QHash<QString, QStringList> pools;   // ZFS pool -> its disks
+        for (const QVariantMap &e : out) {
+            QString kind = e["kind"].toString(), dev = e["device"].toString();
+            if (kind != "system" && kind != "local")
+                continue;
+            if (e["fs"].toString() == "zfs" && which("zpool")) {
+                QString pool = dev.split('/').first();
+                if (!pools.contains(pool))
+                    pools.insert(pool, zpool_disks(pool));
+                devices << pools[pool];
+            } else {
+                devices << dev;
+            }
+        }
+        QHash<QString, health::Info> found = health::read(devices);
+        for (QVariantMap &e : out) {
+            QString dev = e["device"].toString();
+            if (e["fs"].toString() == "zfs") {
+                QList<health::Info> disks;
+                for (const QString &d : pools.value(dev.split('/').first()))
+                    if (found.contains(d))
+                        disks << found[d];
+                if (!disks.isEmpty())
+                    e["health"] = QVariant::fromValue(health::worst(disks));
+            } else if (found.contains(dev)) {
+                e["health"] = QVariant::fromValue(found[dev]);
+            }
+        }
+    }
     QVariantList res;
     for (QVariantMap &e : out) {
         if (e["root"].toString() == "/")
@@ -167,6 +232,42 @@ QVariantList scan_filesystems()
         res << e;
     }
     return res;
+}
+
+// ---------------------------------------------------------------- sections
+
+const QList<QPair<QString, QString>> SECTIONS = {{"drives", "Drives"},       {"phones", "Phones & Cameras"},
+                                                 {"network", "Network"},     {"bookmarks", "Bookmarks"},
+                                                 {"starred", "Starred"},     {"frequent", "Frequent Folders"}};
+static const QStringList HIDDEN_AT_FIRST = {"starred", "frequent"};
+
+QList<QPair<QString, bool>> section_order(const QStringList &saved)
+{
+    QList<QPair<QString, bool>> out;
+    QStringList seen;
+    auto known = [](const QString &id) {
+        return std::any_of(SECTIONS.begin(), SECTIONS.end(), [&](const auto &s) { return s.first == id; });
+    };
+    for (const QString &s : saved) {
+        bool shown = !s.startsWith('-');
+        QString id = shown ? s : s.mid(1);
+        if (known(id) && !seen.contains(id)) {
+            out << qMakePair(id, shown);
+            seen << id;
+        }
+    }
+    for (const auto &[id, title] : SECTIONS)
+        if (!seen.contains(id))
+            out << qMakePair(id, !HIDDEN_AT_FIRST.contains(id));
+    return out;
+}
+
+QStringList save_order(const QList<QPair<QString, bool>> &order)
+{
+    QStringList out;
+    for (const auto &[id, shown] : order)
+        out << (shown ? id : "-" + id);
+    return out;
 }
 
 // filesystem type from the udev database (no root, no subprocess)
@@ -216,6 +317,9 @@ static void reply_when_done(QDialog *dlg, GMountOperation *op, std::function<boo
 static void ask_password(GMountOperation *op, const char *message, const char *default_user,
                          const char *default_domain, GAskPasswordFlags flags, gpointer data)
 {
+    // GMountOperation's own handler (run after this one) replies "unhandled" on the next idle, and udisks then fails
+    // the unlock ("Expected G_MOUNT_OPERATION_HANDLED but got 2") before the window is answered: it mustn't run
+    g_signal_stop_emission_by_name(op, "ask-password");
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
     auto *dlg = new QDialog(parent);
     dlg->setWindowTitle("Authentication Required");
@@ -289,6 +393,7 @@ static void ask_password(GMountOperation *op, const char *message, const char *d
 
 static void ask_question(GMountOperation *op, const char *message, const char **choices, gpointer data)
 {
+    g_signal_stop_emission_by_name(op, "ask-question");   // (as ask_password)
     QWidget *parent = static_cast<QPointer<QWidget> *>(data)->data();
     auto *box = new QMessageBox(QMessageBox::Question, "Question", QString::fromUtf8(message), QMessageBox::NoButton, parent);
     QList<QAbstractButton *> buttons;
@@ -303,7 +408,7 @@ static void ask_question(GMountOperation *op, const char *message, const char **
     });
 }
 
-static GMountOperation *make_mount_operation(QWidget *parent)
+GMountOperation *make_mount_operation(QWidget *parent)
 {
     GMountOperation *op = g_mount_operation_new();
     auto *ptr = new QPointer<QWidget>(parent);
@@ -465,6 +570,51 @@ MountGroup mount_group(const QString &scheme, const QString &path, bool shadowed
     return MountGroup::Skip;
 }
 
+QList<DriveInfo> network_infos(GVolumeMonitor *monitor, const QSet<QString> &known_roots)
+{
+    QList<DriveInfo> out;
+    GList *mounts = g_volume_monitor_get_mounts(monitor);
+    for (GList *l = mounts; l; l = l->next) {
+        MountRef m = mount_ref(G_MOUNT(l->data));
+        GFile *root = g_mount_get_root(m.get());
+        QString path = gstr(g_file_get_path(root));
+        QString scheme = gstr(g_file_get_uri_scheme(root));
+        if (mount_group(scheme, path, g_mount_is_shadowed(m.get()), known_roots.contains(path)) == MountGroup::Network) {
+            DriveInfo info;
+            info.name = gstr(g_mount_get_name(m.get()));
+            info.root = path;
+            info.uri = gstr(g_file_get_uri(root));
+            info.fs = scheme;
+            GIcon *gi = g_mount_get_icon(m.get());
+            info.icon = gicon_to_qicon(gi);
+            g_object_unref(gi);
+            info.mount = m;
+            info.status = "Connected";
+            info.kind = "network";
+            out << info;
+        }
+        g_object_unref(root);
+    }
+    g_list_free(mounts);
+    return out;
+}
+
+bool connected(const QString &server, const QList<DriveInfo> &shares)
+{
+    auto bare = [](QString u) {
+        while (u.endsWith('/'))
+            u.chop(1);
+        return u;
+    };
+    QString s = bare(server);
+    for (const DriveInfo &sh : shares) {
+        QString u = bare(sh.uri);
+        if (!u.isEmpty() && (s == u || s.startsWith(u + "/")))
+            return true;
+    }
+    return false;
+}
+
 QList<DriveInfo> phone_infos(GVolumeMonitor *monitor)
 {
     QList<DriveInfo> out;
@@ -611,14 +761,17 @@ static QLabel *small(QLabel *label, bool dim = true)
     return label;
 }
 
-DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), info(info_)
+DriveCard::DriveCard(const DriveInfo &info_, const CardLook &look, QWidget *parent) : Card(parent), info(info_)
 {
-    setFixedSize(340, 96);
+    static const int widths[] = {280, 340, 420}, heights[] = {80, 96, 116}, icons[] = {32, 48, 64};
+    int s = std::clamp(look.size, 0, 2);
+    setFixedWidth(widths[s]);
+    setMinimumHeight(heights[s]);
     auto *lay = new QHBoxLayout(this);
-    lay->setContentsMargins(12, 10, 12, 10);
+    lay->setContentsMargins(s == 0 ? 10 : 12, s == 0 ? 8 : 10, s == 0 ? 10 : 12, s == 0 ? 8 : 10);
     auto *icon = new QLabel;
-    icon->setPixmap(info.icon.pixmap(48, 48));
-    icon->setFixedSize(52, 52);
+    icon->setPixmap(info.icon.pixmap(icons[s], icons[s]));
+    icon->setFixedSize(icons[s] + 4, icons[s] + 4);
     lay->addWidget(icon, 0, Qt::AlignVCenter);
     auto *col = new QVBoxLayout;
     col->setSpacing(3);
@@ -649,17 +802,22 @@ DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), in
     if (info.mounted && total) {
         qint64 free = info.free < 0 ? 0 : info.free;
         double pct = (total - free) * 100.0 / total;
-        auto *bar = new QProgressBar;
-        bar->setRange(0, 1000);
-        bar->setValue(int(pct * 10));
-        bar->setTextVisible(false);
-        bar->setFixedHeight(8);
-        QString color = pct >= 90 ? "#c01c28" : (pct >= 75 ? "#e5a50a" : "palette(highlight)");
-        bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: %1; }"
-                                   "QProgressBar::chunk { border-radius: 4px; background: %2; }")
-                               .arg(card_border().name(), color));
-        col->addWidget(bar);
-        QString line = QString("%1 free of %2  (%3% used)").arg(human_size(free), human_size(total)).arg(qRound(pct));
+        if (look.bar) {
+            auto *bar = new QProgressBar;
+            bar->setObjectName("usage");
+            bar->setRange(0, 1000);
+            bar->setValue(int(pct * 10));
+            bar->setTextVisible(false);
+            bar->setFixedHeight(8);
+            QString color = pct >= 90 ? "#c01c28" : (pct >= 75 ? "#e5a50a" : "palette(highlight)");
+            bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: %1; }"
+                                       "QProgressBar::chunk { border-radius: 4px; background: %2; }")
+                                   .arg(card_border().name(), color));
+            col->addWidget(bar);
+        }
+        QString line = look.percent ? QString("%1% free of %2").arg(QString::number(qRound(100 - pct)), human_size(total))
+                                    : QString("%1 free of %2  (%3% used)")
+                                          .arg(human_size(free), human_size(total), QString::number(qRound(pct)));
         if ((info.kind == "tape" || info.kind == "floppy") && !info.status.isEmpty())   // "Tape · 12 loads" and the like
             line = info.status + "  ·  " + line;
         col->addWidget(small(new QLabel(line)));
@@ -670,19 +828,44 @@ DriveCard::DriveCard(const DriveInfo &info_, QWidget *parent) : Card(parent), in
             state = QString("%1  ·  %2").arg(human_size(total), state);
         col->addWidget(small(new QLabel(state)));
     }
+    if (info.has_health) {
+        const health::Info &h = info.health;
+        QColor c = h.state == health::State::Failing   ? QColor("#c01c28")
+                   : h.state == health::State::Warning ? QColor("#c64600")
+                                                       : palette().color(QPalette::PlaceholderText);
+        health_label = small(new QLabel, false);
+        health_label->setObjectName("health");
+        health_label->setTextFormat(Qt::RichText);
+        health_label->setWordWrap(true);
+        QString text = health::line(h).toHtmlEscaped();
+        if (h.state == health::State::Failing)
+            text = "<b>" + text + "</b>";
+        health_label->setText(QString("<a href=\"health\" style=\"color: %1; text-decoration: none\">%2</a>")
+                                  .arg(c.name(), text));
+        health_label->setToolTip("Drive Health… (what the drive reports about itself)");
+        health_label->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+        col->addWidget(health_label);
+        if (h.state == health::State::Failing)   // a red border too, seen from across the page
+            setStyleSheet(QString("QFrame#card { background: %1; border: 2px solid #c01c28; border-radius: 10px; }")
+                              .arg(card_color().name()));
+    }
     col->addStretch(1);
     lay->addLayout(col, 1);
 }
 
-BookmarkCard::BookmarkCard(const QString &target, const QString &label, ThumbnailManager *thumbs, QWidget *parent)
+BookmarkCard::BookmarkCard(const QString &target, const QString &label, ThumbnailManager *thumbs, int size,
+                           QWidget *parent)
     : Card(parent), target(target), thumbs(thumbs)
 {
-    setFixedSize(168, 196);
+    static const int widths[] = {128, 168, 216}, pics[] = {96, 128, 176};
+    int s = std::clamp(size, 0, 2), inner = widths[s] - 20;
+    px = pics[s];
+    setFixedSize(widths[s], px + 68);
     auto *lay = new QVBoxLayout(this);
     lay->setContentsMargins(10, 10, 10, 8);
     lay->setSpacing(4);
     pic = new QLabel;
-    pic->setFixedSize(148, 128);
+    pic->setFixedSize(inner, px);
     pic->setAlignment(Qt::AlignCenter);
     lay->addWidget(pic);
     auto *name = new QLabel(label);
@@ -690,11 +873,11 @@ BookmarkCard::BookmarkCard(const QString &target, const QString &label, Thumbnai
     f.setBold(true);
     name->setFont(f);
     name->setAlignment(Qt::AlignHCenter);
-    name->setText(name->fontMetrics().elidedText(label, Qt::ElideMiddle, 148));
+    name->setText(name->fontMetrics().elidedText(label, Qt::ElideMiddle, inner));
     lay->addWidget(name);
     auto *where = small(new QLabel);
     where->setAlignment(Qt::AlignHCenter);
-    where->setText(where->fontMetrics().elidedText(target, Qt::ElideLeft, 148));
+    where->setText(where->fontMetrics().elidedText(target, Qt::ElideLeft, inner));
     where->setToolTip(target);
     lay->addWidget(where);
     local = !is_uri(target);
@@ -703,9 +886,21 @@ BookmarkCard::BookmarkCard(const QString &target, const QString &label, Thumbnai
 
 void BookmarkCard::update_pic()
 {
-    if (local && isdir(target)) {
-        QFileInfo fi(target);
-        pic->setPixmap(thumbs->scaled(thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), 128), 128));
+    if (local && drives::slow_kind(target) != drives::Slow::None) {
+        // on a tape or floppy nothing is asked of the drive (it may be seeking): a folder unless its name has a type
+        bool file = !QFileInfo(target).suffix().isEmpty();
+        pic->setPixmap(file ? icon_for_path(target, 0).pixmap(px * 2 / 3)
+                            : thumbs->scaled(thumbs->plain_folder(thumbs->folder_color, px), px));
+        return;
+    }
+    QFileInfo fi(target);
+    if (local && fi.isDir()) {
+        pic->setPixmap(thumbs->scaled(thumbs->folder_pixmap(target, fi.lastModified().toSecsSinceEpoch(), px, true, this), px));
+        return;
+    }
+    if (local && fi.isFile()) {   // a starred file: its thumbnail when there is one, else its type's icon
+        QPixmap t = thumbs->get(target, fi.lastModified().toSecsSinceEpoch(), false, px, fi.size(), this);
+        pic->setPixmap(!t.isNull() ? thumbs->scaled(t, px) : icon_for_path(target, 0).pixmap(px * 2 / 3));
         return;
     }
     // A network location (mounted when opened), or one that isn't there: a drive that isn't connected, or a folder
@@ -713,7 +908,7 @@ void BookmarkCard::update_pic()
     // it isn't there.
     bool mount = target.startsWith("/run/user") || target.startsWith("/media") || target.startsWith("/mnt");
     QString symbol = !local || target.startsWith("/run/user") ? "folder-remote" : mount ? "drive-harddisk" : "dialog-question";
-    QPixmap pm = thumbs->scaled(thumbs->plain_folder(thumbs->folder_color, 128, symbol), 128);
+    QPixmap pm = thumbs->scaled(thumbs->plain_folder(thumbs->folder_color, px, symbol), px);
     if (local) {
         QPixmap faded(pm.size());
         faded.setDevicePixelRatio(pm.devicePixelRatio());
@@ -751,6 +946,19 @@ OverviewPage::OverviewPage(ThumbnailManager *thumbs, QWidget *parent) : QScrollA
             rebuild();
     });
     on_palette_change(this, [this]() { rebuild(); });   // a light/dark switch: cards and icons in the new colours
+    connect(prefs::Notifier::instance(), &prefs::Notifier::changed, this, [this](const QStringList &keys) {
+        // changed here, in Preferences or by another Kestrel
+        bool rescan = keys.contains("overview_system") || keys.contains("overview_health");
+        bool redo = std::any_of(keys.begin(), keys.end(), [](const QString &k) { return k.startsWith("overview_"); });
+        if (rescan && isVisible())
+            refresh();
+        else if (redo || (save_places && keys.contains("chooser_places")))
+            rebuild();
+    });
+    connect(places::signals_(), &places::Signals::starred_changed, this, [this]() {
+        if (isVisible() && titles.contains("Starred"))
+            rebuild();
+    });
     monitor = g_volume_monitor_get();
     for (const char *sig : {"volume-added", "volume-removed", "volume-changed", "mount-added", "mount-removed",
                             "mount-changed"})
@@ -787,18 +995,24 @@ void OverviewPage::hideEvent(QHideEvent *ev)
 
 void OverviewPage::refresh()
 {
-    if (fs_running)
+    if (fs_running) {
+        scan_again = true;   // (asked meanwhile: the options may have changed)
         return;
+    }
     if (!have_fs)
         rebuild();   // show bookmarks / GIO volumes immediately
     fs_running = true;
+    bool system_mounts = prefs::get("overview_system").toString() == "all";
+    bool with_health = prefs::get("overview_health").toBool();
     Task *t = fileops::run_task(
-        this, "", []() { return QVariant(overview::scan_filesystems()); },
+        this, "", [system_mounts, with_health]() { return QVariant(overview::scan_filesystems(system_mounts, with_health)); },
         [this](const QVariant &res) {
             fs_running = false;
             fs = res.toList();
             have_fs = true;
             rebuild();
+            if (std::exchange(scan_again, false))
+                refresh();
         },
         true);
     connect(t, &Task::error, this, [this]() { fs_running = false; });
@@ -824,6 +1038,7 @@ FlowLayout *OverviewPage::section(const QString &title)
     lab->setFont(f);
     lay->addSpacing(6);
     lay->addWidget(lab);
+    titles << title;
     auto *box = new QWidget;
     auto *flow = new FlowLayout(box);
     lay->addWidget(box);
@@ -835,12 +1050,55 @@ void OverviewPage::rebuild()
     int scroll = verticalScrollBar()->value();
     clear_layout(lay);
     bookmark_cards.clear();
+    save_cards.clear();
+    other_cards.clear();
+    shown_targets.clear();
+    shown_drives.clear();
+    titles.clear();
+    QString size = prefs::get("overview_card_size").toString();
+    look.size = size == "small" ? 0 : size == "large" ? 2 : 1;
+    look.bar = prefs::get("overview_usage_bar").toBool();
+    look.percent = prefs::get("overview_free_as").toString() == "percent";
+    if (save_places)
+        save_places_section();
     auto [local, phones, network] = drive_infos();
+    for (const auto &[id, shown] : overview::section_order(prefs::get("overview_sections").toStringList())) {
+        if (!shown)
+            continue;
+        if (id == "drives")
+            drives_section(local);
+        else if (id == "phones")
+            phones_section(phones);
+        else if (id == "network")
+            network_section(network);
+        else if (id == "bookmarks")
+            bookmarks_section();
+        else if (id == "starred")
+            starred_section();
+        else if (id == "frequent")
+            frequent_section();
+    }
+    if (titles.isEmpty() && !save_places)
+        lay->addWidget(small(new QLabel("Every section is hidden: choose what the Overview shows in Preferences → "
+                                        "Overview.")));
+    lay->addStretch(1);
+    QTimer::singleShot(0, this, [this, scroll]() { verticalScrollBar()->setValue(scroll); });
+}
+
+void OverviewPage::drives_section(const QList<DriveInfo> &local)
+{
     FlowLayout *flow = section("Drives");
-    for (const DriveInfo &info : local)
+    for (const DriveInfo &info : local) {
         flow->addWidget(drive_card(info));
+        if (info.has_health)
+            health::warn_failing(info.name, info.health);   // (once per drive, ever)
+    }
     if (local.isEmpty())
-        flow->addWidget(small(new QLabel("Scanning…")));
+        flow->addWidget(small(new QLabel(have_fs ? "No drives to show." : "Scanning…")));
+}
+
+void OverviewPage::phones_section(const QList<DriveInfo> &phones)
+{
     FlowLayout *pflow = section("Phones & Cameras");
     for (const DriveInfo &info : phones)
         pflow->addWidget(drive_card(info));
@@ -849,6 +1107,10 @@ void OverviewPage::rebuild()
         hint->setWordWrap(true);
         lay->addWidget(hint);
     }
+}
+
+void OverviewPage::network_section(const QList<DriveInfo> &network)
+{
     FlowLayout *nflow = section("Network");
     for (const DriveInfo &info : network)
         nflow->addWidget(drive_card(info));
@@ -869,22 +1131,87 @@ void OverviewPage::rebuild()
         row->addStretch(1);
         lay->addLayout(row);
     }
+}
+
+void OverviewPage::bookmarks_section()
+{
     FlowLayout *bflow = section("Bookmarks");
     auto bms = read_bookmarks();
     for (const auto &[target, label] : bms) {
-        auto *card = new BookmarkCard(target, label, thumbs);
+        auto *card = new BookmarkCard(target, label, thumbs, look.size);
         QString t = target;
         connect(card, &Card::clicked, this, [this, t]() { Q_EMIT navigate(t); });
         connect(card, &Card::middle_clicked, this, [this, t]() { Q_EMIT open_in_tab(t); });
         connect(card, &Card::menu_requested, this, [this, t](const QPoint &pos) { bookmark_menu(t, pos); });
         bflow->addWidget(card);
         bookmark_cards.insert(target, card);
+        shown_targets["bookmarks"] << target;
     }
     if (bms.isEmpty())
         lay->addWidget(small(new QLabel("No bookmarks yet — press Ctrl+D in a folder, or right-click a folder and "
                                         "choose Links & Shortcuts → Add to Bookmarks.")));
-    lay->addStretch(1);
-    QTimer::singleShot(0, this, [this, scroll]() { verticalScrollBar()->setValue(scroll); });
+}
+
+BookmarkCard *OverviewPage::folder_card(const QString &target, const QString &label, const QString &section)
+{
+    auto *card = new BookmarkCard(target, label, thumbs, look.size);
+    other_cards.insert(section + "\n" + target, card);
+    shown_targets[section] << target;
+    return card;
+}
+
+void OverviewPage::starred_section()
+{
+    FlowLayout *flow = section("Starred");
+    QStringList items = places::starred();
+    for (const QString &t : items) {
+        BookmarkCard *card = folder_card(t, basename(t).isEmpty() ? t : basename(t), "starred");
+        connect(card, &Card::clicked, this, [this, t]() {
+            // a folder opens here; a file opens in its app (on a tape or floppy, nothing is asked: shown in its folder)
+            bool slow = drives::slow_kind(t) != drives::Slow::None;
+            if (!slow && isfile(t))
+                Q_EMIT open_file(t);
+            else
+                Q_EMIT navigate(t);
+        });
+        connect(card, &Card::middle_clicked, this, [this, t]() { Q_EMIT open_in_tab(t); });
+        connect(card, &Card::menu_requested, this, [this, t](const QPoint &pos) { starred_menu(t, pos); });
+        flow->addWidget(card);
+    }
+    if (items.isEmpty())
+        lay->addWidget(small(new QLabel(places::empty_text(places::STARRED) + ".")));
+}
+
+void OverviewPage::frequent_section()
+{
+    FlowLayout *flow = section("Frequent Folders");
+    int shown = 0;
+    // the most visited that are still there (one on a tape or floppy isn't asked: shown as it is)
+    for (const QString &t : places::frequent_folders(40)) {
+        if (drives::slow_kind(t) == drives::Slow::None && !isdir(t))
+            continue;
+        BookmarkCard *card = folder_card(t, basename(t).isEmpty() ? t : basename(t), "frequent");
+        connect(card, &Card::clicked, this, [this, t]() { Q_EMIT navigate(t); });
+        connect(card, &Card::middle_clicked, this, [this, t]() { Q_EMIT open_in_tab(t); });
+        connect(card, &Card::menu_requested, this, [this, t](const QPoint &pos) { frequent_menu(t, pos); });
+        flow->addWidget(card);
+        if (++shown == 12)
+            break;
+    }
+    if (!shown)
+        lay->addWidget(small(new QLabel(places::remembers_history()
+                                            ? "No folders yet — the folders you open most will show here."
+                                            : "File History is off in the desktop's privacy settings, so the folders "
+                                              "you open aren't counted.")));
+}
+
+QStringList OverviewPage::section_titles() const { return titles; }
+QList<DriveCard *> OverviewPage::drive_cards() const { return shown_drives; }
+QStringList OverviewPage::card_targets(const QString &section) const { return shown_targets.value(section); }
+
+BookmarkCard *OverviewPage::card_for(const QString &section, const QString &target) const
+{
+    return other_cards.value(section + "\n" + target);
 }
 
 DriveLists OverviewPage::drive_infos()
@@ -894,7 +1221,8 @@ DriveLists OverviewPage::drive_infos()
         QVariantMap e = v.toMap();
         roots.insert(e["root"].toString(), e);
     }
-    QList<DriveInfo> local, network;
+    QList<DriveInfo> local;
+    QList<DriveInfo> network = overview::network_infos(monitor, QSet<QString>(roots.keyBegin(), roots.keyEnd()));
     QHash<QString, overview::MountRef> gio_by_root;
     GList *mounts = g_volume_monitor_get_mounts(monitor);
     for (GList *l = mounts; l; l = l->next) {
@@ -902,29 +1230,18 @@ DriveLists OverviewPage::drive_infos()
         GFile *root = g_mount_get_root(m.get());
         QString path = gstr(g_file_get_path(root));
         QString scheme = gstr(g_file_get_uri_scheme(root));
-        auto group = overview::mount_group(scheme, path, g_mount_is_shadowed(m.get()), roots.contains(path));
-        if (group == overview::MountGroup::Local) {
+        if (overview::mount_group(scheme, path, g_mount_is_shadowed(m.get()), roots.contains(path)) ==
+            overview::MountGroup::Local)
             gio_by_root.insert(path, m);
-        } else if (group == overview::MountGroup::Network) {
-            DriveInfo info;
-            info.name = gstr(g_mount_get_name(m.get()));
-            info.root = path;
-            info.uri = gstr(g_file_get_uri(root));
-            info.fs = scheme;
-            GIcon *gi = g_mount_get_icon(m.get());
-            info.icon = gicon_to_qicon(gi);
-            g_object_unref(gi);
-            info.mount = m;
-            info.status = "Connected";
-            info.kind = "network";
-            network << info;
-        }
         g_object_unref(root);
     }
     g_list_free(mounts);
+    bool no_system = prefs::get("overview_system").toString() == "none";
     for (const QVariant &v : fs) {
         QVariantMap e = v.toMap();
         QString root = e["root"].toString(), kind = e["kind"].toString();
+        if (kind == "system" && no_system)
+            continue;
         QString icon = kind == "system"    ? "drive-harddisk-system"
                        : kind == "tape"    ? "media-tape"
                        : kind == "floppy"  ? "media-floppy"
@@ -940,6 +1257,10 @@ DriveLists OverviewPage::drive_infos()
         info.free = e["free"].toLongLong();
         info.kind = kind;
         info.icon = theme_icon({icon, "drive-removable-media", "drive-harddisk"});
+        if (e.contains("health")) {
+            info.has_health = true;
+            info.health = e["health"].value<health::Info>();
+        }
         info.mounted = true;
         if (kind == "tape" || kind == "floppy") {   // size and tape details from drives::Sizes, read on a worker
             drives::Sizes::Info sz = drives::Sizes::instance()->get(root);
@@ -1021,7 +1342,13 @@ DriveCard *OverviewPage::drive_card(DriveInfo info)
         info.action_icon = {"media-eject-symbolic", "media-eject"};
         info.on_action = [this, m]() { do_unmount(m); };
     }
-    auto *card = new DriveCard(info);
+    auto *card = new DriveCard(info, look);
+    shown_drives << card;
+    if (card->health_label) {
+        QString name = info.name;
+        health::Info h = info.health;
+        connect(card->health_label, &QLabel::linkActivated, this, [this, name, h]() { health::open_window(this, name, h); });
+    }
     if (info.mounted) {
         QString target = !info.root.isEmpty() ? info.root : info.uri;
         connect(card, &Card::clicked, this, [this, target]() {
@@ -1113,6 +1440,12 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             Q_EMIT add_bookmark(target);
             refresh();
         });
+        m.addAction("Find Duplicates…", this, [this, target]() { Q_EMIT find_duplicates(target); });
+        if (info.has_health) {
+            QString name = info.name;
+            health::Info h = info.health;
+            m.addAction("Drive Health…", this, [this, name, h]() { health::open_window(this, name, h); });
+        }
         m.addAction("Properties", this, [this, target]() { Q_EMIT properties(target); });
     }
     if (info.kind == "tape" || info.kind == "floppy") {
@@ -1160,8 +1493,132 @@ void OverviewPage::bookmark_menu(const QString &target, const QPoint &pos)
     m.exec(pos);
 }
 
+void OverviewPage::starred_menu(const QString &target, const QPoint &pos)
+{
+    bool file = drives::slow_kind(target) == drives::Slow::None && isfile(target);
+    QMenu m(this);
+    if (file) {
+        m.addAction("Open", this, [this, target]() { Q_EMIT open_file(target); });
+        m.addAction("Show in Folder", this, [this, target]() { Q_EMIT navigate(target); });
+    } else {
+        m.addAction("Open", this, [this, target]() { Q_EMIT navigate(target); });
+        m.addAction("Open in New Tab", this, [this, target]() { Q_EMIT open_in_tab(target); });
+    }
+    m.addSeparator();
+    m.addAction("Unstar", this, [target]() { places::set_starred({target}, false); });   // (starred_changed: rebuilt)
+    m.exec(pos);
+}
+
+void OverviewPage::frequent_menu(const QString &target, const QPoint &pos)
+{
+    QMenu m(this);
+    m.addAction("Open", this, [this, target]() { Q_EMIT navigate(target); });
+    m.addAction("Open in New Tab", this, [this, target]() { Q_EMIT open_in_tab(target); });
+    m.addAction("Add to Bookmarks", this, [this, target]() {
+        Q_EMIT add_bookmark(target);
+        rebuild();
+    });
+    m.addSeparator();
+    m.addAction("Remove from Frequent Folders", this, [this, target]() {
+        places::forget_frequent({target});
+        rebuild();
+    });
+    m.exec(pos);
+}
+
 void OverviewPage::thumb_ready(const QString &path)
 {
+    for (const QString &section : {QString("starred"), QString("frequent")})
+        if (BookmarkCard *card = other_cards.value(section + "\n" + path))
+            card->update_pic();
     if (BookmarkCard *card = bookmark_cards.value(path))
         card->update_pic();
+    if (BookmarkCard *card = save_cards.value(path))
+        card->update_pic();
+}
+
+// ---------------------------------------------------------------- a Save window's save locations
+
+void OverviewPage::set_save_places(bool on)
+{
+    if (on == save_places)
+        return;
+    save_places = on;
+    rebuild();
+}
+
+void OverviewPage::add_save_place(const QString &path)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    if (!path.isEmpty() && !l.contains(path))
+        prefs::set("chooser_places", l << path);   // every Save window's Overview shows it (prefs::Notifier)
+}
+
+void OverviewPage::remove_save_place(const QString &path)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    if (l.removeAll(path))
+        prefs::set("chooser_places", l);
+}
+
+void OverviewPage::move_save_place(const QString &path, int by)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    int i = l.indexOf(path), j = i + by;
+    if (i < 0 || j < 0 || j >= l.size())
+        return;
+    l.move(i, j);
+    prefs::set("chooser_places", l);
+}
+
+QStringList OverviewPage::save_place_cards() const { return save_places ? save_order : QStringList(); }
+
+void OverviewPage::save_places_section()
+{
+    FlowLayout *flow = section("Save Locations");
+    save_order = prefs::get("chooser_places").toStringList();
+    for (const QString &target : save_order) {
+        QString label = target == HOME() ? QString("Home") : basename(target);
+        auto *card = new BookmarkCard(target, label, thumbs, look.size);
+        connect(card, &Card::clicked, this, [this, target]() { Q_EMIT navigate(target); });
+        connect(card, &Card::middle_clicked, this, [this, target]() { Q_EMIT open_in_tab(target); });
+        connect(card, &Card::menu_requested, this, [this, target](const QPoint &pos) { save_place_menu(target, pos); });
+        flow->addWidget(card);
+        save_cards.insert(target, card);
+    }
+    auto *row = new QHBoxLayout;
+    if (save_order.isEmpty()) {
+        auto *hint = small(new QLabel("No save locations yet: add the folders you save to most from other apps "
+                                      "(Downloads, a project folder…). They're only for these Save windows."));
+        hint->setWordWrap(true);
+        row->addWidget(hint, 1);
+    }
+    auto *add = new QPushButton(theme_icon({"list-add", "folder-new"}), "Add Folder…");
+    add->setObjectName("add_save_place");
+    connect(add, &QPushButton::clicked, this, [this]() {
+        QString start = settings().value("chooser_folder").toString();   // where the last Save window saved
+        QPointer<OverviewPage> self(this);
+        choose_folder(window(), "Add a Save Location", isdir(start) ? start : HOME(), [self](const QString &p) {
+            if (self)
+                self->add_save_place(p);
+        });
+    });
+    row->addWidget(add);
+    if (!save_order.isEmpty())
+        row->addStretch(1);
+    lay->addLayout(row);
+}
+
+void OverviewPage::save_place_menu(const QString &target, const QPoint &pos)
+{
+    QStringList l = prefs::get("chooser_places").toStringList();
+    int i = l.indexOf(target);
+    QMenu m(this);
+    m.addAction("Open", this, [this, target]() { Q_EMIT navigate(target); });
+    m.addAction("Open in New Tab", this, [this, target]() { Q_EMIT open_in_tab(target); });
+    m.addSeparator();
+    m.addAction("Move Earlier", this, [this, target]() { move_save_place(target, -1); })->setEnabled(i > 0);
+    m.addAction("Move Later", this, [this, target]() { move_save_place(target, 1); })->setEnabled(i >= 0 && i + 1 < l.size());
+    m.addAction("Remove from Save Locations", this, [this, target]() { remove_save_place(target); });
+    m.exec(pos);
 }

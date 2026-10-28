@@ -3,15 +3,28 @@
 # its files are in place, the menu entry is valid, and removing it leaves nothing behind. Needs root and a throwaway
 # system: CI runs it in a fresh ubuntu:24.04 container. Locally:
 #   docker run --rm -v "$PWD":/src:ro ubuntu:24.04 /src/tests/check_package.sh /src/kestrel-explorer_….deb
+# With --apt REPO SUITE it installs the package from a suite of a copy of the apt repository (gh-pages) instead, as a
+# user's sources file would, checking first that the suite is there and signed with the repository's key (REPO/kestrel.asc).
 set -uo pipefail
-DEB="$(realpath "${1:?usage: check_package.sh kestrel-explorer_VERSION_amd64.deb}")"
+usage="usage: check_package.sh kestrel-explorer_VERSION_amd64.deb | --apt REPO SUITE"
 fails=0
 check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; fails=$((fails + 1)); fi; }
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq >/dev/null
+if [[ "${1:-}" == --apt ]]; then
+    REPO="$(realpath "${2:?$usage}")" SUITE="${3:?$usage}" PKG=kestrel-explorer
+    printf 'Types: deb\nURIs: file:%s\nSuites: %s\nComponents: main\nSigned-By: %s/kestrel.asc\n' "$REPO" "$SUITE" "$REPO" \
+        >/etc/apt/sources.list.d/kestrel.sources
+else
+    PKG="$(realpath "${1:?$usage}")"
+fi
+apt-get update >/tmp/update.log 2>&1
+if [[ -n "${SUITE:-}" ]]; then
+    check '! grep -E "^(W|E|Err):" /tmp/update.log && apt-cache policy kestrel-explorer | grep -q "file:$REPO $SUITE/main"' \
+        "the repository's $SUITE suite is there, signed with its key, and has the package"
+fi
 apt-get install -y -qq desktop-file-utils >/dev/null 2>&1
 
-check 'apt-get install -y -qq --no-install-recommends "$DEB" >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; false; }' \
+check 'apt-get install -y -qq --no-install-recommends "$PKG" >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; false; }' \
     "the package installs, with its dependencies"
 check '! ldd /usr/bin/kes /usr/bin/kes-admin-helper | grep -q "not found"' "every library kes and the admin helper need is there"
 check '[[ "$(kes --version)" == "Kestrel Explorer "* ]]' "kes starts and reports its version"

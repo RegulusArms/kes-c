@@ -2,14 +2,18 @@
 #pragma once
 
 #include "overview.h"
+#include "search.h"
 
 #include <QAbstractFileIconProvider>
+#include <QDate>
 #include <QFileSystemModel>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPointer>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMutex>
+#include <QPainterPath>
 #include <QScrollArea>
 #include <QSortFilterProxyModel>
 #include <QStandardItemModel>
@@ -32,6 +36,7 @@ enum Roles {
     StatRole = Qt::UserRole + 52,   // search results: (is_dir, mtime, size)
     KindRole = Qt::UserRole + 53,   // bit 1: directory, bit 2: symbolic link
     SizeRole = Qt::UserRole + 54,   // the file's size as the view knows it (no file system call)
+    LineRole = Qt::UserRole + 55,   // content search results: the first matching line's number (0: none)
 };
 enum Kind { KIND_DIR = 1, KIND_LINK = 2 };
 
@@ -53,6 +58,24 @@ private:
     mutable QMutex mutex;
 };
 
+// The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
+// drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
+// over any of its windows, following the drag events Qt delivers to them (watched on the whole application). Made for
+// the length of a drag (QDrag::exec) by the file views and the image viewer.
+class DragGhost : public QObject {
+public:
+    DragGhost(const QPixmap &pm, const QPoint &hot);
+    ~DragGhost() override;
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override;
+
+private:
+    QPixmap pm;
+    QPoint hot;
+    QPointer<QLabel> label;
+};
+
 // QFileSystemModel that serves thumbnails and folder previews.
 class FSModel : public QFileSystemModel {
     Q_OBJECT
@@ -61,10 +84,13 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
                       const QModelIndex &parent) override;
+    QStringList mimeTypes() const override;   // files, and items dragged out of Open as Archive (archive::MEMBERS_MIME)
 
     int thumb_size = 128;
     bool folder_previews = true;
-    std::function<void(const QStringList &, const QString &)> drop_handler;
+    std::function<void(const QStringList &, const QString &, bool)> drop_handler;   // (paths, folder, copy only)
+    // items dragged out of Open as Archive, dropped into target (ArchiveWindow::drop_members)
+    std::function<void(const QMimeData *, const QString &)> members_handler;
 
 private:
     QPixmap thumb(const QModelIndex &index) const;
@@ -103,8 +129,10 @@ class SearchModel : public QStandardItemModel {
     Q_OBJECT
 public:
     explicit SearchModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    // add result rows; `locations` optionally maps a path to the text for its Location column
-    void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {});
+    // add result rows; `locations` optionally maps a path to the text for its Location column; `matches` a path to
+    // its matching lines ("12:text", content search), shown in the Match column (the first) and its tooltip (all)
+    void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {},
+                   const QVariantMap &matches = {});
     void clear_results();
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<QString, QStandardItem *> rows;
@@ -119,24 +147,34 @@ private:
 class SearchThread : public QThread {
     Q_OBJECT
 public:
+    // recursive: the subfolders too (else root's own items); an empty query matches every name (filters only)
     SearchThread(const QString &root, const QString &query, bool hidden, QObject *parent = nullptr,
-                 bool contents = false);
+                 bool contents = false, bool recursive = true, const SearchFilter &filter = {},
+                 const ContentSearch &how = {});
     std::atomic<bool> stop{false};
+    QString engine;   // a content search: what it used ("index", "ripgrep", "grep", "index, then grep"…)
+    QString error;    // why it found nothing it should have (a bad regular expression, …)
 
 Q_SIGNALS:
-    void found(const QStringList &paths);
+    void found(const QStringList &paths, const QVariantMap &matches = {});
 
 protected:
     void run() override;
 
 private:
     bool match(const QString &name) const;
-    void run_contents();
+    bool keep(const QString &path) const;   // the filter
+    int run_contents();   // the files found with the index; -1 if it couldn't be asked
+    void run_read();      // ripgrep / grep
     QString root;
     QString query, raw_query;
     bool hidden;
     bool wildcard;
     bool contents;
+    bool recursive;
+    SearchFilter filter;
+    ContentSearch how;
+    QDate today;
 };
 
 bool can_search_contents();   // the desktop's search index (localsearch) is installed
@@ -151,6 +189,12 @@ public:
     QSize cell_size() const;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    // What counts as the item in its cell (option.rect; State_Selected: its name is drawn bold): the icon as drawn (a
+    // thumbnail's own size, for a wide or tall image less than the icon's square) and the name's lines as wrapped,
+    // each centred. The highlight (selected, hovered, a drag's target) fills it, and the grid's hit tests ask it
+    // (Pane's grid: indexAt, the rubber band), so the rest of the cell is the folder's empty space. A group header:
+    // its whole line.
+    QPainterPath shape(const QStyleOptionViewItem &option, const QModelIndex &index) const;
     int icon_size = 128;
     Animator *animator = nullptr;   // GIF / WebM playing in place of thumbnails
     // grouped (groups.h): the grid has no fixed cells (a header takes a line of its own), so each item is given this size
@@ -159,6 +203,17 @@ public:
     int header_width = 0;
 
 private:
+    struct Layout {
+        QRect r, icon_rect, text_rect;   // the cell less its margin; the icon's square; the name's lines
+        QRectF drawn;                    // the picture as drawn: a thumbnail's own size, else the icon's square
+        QPixmap pm;                      // the thumbnail or animation frame (null: the theme's icon, in icon_rect)
+        QPixmap anim;                    // (the frame, when one plays)
+        QFont font;
+        QStringList lines;
+    };
+    // paint: the animation's frame too (asking for it starts it playing); a hit test goes by the thumbnail
+    Layout layout(const QStyleOptionViewItem &option, const QModelIndex &index, bool paint) const;
+    QPainterPath shape(const Layout &l) const;
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
     static void play_badge(QPainter *p, const QRectF &rect);
     static void star_badge(QPainter *p, const QRectF &rect);
@@ -247,11 +302,14 @@ public:
     void toggle_section(const QString &section);
     QStringList shown_sections() const;                   // in order
     QStringList entry_keys(const QString &section) const;   // in order; empty when collapsed
+    void forget_server(const QString &uri);   // takes a recent server out of the Mounts section (and the Overview)
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
-    void dropped(const QStringList &sources, const QString &target);
+    void dropped(const QStringList &sources, const QString &target, bool copy_only);
+    void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
+    void find_duplicates(const QString &root);   // a drive's Find Duplicates…
     void shred_trash_requested();   // Empty Trash with BleachBit
 
 protected:
@@ -277,6 +335,7 @@ private:
         QString kind = "place";
         QVariant extra;
         QString key, tip;   // key: what the saved order lists (the path; "phone:<name>" for a phone)
+        bool dim = false;   // greyed (a recent server that isn't connected)
     };
     struct Drop {
         int row = -1;            // insertion row (count() = after the last)
@@ -298,8 +357,14 @@ private:
     int section_end(const QString &section) const;   // the row after its last entry
     Drop drop_for(const QPoint &pos, const QString &section, const QString &key) const;
     void save_order(const QString &setting, const QStringList &keys);
+    struct UserMount {   // the Mounts section's own mounts (drives::user_mount), not those Devices lists
+        QString root, fs, source;
+        bool operator==(const UserMount &o) const { return root == o.root && fs == o.fs && source == o.source; }
+    };
     QList<Mount> mount_list() const;
+    QList<UserMount> user_mount_list(const QList<Mount> &devices) const;
     void check_mounts();
+    void unmount_share(int i);
     void clicked(QListWidgetItem *it);
     void menu(const QPoint &pos);
     void unmount(const QString &path);
@@ -309,8 +374,15 @@ private:
     void remove_bookmark(int i);
     void move_bookmark(int i, int d);
     QList<Mount> mounts;
+    QList<UserMount> user_mounts;
     QList<DriveInfo> phones;   // phones and cameras (GIO)
-    QTimer timer, phone_timer;
+    QList<DriveInfo> shares;   // network shares mounted through GVFS (GIO)
+    QTimer phone_timer;   // a change to the drives (GIO, MountWatch): the list made again, once, shortly after
+    // ...and checked again a little later (check_mounts), for the steps of a mount that come after the refresh with no
+    // event of their own (udev's by-label link, a mount that settles a moment later)
+    QTimer settle_timer;
+    int settle_step = 0;
+    void drives_changed();
     GVolumeMonitor *monitor = nullptr;
     QPoint press_pos;
     QPersistentModelIndex press_index;

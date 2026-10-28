@@ -3,6 +3,7 @@
 #include "admin.h"
 #include "drives.h"
 #include "jobs.h"
+#include "prefs.h"
 #include "atc.h"
 #include "proc.h"
 #include "undo.h"
@@ -15,8 +16,11 @@
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
+#include <QTime>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMouseEvent>
 #include <QLabel>
 #include <QMainWindow>
@@ -66,6 +70,8 @@ Task::Task(const QString &title, Fn fn, bool cancellable) : title(title), cancel
 static thread_local Task *running_task = nullptr;
 
 Task *Task::current() { return running_task; }
+
+qint64 Task::now_ms() { return monotonic_ms(); }
 
 qint64 Task::elapsed_ms() const { return started_ms ? monotonic_ms() - started_ms : 0; }
 
@@ -178,6 +184,11 @@ void Task::run()
     running_task = this;
     proc::set_watcher(this);
     started_ms = monotonic_ms();
+    for (const QString &line : intro)
+        log(line);
+    if (queued_ms && started_ms - queued_ms >= 1000)
+        log("Waited " + fileops::wait_text(started_ms - queued_ms) +
+            (waited_for.isEmpty() ? QString() : " for: " + waited_for.join("; ")));
     try {
         check();   // cancelled while it waited in the queue: it ends at once
         res = fn(this);
@@ -217,8 +228,19 @@ TaskBoard::TaskBoard()
     });
 }
 
+QList<Task *> TaskBoard::keeping() const
+{
+    QList<Task *> out;
+    for (Task *t : local)
+        if (t->keeps_running)
+            out << t;
+    return out;
+}
+
 void TaskBoard::add(Task *task)
 {
+    if (local.contains(task))   // (handed to another window's status bar)
+        return;
     local << task;
     stats::peak("tasks at once", local.size());
     connect(task, &Task::progress, this, [this]() {
@@ -517,6 +539,14 @@ static TaskPanel *panel_for(QWidget *widget)
     return nullptr;
 }
 
+// A job's failure is told also when the window that started it has closed (with no parent, then)
+static void tell_errors(Task *t, QWidget *parent, const QString &title)
+{
+    QPointer<QWidget> p(parent);
+    QObject::connect(t, &Task::error, t, [p, title](const QString &msg) { warn(p, title, msg); });
+    t->keeps_running = std::make_unique<QEventLoopLocker>();
+}
+
 Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, bool cancellable, bool quiet)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
@@ -524,8 +554,7 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
-        QPointer<QWidget> p(parent);
-        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
     }
@@ -535,17 +564,17 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
 }
 
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done,
-                bool cancellable, const QStringList &steps, bool quiet)
+                bool cancellable, const QStringList &steps, bool quiet, const QStringList &intro, bool outlives_parent)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
     t->paths = paths;
     t->steps = steps;
-    QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
+    t->intro = intro;
+    QObject *ctx = parent && !outlives_parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
-        QPointer<QWidget> p(parent);
-        QObject::connect(t, &Task::error, ctx, [p, title](const QString &msg) { warn(p, title, msg); });
+        tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
     }
@@ -720,12 +749,17 @@ public:
                     ops->task->log(ops->buffer->summary());
                     ops->buffer.reset();
                 }
+                if (!ops->quieted.isEmpty()) {   // GNOME's check may look at the tape again
+                    drives::unquiet_tape(ops->quieted);
+                    ops->quieted.clear();
+                }
             }
         } end_buffer{this};
         for (const auto &[at, index] : keyed) {
             const Job &j = jobs[index];
             task->check();
             task->step = index;
+            dd_now = j.dd;
             task->log(step_text(j));
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
@@ -787,7 +821,42 @@ private:
     bool by_count;
     qint64 done = 0, total = 0;
     std::unique_ptr<tapebuf::Buffer> buffer;   // copying onto a tape (tapebuf.h)
+    QString quieted;                           // the tape GNOME's low-disk-space check skips while this runs
+    QStringList told_pollers;                  // programs asking every drive for its free space, said in the log
+    bool dd_now = false;                       // the job being run writes with dd (Job::dd)
     bool told_slow = false;                    // said the source is too slow for the tape to stream
+    QElapsedTimer rate_clock;                  // copying onto a tape: since the last rate line in the log
+    qint64 rate_done = 0;                      // ...and the bytes written by then
+
+    // Copying onto a tape: every 5 seconds a line in the job's log (the Jobs window shows it as it comes), with the time
+    // (to set beside the drive's own logs), how fast the tape took the data in those 5 seconds, the source's read speed,
+    // the buffer, and how far the copy is: a drive that slows down shows when and for how long.
+    void log_tape_rate()
+    {
+        if (!buffer)
+            return;
+        if (!rate_clock.isValid()) {
+            rate_clock.start();
+            rate_done = done;
+            return;
+        }
+        qint64 ms = rate_clock.elapsed();
+        if (ms < 5000)
+            return;
+        qint64 wrote = done - rate_done;
+        qint64 cap = std::max<qint64>(buffer->capacity(), 1);
+        QString tape = wrote > 0 ? human_size(qint64(double(wrote) * 1000.0 / double(ms))) + "/s"
+                                 : QString("waiting for the buffer");
+        double src = buffer->source_rate();
+        task->log(QString("  %1  tape %2 · source %3 · buffer %4 of %5 (%6%) · %7 of %8 written")
+                      .arg(QTime::currentTime().toString("HH:mm:ss"), tape,
+                           src > 0 ? human_size(qint64(src)) + "/s" : QString("—"), human_size(buffer->filled()),
+                           human_size(cap), QString::number(buffer->filled() * 100 / cap), human_size(done),
+                           human_size(total)));
+        rate_clock.restart();
+        rate_done = done;
+        check_pollers();   // (one opened meanwhile)
+    }
 
     void report_progress(const QString &name)
     {
@@ -835,13 +904,25 @@ private:
             if (drives::slow_kind(j.dst) != drives::Slow::Tape || drives::slow_kind(j.src) == drives::Slow::Tape)
                 continue;
             tape = drives::slow_root(j.dst);
-            plan_files(j.src, files, task);
+            if (!j.dd)   // dd reads each file itself
+                plan_files(j.src, files, task);
         }
+        if (tape.isEmpty())
+            return;
+        if (drives::quiet_tape(tape)) {
+            quieted = tape;
+            task->log("While this job runs, GNOME's low-disk-space check skips this tape: it asks the drive for its free "
+                      "space once a minute, and each time the tape stops streaming.");
+        }
+        check_pollers();
         if (files.isEmpty())
             return;
         tapebuf::Memory mem = tapebuf::memory();
         buffer = std::make_unique<tapebuf::Buffer>(task, files);
-        buffer->waiting = [this](const QString &text) { task->report(double(done), double(total), text, true); };
+        buffer->waiting = [this](const QString &text) {
+            task->report(double(done), double(total), text, true);
+            log_tape_rate();
+        };
         task->log(QString("Tape buffer: up to %1 (memory %2, %3 available)")
                       .arg(human_size(buffer->capacity()), human_size(mem.total), human_size(mem.available)));
         if (int every = drives::ltfs_sync_minutes(drives::ltfs_sync(tape)))
@@ -849,6 +930,91 @@ private:
                               "the drive stops each time. Mounting it with -o sync_type=unmount avoids that (the index is "
                               "then written when it's unmounted, or with Write Tape Index Now).")
                           .arg(QString::number(every), drives::ltfs_sync(tape)));
+    }
+
+    // A file onto a tape written by dd (the user's choice): dd reads the source and writes the destination Kestrel has
+    // opened (its claimed name, or a part file), given to it as its input and output, so the claim, the conflict checks
+    // and the clean-up of a failed or cancelled write are Kestrel's as for its own copy. 512 KB blocks, LTFS's. Its
+    // output shows in the Jobs window as it runs; cancelling stops it, pausing the job pauses it.
+    void copy_with_dd(int in_fd, int out_fd, const QString &src, const QString &dst, qint64 size, qint64 &written)
+    {
+        QStringList argv{"dd", "bs=512K", "iflag=fullblock", "status=progress"};
+        task->log(QString("  %1 < “%2” > “%3”").arg(argv.join(' '), src, dst));
+        proc::Options o;
+        o.in = in_fd;
+        o.out = out_fd;
+        o.err = proc::PIPE;
+        o.c_utf8 = true;   // its progress and errors in English, to read them
+        auto p = proc::spawn(argv, o);
+        static const QRegularExpression bytes_re("(\\d+) bytes");
+        qint64 base = done;
+        QByteArray err;
+        QElapsedTimer since_look;
+        since_look.start();
+        auto take = [&](const QByteArray &chunk) {
+            task->log_output(chunk);   // the Jobs window shows it live
+            err += chunk;
+            if (err.size() > 65536)
+                err.remove(0, err.size() - 16384);
+            QRegularExpressionMatchIterator it = bytes_re.globalMatch(QString::fromLatin1(err.right(256)));
+            qint64 n = -1;
+            while (it.hasNext())
+                n = it.next().captured(1).toLongLong();
+            if (n >= 0) {
+                written = n;
+                done = base + n;
+            }
+        };
+        for (;;) {
+            task->check();   // a cancel throws: p goes, and dd with it
+            fd_set rf;
+            FD_ZERO(&rf);
+            FD_SET(p->err, &rf);
+            struct timeval tv = {0, 200000};
+            int r = ::select(p->err + 1, &rf, nullptr, nullptr, &tv);
+            if (r > 0) {
+                char buf[4096];
+                ssize_t n = ::read(p->err, buf, sizeof buf);
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n <= 0)
+                    break;
+                take(QByteArray(buf, int(n)));
+                report_progress(basename(src));
+            } else if (p->poll()) {
+                break;
+            }
+            if (since_look.elapsed() >= 5000) {   // (one opened meanwhile)
+                since_look.restart();
+                check_pollers();
+            }
+        }
+        take(p->read_all_err());
+        if (p->wait() != 0) {
+            QStringList lines;
+            for (const QString &l : QString::fromUtf8(err).split(QRegularExpression("[\\r\\n]"), Qt::SkipEmptyParts))
+                if (!l.contains(" bytes ") && !l.contains("records "))
+                    lines << l.trimmed();
+            throw Error(QString("dd couldn't write “%1”: %2")
+                            .arg(basename(dst), lines.isEmpty() ? QString("it failed") : lines.mid(lines.size() - 2).join(" ")));
+        }
+        written = size;
+        done = base + size;
+    }
+
+    // A program asking every drive for its free space every few seconds slows the tape: said in the log, once each
+    void check_pollers()
+    {
+        for (const QString &p : drives::free_space_pollers()) {
+            if (told_pollers.contains(p))
+                continue;
+            told_pollers << p;
+            task->log(QString("Note: %1 is running. Programs like it ask every drive for its free space every few "
+                              "seconds (GNOME System Monitor in its File Systems tab); on a tape each question stops it "
+                              "streaming, and it can run at a fraction of its speed for a while after. Close it while "
+                              "the tape is written.")
+                          .arg(p));
+        }
     }
 
     // bytes under path, or the file count when counting deletes
@@ -1105,17 +1271,35 @@ private:
         // Written to a new file beside the destination and renamed over it once complete: until then an existing file
         // keeps its contents (a cancel or an error removes only the new file), a symlink in the way is replaced (never
         // written through), and another hard link of the old file keeps the old contents.
+        //
+        // An exception, by the user's choice: a new name on a tape is written under that name straight away. There the
+        // part file buys nothing: what a write that fails part-way used stays used whatever the file is called (LTFS
+        // never reuses tape), and LTFS has neither RENAME_NOREPLACE nor link(), so a part's claim on the name would be
+        // check-then-rename, which O_EXCL on the name itself does better. A cancel or an error deletes the half-written
+        // file, so none is left under the real name once the job has ended (a crash or power cut mid-file can leave
+        // one). Replacing a file on a tape still goes through a part file: the old one is kept until the new is whole.
+        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
+        struct stat existing;
+        bool direct = to_tape && !stat_at(ddir, dname, existing);
         QString part;
         int part_fd;
-        try {
-            part_fd = open_part_at(ddir, QString(), &part);
-        } catch (const OSError &e) {
-            throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
+        if (direct) {
+            part = dname;
+            part_fd = ::openat(ddir, enc(dname).constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0666);
+            if (part_fd < 0 && errno == EEXIST)   // taken meanwhile: never replaced (as a part's claim would find)
+                throw conflict(dst);
+            if (part_fd < 0)
+                throw_errno(dst);
+        } else {
+            try {
+                part_fd = open_part_at(ddir, QString(), &part);
+            } catch (const OSError &e) {
+                throw_errno(dst, e.code);   // named as the destination (permission denied there → offer the admin session)
+            }
         }
         Fd out(part_fd);
         if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
             task->report(double(done), double(total), "Positioning the tape — " + name, true);
-        bool to_tape = drives::slow_kind(dst) == drives::Slow::Tape;
         qint64 written = 0;
         try {
             if (to_tape) {   // room for it first: a write that runs out of tape wastes what it wrote (LTFS never reuses it)
@@ -1127,10 +1311,14 @@ private:
                     throw Error(QString("Not enough space on the tape for “%1”: it needs %2, the tape has %3 left")
                                     .arg(name, human_size(qint64(now.st_size)), human_size(free)));
             }
+            if (to_tape && dd_now) {
+                copy_with_dd(in.fd, out.fd, src, dst, qint64(now.st_size), written);
+                report_progress(name);
+            }
             // from the tape buffer when it has it (read ahead by its thread), else straight from the file
-            bool buffered = to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
-            std::unique_ptr<char[]> buf(buffered ? nullptr : new char[CHUNK]);
-            for (;;) {
+            bool buffered = !dd_now && to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
+            std::unique_ptr<char[]> buf(buffered || (to_tape && dd_now) ? nullptr : new char[CHUNK]);
+            for (; !(to_tape && dd_now);) {
                 task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
                 const char *data = buf.get();
                 ssize_t n;
@@ -1159,6 +1347,7 @@ private:
                     buffer->wrote(n, writing.nsecsElapsed());
                 done += n;
                 written += n;
+                log_tape_rate();
                 if (buffer && !told_slow && buffer->source_too_slow()) {
                     told_slow = true;
                     task->log(QString("The source reads at %1/s, slower than the tape's lowest streaming speed: the tape "
@@ -1177,10 +1366,11 @@ private:
                 throw_errno(dst);
             if (::close(out.release()) != 0)
                 throw_errno(dst);
-            commit(ddir, part, dname, dst, claim);
+            if (!direct)
+                commit(ddir, part, dname, dst, claim);
         } catch (...) {
             out.reset();
-            ::unlinkat(ddir, enc(part).constData(), 0);
+            ::unlinkat(ddir, enc(part).constData(), 0);   // the part, or (direct) the half-written file under its name
             if (to_tape && written >= 1024LL * 1024 * 1024)
                 task->log(QString("  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the "
                                   "tape is reformatted.")
@@ -1358,8 +1548,41 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
         paths);
 }
 
+QString wait_text(qint64 ms)
+{
+    qint64 s = (ms + 500) / 1000;
+    if (s < 60)
+        return QString("%1 s").arg(s);
+    if (s < 3600)
+        return s % 60 ? QString("%1 min %2 s").arg(s / 60).arg(s % 60) : QString("%1 min").arg(s / 60);
+    return (s / 60) % 60 ? QString("%1 h %2 min").arg(s / 3600).arg((s / 60) % 60) : QString("%1 h").arg(s / 3600);
+}
+
+QString transfer_title(const QStringList &sources, const QString &dest_dir, const QString &op, bool dd)
+{
+    QString what = sources.size() == 1 ? "“" + basename(rstrip(sources.first(), '/')) + "”"
+                                       : QString("%1 items").arg(sources.size());
+    QString to = basename(rstrip(dest_dir, '/'));
+    return QString(op == "copy" ? "Copying " : "Moving ") + what + " to " + (to.isEmpty() ? dest_dir : to) +
+           (dd ? " (with dd)" : "");
+}
+
+// The folders the jobs write into that aren't there (any more): a destination moved or deleted while the job waited
+static QStringList missing_destinations(const QList<Job> &jobs)
+{
+    QStringList out;
+    for (const Job &j : jobs) {
+        if (j.dst.isEmpty() || j.op == "delete")
+            continue;
+        QString dir = dirname(j.dst);
+        if (!out.contains(dir) && !isdir(dir))
+            out << dir;
+    }
+    return out;
+}
+
 Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, std::function<void()> on_done,
-                const QString &undo_label)
+                const QString &undo_label, const QStringList &intro)
 {
     if (jobs.isEmpty())
         return nullptr;
@@ -1400,6 +1623,15 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             }
             for (const QString &root : tapes)
                 drives::sync_tape_job(p, root);
+            // the remembered sizes of the folders it changed (and those above them) are out of date
+            QStringList changed;
+            for (const Job &j : (*ops)->touched) {
+                if (!j.dst.isEmpty())
+                    changed << dirname(j.dst);
+                if (j.op.contains("move") || j.op == "delete")
+                    changed << j.src;
+            }
+            dirsizes::drop_with_parents(changed);
         }
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
@@ -1412,6 +1644,16 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             on_done();
     };
     auto work = [ops, jobs](Task *task) {
+        // checked when its turn comes: one clear failure, not one "No such file or directory" for each item
+        QStringList gone = missing_destinations(jobs);
+        if (!gone.isEmpty()) {
+            bool moving = std::all_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.op.contains("move"); });
+            throw Error(QString("The folder it was %1 into, “%2”, isn't there any more: it was moved or deleted %3. "
+                                "Nothing was %4.")
+                            .arg(moving ? "moving" : "copying", gone.first(),
+                                 task->queued_ms ? "while this job waited" : "before this job began",
+                                 moving ? "moved" : "copied"));
+        }
         *ops = std::make_unique<Ops>(task, jobs);
         QStringList errors = (*ops)->run();
         task->log(errors.isEmpty() ? QString("Finished.") : QString("Finished, with %1 error(s).").arg(errors.size()));
@@ -1427,7 +1669,8 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             paths << j.src << (j.dst.isEmpty() ? QString() : dirname(j.dst));
     }
     paths.removeAll(QString());
-    return queue_job(parent, title, paths, work, finished, true, steps);
+    // what it finishes (undo, the tape's index, what failed) doesn't need the window: it may have closed meanwhile
+    return queue_job(parent, title, paths, work, finished, true, steps, false, intro, true);
 }
 
 namespace {
@@ -1559,13 +1802,88 @@ void plan_transfer(QWidget *parent, const QStringList &sources, const QString &d
         true);
 }
 
+// The jobs that write files onto a tape from another drive (a copy, or a move between drives), by index
+static QList<int> tape_writes(const QList<Job> &jobs)
+{
+    QList<int> out;
+    for (int i = 0; i < jobs.size(); ++i) {
+        const Job &j = jobs[i];
+        if ((j.op != "copy" && j.op != "move") || drives::slow_kind(j.dst) != drives::Slow::Tape ||
+            drives::slow_kind(j.src) == drives::Slow::Tape)
+            continue;
+        struct stat a, b;
+        if (j.op == "move" && lstat_(j.src, a) && stat_(dirname(j.dst), b) && a.st_dev == b.st_dev)
+            continue;   // a rename on the tape
+        out << i;
+    }
+    return out;
+}
+
+static QList<Job> with_dd(QList<Job> jobs, const QList<int> &which, bool dd)
+{
+    for (int i : which)
+        jobs[i].dd = dd;
+    return jobs;
+}
+
+void choose_tape_writer(QWidget *parent, const QList<Job> &jobs, std::function<void(const QList<Job> &)> go)
+{
+    QList<int> onto = tape_writes(jobs);
+    QString how = settings().value("tape_writer", "ask").toString();
+    if (onto.isEmpty() || how != "ask") {
+        go(with_dd(jobs, onto, !onto.isEmpty() && how == "dd"));
+        return;
+    }
+    QString tape = basename(rstrip(drives::slow_root(jobs[onto.first()].dst), '/'));
+    auto *box = new QMessageBox(QMessageBox::Question, "Write to the Tape",
+                                QString("How should Kestrel write to the tape “%1”?").arg(tape), QMessageBox::NoButton,
+                                parent);
+    box->setInformativeText("Kestrel's copy reads ahead into a buffer in memory, so the tape keeps streaming when the "
+                            "source slows down. dd writes each file straight from the source, in 512 KB blocks as LTFS "
+                            "stores them; the Jobs window shows its output.");
+    QAbstractButton *kestrel = box->addButton("Kestrel's Copy", QMessageBox::AcceptRole);
+    QAbstractButton *dd = box->addButton("dd", QMessageBox::AcceptRole);
+    box->addButton(QMessageBox::Cancel);
+    box->setDefaultButton(qobject_cast<QPushButton *>(kestrel));
+    auto *always = new QCheckBox("Don't ask again (Preferences → Files → Tapes)");
+    box->setCheckBox(always);
+    ask_box(box, [jobs, onto, go, kestrel, dd, always](QAbstractButton *b) {
+        if (!b || (b != kestrel && b != dd))
+            return;   // cancelled: nothing is written
+        if (always->isChecked())
+            prefs::set("tape_writer", b == dd ? "dd" : "kestrel");
+        go(with_dd(jobs, onto, b == dd));
+    });
+}
+
 void transfer(QWidget *parent, const QStringList &sources, const QString &dest_dir, const QString &op,
-              std::function<void()> on_done)
+              std::function<void()> on_done, const QString &how, std::function<void()> on_started)
 {
     QPointer<QWidget> owner(parent);
-    plan_transfer(parent, sources, dest_dir, op, [owner, op, on_done](const QList<Job> &jobs) {
-        if (!jobs.isEmpty())
-            start_ops(owner, jobs, op == "copy" ? "Copying" : "Moving", on_done, op == "copy" ? "Copy" : "Move");
+    // what started it, when (asked now: the conflict and tape questions may stay open a while)
+    QString window = parent ? parent->window()->windowTitle() : QString();
+    QStringList from;
+    for (const QString &s : sources)
+        if (!from.contains(dirname(abspath(s))))
+            from << dirname(abspath(s));
+    QStringList intro{QString(op == "copy" ? "Copy" : "Move") + " of " +
+                          (sources.size() == 1 ? QString("1 item") : QString("%1 items").arg(sources.size())) +
+                          ", started by " + (how.isEmpty() ? QString("Kestrel") : how) +
+                          (window.isEmpty() ? QString() : " in the window “" + window + "”") + " at " +
+                          QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"),
+                      "From: " + from.join(", "), "To: " + dest_dir};
+    plan_transfer(parent, sources, dest_dir, op, [owner, sources, dest_dir, op, on_done, intro, on_started](const QList<Job> &planned) {
+        if (planned.isEmpty())
+            return;
+        choose_tape_writer(owner, planned, [owner, sources, dest_dir, op, on_done, intro, on_started](const QList<Job> &jobs) {
+            bool dd = std::any_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.dd; });
+            if (!owner)   // (re-read: the window may have closed while the question was open)
+                return;
+            start_ops(owner, jobs, transfer_title(sources, dest_dir, op, dd), on_done, op == "copy" ? "Copy" : "Move",
+                      intro);
+            if (on_started)
+                on_started();
+        });
     });
 }
 
@@ -1727,6 +2045,116 @@ Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
             on_done(r.toStringList());
     });
 }
+
+namespace dirsizes {
+
+static const int MAX_ENTRIES = 5000;
+static const qint64 MAX_AGE = 365LL * 24 * 3600;   // older entries are trimmed
+
+QString cache_file() { return join(APP_CACHE(), "folder-sizes.json"); }
+
+static QJsonObject &entries()
+{
+    // re-read when another Kestrel has written it
+    static QJsonObject cached;
+    static qint64 read_mtime = -1;
+    struct stat st;
+    qint64 m = stat_(cache_file(), st) ? qint64(st.st_mtim.tv_sec) * 1000000000 + st.st_mtim.tv_nsec : 0;
+    if (m != read_mtime) {
+        bool ok = false;
+        cached = QJsonDocument::fromJson(read_file(cache_file(), &ok)).object();
+        read_mtime = m;
+    }
+    return cached;
+}
+
+static void save(QJsonObject &all)
+{
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    QList<QPair<qint64, QString>> by_age;
+    for (auto it = all.begin(); it != all.end();) {
+        qint64 at = it.value().toObject().value("at").toInteger();
+        if (now - at > MAX_AGE) {
+            it = all.erase(it);
+        } else {
+            by_age << qMakePair(at, it.key());
+            ++it;
+        }
+    }
+    if (by_age.size() > MAX_ENTRIES) {   // the oldest go
+        std::sort(by_age.begin(), by_age.end());
+        for (int i = 0; i < by_age.size() - MAX_ENTRIES; ++i)
+            all.remove(by_age[i].second);
+    }
+    try {
+        makedirs(APP_CACHE(), true);
+        write_atomic(cache_file(), QJsonDocument(all).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {   // a cache: a failure to write it only means counting again next time
+    }
+}
+
+std::optional<Entry> get(const QString &folder)
+{
+    QJsonObject o = entries().value(folder).toObject();
+    struct stat st;
+    if (o.isEmpty() || !lstat_(folder, st) || !S_ISDIR(st.st_mode) || o.value("dev").toInteger() != qint64(st.st_dev) ||
+        o.value("ino").toInteger() != qint64(st.st_ino))
+        return std::nullopt;
+    Entry e;
+    e.stats.size = o.value("size").toInteger();
+    e.stats.files = o.value("files").toInteger();
+    e.stats.dirs = o.value("dirs").toInteger();
+    e.measured = o.value("at").toInteger();
+    return e;
+}
+
+void put(const QString &folder, const DirStats &s)
+{
+    struct stat st;
+    if (!lstat_(folder, st) || !S_ISDIR(st.st_mode))
+        return;
+    QJsonObject &all = entries();
+    all[folder] = QJsonObject{{"dev", qint64(st.st_dev)}, {"ino", qint64(st.st_ino)}, {"size", s.size},
+                              {"files", s.files},         {"dirs", s.dirs},          {"at", QDateTime::currentSecsSinceEpoch()}};
+    save(all);
+}
+
+void drop_with_parents(const QStringList &paths)
+{
+    QJsonObject &all = entries();
+    if (all.isEmpty())
+        return;
+    bool changed = false;
+    for (const QString &p : paths) {
+        for (QString d = rstrip(p, '/'); !d.isEmpty(); d = dirname(d)) {
+            if (all.contains(d)) {
+                all.remove(d);
+                changed = true;
+            }
+            if (d == "/")
+                break;
+        }
+    }
+    if (changed)
+        save(all);
+}
+
+QString age_text(qint64 measured, qint64 now)
+{
+    qint64 ago = std::max<qint64>(0, now - measured);
+    auto n = [](qint64 v, const char *unit) { return QString("%1 %2%3 ago").arg(v).arg(unit).arg(v == 1 ? "" : "s"); };
+    QString words = ago < 60               ? QString("just now")
+                    : ago < 3600           ? n(ago / 60, "minute")
+                    : ago < 86400          ? n(ago / 3600, "hour")
+                    : ago < 30 * 86400     ? n(ago / 86400, "day")
+                    : ago < 365 * 86400LL  ? n(ago / (30 * 86400), "month")
+                                           : n(ago / (365 * 86400LL), "year");
+    if (ago < 60)
+        return "Calculated just now";
+    return "Calculated " + words + " (" + QDateTime::fromSecsSinceEpoch(measured).toString("yyyy-MM-dd HH:mm") + ")";
+}
+
+}  // namespace dirsizes
 
 DirStats dir_stats(const QString &path, std::function<bool()> cancel)
 {
