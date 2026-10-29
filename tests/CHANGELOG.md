@@ -4,6 +4,14 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.30
+
+Changed:
+- `i18n` no longer counts any installed app's name as untranslated English, wherever it's listed: Preferences' image
+  and video opener lists name every app that opens JPEGs and MP4s (on GitHub's 24.04 runner Firefox, Chrome and
+  Edge), which alpha.29's fix (only the apps for a text file and a folder) missed. Its check failed again in CI's
+  `test` job on alpha.29 though nothing was untranslated.
+
 ## 0.3.2-alpha.29
 
 Changed:

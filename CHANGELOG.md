@@ -2,9 +2,13 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.29
+## 0.3.2-alpha.30
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha30).
+
+## 0.3.2-alpha.29 (2026-10-29)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha29).
 
 ## 0.3.2-alpha.28 (2026-10-29)
 
@@ -92,7 +96,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.22 (2026-10-27)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha22).
 
 ## 0.3.2-alpha.21 (2026-10-27)
 
@@ -115,7 +119,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.19 (2026-10-26)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha19).
 
 ## 0.3.2-alpha.18 (2026-10-26)
 
@@ -392,7 +396,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.4 (2026-10-21)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha4).
 
 ## 0.3.2-alpha.3 (2026-10-21)
 
