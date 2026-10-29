@@ -108,6 +108,7 @@ struct TaskInfo {
     bool cancellable = false, cancelling = false, admin = false;
     Task *local = nullptr;
     QString state;   // "waiting", "running", "paused"
+    qint64 elapsed = 0;   // ms since it started (0 while it waits)
 };
 
 // A job of this Kestrel that has ended, for the Jobs window (kept until cleared; the newest 50)
@@ -118,6 +119,16 @@ struct FinishedTask {
     qint64 took_ms = 0;
     QDateTime ended;
     bool admin = false;
+    QString id;       // the task's (its log is asked for by it)
+    QString flight;   // another Kestrel's (remote_finished: without its log and steps, asked for with ask_detail)
+};
+
+// Another Kestrel's job, as the Jobs window shows it: its steps around where it is, and its log (ask_detail)
+struct JobDetail {
+    QStringList steps;    // steps_from… of steps_total
+    int steps_from = 0, steps_total = 0, step = -1;
+    QString log;
+    qint64 at = 0;        // when it came (ms since the epoch)
 };
 
 // Every running task: this Kestrel's (all its windows) and, through the tower (atc.h), the other Kestrels'. Ours are
@@ -134,7 +145,12 @@ public:
     // the jobs that keep this Kestrel running (keeps_running), running or waiting
     QList<Task *> keeping() const;
     QList<FinishedTask> finished;        // ours that have ended, newest last
-    void clear_finished();
+    QMap<QString, QList<FinishedTask>> remote_finished;   // flight -> the other Kestrels' (no logs: ask_detail)
+    void clear_finished();               // every Kestrel's
+    // Another Kestrel's job or finished job: ask it for its steps and log; detail() has them once it answers
+    void ask_detail(const QString &flight, const QString &task);
+    JobDetail detail(const QString &flight, const QString &task) const { return details.value(flight + "/" + task); }
+    void pause(const TaskInfo &task, bool on);   // also another Kestrel's (a job outside the queue: jobs.h has its own)
 
 Q_SIGNALS:
     void changed();
@@ -146,6 +162,8 @@ private:
     void on_heard(const QJsonObject &msg);
     QList<Task *> local;
     QMap<QString, QList<TaskInfo>> remote;   // flight -> its tasks
+    QHash<QString, JobDetail> details;       // "flight/task" -> what it answered
+    void publish_finished();
     QTimer *timer;
 };
 

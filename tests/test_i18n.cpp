@@ -15,9 +15,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QStorageInfo>
 #include <QTabWidget>
 #include <QTextDocument>
 #include <QToolButton>
@@ -25,6 +27,7 @@
 #include <QTreeWidget>
 #include <QXmlStreamReader>
 
+#include <grp.h>
 #include <pwd.h>
 #include <unistd.h>
 
@@ -268,12 +271,16 @@ int main(int argc, char **argv)
                                      "Zstandard", "lzip", "LZMA", "PPMd", "BZip", "Deflate", "Copy", "MP", "WebM", "MKV",
                                      "MOV", "GIF", "AAC", "Opus", "OGG", "Vorbis", "FLAC", "WAV", "ALAC", "dd", "exiftool",
                                      "zst", "lz4", "bz2", "gz"};
-    // …and what the computer names: the mounts, the user, file types (the system translates those), Qt's own buttons
+    // …and what the computer names: the mounts and their drives' labels (a runner's "cloudimg-rootfs"), the user and
+    // their group (a runner's "docker"), file types (the system translates those), Qt's own buttons
     const struct passwd *pw = getpwuid(getuid());
-    QStringList theirs = {pw ? QString::fromLocal8Bit(pw->pw_name) : QString(), QMimeDatabase().mimeTypeForName("text/plain").comment(),
+    const struct group *gr = getgrgid(getgid());
+    QStringList theirs = {pw ? QString::fromLocal8Bit(pw->pw_name) : QString(), gr ? QString::fromLocal8Bit(gr->gr_name) : QString(),
+                          QMimeDatabase().mimeTypeForName("text/plain").comment(),
                           QMimeDatabase().mimeTypeForName("inode/directory").comment()};
     for (const drives::Mount &mt : drives::mounts())
-        theirs << basename(mt.root) << mt.fstype;
+        theirs << basename(mt.root) << mt.fstype << drives::device_label(mt.source) << mt.source.section('/', 0, 0)
+               << QStorageInfo(mt.root).displayName();
     static const QStringList qt_buttons = {"Cancel", "OK", "Close", "Yes", "No", "Apply", "Reset", "Help"};
     QStringList english_left;
     for (QString t : shown) {
@@ -295,5 +302,55 @@ int main(int argc, char **argv)
                   "text that isn't translated (%1 texts looked at)")
                   .arg(shown.size()) +
               (english_left.isEmpty() ? QString() : ":\n  " + english_left.mid(0, 40).join("\n  ")));
+
+    // ---- what's written or removed is the tag the row stands for, not what it shows (a translation may name its
+    // group differently)
+    if (!which("exiftool")) {
+        skip("Properties → Metadata removes the tag a row stands for (exiftool isn't installed)");
+        finish();
+    }
+    QString img = join(dir, "tagged.jpg");
+    QImage(8, 8, QImage::Format_RGB32).save(img);
+    QProcess tag;
+    tag.start("exiftool", {"-q", "-overwrite_original", "-Artist=Kestrel Test", img});
+    tag.waitForFinished(30000);
+    auto artist = [&]() {
+        QProcess r;
+        r.start("exiftool", {"-s3", "-Artist", img});
+        r.waitForFinished(30000);
+        return QString::fromUtf8(r.readAllStandardOutput()).trimmed();
+    };
+    bool tagged = artist() == "Kestrel Test";
+    auto *pd2 = new PropertiesDialog(w, {img});
+    show_free(pd2);
+    for (auto *tw : pd2->findChildren<QTabWidget *>())
+        for (int i = 0; i < tw->count(); ++i)
+            if (tw->tabText(i) == tx("Metadata"))
+                tw->setCurrentIndex(i);
+    QTreeWidgetItem *row = nullptr;
+    wait_for([&]() {
+        for (auto *t : pd2->findChildren<QTreeWidget *>())
+            for (int i = 0; i < t->topLevelItemCount(); ++i)
+                if (t->topLevelItem(i)->text(1) == "Artist")
+                    row = t->topLevelItem(i);
+        return row != nullptr;
+    }, 30000);
+    QAbstractButton *remove = nullptr;
+    if (row) {
+        row->setText(0, "[Ğŕöûƥ]");   // as a translation could show it
+        row->treeWidget()->setCurrentItem(row);
+        row->setSelected(true);
+        for (auto *b : pd2->findChildren<QAbstractButton *>())
+            if (b->text() == tx("Remove"))
+                remove = b;
+    }
+    if (remove)
+        remove->click();
+    if (auto *box = shown_window<QMessageBox>())
+        box->button(QMessageBox::Yes)->click();
+    bool removed = wait_for([&]() { return artist().isEmpty(); }, 30000);
+    check(tagged && row && remove && removed,
+          "Properties → Metadata removes the tag a row stands for, whatever its group shows (" + artist() + ")");
+    pd2->close();
     finish();
 }

@@ -698,16 +698,8 @@ Rows ai_info(const QString &path)
                 set_default(res, tx("Settings"), settings.join('\n'));
         }
     }
-    if (info.contains("workflow")) {
-        bool found = false;
-        for (auto &r : res)
-            if (r.first == tx("ComfyUI workflow")) {
-                r.second = tx("embedded (see Metadata tab)");
-                found = true;
-            }
-        if (!found)
-            res << qMakePair(tx("ComfyUI workflow"), tx("embedded (see Metadata tab)"));
-    }
+    if (info.contains("workflow"))
+        set_default(res, tx("ComfyUI workflow"), tx("embedded (see Metadata tab)"));
     for (const char *k : {TX_NOOP("Description"), TX_NOOP("Comment"), TX_NOOP("Software")}) {   // (the PNG's own keys)
         QString v = info.value(k);
         if (v.isEmpty())

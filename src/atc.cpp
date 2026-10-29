@@ -47,7 +47,7 @@ static QByteArray compact(const QJsonObject &o) { return QJsonDocument(o).toJson
 
 // Each message type and its fields. A field that's missing is fine (the receiver uses a default); one that's there
 // must have this type. PATHS: a list of absolute paths; STRS: a list of strings; TASKS: a list of tasks (fields below).
-enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS, JOBS };
+enum Field { STR, NUM, BOOL, PATHS, STRS, TASKS, JOBS, FINISHED, THUMBS };
 static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"settings", {{"keys", STRS}}},   // settings changed (keys: which; missing: any of Preferences')
     {"sidebar", {}},         // the sidebar's order or collapsed sections changed
@@ -66,12 +66,26 @@ static const QHash<QString, QList<QPair<QString, Field>>> TYPES = {
     {"lane_open", {{"flight", STR}, {"task", STR}}},   // (the tower's) that flight's job may start
     {"job_control", {{"flight", STR}, {"task", STR}, {"action", STR}}},   // pause, resume, start_now, up, down, cancel
     {"queue_mode", {{"mode", STR}}},   // "drive", "one" or "all" (jobs.h)
+    // the one Jobs window (jobswin.h) shows every Kestrel's jobs whole:
+    {"finished", {{"jobs", FINISHED}}},   // keep: the flight's jobs that have ended (their logs on asking)
+    {"thumbs", {{"jobs", THUMBS}}},       // keep: the flight's thumbnail jobs
+    {"job_detail_ask", {{"flight", STR}, {"task", STR}}},   // that flight's job (or finished job): its steps and log
+    {"job_detail", {{"to", STR}, {"task", STR}, {"steps", STRS}, {"steps_from", NUM}, {"steps_total", NUM}, {"step", NUM},
+                    {"log", STR}}},       // the answer, for the flight that asked ("to")
+    {"thumb_control", {{"flight", STR}, {"id", STR}, {"action", STR}}},   // pause, resume, stop a thumbnail job
+    {"clear_finished", {}},   // every Kestrel forgets its finished jobs (Clear Finished)
+    {"jobs_window", {}},      // the Jobs window opened in that flight: the one any other Kestrel has open closes
 };
 static const QList<QPair<QString, Field>> JOB_FIELDS = {{"flight", STR}, {"id", STR},      {"title", STR}, {"state", STR},
                                                         {"drives", STRS}, {"paused", BOOL}, {"admin", BOOL}};
 static const QList<QPair<QString, Field>> TASK_FIELDS = {{"id", STR},          {"title", STR},      {"text", STR},
                                                          {"fraction", NUM},    {"cancellable", BOOL},
-                                                         {"cancelling", BOOL}, {"admin", BOOL}, {"state", STR}};
+                                                         {"cancelling", BOOL}, {"admin", BOOL}, {"state", STR},
+                                                         {"elapsed", NUM}};
+static const QList<QPair<QString, Field>> FINISHED_FIELDS = {{"id", STR},   {"title", STR}, {"state", STR},
+                                                             {"took", NUM}, {"ended", NUM}, {"admin", BOOL}};
+static const QList<QPair<QString, Field>> THUMB_FIELDS = {{"id", STR},   {"title", STR}, {"folder", STR}, {"window", STR},
+                                                          {"state", STR}, {"done", NUM}, {"total", NUM}, {"paused", BOOL}};
 static const QStringList UNDO_KINDS = {"move", "move_into", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
 
 static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
@@ -89,11 +103,15 @@ static bool valid_field(const QJsonValue &v, Field f)
     case STRS:
     case TASKS:
     case JOBS:
+    case FINISHED:
+    case THUMBS:
         if (!v.isArray())
             return false;
         for (const QJsonValue &e : v.toArray()) {
-            if (f == TASKS || f == JOBS ? !e.isObject() || !valid_fields(e.toObject(), f == TASKS ? TASK_FIELDS : JOB_FIELDS)
-                                        : !e.isString() || (f == PATHS && !e.toString().startsWith('/')))
+            const QList<QPair<QString, Field>> &fields = f == TASKS ? TASK_FIELDS : f == JOBS ? JOB_FIELDS
+                                                         : f == FINISHED ? FINISHED_FIELDS : THUMB_FIELDS;
+            if (f == PATHS || f == STRS ? !e.isString() || (f == PATHS && !e.toString().startsWith('/'))
+                                        : !e.isObject() || !valid_fields(e.toObject(), fields))
                 return false;
         }
         return true;

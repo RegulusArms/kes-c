@@ -2,7 +2,17 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.27
+## 0.3.2-alpha.28
+
+- **One Jobs window for all of Kestrel.** A folder opened from another app can start a separate Kestrel, and each
+  had a Jobs window of its own, where the others' jobs showed without their steps or logs ("its log is in that
+  window's Jobs window") and their finished jobs and thumbnail jobs didn't show at all. Now there's one: opened from
+  any window, it closes the one another Kestrel had open, and shows every job wherever it runs, whole: its steps and
+  log (running or finished), every Kestrel's finished jobs, and every Kestrel's thumbnail jobs, which Pause and Stop
+  work on. Pause works on another Kestrel's job too, and Clear Finished clears every Kestrel's. Kestrels on this
+  version and older ones don't share jobs (the tower's messages changed).
+
+## 0.3.2-alpha.27 (2026-10-29)
 
 - **"&" shows as "&" in tab and submenu names.** The Preferences tab "Images & Videos" read "Images Videos" with
   the V underlined (or "Images_Videos"), as did a folder's tab when its name has an "&" ("Tom & Jerry"), and, in a

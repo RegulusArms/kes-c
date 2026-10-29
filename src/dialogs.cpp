@@ -855,7 +855,7 @@ void PropertiesDialog::meta_buttons()
 
 QString PropertiesDialog::meta_key(QTreeWidgetItem *it) const
 {
-    return it->text(0).isEmpty() ? it->text(1) : it->text(0) + ":" + it->text(1);
+    return it->data(1, Qt::UserRole).toString();
 }
 
 void PropertiesDialog::meta_write(std::function<QStringList()> fn)
@@ -994,6 +994,7 @@ void PropertiesDialog::show_meta(const QVariant &rows)
         QString group = r.value(0), tag = r.value(1), val = r.value(2);
         QString short_val = val.size() < 300 ? val : val.left(300).replace('\n', ' ') + " …";
         auto *it = new QTreeWidgetItem(QStringList{group, tag, QString(short_val).replace('\n', ' ')});
+        it->setData(1, Qt::UserRole, group.isEmpty() ? tag : group + ":" + tag);   // the tag written, kept apart from the shown text
         it->setData(2, Qt::UserRole, val);
         bool editable = metadata::is_editable(group, val, tag);
         it->setData(0, Qt::UserRole, editable);

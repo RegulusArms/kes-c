@@ -679,8 +679,16 @@ ThumbnailManager *ThumbnailManager::instance() { return first_manager; }
 
 ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 {
-    if (!first_manager)
+    if (!first_manager) {
         first_manager = this;
+        // the app's thumbnail jobs, for the one Jobs window (in whichever Kestrel has it open), and the others'
+        connect(this, &ThumbnailManager::jobs_changed, this, &ThumbnailManager::publish_jobs);
+        connect(atc::radio(), &atc::Radio::heard, this, &ThumbnailManager::on_heard);
+        connect(atc::radio(), &atc::Radio::reset, this, [this]() {
+            remote.clear();
+            Q_EMIT jobs_changed();
+        });
+    }
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     device_pool.setMaxThreadCount(1);   // phones and cameras serve one request at a time (is_device_path)
@@ -1141,6 +1149,63 @@ QList<ThumbJob> ThumbnailManager::thumb_jobs() const
     QList<ThumbJob> out = jobs.values();
     std::sort(out.begin(), out.end(), [](const ThumbJob &a, const ThumbJob &b) { return a.prio > b.prio; });
     return out;
+}
+
+void ThumbnailManager::publish_jobs()
+{
+    QJsonArray list;
+    for (const ThumbJob &j : thumb_jobs())
+        list << QJsonObject{{"id", QString::number(j.id)}, {"title", j.title()}, {"folder", j.folder}, {"window", j.window},
+                            {"state", j.state()},           {"done", j.done},     {"total", j.total},   {"paused", j.paused}};
+    QByteArray now = QJsonDocument(list).toJson(QJsonDocument::Compact);
+    if (now == published)   // (hearing the others' lists says jobs_changed too: not told again for that)
+        return;
+    published = now;
+    atc::announce("thumbs", {{"jobs", list}}, true);
+}
+
+void ThumbnailManager::on_heard(const QJsonObject &m)
+{
+    if (m.value("own").toBool())
+        return;
+    QString type = m.value("type").toString(), from = m.value("from").toString();
+    if (type == "thumbs") {
+        QList<RemoteThumbJob> l;
+        for (const QJsonValue &v : m.value("jobs").toArray()) {
+            QJsonObject o = v.toObject();
+            l << RemoteThumbJob{from, o.value("id").toString(), o.value("title").toString(), o.value("folder").toString(),
+                                o.value("window").toString(), o.value("state").toString(), o.value("done").toInt(),
+                                o.value("total").toInt(), o.value("paused").toBool()};
+        }
+        if (l.isEmpty())
+            remote.remove(from);
+        else
+            remote[from] = l;
+        Q_EMIT jobs_changed();
+    } else if (type == "left") {
+        if (remote.remove(from))
+            Q_EMIT jobs_changed();
+    } else if (type == "thumb_control" && m.value("flight").toString() == atc::radio()->flight()) {
+        quint64 id = m.value("id").toString().toULongLong();
+        QString action = m.value("action").toString();
+        if (action == "stop")
+            stop_job(id);
+        else if (action == "pause" || action == "resume")
+            pause_job(id, action == "pause");
+    }
+}
+
+QList<RemoteThumbJob> ThumbnailManager::remote_jobs() const
+{
+    QList<RemoteThumbJob> out;
+    for (const QList<RemoteThumbJob> &l : remote)
+        out << l;
+    return out;
+}
+
+void ThumbnailManager::control_remote(const RemoteThumbJob &job, const QString &action)
+{
+    atc::announce("thumb_control", {{"flight", job.flight}, {"id", job.id}, {"action", action}});
 }
 
 void ThumbnailManager::pause_job(quint64 id, bool on)

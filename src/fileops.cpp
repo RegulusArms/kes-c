@@ -224,6 +224,7 @@ TaskBoard::TaskBoard()
     connect(atc::radio(), &atc::Radio::heard, this, &TaskBoard::on_heard);
     connect(atc::radio(), &atc::Radio::reset, this, [this]() {
         remote.clear();
+        remote_finished.clear();
         Q_EMIT changed();
     });
 }
@@ -255,9 +256,10 @@ void TaskBoard::add(Task *task)
                         : task->had_errors || log.contains("  failed: ") ? "done with errors"   // (the admin helper's lines)
                                                      : "done";
         finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
-                                 task->admin};
+                                 task->admin, task->id};
         while (finished.size() > 50)
             finished.removeFirst();
+        publish_finished();
         schedule(0);
         Q_EMIT changed();
     });
@@ -268,7 +270,36 @@ void TaskBoard::add(Task *task)
 void TaskBoard::clear_finished()
 {
     finished.clear();
+    remote_finished.clear();
+    publish_finished();
+    atc::announce("clear_finished");   // (the others clear theirs and tell everyone)
     Q_EMIT changed();
+}
+
+void TaskBoard::publish_finished()
+{
+    QJsonArray list;
+    for (const FinishedTask &f : finished)
+        list << QJsonObject{{"id", f.id},
+                            {"title", f.title},
+                            {"state", f.state},
+                            {"took", double(f.took_ms)},
+                            {"ended", double(f.ended.toMSecsSinceEpoch())},
+                            {"admin", f.admin}};
+    atc::announce("finished", {{"jobs", list}}, true);
+}
+
+void TaskBoard::ask_detail(const QString &flight, const QString &task)
+{
+    atc::announce("job_detail_ask", {{"flight", flight}, {"task", task}});
+}
+
+void TaskBoard::pause(const TaskInfo &task, bool on)
+{
+    if (task.local)
+        task.local->set_paused(on);
+    else   // the Kestrel running it pauses it
+        atc::announce("job_control", {{"flight", task.flight}, {"task", task.id}, {"action", on ? "pause" : "resume"}});
 }
 
 void TaskBoard::schedule(int ms)
@@ -289,7 +320,8 @@ void TaskBoard::publish()
                             {"cancellable", t->cancellable},
                             {"cancelling", bool(t->cancelled)},
                             {"admin", t->admin},
-                            {"state", t->queued ? "waiting" : t->paused() ? "paused" : "running"}};
+                            {"state", t->queued ? "waiting" : t->paused() ? "paused" : "running"},
+                            {"elapsed", double(t->elapsed_ms())}};
     atc::announce("tasks", {{"tasks", list}}, true);
 }
 
@@ -300,7 +332,7 @@ QList<TaskInfo> TaskBoard::others(const QList<Task *> &mine) const
     for (Task *t : local)
         if (!mine.contains(t))
             out << TaskInfo{me, t->id, t->title, t->text, t->fraction, t->cancellable, bool(t->cancelled), t->admin, t,
-                            t->queued ? "waiting" : t->paused() ? "paused" : "running"};
+                            t->queued ? "waiting" : t->paused() ? "paused" : "running", t->elapsed_ms()};
     for (const QList<TaskInfo> &l : remote)
         out << l;
     return out;
@@ -340,15 +372,94 @@ void TaskBoard::on_heard(const QJsonObject &m)
                           o.value("cancelling").toBool(),
                           o.value("admin").toBool(),
                           nullptr,
-                          o.value("state").toString("running")};
+                          o.value("state").toString("running"),
+                          qint64(o.value("elapsed").toDouble())};
         }
         if (l.isEmpty())
             remote.remove(from);
         else
             remote[from] = l;
         Q_EMIT changed();
+    } else if (type == "finished") {
+        QList<FinishedTask> l;
+        for (const QJsonValue &v : m.value("jobs").toArray()) {
+            QJsonObject o = v.toObject();
+            FinishedTask f;
+            f.id = o.value("id").toString();
+            f.title = o.value("title").toString();
+            f.state = o.value("state").toString("done");
+            f.took_ms = qint64(o.value("took").toDouble());
+            f.ended = QDateTime::fromMSecsSinceEpoch(qint64(o.value("ended").toDouble()));
+            f.admin = o.value("admin").toBool();
+            f.flight = from;
+            l << f;
+        }
+        if (l.isEmpty())
+            remote_finished.remove(from);
+        else
+            remote_finished[from] = l;
+        Q_EMIT changed();
+    } else if (type == "clear_finished") {
+        if (!finished.isEmpty()) {
+            finished.clear();
+            publish_finished();
+        }
+        remote_finished.clear();
+        Q_EMIT changed();
+    } else if (type == "job_detail_ask" && m.value("flight").toString() == atc::radio()->flight()) {
+        // the steps around where it is and the log of one of ours, running or finished, for the Kestrel showing the
+        // Jobs window (the log's end when it's long: a message has a size limit)
+        QString id = m.value("task").toString();
+        QStringList steps;
+        int at = -1;
+        QString log;
+        bool found = false;
+        for (Task *t : local)
+            if (t->id == id) {
+                steps = t->steps, at = t->step.load(), log = t->log_text(), found = true;
+                break;
+            }
+        for (int i = finished.size() - 1; !found && i >= 0; --i)
+            if (finished[i].id == id)
+                steps = finished[i].steps, at = int(steps.size()), log = finished[i].log, found = true;
+        if (!found)
+            return;
+        int from_i = std::max(0, at - 200), to_i = std::min<int>(steps.size(), from_i + 500);
+        static const int MOST = atc::MAX_MESSAGE / 2;
+        if (log.size() > MOST)
+            log = "…\n" + log.right(MOST);
+        atc::announce("job_detail", {{"to", from},
+                                     {"task", id},
+                                     {"steps", QJsonArray::fromStringList(steps.mid(from_i, to_i - from_i))},
+                                     {"steps_from", from_i},
+                                     {"steps_total", int(steps.size())},
+                                     {"step", at},
+                                     {"log", log}});
+    } else if (type == "job_detail" && m.value("to").toString() == atc::radio()->flight()) {
+        JobDetail d;
+        for (const QJsonValue &v : m.value("steps").toArray())
+            d.steps << v.toString();
+        d.steps_from = m.value("steps_from").toInt();
+        d.steps_total = m.value("steps_total").toInt();
+        d.step = m.value("step").toInt(-1);
+        d.log = m.value("log").toString();
+        d.at = QDateTime::currentMSecsSinceEpoch();
+        details.insert(from + "/" + m.value("task").toString(), d);
+        Q_EMIT changed();
+    } else if (type == "job_control" && m.value("flight").toString() == atc::radio()->flight()) {
+        // pausing one of ours that isn't in the job queue (the queue's own are paused by jobs::Queue)
+        QString id = m.value("task").toString(), action = m.value("action").toString();
+        for (Task *t : local) {
+            bool queued = false;
+            for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+                queued = queued || j.local == t;
+            if (t->id == id && !queued && (action == "pause" || action == "resume"))
+                t->set_paused(action == "pause");
+        }
+        schedule(0);
     } else if (type == "left") {
-        if (remote.remove(from))
+        bool had = remote.remove(from) + remote_finished.remove(from);
+        if (had)
             Q_EMIT changed();
     } else if (type == "cancel" && m.value("flight").toString() == atc::radio()->flight()) {
         for (Task *t : local)

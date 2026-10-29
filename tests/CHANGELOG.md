@@ -4,6 +4,25 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.28
+
+Added:
+- `i18n` checks that Properties → Metadata's Remove removes the tag a row stands for when the row shows its group
+  under another name, as a translation could. Covers the fix that keeps the tag apart from the row's text (it was
+  read back from what the row showed).
+- `atc_tasks` checks the one Jobs window across Kestrels (a stand-in second Kestrel): opening it tells the others and
+  one opened elsewhere closes ours; another Kestrel's running and finished jobs are listed, their steps and logs asked
+  for and shown, its thumbnail jobs listed, and Pause and Stop on them sent to it; ours are told and answered for a
+  Jobs window elsewhere, and paused and resumed from it; Clear Finished clears every Kestrel's. Covers making the
+  Jobs window one for all Kestrels.
+
+Changed:
+- `i18n` no longer counts the names the computer gives as untranslated English: the user's group (on GitHub's runner
+  it's `docker`, shown in Properties → Permissions), drive labels and the names the system gives a mount (shown on
+  Overview cards). Its check failed in both of CI's test jobs on alpha.27 though nothing was untranslated.
+- `run.sh` prints a failed check's indented lines under it (what it found), not only its first line, so CI's log
+  shows them. Alpha.27's failure in CI listed nothing.
+
 ## 0.3.2-alpha.27
 
 Changed:

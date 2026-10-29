@@ -51,7 +51,8 @@ for t in "${TESTS[@]}"; do
         HOME="$work/home" QT_QPA_PLATFORM=offscreen \
         timeout 600 dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
     rc=$?
-    grep -E '^(PASS|FAIL|SKIP) ' "$work/log"
+    # (with a failed check's indented lines under it: what it found)
+    awk '/^(PASS|FAIL|SKIP) / { more = /^FAIL/; print; next } more && /^  / { print; next } { more = 0 }' "$work/log"
     if grep -q '^ALL PASSED' "$work/log" && (( rc == 0 )); then
         grep '^ALL PASSED' "$work/log"
     else

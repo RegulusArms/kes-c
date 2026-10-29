@@ -68,6 +68,9 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │   cleared caches                                              │
        │ • hands folders to an open window ("open folders as tabs")    │
        │ • the job queue: lanes on drives for every Kestrel's jobs     │
+       │ • one Jobs window: each Kestrel's finished and thumbnail      │
+       │   jobs, a job's steps and log when the window asks for them,  │
+       │   and which Kestrel has the window open                       │
        │                                                               │
        │ Checks every message (protocol version, known types, the      │
        │ types of known fields, absolute paths, size); so does each    │
