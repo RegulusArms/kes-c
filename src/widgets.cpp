@@ -11,6 +11,7 @@
 #include "metadata.h"
 #include "overview.h"
 #include "places.h"
+#include "prefs.h"
 #include "proc.h"
 #include "thumbs.h"
 #include "util.h"
@@ -1222,6 +1223,12 @@ namespace sidebar {
 
 const QStringList SECTIONS = {"places", "bookmarks", "devices", "mounts"};
 
+const QList<QPair<QString, QString>> PLACES = {
+    {"overview", TX_NOOP("Overview")}, {"home", TX_NOOP("Home")},         {"recent", TX_NOOP("Recent")},
+    {"starred", TX_NOOP("Starred")},   {"desktop", TX_NOOP("Desktop")},   {"documents", TX_NOOP("Documents")},
+    {"downloads", TX_NOOP("Downloads")}, {"music", TX_NOOP("Music")},     {"pictures", TX_NOOP("Pictures")},
+    {"videos", TX_NOOP("Videos")},     {"trash", TX_NOOP("Trash")}};
+
 QStringList section_order(const QStringList &saved)
 {
     QStringList out;
@@ -1392,25 +1399,28 @@ void Sidebar::refresh()
 {
     QString current = currentItem() ? currentItem()->data(PathRole).toString() : QString();
     clear();
+    // a place's extra is its id in sidebar::PLACES (Hide from Sidebar)
     QList<Entry> place_list;
-    place_list << Entry{tx(OVERVIEW_TITLE), OVERVIEW, theme_icon({"computer", "folder"}), "overview"};
-    place_list << Entry{tx("Home"), HOME(), theme_icon({"user-home", "folder"})};
-    place_list << Entry{tx("Recent"), places::RECENT, theme_icon({"document-open-recent", "folder-recent", "folder"}), "recent"};
-    place_list << Entry{tx("Starred"), places::STARRED, theme_icon({"starred", "starred-symbolic", "folder"}), "starred"};
-    const QList<QStringList> xdg = {{"DESKTOP", tx("Desktop"), "user-desktop"},
-                                    {"DOCUMENTS", tx("Documents"), "folder-documents"},
-                                    {"DOWNLOAD", tx("Downloads"), "folder-download"},
-                                    {"MUSIC", tx("Music"), "folder-music"},
-                                    {"PICTURES", tx("Pictures"), "folder-pictures"},
-                                    {"VIDEOS", tx("Videos"), "folder-videos"}};
+    place_list << Entry{tx(OVERVIEW_TITLE), OVERVIEW, theme_icon({"computer", "folder"}), "overview", "overview"};
+    place_list << Entry{tx("Home"), HOME(), theme_icon({"user-home", "folder"}), "place", "home"};
+    place_list << Entry{tx("Recent"), places::RECENT, theme_icon({"document-open-recent", "folder-recent", "folder"}), "recent", "recent"};
+    place_list << Entry{tx("Starred"), places::STARRED, theme_icon({"starred", "starred-symbolic", "folder"}), "starred", "starred"};
+    const QList<QStringList> xdg = {{"DESKTOP", tx("Desktop"), "user-desktop", "desktop"},
+                                    {"DOCUMENTS", tx("Documents"), "folder-documents", "documents"},
+                                    {"DOWNLOAD", tx("Downloads"), "folder-download", "downloads"},
+                                    {"MUSIC", tx("Music"), "folder-music", "music"},
+                                    {"PICTURES", tx("Pictures"), "folder-pictures", "pictures"},
+                                    {"VIDEOS", tx("Videos"), "folder-videos", "videos"}};
     for (const QStringList &pl : xdg) {
         QString p = xdg_user_dir(pl[0]);
         if (isdir(p))
-            place_list << Entry{pl[1], p, theme_icon({pl[2], "folder"})};
+            place_list << Entry{pl[1], p, theme_icon({pl[2], "folder"}), "place", pl[3]};
     }
     bool empty = trash_is_empty();   // home trash and every drive's trash
     place_list << Entry{tx("Trash"), join(TRASH_DIR(), "files"),
-                        theme_icon({empty ? "user-trash" : "user-trash-full", "folder"}), "trash"};
+                        theme_icon({empty ? "user-trash" : "user-trash-full", "folder"}), "trash", "trash"};
+    const QStringList hidden = settings().value("sidebar_hidden").toStringList();
+    place_list.removeIf([&hidden](const Entry &e) { return hidden.contains(e.extra.toString()); });
     QList<Entry> bookmark_list;   // in the bookmarks file's order (moving one rewrites the file)
     auto bms = read_bookmarks();
     for (int i = 0; i < bms.size(); ++i) {
@@ -1724,6 +1734,10 @@ void Sidebar::menu(const QPoint &pos)
         QString label = g_mount_can_eject(phones[i].mount.get()) ? tx("Eject") : tx("Unmount");
         m.addAction(label, this, [this, i]() { eject_phone(i); });
     }
+    if (it->data(SectionRole) == "places") {   // (shown again from Preferences → Sidebar)
+        m.addSeparator();
+        m.addAction(tx("Hide from Sidebar"), this, [id = extra.toString()]() { hide_place(id); });
+    }
     m.exec(viewport()->mapToGlobal(pos));
 }
 
@@ -1780,6 +1794,13 @@ void Sidebar::unmount_share(int i)
             warn(self, tx("Unmount"), err);
         self->refresh();
     });
+}
+
+void Sidebar::hide_place(const QString &id)
+{
+    QStringList hidden = prefs::get("sidebar_hidden").toStringList();
+    if (!id.isEmpty() && !hidden.contains(id))
+        prefs::set("sidebar_hidden", hidden << id);   // every sidebar, here and in other Kestrels; Preferences shows it
 }
 
 void Sidebar::forget_server(const QString &uri)

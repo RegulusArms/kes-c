@@ -142,6 +142,7 @@ public:
     void set_pinned_first(bool on);   // Pinned & Starred First, for this window's tabs and its saved view setting
     void set_default_sort(Pane *p);   // Sort → Set as Default: p's sort, for folders without their own
     void sort_subfolders(Pane *p);    // Sort → Apply to Subfolders: p's sort, for every folder below p's
+    void remember_server(const QString &uri);   // a server connected to, first in recent_servers (unless Privacy says no)
 
 protected:
     void closeEvent(QCloseEvent *ev) override;
@@ -155,7 +156,6 @@ private:
     void build_actions();
     void tab_changed(int i);
     void pane_path_changed(Pane *pane);
-    void remember_server(const QString &uri);
     void sync_view_btn();
     void on_thumb_progress(int done, int total);
     void toggle_panel(QWidget *w, const QString &key, bool on);

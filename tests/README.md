@@ -198,6 +198,9 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a change made in a window shows in it;
   - the search box; a homepage that isn't a folder refused;
   - the file chooser's own view;
+  - Sidebar → Places shown: an unticked place leaves every window's sidebar, and Hide from Sidebar shows unticked;
+  - Privacy: Recent, Frequent Folders and recent servers aren't recorded while their switch is off; the desktop's File
+    History is shown; Clear Kestrel's History and Clear Recent Files ask, then clear;
   - a format's options and Extract To…'s choices used by those windows;
   - Reset This Tab and Reset All.
 - **The menus:**
@@ -243,6 +246,8 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - our finished jobs are told;
   - asked for a job's steps and log, we answer the Kestrel that asked;
   - another Kestrel's Pause and Resume pause and resume our job outside the queue.
+- Finished jobs stay until Clear Finished: another Kestrel's newer list adds to its older one, a closed Kestrel's stay
+  (saying their log is gone), and more than 50 of ours stay.
 - **Clear Finished** forgets every Kestrel's finished jobs, and another Kestrel's clears ours.
 
 ### atc_undo
@@ -435,7 +440,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a special folder (Downloads, Home…) gets its symbol on it, in a shade that stands out on any colour, also white and black (skipped if the icon theme has no symbolic folder icons);
   - on the Overview, a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default colour, a network one a folder in it, not the theme's icon.
 - **Generating folder previews:**
-  - Generate Folder Previews makes previews for the folder and the folders directly in it (not deeper), and its recursive form for every folder below, both without a thumbnail for every image, as Generate Previews Recursively makes;
+  - Generate Folder Previews makes previews for the folder and the folders directly in it (not deeper), and its recursive form for every folder below, both without a thumbnail for every image, as Generate Previews Recursively makes (Generate Previews: only the folder's own files');
   - a preview build finishes scanning the tree before most previews are made;
   - nothing inside Kestrel's own cache folder gets a thumbnail or folder preview, from a view or a preview build (on a folder in it or on `~/.cache` above it).
 - **Preview builds:**

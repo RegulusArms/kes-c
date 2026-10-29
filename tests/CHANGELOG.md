@@ -4,6 +4,19 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.31
+
+Added:
+- `prefs`: Preferences → Sidebar → Places shown (an unticked place leaves every window's sidebar, Hide from Sidebar
+  shows unticked there), and the new Privacy tab: each history switch (Recent, Frequent Folders, recent servers) keeps
+  it from being recorded when off, the desktop's File History is shown, and Clear Kestrel's History / Clear Recent
+  Files ask, then clear. The tab list now includes Privacy.
+- `atc_tasks`: finished jobs stay until Clear Finished: another Kestrel's newer list adds to its older one, a Kestrel
+  that closes leaves its finished jobs listed (saying its log is gone), and 60 of our own all stay listed and told
+  (only 50 were kept before).
+- `theme`: Generate Previews (the new non-recursive entry) makes thumbnails of the folder's own files only, and the
+  Previews submenu lists it first; `ui`'s list of every menu entry has it.
+
 ## 0.3.2-alpha.30
 
 Changed:

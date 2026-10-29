@@ -165,6 +165,27 @@ int main(int argc, char **argv)
                   {"steps_from", 0}, {"steps_total", 1}, {"step", 1}, {"log", "old.zip  failed: damaged"}});
     check(wait_for([&]() { return log_box && log_box->toPlainText().contains("old.zip  failed: damaged"); }),
           "a finished job of another Kestrel shows its log too");
+    // its finished jobs stay until Clear Finished: a later list (a long one comes cut to fit) adds to what it told
+    fake2.report({{"type", "finished"}, {"keep", true},
+                  {"jobs", QJsonArray{QJsonObject{{"id", "42"}, {"title", "Hashing photos"}, {"state", "done"},
+                                                  {"took", 1000.0}, {"ended", double(QDateTime::currentMSecsSinceEpoch())}}}}});
+    check(wait_for([&]() { return row_of("Hashing photos") != nullptr; }) && row_of("Extracting old.zip"),
+          "another Kestrel's finished jobs stay listed when it tells newer ones without them");
+    {
+        FakeFlight fake3;   // a Kestrel that closes: its finished jobs stay too, without a log to ask it for
+        fake3.check_in();
+        fake3.report({{"type", "finished"}, {"keep", true},
+                      {"jobs", QJsonArray{QJsonObject{{"id", "1"}, {"title", "Moving holiday videos"}, {"state", "done"},
+                                                      {"took", 2000.0}, {"ended", double(QDateTime::currentMSecsSinceEpoch())}}}}});
+        QString gone = fake3.name();
+        wait_for([&]() { return row_of("Moving holiday videos") != nullptr; });
+        fake3.disconnect_bus();
+        check(wait_for([&]() { return TaskBoard::instance()->has_left(gone); }) && row_of("Moving holiday videos"),
+              "a finished job of a Kestrel that has closed stays listed");
+        jw->list->setCurrentItem(row_of("Moving holiday videos"));
+        check(wait_for([&]() { return log_box && log_box->toPlainText().contains("has closed"); }),
+              "...and says its log went with it, instead of asking for it");
+    }
     // its thumbnail jobs, and Stop on one
     QTreeWidgetItem *thumb = nullptr;
     wait_for([&]() {
@@ -216,6 +237,15 @@ int main(int argc, char **argv)
     fake2.report({{"type", "clear_finished"}});
     check(wait_for([&]() { return TaskBoard::instance()->finished.isEmpty() && !row_of("Another finished job"); }),
           "...and another Kestrel's Clear Finished clears ours");
+    // however many finish, none is dropped (it once kept the newest 50)
+    for (int i = 0; i < 60; ++i)
+        fileops::run_job(w, QString("Quick job %1").arg(i), [](Task *) -> QVariant { return QVariant(true); });
+    check(wait_for([&]() {
+              return TaskBoard::instance()->finished.size() == 60 && row_of("Quick job 0") && row_of("Quick job 59") &&
+                     fake2.last_of("finished").value("jobs").toArray().size() == 60;
+          }, 30000),
+          "every finished job stays listed until Clear Finished (60 here), and the others are told them all");
+    TaskBoard::instance()->clear_finished();
     // another Kestrel's Pause on one of ours outside the queue pauses it, and its Resume resumes it
     Task *ours = fileops::run_job(w, "Our long job", [](Task *t) -> QVariant {
         for (;;) {

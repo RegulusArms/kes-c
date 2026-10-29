@@ -523,8 +523,9 @@ void JobsWindow::show_details()
     // while it's chosen
     const FinishedTask *fin = r->finished ? finished_task(*r) : nullptr;
     bool theirs = !r->local && !task;
+    bool closed = theirs && r->finished && TaskBoard::instance()->has_left(r->flight);   // nobody to ask
     JobDetail d;
-    if (theirs) {
+    if (theirs && !closed) {
         d = TaskBoard::instance()->detail(r->flight, r->id);
         qint64 now = QDateTime::currentMSecsSinceEpoch();
         if (now - asked.value(r->key) >= 1000 && !(r->finished && d.at)) {   // (a finished one doesn't change)
@@ -552,7 +553,8 @@ void JobsWindow::show_details()
         if (at >= from && at - from < steps->count())
             steps->scrollToItem(steps->item(at - from));
     }
-    QString body = theirs ? (d.at ? d.log : tx("Asking the Kestrel it runs in for its log…"))
+    QString body = closed ? (d.at ? d.log : tx("The Kestrel it ran in has closed, so its log isn't available."))
+                   : theirs ? (d.at ? d.log : tx("Asking the Kestrel it runs in for its log…"))
                    : fin  ? fin->log
                    : task ? task->log_text()
                           : QString();

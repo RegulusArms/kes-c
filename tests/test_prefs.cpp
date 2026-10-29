@@ -6,12 +6,16 @@
 
 #include "archive_ui.h"
 #include "menus.h"
+#include "places.h"
 #include "prefs.h"
 #include "prefswin.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDirIterator>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QHeaderView>
 #include <QLineEdit>
 #include <QMenu>
@@ -167,7 +171,7 @@ int main(int argc, char **argv)
         if (!pd || !pd->editor(p.key))
             no_editor << p.key;
     check(pd && is_free_window(pd) &&
-              tab_texts == QStringList({"General", "Views", "Sidebar", "Overview", "Images && Videos", "Files", "Archives", "Windows", "Menus"}) &&
+              tab_texts == QStringList({"General", "Views", "Sidebar", "Overview", "Images && Videos", "Files", "Archives", "Windows", "Privacy", "Menus"}) &&
               no_editor.isEmpty(),
           "Preferences is a free window with tabs (" + tab_texts.join(", ") + ") and a control for every setting (a tab's & "
           "doubled, so it shows as &, not as the next letter underlined)" +
@@ -204,6 +208,93 @@ int main(int argc, char **argv)
     box("sidebar")->setChecked(true);
     spin("folder_count")->setValue(2);
     check(g_thumbs->folder_count == 2, "folder preview settings take effect at once");
+
+    // ---- Sidebar → Places shown: an unticked place leaves every window's sidebar
+    {
+        auto *shown_places = pd->findChild<QListWidget *>("sidebar_places_list");
+        QListWidgetItem *recent = nullptr;
+        for (int i = 0; shown_places && i < shown_places->count(); ++i)
+            if (shown_places->item(i)->data(Qt::UserRole) == "recent")
+                recent = shown_places->item(i);
+        bool listed = recent && recent->checkState() == Qt::Checked && w1->sidebar->entry_keys("places").contains(places::RECENT);
+        if (recent)
+            recent->setCheckState(Qt::Unchecked);
+        check(listed && prefs::get("sidebar_hidden").toStringList() == QStringList{"recent"} &&
+                  !w1->sidebar->entry_keys("places").contains(places::RECENT) &&
+                  !w2->sidebar->entry_keys("places").contains(places::RECENT) &&
+                  w1->sidebar->entry_keys("places").contains(places::STARRED),
+              "Recent unticked under Places shown leaves every window's sidebar (the other places stay)");
+        Sidebar::hide_place("starred");   // the sidebar's Hide from Sidebar
+        check(wait_for([&]() {
+                  return !w2->sidebar->entry_keys("places").contains(places::STARRED) && shown_places &&
+                         shown_places->item(3)->checkState() == Qt::Unchecked;
+              }),
+              "Hide from Sidebar hides a place in every window, and shows it unticked in Preferences");
+        if (recent)
+            recent->setCheckState(Qt::Checked);
+        check(w1->sidebar->entry_keys("places").contains(places::RECENT), "ticked again, it's back");
+        prefs::reset({"sidebar_hidden"});
+    }
+
+    // ---- Privacy: each history can be turned off, and cleared
+    {
+        QString opened = join(dir, "small.txt");
+        box("history_recent")->setChecked(false);
+        places::add_recent({opened});
+        bool kept_out = !places::recent_files().contains(opened);
+        box("history_recent")->setChecked(true);
+        places::add_recent({opened});
+        check(kept_out && places::recent_files().contains(opened),
+              "with Add the files I open to Recent unticked, an opened file isn't added to Recent; ticked, it is");
+        QString visited = join(dir, "sub");
+        box("history_frequent")->setChecked(false);
+        places::visit_folder(visited);
+        places::save_frequent();
+        bool not_counted = !places::frequent_folders(200).contains(visited);
+        box("history_frequent")->setChecked(true);
+        places::visit_folder(visited);
+        places::save_frequent();
+        check(not_counted && places::frequent_folders(200).contains(visited),
+              "with Count the folders I open unticked, a folder opened isn't counted; ticked, it is");
+        box("history_servers")->setChecked(false);
+        w1->remember_server("sftp://nobody@kestrel.invalid/");
+        bool not_kept = settings().value("recent_servers").toStringList().isEmpty();
+        box("history_servers")->setChecked(true);
+        w1->remember_server("sftp://nobody@kestrel.invalid/");
+        check(not_kept && settings().value("recent_servers").toStringList() == QStringList{"sftp://nobody@kestrel.invalid/"},
+              "with Remember the servers unticked, a server connected to isn't remembered; ticked, it is");
+        check(pd->editor("history_desktop") && qobject_cast<QLabel *>(pd->editor("history_desktop")) &&
+                  qobject_cast<QLabel *>(pd->editor("history_desktop"))->text() == "On",
+              "Privacy shows the desktop's File History switch (on here)");
+        auto answer_yes = [](const QString &title) {
+            QMessageBox *q = nullptr;
+            wait_for([&]() {
+                for (QWidget *x : QApplication::topLevelWidgets())
+                    if (auto *b = qobject_cast<QMessageBox *>(x); b && b->isVisible() && b->windowTitle() == title)
+                        q = b;
+                return q != nullptr;
+            });
+            if (q)
+                q->button(QMessageBox::Yes)->click();
+            return q != nullptr;
+        };
+        settings().setValue("viewer_recent_folders", QStringList{dir});
+        settings().setValue("chooser_folder", dir);
+        pd->findChild<QPushButton *>("clear_history")->click();
+        bool asked = answer_yes("Clear Kestrel's History");
+        check(asked && wait_for([&]() {
+                  return places::frequent_folders(200).isEmpty() && !settings().contains("recent_servers") &&
+                         !settings().contains("viewer_recent_folders") && !settings().contains("chooser_folder");
+              }),
+              "Clear Kestrel's History asks, then forgets the Frequent Folders, the recent servers, the last Save folder "
+              "and the viewer's recent folders");
+        pd->findChild<QPushButton *>("clear_recent")->click();
+        asked = answer_yes("Clear Recent Files");
+        check(asked && wait_for([&]() { return places::recent_files().isEmpty(); }),
+              "Clear Recent Files asks, then empties the desktop's Recent list");
+        places::add_recent({opened});
+        check(places::recent_files() == QStringList{opened}, "...which files are added to again afterwards");
+    }
 
     // ---- a change made in a window shows in the open Preferences
     action(w2, "Show Hidden Files")->trigger();   // Ctrl+H

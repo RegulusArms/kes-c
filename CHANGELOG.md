@@ -2,7 +2,22 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.30
+## 0.3.2-alpha.31
+
+- **Hide places from the sidebar.** Right-click Recent, Starred, Trash or any other place in the sidebar →
+  **Hide from Sidebar**, or untick it under Preferences → Sidebar → **Places shown**, where it can be ticked back.
+  It applies to every window and every Kestrel.
+- **A Privacy tab in Preferences.** Turn off, one by one, what Kestrel remembers as you use it: adding the files you
+  open to Recent, counting the folders you open (Frequent Folders), the servers you connect to, and the image
+  viewer's Move To / Copy To folders. It shows whether the desktop's File History switch is on, and has
+  **Clear Kestrel's History…** and **Clear Recent Files…** (the desktop's list, which other apps share).
+- **Finished jobs stay in the Jobs window until Clear Finished.** Only the newest 50 were kept, and a Kestrel that
+  closed took its finished jobs out of the other Kestrels' Jobs window. Now every finished job stays listed until
+  you clear them; one from a Kestrel that has closed says its log went with it.
+- **Generate Previews, for just this folder.** The Previews submenu had Generate Previews Recursively and Regenerate
+  Previews but nothing to make the missing previews of only the folder itself: **Generate Previews** does that.
+
+## 0.3.2-alpha.30 (2026-10-29)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha30).
 

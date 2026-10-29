@@ -8,6 +8,7 @@
 #include "keyring.h"
 #include "menus.h"
 #include "overview.h"
+#include "places.h"
 #include "prefs.h"
 #include "tapebuf.h"
 #include "thumbs.h"
@@ -674,6 +675,75 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         loaders[key] = show;
         return box;
     }
+    if (key == "sidebar_hidden") {
+        auto *list = new QListWidget;
+        list->setObjectName("sidebar_places_list");
+        list->setMaximumHeight(150);
+        // each place; ticked: shown
+        connect(list, &QListWidget::itemChanged, this, [this, list]() {
+            QStringList hidden;
+            for (int i = 0; i < list->count(); ++i)
+                if (list->item(i)->checkState() != Qt::Checked)
+                    hidden << list->item(i)->data(Qt::UserRole).toString();
+            if (!loading)
+                prefs::set("sidebar_hidden", hidden);
+        });
+        for (const auto &[id, name] : sidebar::PLACES) {
+            auto *it = new QListWidgetItem(tx(name));
+            it->setData(Qt::UserRole, id);
+            it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+            list->addItem(it);
+        }
+        // the ticks set in place (not the items made again: a change can come while one is being ticked)
+        loaders[key] = [list]() {
+            QSignalBlocker quiet(list);
+            QStringList hidden = prefs::get("sidebar_hidden").toStringList();
+            for (int i = 0; i < list->count(); ++i)
+                list->item(i)->setCheckState(hidden.contains(list->item(i)->data(Qt::UserRole).toString()) ? Qt::Unchecked
+                                                                                                            : Qt::Checked);
+        };
+        return list;
+    }
+    if (key == "history_desktop") {   // the desktop's own switch, shown (changed in its settings, for every app)
+        auto *label = new QLabel;
+        label->setWordWrap(true);
+        loaders[key] = [label]() {
+            label->setText(places::remembers_history() ? tx("On")
+                                                       : tx("Off: Kestrel adds nothing to Recent and counts no folders"));
+        };
+        return label;
+    }
+    if (key == "history_clear") {
+        auto *box = new QWidget;
+        auto *h = new QHBoxLayout(box);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto *mine = new QPushButton(tx("Clear Kestrel's History…"));
+        mine->setObjectName("clear_history");
+        mine->setToolTip(tx("Forget the Frequent Folders, the recent servers, the folder the last Save window was left in, "
+                            "and the image viewer's recent folders"));
+        auto *recent = new QPushButton(tx("Clear Recent Files…"));
+        recent->setObjectName("clear_recent");
+        recent->setToolTip(tx("Empty the desktop's Recent list, which other apps share"));
+        h->addWidget(mine);
+        h->addWidget(recent);
+        h->addStretch(1);
+        connect(mine, &QPushButton::clicked, this, [this]() {
+            ask_yes(this, tx("Clear Kestrel's History"),
+                    tx("Forget the Frequent Folders, the recent servers, the folder the last Save window was left in, and "
+                       "the image viewer's recent folders, in every Kestrel window?"),
+                    []() { places::clear_history(); });
+        });
+        connect(recent, &QPushButton::clicked, this, [this]() {
+            QPointer<QWidget> owner(parentWidget() ? parentWidget() : this);   // stays open after Preferences closes
+            ask_yes(this, tx("Clear Recent Files"),
+                    tx("Empty the list of recently used files? It's the desktop's, so Recent empties in other apps too."),
+                    [owner]() {
+                        if (!places::clear_recent() && owner)
+                            warn(owner, tx("Clear Recent Files"), tx("The list of recently used files couldn't be written."));
+                    });
+        });
+        return box;
+    }
     if (key == "archive_passwords") {
         auto *forget = new QPushButton(tx("Forget Saved Archive Passwords…"));
         forget->setObjectName("forget_passwords");
@@ -814,7 +884,7 @@ QStringList PreferencesDialog::keys_of(const QString &tab) const
     for (const prefs::Pref &p : prefs::all()) {
         if (p.tab != tab)
             continue;
-        if (p.key == "tape_buffer_now")
+        if (p.key == "tape_buffer_now" || p.key == "history_desktop" || p.key == "history_clear")   // (not settings)
             continue;
         if (p.key == "sidebar_sections")
             out << "sidebar_sections" << "sidebar_collapsed";

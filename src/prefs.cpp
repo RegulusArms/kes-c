@@ -83,6 +83,8 @@ static QList<Pref> build()
     // -- Sidebar
     add(TX_NOOP("Sidebar"), "", "sidebar_sections", TX_NOOP("Sections"), CUSTOM, QStringList(),
         TX_NOOP("drag a section's heading in the sidebar; click it to collapse it"));
+    add(TX_NOOP("Sidebar"), "", "sidebar_hidden", TX_NOOP("Places shown"), CUSTOM, QStringList(),
+        TX_NOOP("a place's right-click menu → Hide from Sidebar"), TX_NOOP("Ticked places show in the sidebar's Places"));
 
     // -- Overview
     add(TX_NOOP("Overview"), "", "overview_sections", TX_NOOP("Sections"), CUSTOM, QStringList(), "",
@@ -218,6 +220,23 @@ static QList<Pref> build()
         TX_NOOP("a Save window's Overview (Add Folder…; right-click one to move or remove it)"),
         TX_NOOP("Folders shown first on a Save window's Overview, for saving from other apps. Only for Save windows: adding "
         "one doesn't star or bookmark it."));
+
+    // -- Privacy
+    const QString history = TX_NOOP("History");
+    add(TX_NOOP("Privacy"), history, "history_desktop", TX_NOOP("The desktop's File History"), CUSTOM, QVariant(),
+        TX_NOOP("Settings → Privacy → File History & Trash"),
+        TX_NOOP("Shared by every app: while it's off, Kestrel adds nothing to Recent and counts no folders, whatever is "
+        "ticked below."));
+    add(TX_NOOP("Privacy"), history, "history_recent", TX_NOOP("Add the files I open to Recent"), BOOL, true, QString(),
+        TX_NOOP("Recent is the desktop's list of recently used files, shared with other apps."));
+    add(TX_NOOP("Privacy"), history, "history_frequent", TX_NOOP("Count the folders I open (the Overview's Frequent Folders)"),
+        BOOL, true);
+    add(TX_NOOP("Privacy"), history, "history_servers",
+        TX_NOOP("Remember the servers I connect to (the sidebar's Mounts, the Overview)"), BOOL, true);
+    add(TX_NOOP("Privacy"), history, "history_viewer_folders",
+        TX_NOOP("Remember the image viewer's Move To / Copy To folders (Ctrl+1–9, Alt+1–9)"), BOOL, true);
+    add(TX_NOOP("Privacy"), history, "history_clear", TX_NOOP("Clear"), CUSTOM, QVariant(),
+        TX_NOOP("Remove from Frequent Folders, Remove from Recent Servers (right-click one)"));
     return l;
 }
 

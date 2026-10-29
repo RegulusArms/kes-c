@@ -94,7 +94,8 @@ static Entry submenu(const QString &id, const QString &title, const QList<Entry>
 static QList<Entry> previews_menu()
 {
     return {submenu("previews", tx(builtin_title("previews")),
-                    {item("gen_previews_rec", tx("Generate Previews Recursively")),
+                    {item("gen_previews", tx("Generate Previews")),
+                     item("gen_previews_rec", tx("Generate Previews Recursively")),
                      item("gen_folder_previews", tx("Generate Folder Previews")),
                      item("gen_folder_previews_rec", tx("Generate Folder Previews Recursively")), sep(),
                      item("regen_previews", tx("Regenerate Previews")),

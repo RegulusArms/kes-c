@@ -926,6 +926,8 @@ void MainWindow::open_location(const QString &target_in, bool new_tab_)
 
 void MainWindow::remember_server(const QString &uri)
 {
+    if (!prefs::get("history_servers").toBool())
+        return;
     QStringList recents;
     for (const QString &u : settings().value("recent_servers").toStringList())
         if (u != uri)
@@ -1002,6 +1004,8 @@ void MainWindow::add_preview_menu(QMenu *menu, const QString &folder)
     // "Recursively", this folder and the folders directly in it (and this folder's files).
     QMenu *pm = menu->addMenu(icon({"view-refresh"}), tx("Previews"));
     menus::tag(pm->menuAction(), "previews");
+    menus::tag(pm->addAction(tx("Generate Previews"), this, [this, folder]() { build_previews(folder, false, 1); }),
+               "gen_previews");
     menus::tag(pm->addAction(tx("Generate Previews Recursively"), this, [this, folder]() { build_previews(folder); }),
                "gen_previews_rec");
     menus::tag(pm->addAction(tx("Generate Folder Previews"), this, [this, folder]() { build_previews(folder, true, 1); }),
@@ -1719,9 +1723,11 @@ void apply_settings(const QStringList &keys)
             for (MainWindow *w : wins)
                 for (Pane *p : w->panes())
                     p->set_search_options(prefs::get("search_recursive").toBool(), prefs::get("search_contents").toBool());
-        } else if (key == "sidebar_sections" || key == "sidebar_collapsed") {
+        } else if (key == "sidebar_sections" || key == "sidebar_collapsed" || key == "sidebar_hidden") {
             for (MainWindow *w : WINDOWS)
                 w->sidebar->refresh();
+        } else if (key.startsWith("history_")) {
+            // read each time a file is opened, a folder entered…; the Overview follows history_frequent itself
         } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
             // read each time a menu is built, or a copy onto a tape starts
         } else if (key == "chooser_start" || key == "chooser_places") {

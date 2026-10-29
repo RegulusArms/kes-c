@@ -144,9 +144,11 @@ public:
     QList<Task *> mine() const { return local; }   // this Kestrel's, every window's
     // the jobs that keep this Kestrel running (keeps_running), running or waiting
     QList<Task *> keeping() const;
+    // Finished jobs stay until Clear Finished (here or in another Kestrel), however many, also a closed Kestrel's
     QList<FinishedTask> finished;        // ours that have ended, newest last
     QMap<QString, QList<FinishedTask>> remote_finished;   // flight -> the other Kestrels' (no logs: ask_detail)
     void clear_finished();               // every Kestrel's
+    bool has_left(const QString &flight) const { return left.contains(flight); }   // closed: its logs went with it
     // Another Kestrel's job or finished job: ask it for its steps and log; detail() has them once it answers
     void ask_detail(const QString &flight, const QString &task);
     JobDetail detail(const QString &flight, const QString &task) const { return details.value(flight + "/" + task); }
@@ -163,6 +165,7 @@ private:
     QList<Task *> local;
     QMap<QString, QList<TaskInfo>> remote;   // flight -> its tasks
     QHash<QString, JobDetail> details;       // "flight/task" -> what it answered
+    QSet<QString> left;                      // flights that have closed (their finished jobs are kept)
     void publish_finished();
     QTimer *timer;
 };

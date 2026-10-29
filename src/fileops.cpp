@@ -222,9 +222,8 @@ TaskBoard::TaskBoard()
     timer->setSingleShot(true);
     connect(timer, &QTimer::timeout, this, &TaskBoard::publish);
     connect(atc::radio(), &atc::Radio::heard, this, &TaskBoard::on_heard);
-    connect(atc::radio(), &atc::Radio::reset, this, [this]() {
+    connect(atc::radio(), &atc::Radio::reset, this, [this]() {   // (the finished jobs stay: they're re-told, merged)
         remote.clear();
-        remote_finished.clear();
         Q_EMIT changed();
     });
 }
@@ -257,8 +256,6 @@ void TaskBoard::add(Task *task)
                                                      : "done";
         finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
                                  task->admin, task->id};
-        while (finished.size() > 50)
-            finished.removeFirst();
         publish_finished();
         schedule(0);
         Q_EMIT changed();
@@ -276,16 +273,25 @@ void TaskBoard::clear_finished()
     Q_EMIT changed();
 }
 
+// The newest that fit in a message (thousands): the others merge them with what they had, so the older ones stay with
+// them; only a Kestrel that starts after so many has ended misses the oldest
 void TaskBoard::publish_finished()
 {
     QJsonArray list;
-    for (const FinishedTask &f : finished)
-        list << QJsonObject{{"id", f.id},
-                            {"title", f.title},
-                            {"state", f.state},
-                            {"took", double(f.took_ms)},
-                            {"ended", double(f.ended.toMSecsSinceEpoch())},
-                            {"admin", f.admin}};
+    qint64 size = 0;
+    for (int i = finished.size() - 1; i >= 0; --i) {
+        const FinishedTask &f = finished[i];
+        QJsonObject o{{"id", f.id},
+                      {"title", f.title},
+                      {"state", f.state},
+                      {"took", double(f.took_ms)},
+                      {"ended", double(f.ended.toMSecsSinceEpoch())},
+                      {"admin", f.admin}};
+        size += QJsonDocument(o).toJson(QJsonDocument::Compact).size() + 1;
+        if (size > atc::MAX_MESSAGE / 2)
+            break;
+        list.prepend(o);
+    }
     atc::announce("finished", {{"jobs", list}}, true);
 }
 
@@ -359,6 +365,8 @@ void TaskBoard::on_heard(const QJsonObject &m)
     if (m.value("own").toBool())
         return;
     QString type = m.value("type").toString(), from = m.value("from").toString();
+    if (type == "tasks" || type == "finished")
+        left.remove(from);   // (back: a flight's name isn't reused, but a tower restart re-tells them)
     if (type == "tasks") {
         QList<TaskInfo> l;
         for (const QJsonValue &v : m.value("tasks").toArray()) {
@@ -381,7 +389,11 @@ void TaskBoard::on_heard(const QJsonObject &m)
             remote[from] = l;
         Q_EMIT changed();
     } else if (type == "finished") {
-        QList<FinishedTask> l;
+        // merged with what it told before (only Clear Finished takes them away: a long list comes cut to fit)
+        QList<FinishedTask> l = remote_finished.value(from);
+        QSet<QString> had;
+        for (const FinishedTask &f : l)
+            had << f.id;
         for (const QJsonValue &v : m.value("jobs").toArray()) {
             QJsonObject o = v.toObject();
             FinishedTask f;
@@ -392,11 +404,10 @@ void TaskBoard::on_heard(const QJsonObject &m)
             f.ended = QDateTime::fromMSecsSinceEpoch(qint64(o.value("ended").toDouble()));
             f.admin = o.value("admin").toBool();
             f.flight = from;
-            l << f;
+            if (!had.contains(f.id))
+                l << f;
         }
-        if (l.isEmpty())
-            remote_finished.remove(from);
-        else
+        if (!l.isEmpty())
             remote_finished[from] = l;
         Q_EMIT changed();
     } else if (type == "clear_finished") {
@@ -457,9 +468,9 @@ void TaskBoard::on_heard(const QJsonObject &m)
                 t->set_paused(action == "pause");
         }
         schedule(0);
-    } else if (type == "left") {
-        bool had = remote.remove(from) + remote_finished.remove(from);
-        if (had)
+    } else if (type == "left") {   // its finished jobs stay listed (without their logs) until Clear Finished
+        left << from;
+        if (remote.remove(from) || remote_finished.contains(from))
             Q_EMIT changed();
     } else if (type == "cancel" && m.value("flight").toString() == atc::radio()->flight()) {
         for (Task *t : local)

@@ -1312,6 +1312,8 @@ QStringList ImageViewer::recent_folders() { return settings().value("viewer_rece
 
 void ImageViewer::remember_folder(const QString &folder)
 {
+    if (!prefs::get("history_viewer_folders").toBool())
+        return;
     QStringList l = recent_folders();
     l.removeAll(folder);
     l.prepend(folder);

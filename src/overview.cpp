@@ -951,7 +951,7 @@ OverviewPage::OverviewPage(ThumbnailManager *thumbs, QWidget *parent) : QScrollA
         bool redo = std::any_of(keys.begin(), keys.end(), [](const QString &k) { return k.startsWith("overview_"); });
         if (rescan && isVisible())
             refresh();
-        else if (redo || (save_places && keys.contains("chooser_places")))
+        else if (redo || (save_places && keys.contains("chooser_places")) || keys.contains("history_frequent"))
             rebuild();
     });
     connect(places::signals_(), &places::Signals::starred_changed, this, [this]() {
@@ -1198,10 +1198,12 @@ void OverviewPage::frequent_section()
             break;
     }
     if (!shown)
-        lay->addWidget(small(new QLabel(places::remembers_history()
-                                            ? tx("No folders yet — the folders you open most will show here.")
-                                            : tx("File History is off in the desktop's privacy settings, so the folders "
-                                                 "you open aren't counted."))));
+        lay->addWidget(small(new QLabel(!places::remembers_history()
+                                            ? tx("File History is off in the desktop's privacy settings, so the folders "
+                                                 "you open aren't counted.")
+                                        : !prefs::get("history_frequent").toBool()
+                                            ? tx("Counting the folders you open is off in Preferences → Privacy.")
+                                            : tx("No folders yet — the folders you open most will show here."))));
 }
 
 QStringList OverviewPage::section_titles() const { return titles; }

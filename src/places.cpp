@@ -1,6 +1,7 @@
 #include "places.h"
 
 #include "atc.h"
+#include "prefs.h"
 #include "drives.h"
 #include "util.h"
 
@@ -368,7 +369,7 @@ bool remembers_history() { return remember_recent(); }
 
 void visit_folder(const QString &dir)
 {
-    if (!dir.startsWith('/') || !remember_recent())
+    if (!dir.startsWith('/') || !remember_recent() || !prefs::get("history_frequent").toBool())
         return;
     if (pending_visits.isEmpty()) {
         static bool hooked = false;
@@ -430,7 +431,7 @@ void add_recent(const QStringList &paths_in)
     for (const QString &p : paths_in)   // (files already; a tape's aren't asked again: it may be busy seeking)
         if (drives::slow_kind(p) != drives::Slow::None || isfile(p))
             wanted.insert(file_uri(p), p);
-    if (wanted.isEmpty() || !remember_recent())
+    if (wanted.isEmpty() || !remember_recent() || !prefs::get("history_recent").toBool())
         return;
     QString now = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH:mm:ss.zzz000Z");
     bool ok = false;
@@ -524,6 +525,38 @@ void add_recent(const QStringList &paths_in)
         }, false, true);
     } catch (const OSError &) {
     }
+}
+
+// ---------------------------------------------------------------- clearing (Preferences → Privacy)
+
+void clear_history()
+{
+    // what BleachBit's History option deletes (kes-setup's cleaner); another Kestrel's visits not yet written are
+    // still added when it writes them, within a few seconds
+    pending_visits.clear();
+    write_frequent({});
+    for (const char *key : {"recent_servers", "chooser_folder", "viewer_recent_folders"})
+        settings().remove(key);
+    settings().sync();
+    atc::announce("sidebar");   // the sidebars' recent servers, here and in other Kestrels
+}
+
+bool clear_recent()
+{
+    // the whole list, every app's (as the desktop's Clear History does): an empty one in its place, whole
+    static const char *EMPTY = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                               "<xbel version=\"1.0\"\n"
+                               "      xmlns:bookmark=\"http://www.freedesktop.org/standards/desktop-bookmarks\"\n"
+                               "      xmlns:mime=\"http://www.freedesktop.org/standards/shared-mime-info\"\n"
+                               ">\n</xbel>\n";
+    if (!lexists(recent_file()))
+        return true;
+    try {
+        write_atomic(recent_file(), EMPTY);
+    } catch (const OSError &) {
+        return false;
+    }
+    return true;
 }
 
 }  // namespace places

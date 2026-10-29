@@ -308,6 +308,8 @@ int main(int argc, char **argv)
         build(true, -1);
         check(preview(s2) && large() == 0, "Generate Folder Previews Recursively makes previews for every folder below, "
                                            "and no thumbnail for every file");
+        build(false, 1);
+        check(large() == 2, "Generate Previews makes the thumbnails of the folder's own files, not deeper");
         build(false, -1);
         check(large() == 6, "Generate Previews Recursively makes every file's thumbnail too");
     }
@@ -642,7 +644,7 @@ int main(int argc, char **argv)
                     if (!x->isSeparator())
                         entries << x->text();
         delete m;
-        check(entries == QStringList({"Generate Previews Recursively", "Generate Folder Previews",
+        check(entries == QStringList({"Generate Previews", "Generate Previews Recursively", "Generate Folder Previews",
                                       "Generate Folder Previews Recursively", "Regenerate Previews",
                                       "Regenerate Previews Recursively", "Regenerate Folder Previews",
                                       "Regenerate Folder Previews Recursively"}),
