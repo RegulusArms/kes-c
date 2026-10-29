@@ -1496,7 +1496,7 @@ int main(int argc, char **argv)
             write_atomic(fileops::dirsizes::cache_file(), QJsonDocument(all).toJson());
             write_text(join(fs, "new.bin"), QByteArray(66, 'z'));
             d = new PropertiesDialog(w, {fs});
-            QString at = QDateTime::fromSecsSinceEpoch(then).toString("yyyy-MM-dd HH:mm");
+            QString at = i18n::date_time(QDateTime::fromSecsSinceEpoch(then));
             check(size_text(d).contains("1,234 bytes") && d->size_age->text() == "Calculated 3 days ago (" + at + ")" &&
                       d->recalc->isEnabled(),
                   "a remembered size shows at once, without counting, saying how old it is (" + d->size_age->text() + ")");

@@ -111,6 +111,48 @@ To keep it that way, a new window:
 
 tests/test_ui.cpp checks the source for modal calls, so one that slips in fails the tests.
 
+## Translations
+
+Kestrel is set up to be translated, though only English ships. Every text the user sees goes through `tx()`, and
+`translations/kestrel_<language>.ts` holds a language's translations. Each `.ts` is built into `kes` (as
+`:/i18n/kestrel_<language>.qm`), and at startup Kestrel loads English, then the desktop's language on top when there's a
+file for it. So adding a language is adding its `.ts`, with nothing to change in the code. Numbers, sizes and dates
+follow the system's formats (`LC_NUMERIC`, `LC_TIME`) whatever the language, as GNOME does.
+
+**Marking a new text** (`src/i18n.h`, included by `util.h`):
+
+- `tx("Open")` for a text. All of Kestrel's texts share one context, so the same English is one translation everywhere;
+  when it needs two (a verb and a noun), tell them apart: `tx("Open", "verb")`.
+- `txn("%Ln file(s)", n)` for a text with a count: the translation picks the form for `n`, as each language counts
+  (English has two, some have one or several). `%Ln` writes the number with the system's digit grouping (`%n`
+  without). After adding one, run `translations/update.sh` and write its two English forms in
+  `translations/kestrel_en.ts` ("%Ln file" and "%Ln files"), or a count of one shows as "1 file(s)".
+- A sentence with parts in it is one text: `tx("Copying “%1” to %2").arg(name, folder)` with every part in a single
+  `.arg()`, never pieces joined with `+`, so a translation can put the parts in its own order.
+- A text kept in a table is marked where it's written with `TX_NOOP("Name")` (`TXN_NOOP` for a count's) and passed
+  through `tx()` (`txn()`) where it's shown. Use this when the English is also a key, as Preferences' tab and group
+  names and the Overview's section titles are.
+- Not for settings keys, menu ids, file names, command lines, or what's handed to other programs. A line that passes a
+  literal straight to a widget or a message on purpose says why with `notr:` in a comment.
+- Code never compares what a widget shows: a combo box keeps its value as the item's data, not its text.
+
+**The tools:**
+
+- `translations/update.sh` (or `cmake --build build --target update_translations`) refreshes every `.ts` from the code
+  with `lupdate`: new texts added, gone ones dropped, translations kept. English keeps only the plural forms.
+- `translations/update.sh --pseudo pseudo.qm` makes the pseudo-translation, where every text is padded and accented
+  (`[Öρéñ··]`). Run Kestrel with it, `KESTREL_TEST_TRANSLATION=pseudo.qm build/kes`: a text still in plain English
+  wasn't marked, and a clipped one needs more room, as translations are often longer than English.
+
+**Adding a language:** copy `kestrel_en.ts` to `kestrel_<language>.ts` (`de`, `pt_BR`…), set its `language`
+attribute, run `translations/update.sh` to fill it with every text, and translate them, for example with Qt
+Linguist (`linguist`). Rebuild and start Kestrel with that language (`LANGUAGE=de build/kes`). Qt's own texts
+(standard buttons) come from Qt's translations for that language.
+
+The tests watch this: `ui` fails on a literal passed to a widget or message without `tx()`, and `i18n` checks that
+every `.ts` builds and keeps each text's `%1` and `%n`, that every count in the code has English forms, and, with the
+pseudo-translation installed, that the main windows and menus show no untranslated text.
+
 ## Layout
 
 | File | Purpose |
@@ -156,6 +198,8 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |
 | `src/health.cpp` | Drive health (S.M.A.R.T.) from udisks over D-Bus: the cards' health line, the Drive Health window, the failing-drive notification |
+| `src/i18n.cpp` | Translations: loading them at startup (`tx()`, `txn()` in `i18n.h`), and the system's formats for numbers and dates |
+| `translations/` | Each language's `.ts` file (only English's plural forms ship) and `update.sh`, which refreshes them from the code and makes the pseudo-translation |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |

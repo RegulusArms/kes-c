@@ -353,9 +353,17 @@ if (( DOCK )); then
     fi
 fi
 if (( BLEACHBIT )); then
-    mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
-    bleachbit_cleaner > "$BLEACHBIT_CLEANER"
+    # Only the user may change it, whatever the umask: BleachBit ignores a cleaner others could edit (world-writable)
+    # as a security measure. Written whole under a hidden name, then renamed into place.
+    (
+        umask 022
+        mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
+        part="$(dirname "$BLEACHBIT_CLEANER")/.kestrel-explorer.xml.part"
+        bleachbit_cleaner > "$part" && chmod 644 "$part" && sync "$part" && mv -f "$part" "$BLEACHBIT_CLEANER" ||
+            { rm -f "$part"; exit 1; }
+    ) || { echo "Couldn't write BleachBit's cleaner ($BLEACHBIT_CLEANER)." >&2; exit 1; }
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder, frequent" \
-         "folders), Starred, pinned items, and folder covers, colours and sorts."
+         "folders), Starred, pinned items, and folder covers, colours and sorts. The first time BleachBit opens" \
+         "afterwards, it asks whether to trust the new cleaner (a check it makes for every cleaner you add): choose OK."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

@@ -172,9 +172,15 @@ dock_check '[[ "$(exts)" == "$EXTS_BEFORE" && -d "$WORK/extensions/$FOCUS_UUID" 
 # folder linked from the cache, the settings it doesn't name) as it was.
 fresh
 CLEANER="$HOME/.config/bleachbit/cleaners/kestrel-explorer.xml"
-"$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1
+# under umask 000 (as docker exec gives): BleachBit ignores a world-writable cleaner, so it must not come out as one
+(umask 000; "$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1)
 check '[[ -f "$CLEANER" ]] && python3 -c "import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$CLEANER"' \
     "kes-setup --bleachbit: writes BleachBit's cleaner, as well-formed XML"
+check '[[ "$(stat -c %a "$CLEANER")" == 644 && "$(stat -c %a "$(dirname "$CLEANER")")" == 755 &&
+         "$(stat -c %a "$HOME/.config/bleachbit")" == 755 && -z "$(ls -A "$(dirname "$CLEANER")" | grep -v "^kestrel-explorer.xml$")" ]]' \
+    "...only the user can change it, also under umask 000 (BleachBit ignores a world-writable cleaner), and no part file is left"
+check 'grep -q "asks whether to trust the new cleaner" "$WORK/out8"' \
+    "...and says BleachBit will ask once whether to trust it"
 cleaner_actions() {   # each action as "command path [parameter]", sorted
     grep -o '<action [^>]*>' "$CLEANER" | sed -E 's/.*command="([^"]*)".*path="([^"]*)"( section="[^"]*" parameter="([^"]*)")?.*/\1 \2 \4/' |
         sed 's/ *$//' | LC_ALL=C sort | tr '\n' ';'

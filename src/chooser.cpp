@@ -181,8 +181,8 @@ QString button_text(const Request &req)
         return t.replace("__", "\x01").remove('_').replace('\x01', '_');   // GTK mnemonics: _Save
     }
     if (req.method == "SaveFiles" || req.directory)
-        return "Select";
-    return req.saving() ? "Save" : "Open";
+        return tx("Select");
+    return req.saving() ? tx("Save") : tx("Open");
 }
 
 // ---------------------------------------------------------------- the D-Bus service
@@ -317,7 +317,7 @@ ChooserBar::ChooserBar(MainWindow *win, const chooser::Request &req, std::functi
     auto *lay = new QHBoxLayout(this);
     lay->setContentsMargins(8, 6, 8, 6);
     if (req.method == "SaveFile") {
-        lay->addWidget(new QLabel("Name:"));
+        lay->addWidget(new QLabel(tx("Name:")));
         name = new QLineEdit(req.current_name);
         name->setMinimumWidth(320);
         connect(name, &QLineEdit::returnPressed, this, &ChooserBar::accept);
@@ -342,7 +342,7 @@ ChooserBar::ChooserBar(MainWindow *win, const chooser::Request &req, std::functi
         });
         lay->addWidget(filter);
     }
-    auto *cancel = new QPushButton("Cancel");
+    auto *cancel = new QPushButton(tx("Cancel"));
     connect(cancel, &QPushButton::clicked, this, [this]() { finish(false); });
     ok_btn = new QPushButton(chooser::button_text(req));
     ok_btn->setDefault(true);
@@ -417,10 +417,9 @@ void ChooserBar::folder_changed()
         QStringList targets = can_look(dir) ? save_targets(dir) : QStringList();
         for (int i = 0; i < targets.size(); ++i)
             renamed += basename(targets[i]) != req.files[i];
-        QString text = QString("Choose a folder for %1 file%2").arg(QString::number(n), n == 1 ? "" : "s");
+        QString text = txn("Choose a folder for %Ln file(s)", n);
         if (renamed)
-            text += QString(" (%1 get%2 a new name: the folder has a file of the same name)")
-                        .arg(QString::number(renamed), renamed == 1 ? "s" : "");
+            text = txn("%1 (%Ln get(s) a new name: the folder has a file of the same name)", renamed).arg(text);
         files_label->setText(text);
     }
     update_button();
@@ -439,11 +438,10 @@ void ChooserBar::activated(const QStringList &files)
 static void confirm_replace(QWidget *parent, const QStringList &existing, std::function<void()> yes)
 {
     QString text = existing.size() == 1
-                       ? QString("A file named “%1” already exists. Do you want to replace it?").arg(basename(existing[0]))
-                       : QString("%1 of these files already exist in this folder. Do you want to replace them?")
-                             .arg(existing.size());
-    auto *box = new QMessageBox(QMessageBox::Question, "Replace File", text, QMessageBox::NoButton, parent);
-    QPushButton *replace = box->addButton("Replace", QMessageBox::DestructiveRole);
+                       ? tx("A file named “%1” already exists. Do you want to replace it?").arg(basename(existing[0]))
+                       : txn("%Ln of these files already exist in this folder. Do you want to replace them?", existing.size());
+    auto *box = new QMessageBox(QMessageBox::Question, tx("Replace File"), text, QMessageBox::NoButton, parent);
+    QPushButton *replace = box->addButton(tx("Replace"), QMessageBox::DestructiveRole);
     box->addButton(QMessageBox::Cancel);
     ask_box(box, [replace, yes](QAbstractButton *b) {
         if (b == replace)
@@ -466,7 +464,7 @@ void ChooserBar::accept()
             return;
         }
         if (!isdir(dirname(target))) {
-            warn(this, "Save", QString("The folder “%1” doesn't exist.").arg(dirname(target)));
+            warn(this, tx("Save"), tx("The folder “%1” doesn't exist.").arg(dirname(target)));
             return;
         }
         if (lexists(target))

@@ -54,7 +54,7 @@ QString ExifVal::text() const
         return QString::fromUtf8(s);
     }
     if (type == 1 || type == 6 || type == 7)
-        return QString("(binary, %1 bytes)").arg(raw.size());
+        return txn("(binary, %Ln byte(s))", raw.size());
     if (nums.size() == 1)
         return fmt_num(nums.first());
     QStringList parts;
@@ -500,13 +500,13 @@ Rows basic_info(const QString &path)
         return out;
     QSize size = reader.size();
     if (size.isValid())
-        out << qMakePair(QString("Dimensions"), QString("%1 × %2").arg(size.width()).arg(size.height()));
+        out << qMakePair(tx("Dimensions"), QString("%1 × %2").arg(size.width()).arg(size.height()));
     QString mode = mode_of(reader.imageFormat());
     QString fmt = QString::fromLatin1(reader.format()).toUpper();
-    out << qMakePair(QString("Format"), mode.isEmpty() ? fmt : QString("%1 (%2)").arg(fmt, mode));
+    out << qMakePair(tx("Format"), mode.isEmpty() ? fmt : QString("%1 (%2)").arg(fmt, mode));
     int n = reader.imageCount();
     if (n > 1)
-        out << qMakePair(QString("Frames"), QString::number(n));
+        out << qMakePair(tx("Frames"), i18n::number(n));
     FileMeta fm = read_file_meta(path);
     if (fm.exif_blob.isEmpty())
         return out;
@@ -521,27 +521,26 @@ Rows basic_info(const QString &path)
     auto text = [&](int tag) { return g(tag) ? g(tag)->text().trimmed() : QString(); };
     QString make = text(0x010F), model = text(0x0110);
     if (!model.isEmpty())
-        out << qMakePair(QString("Camera"), (make + " " + model).trimmed());
+        out << qMakePair(tx("Camera"), (make + " " + model).trimmed());
     if (!text(0xA434).isEmpty())
-        out << qMakePair(QString("Lens"), text(0xA434));
+        out << qMakePair(tx("Lens"), text(0xA434));
     QString taken = !text(0x9003).isEmpty() ? text(0x9003) : text(0x0132);
     if (!taken.isEmpty())
-        out << qMakePair(QString("Taken"), taken);
+        out << qMakePair(tx("Taken"), taken);
     if (const ExifVal *v = g(0x829A); v && v->numeric() && v->num() > 0) {
         double exp = v->num();
-        out << qMakePair(QString("Exposure"), exp < 1 ? QString("1/%1 s").arg(qRound(1 / exp))
-                                                      : QString("%1 s").arg(QString::number(exp, 'g', 6)));
+        out << qMakePair(tx("Exposure"), exp < 1 ? tx("1/%1 s").arg(qRound(1 / exp)) : tx("%1 s").arg(QLocale().toString(exp, 'g', 6)));
     }
     if (const ExifVal *v = g(0x829D); v && v->numeric() && v->num() > 0)
-        out << qMakePair(QString("Aperture"), "f/" + QString::number(v->num(), 'g', 6));
+        out << qMakePair(tx("Aperture"), "f/" + QLocale().toString(v->num(), 'g', 6));
     if (const ExifVal *v = g(0x8827); v && v->numeric() && v->num() > 0)
-        out << qMakePair(QString("ISO"), v->text());
+        out << qMakePair(tx("ISO"), v->text());
     if (const ExifVal *v = g(0x920A); v && v->numeric() && v->num() > 0)
-        out << qMakePair(QString("Focal length"), QString::number(v->num(), 'g', 6) + " mm");
+        out << qMakePair(tx("Focal length"), tx("%1 mm").arg(QLocale().toString(v->num(), 'g', 6)));
     if (double lat, lon; gps_of(exif, &lat, &lon))
-        out << qMakePair(QString("GPS"), QString("%1, %2").arg(QString::number(lat, 'f', 6), QString::number(lon, 'f', 6)));
+        out << qMakePair(tx("GPS"), QString("%1, %2").arg(QString::number(lat, 'f', 6), QString::number(lon, 'f', 6)));
     else if (!exif.gps.isEmpty())
-        out << qMakePair(QString("GPS"), QString("yes"));
+        out << qMakePair(tx("GPS"), tx("yes"));
     return out;
 }
 
@@ -646,11 +645,11 @@ Rows ai_info(const QString &path)
             neg = prompt.mid(ni + 16);
             prompt = prompt.left(ni);
         }
-        res << qMakePair(QString("Prompt"), prompt.trimmed());
+        res << qMakePair(tx("Prompt"), prompt.trimmed());
         if (!neg.trimmed().isEmpty())
-            res << qMakePair(QString("Negative prompt"), neg.trimmed());
+            res << qMakePair(tx("Negative prompt"), neg.trimmed());
         if (!settings.isEmpty())
-            res << qMakePair(QString("Settings"), settings);
+            res << qMakePair(tx("Settings"), settings);
     }
     if (info.contains("prompt")) {
         QByteArray json = info["prompt"].toUtf8();
@@ -691,30 +690,30 @@ Rows ai_info(const QString &path)
                 }
             }
             if (!texts.isEmpty()) {
-                set_default(res, "Prompt", texts.first());
+                set_default(res, tx("Prompt"), texts.first());
                 if (texts.size() > 1)
-                    set_default(res, "Other prompts", texts.mid(1).join("\n---\n"));
+                    set_default(res, tx("Other prompts"), texts.mid(1).join("\n---\n"));
             }
             if (!settings.isEmpty())
-                set_default(res, "Settings", settings.join('\n'));
+                set_default(res, tx("Settings"), settings.join('\n'));
         }
     }
     if (info.contains("workflow")) {
         bool found = false;
         for (auto &r : res)
-            if (r.first == "ComfyUI workflow") {
-                r.second = "embedded (see Metadata tab)";
+            if (r.first == tx("ComfyUI workflow")) {
+                r.second = tx("embedded (see Metadata tab)");
                 found = true;
             }
         if (!found)
-            res << qMakePair(QString("ComfyUI workflow"), QString("embedded (see Metadata tab)"));
+            res << qMakePair(tx("ComfyUI workflow"), tx("embedded (see Metadata tab)"));
     }
-    for (const QString &k : {QString("Description"), QString("Comment"), QString("Software")}) {
+    for (const char *k : {TX_NOOP("Description"), TX_NOOP("Comment"), TX_NOOP("Software")}) {   // (the PNG's own keys)
         QString v = info.value(k);
         if (v.isEmpty())
-            v = info.value(k.toLower());
-        if (!v.trimmed().isEmpty() && !has_key(res, k))
-            res << qMakePair(k, v.trimmed());
+            v = info.value(QString(k).toLower());
+        if (!v.trimmed().isEmpty() && !has_key(res, tx(k)))
+            res << qMakePair(tx(k), v.trimmed());
     }
     return res;
 }
@@ -848,7 +847,7 @@ QList<MetaRow> full_metadata(const QString &path)
     }
     QImageReader reader(path);
     if (!reader.canRead()) {
-        rows << MetaRow{"Error", "", reader.errorString()};
+        rows << MetaRow{tx("Error"), "", reader.errorString()};
         return rows;
     }
     QSize size = reader.size();
@@ -924,9 +923,9 @@ static QStringList exiftool_write(const QString &path, const QStringList &args)
             msgs << t;
     }
     if (r.failed)
-        throw Error("exiftool failed");
+        throw Error(tx("exiftool failed"));
     if (r.rc != 0 || out.contains("0 image files updated") || out.contains("Nothing to do"))
-        throw Error(!msgs.isEmpty() ? msgs.join('\n') : !out.trimmed().isEmpty() ? out.trimmed() : "exiftool failed");
+        throw Error(!msgs.isEmpty() ? msgs.join('\n') : !out.trimmed().isEmpty() ? out.trimmed() : tx("exiftool failed"));
     return msgs;
 }
 
@@ -977,10 +976,10 @@ QString wipe(const QString &path, bool copy, bool keep_basic)
     argv << "-o" << "-" << abspath(path);
     auto r = proc::run(argv, 300000);
     if (r.failed)
-        throw Error("Wiping metadata needs exiftool (package libimage-exiftool-perl).");
+        throw Error(tx("Wiping metadata needs exiftool (package libimage-exiftool-perl)."));
     if (r.rc != 0 || r.out.isEmpty()) {
         QString err = QString::fromUtf8(r.err).trimmed();
-        throw Error(QString("Couldn't wipe the metadata of %1: %2").arg(basename(path), err.isEmpty() ? QString("exiftool failed") : err));
+        throw Error(tx("Couldn't wipe the metadata of %1: %2").arg(basename(path), err.isEmpty() ? tx("exiftool failed") : err));
     }
     struct stat st;
     bool have_mode = ::stat(enc(path).constData(), &st) == 0;
@@ -1047,121 +1046,119 @@ static QStringList family_groups(const QString &fam)
     return {};
 }
 
-#define DATE " Format: YYYY:MM:DD HH:MM:SS."
-
 // (family, "Group:Tag", what it's for) — the common tags offered first
 const QList<CatalogEntry> TAG_CATALOG = {
-    {"EXIF", "EXIF:ImageDescription", "Title or caption describing the image."},
-    {"EXIF", "EXIF:Artist", "Name of the photographer or creator."},
-    {"EXIF", "EXIF:Copyright", "Copyright notice, e.g. “© 2026 Jane Doe. All rights reserved.”"},
-    {"EXIF", "EXIF:UserComment", "Free-form comment. Stable Diffusion tools store generation parameters here in JPEGs."},
-    {"EXIF", "EXIF:DateTimeOriginal", "When the photo was taken." DATE},
-    {"EXIF", "EXIF:CreateDate", "When the image was digitised (normally the same as when it was taken)." DATE},
-    {"EXIF", "EXIF:ModifyDate", "When the image was last edited." DATE},
-    {"EXIF", "EXIF:OffsetTimeOriginal", "Time-zone offset for DateTimeOriginal, e.g. +02:00."},
-    {"EXIF", "EXIF:Orientation", "How viewers should rotate or flip the image when showing it."},
-    {"EXIF", "EXIF:Make", "Manufacturer of the camera or phone."},
-    {"EXIF", "EXIF:Model", "Model name of the camera or phone."},
-    {"EXIF", "EXIF:LensMake", "Manufacturer of the lens."},
-    {"EXIF", "EXIF:LensModel", "Lens used to take the photo."},
-    {"EXIF", "EXIF:SerialNumber", "Serial number of the camera body."},
-    {"EXIF", "EXIF:Software", "Program used to create or last edit the image."},
-    {"EXIF", "EXIF:ExposureTime", "Shutter speed in seconds, e.g. 1/250."},
-    {"EXIF", "EXIF:FNumber", "Aperture f-number, e.g. 2.8."},
-    {"EXIF", "EXIF:ISO", "Sensor sensitivity (ISO speed), e.g. 400."},
-    {"EXIF", "EXIF:FocalLength", "Lens focal length in mm, e.g. 50."},
-    {"EXIF", "EXIF:GPSLatitude", "Latitude in degrees, e.g. 48.8584. Also set GPSLatitudeRef (North/South)."},
-    {"EXIF", "EXIF:GPSLatitudeRef", "Hemisphere for GPSLatitude: N (north) or S (south)."},
-    {"EXIF", "EXIF:GPSLongitude", "Longitude in degrees, e.g. 2.2945. Also set GPSLongitudeRef (East/West)."},
-    {"EXIF", "EXIF:GPSLongitudeRef", "Hemisphere for GPSLongitude: E (east) or W (west)."},
-    {"EXIF", "EXIF:GPSAltitude", "Altitude in metres above sea level."},
-    {"EXIF", "EXIF:XPTitle", "Title shown in Windows Explorer's Details tab."},
-    {"EXIF", "EXIF:XPComment", "Comments shown in Windows Explorer's Details tab."},
-    {"EXIF", "EXIF:XPKeywords", "Tags shown in Windows Explorer, separated by semicolons."},
-    {"EXIF", "EXIF:XPAuthor", "Authors shown in Windows Explorer, separated by semicolons."},
-    {"EXIF", "EXIF:XPSubject", "Subject shown in Windows Explorer's Details tab."},
-    {"File", "File:Comment", "JPEG comment segment — a plain-text note many tools display."},
-    {"XMP", "XMP-dc:Title", "Title of the work (Lightroom, Bridge, digiKam, darktable…)."},
-    {"XMP", "XMP-dc:Description", "Caption or description of the content."},
-    {"XMP", "XMP-dc:Creator", "Creator(s) or author(s); one name per line."},
-    {"XMP", "XMP-dc:Subject", "Keywords; one per line. The standard keyword field for photo managers."},
-    {"XMP", "XMP-dc:Rights", "Copyright / usage rights statement."},
-    {"XMP", "XMP-lr:HierarchicalSubject", "Nested keywords, e.g. “Places|France|Paris”; one per line."},
-    {"XMP", "XMP-xmp:Rating", "Star rating 0–5 (−1 = rejected), used by Lightroom, digiKam, Windows and others."},
-    {"XMP", "XMP-xmp:Label", "Colour label, e.g. Red, Green, Blue."},
-    {"XMP", "XMP-xmp:CreateDate", "When the resource was created." DATE},
-    {"XMP", "XMP-xmp:ModifyDate", "When the resource was last modified." DATE},
-    {"XMP", "XMP-xmp:CreatorTool", "Application that created the file."},
-    {"XMP", "XMP-photoshop:Headline", "Short headline summarising the content."},
-    {"XMP", "XMP-photoshop:DateCreated", "When the content was created (date or date-time)."},
-    {"XMP", "XMP-photoshop:City", "City where the photo was taken."},
-    {"XMP", "XMP-photoshop:State", "State or province where the photo was taken."},
-    {"XMP", "XMP-photoshop:Country", "Country where the photo was taken."},
-    {"XMP", "XMP-photoshop:Credit", "Credit line required when publishing."},
-    {"XMP", "XMP-photoshop:Source", "Original owner or supplier of the content."},
-    {"XMP", "XMP-photoshop:Instructions", "Special instructions, e.g. embargoes or usage restrictions."},
-    {"XMP", "XMP-iptcCore:Location", "Sub-location (venue, landmark or neighbourhood)."},
-    {"XMP", "XMP-iptcCore:CountryCode", "ISO country code, e.g. FR or USA."},
-    {"XMP", "XMP-xmpRights:UsageTerms", "Licence or terms for using the content."},
-    {"XMP", "XMP-xmpRights:WebStatement", "URL of a web page with copyright / licence details."},
-    {"XMP", "XMP-xmpRights:Marked", "True if the content is copyrighted, False if public domain."},
-    {"IPTC", "IPTC:ObjectName", "Short title (IPTC). Used by news agencies and older photo software."},
-    {"IPTC", "IPTC:Caption-Abstract", "Caption / description (IPTC)."},
-    {"IPTC", "IPTC:Keywords", "Keywords (IPTC); one per line."},
-    {"IPTC", "IPTC:By-line", "Photographer / creator (IPTC)."},
-    {"IPTC", "IPTC:CopyrightNotice", "Copyright notice (IPTC)."},
-    {"IPTC", "IPTC:Headline", "Short headline (IPTC)."},
-    {"IPTC", "IPTC:Credit", "Credit line (IPTC)."},
-    {"IPTC", "IPTC:Source", "Original owner of the content (IPTC)."},
-    {"IPTC", "IPTC:City", "City (IPTC)."},
-    {"IPTC", "IPTC:Province-State", "State or province (IPTC)."},
-    {"IPTC", "IPTC:Country-PrimaryLocationName", "Country (IPTC)."},
-    {"IPTC", "IPTC:DateCreated", "Date the content was created (IPTC). Format: YYYY:MM:DD."},
-    {"IPTC", "IPTC:SpecialInstructions", "Usage instructions or restrictions (IPTC)."},
-    {"PNG", "PNG:Title", "Short title of the image (PNG text chunk)."},
-    {"PNG", "PNG:Author", "Name of the image's creator."},
-    {"PNG", "PNG:Description", "Description of the image."},
-    {"PNG", "PNG:Comment", "Miscellaneous comment."},
-    {"PNG", "PNG:Copyright", "Copyright notice."},
-    {"PNG", "PNG:CreationTime", "When the original image was created." DATE},
-    {"PNG", "PNG:Software", "Software used to create the image."},
-    {"PNG", "PNG:Source", "Device used to create the image."},
-    {"PNG", "PNG:Disclaimer", "Legal disclaimer."},
-    {"PNG", "PNG:Parameters", "Stable Diffusion (A1111/Forge) generation parameters: prompt, negative prompt, settings."},
-    {"QuickTime", "QuickTime:Title", "Title shown by media players."},
-    {"QuickTime", "QuickTime:Artist", "Artist or creator."},
-    {"QuickTime", "QuickTime:Author", "Author of the video."},
-    {"QuickTime", "QuickTime:Director", "Director of the video."},
-    {"QuickTime", "QuickTime:Album", "Album or collection the video/track belongs to."},
-    {"QuickTime", "QuickTime:Genre", "Genre, e.g. Documentary."},
-    {"QuickTime", "QuickTime:Year", "Release year."},
-    {"QuickTime", "QuickTime:Comment", "Free-form comment."},
-    {"QuickTime", "QuickTime:Description", "Description of the content."},
-    {"QuickTime", "QuickTime:Keywords", "Keywords, separated by commas."},
-    {"QuickTime", "QuickTime:Copyright", "Copyright notice."},
-    {"QuickTime", "QuickTime:Rating", "Content rating."},
-    {"QuickTime", "QuickTime:CreateDate", "When the video was recorded (stored as UTC)." DATE},
+    {"EXIF", "EXIF:ImageDescription", TX_NOOP("Title or caption describing the image.")},
+    {"EXIF", "EXIF:Artist", TX_NOOP("Name of the photographer or creator.")},
+    {"EXIF", "EXIF:Copyright", TX_NOOP("Copyright notice, e.g. “© 2026 Jane Doe. All rights reserved.”")},
+    {"EXIF", "EXIF:UserComment", TX_NOOP("Free-form comment. Stable Diffusion tools store generation parameters here in JPEGs.")},
+    {"EXIF", "EXIF:DateTimeOriginal", TX_NOOP("When the photo was taken. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"EXIF", "EXIF:CreateDate", TX_NOOP("When the image was digitised (normally the same as when it was taken). Format: YYYY:MM:DD HH:MM:SS.")},
+    {"EXIF", "EXIF:ModifyDate", TX_NOOP("When the image was last edited. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"EXIF", "EXIF:OffsetTimeOriginal", TX_NOOP("Time-zone offset for DateTimeOriginal, e.g. +02:00.")},
+    {"EXIF", "EXIF:Orientation", TX_NOOP("How viewers should rotate or flip the image when showing it.")},
+    {"EXIF", "EXIF:Make", TX_NOOP("Manufacturer of the camera or phone.")},
+    {"EXIF", "EXIF:Model", TX_NOOP("Model name of the camera or phone.")},
+    {"EXIF", "EXIF:LensMake", TX_NOOP("Manufacturer of the lens.")},
+    {"EXIF", "EXIF:LensModel", TX_NOOP("Lens used to take the photo.")},
+    {"EXIF", "EXIF:SerialNumber", TX_NOOP("Serial number of the camera body.")},
+    {"EXIF", "EXIF:Software", TX_NOOP("Program used to create or last edit the image.")},
+    {"EXIF", "EXIF:ExposureTime", TX_NOOP("Shutter speed in seconds, e.g. 1/250.")},
+    {"EXIF", "EXIF:FNumber", TX_NOOP("Aperture f-number, e.g. 2.8.")},
+    {"EXIF", "EXIF:ISO", TX_NOOP("Sensor sensitivity (ISO speed), e.g. 400.")},
+    {"EXIF", "EXIF:FocalLength", TX_NOOP("Lens focal length in mm, e.g. 50.")},
+    {"EXIF", "EXIF:GPSLatitude", TX_NOOP("Latitude in degrees, e.g. 48.8584. Also set GPSLatitudeRef (North/South).")},
+    {"EXIF", "EXIF:GPSLatitudeRef", TX_NOOP("Hemisphere for GPSLatitude: N (north) or S (south).")},
+    {"EXIF", "EXIF:GPSLongitude", TX_NOOP("Longitude in degrees, e.g. 2.2945. Also set GPSLongitudeRef (East/West).")},
+    {"EXIF", "EXIF:GPSLongitudeRef", TX_NOOP("Hemisphere for GPSLongitude: E (east) or W (west).")},
+    {"EXIF", "EXIF:GPSAltitude", TX_NOOP("Altitude in metres above sea level.")},
+    {"EXIF", "EXIF:XPTitle", TX_NOOP("Title shown in Windows Explorer's Details tab.")},
+    {"EXIF", "EXIF:XPComment", TX_NOOP("Comments shown in Windows Explorer's Details tab.")},
+    {"EXIF", "EXIF:XPKeywords", TX_NOOP("Tags shown in Windows Explorer, separated by semicolons.")},
+    {"EXIF", "EXIF:XPAuthor", TX_NOOP("Authors shown in Windows Explorer, separated by semicolons.")},
+    {"EXIF", "EXIF:XPSubject", TX_NOOP("Subject shown in Windows Explorer's Details tab.")},
+    {"File", "File:Comment", TX_NOOP("JPEG comment segment — a plain-text note many tools display.")},
+    {"XMP", "XMP-dc:Title", TX_NOOP("Title of the work (Lightroom, Bridge, digiKam, darktable…).")},
+    {"XMP", "XMP-dc:Description", TX_NOOP("Caption or description of the content.")},
+    {"XMP", "XMP-dc:Creator", TX_NOOP("Creator(s) or author(s); one name per line.")},
+    {"XMP", "XMP-dc:Subject", TX_NOOP("Keywords; one per line. The standard keyword field for photo managers.")},
+    {"XMP", "XMP-dc:Rights", TX_NOOP("Copyright / usage rights statement.")},
+    {"XMP", "XMP-lr:HierarchicalSubject", TX_NOOP("Nested keywords, e.g. “Places|France|Paris”; one per line.")},
+    {"XMP", "XMP-xmp:Rating", TX_NOOP("Star rating 0–5 (−1 = rejected), used by Lightroom, digiKam, Windows and others.")},
+    {"XMP", "XMP-xmp:Label", TX_NOOP("Colour label, e.g. Red, Green, Blue.")},
+    {"XMP", "XMP-xmp:CreateDate", TX_NOOP("When the resource was created. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"XMP", "XMP-xmp:ModifyDate", TX_NOOP("When the resource was last modified. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"XMP", "XMP-xmp:CreatorTool", TX_NOOP("Application that created the file.")},
+    {"XMP", "XMP-photoshop:Headline", TX_NOOP("Short headline summarising the content.")},
+    {"XMP", "XMP-photoshop:DateCreated", TX_NOOP("When the content was created (date or date-time).")},
+    {"XMP", "XMP-photoshop:City", TX_NOOP("City where the photo was taken.")},
+    {"XMP", "XMP-photoshop:State", TX_NOOP("State or province where the photo was taken.")},
+    {"XMP", "XMP-photoshop:Country", TX_NOOP("Country where the photo was taken.")},
+    {"XMP", "XMP-photoshop:Credit", TX_NOOP("Credit line required when publishing.")},
+    {"XMP", "XMP-photoshop:Source", TX_NOOP("Original owner or supplier of the content.")},
+    {"XMP", "XMP-photoshop:Instructions", TX_NOOP("Special instructions, e.g. embargoes or usage restrictions.")},
+    {"XMP", "XMP-iptcCore:Location", TX_NOOP("Sub-location (venue, landmark or neighbourhood).")},
+    {"XMP", "XMP-iptcCore:CountryCode", TX_NOOP("ISO country code, e.g. FR or USA.")},
+    {"XMP", "XMP-xmpRights:UsageTerms", TX_NOOP("Licence or terms for using the content.")},
+    {"XMP", "XMP-xmpRights:WebStatement", TX_NOOP("URL of a web page with copyright / licence details.")},
+    {"XMP", "XMP-xmpRights:Marked", TX_NOOP("True if the content is copyrighted, False if public domain.")},
+    {"IPTC", "IPTC:ObjectName", TX_NOOP("Short title (IPTC). Used by news agencies and older photo software.")},
+    {"IPTC", "IPTC:Caption-Abstract", TX_NOOP("Caption / description (IPTC).")},
+    {"IPTC", "IPTC:Keywords", TX_NOOP("Keywords (IPTC); one per line.")},
+    {"IPTC", "IPTC:By-line", TX_NOOP("Photographer / creator (IPTC).")},
+    {"IPTC", "IPTC:CopyrightNotice", TX_NOOP("Copyright notice (IPTC).")},
+    {"IPTC", "IPTC:Headline", TX_NOOP("Short headline (IPTC).")},
+    {"IPTC", "IPTC:Credit", TX_NOOP("Credit line (IPTC).")},
+    {"IPTC", "IPTC:Source", TX_NOOP("Original owner of the content (IPTC).")},
+    {"IPTC", "IPTC:City", TX_NOOP("City (IPTC).")},
+    {"IPTC", "IPTC:Province-State", TX_NOOP("State or province (IPTC).")},
+    {"IPTC", "IPTC:Country-PrimaryLocationName", TX_NOOP("Country (IPTC).")},
+    {"IPTC", "IPTC:DateCreated", TX_NOOP("Date the content was created (IPTC). Format: YYYY:MM:DD.")},
+    {"IPTC", "IPTC:SpecialInstructions", TX_NOOP("Usage instructions or restrictions (IPTC).")},
+    {"PNG", "PNG:Title", TX_NOOP("Short title of the image (PNG text chunk).")},
+    {"PNG", "PNG:Author", TX_NOOP("Name of the image's creator.")},
+    {"PNG", "PNG:Description", TX_NOOP("Description of the image.")},
+    {"PNG", "PNG:Comment", TX_NOOP("Miscellaneous comment.")},
+    {"PNG", "PNG:Copyright", TX_NOOP("Copyright notice.")},
+    {"PNG", "PNG:CreationTime", TX_NOOP("When the original image was created. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"PNG", "PNG:Software", TX_NOOP("Software used to create the image.")},
+    {"PNG", "PNG:Source", TX_NOOP("Device used to create the image.")},
+    {"PNG", "PNG:Disclaimer", TX_NOOP("Legal disclaimer.")},
+    {"PNG", "PNG:Parameters", TX_NOOP("Stable Diffusion (A1111/Forge) generation parameters: prompt, negative prompt, settings.")},
+    {"QuickTime", "QuickTime:Title", TX_NOOP("Title shown by media players.")},
+    {"QuickTime", "QuickTime:Artist", TX_NOOP("Artist or creator.")},
+    {"QuickTime", "QuickTime:Author", TX_NOOP("Author of the video.")},
+    {"QuickTime", "QuickTime:Director", TX_NOOP("Director of the video.")},
+    {"QuickTime", "QuickTime:Album", TX_NOOP("Album or collection the video/track belongs to.")},
+    {"QuickTime", "QuickTime:Genre", TX_NOOP("Genre, e.g. Documentary.")},
+    {"QuickTime", "QuickTime:Year", TX_NOOP("Release year.")},
+    {"QuickTime", "QuickTime:Comment", TX_NOOP("Free-form comment.")},
+    {"QuickTime", "QuickTime:Description", TX_NOOP("Description of the content.")},
+    {"QuickTime", "QuickTime:Keywords", TX_NOOP("Keywords, separated by commas.")},
+    {"QuickTime", "QuickTime:Copyright", TX_NOOP("Copyright notice.")},
+    {"QuickTime", "QuickTime:Rating", TX_NOOP("Content rating.")},
+    {"QuickTime", "QuickTime:CreateDate", TX_NOOP("When the video was recorded (stored as UTC). Format: YYYY:MM:DD HH:MM:SS.")},
     {"QuickTime", "QuickTime:ContentCreateDate",
      "When the content was created, with time zone, e.g. 2026:10:02 14:00:00+02:00."},
     {"QuickTime", "QuickTime:GPSCoordinates",
      "Recording location: “latitude longitude [altitude]”, e.g. 48.8584 2.2945 35."},
-    {"QuickTime", "QuickTime:Encoder", "Software used to encode the video."},
-    {"PDF", "PDF:Title", "Document title shown by PDF viewers."},
-    {"PDF", "PDF:Author", "Document author."},
-    {"PDF", "PDF:Subject", "Document subject."},
-    {"PDF", "PDF:Keywords", "Keywords for searching."},
-    {"PDF", "PDF:Creator", "Application that created the original document."},
-    {"PDF", "PDF:Producer", "Application that produced the PDF."},
-    {"PDF", "PDF:CreateDate", "When the document was created." DATE},
-    {"PDF", "PDF:ModifyDate", "When the document was last modified." DATE},
-    {"GIF", "GIF:Comment", "Plain-text comment stored in the GIF."},
+    {"QuickTime", "QuickTime:Encoder", TX_NOOP("Software used to encode the video.")},
+    {"PDF", "PDF:Title", TX_NOOP("Document title shown by PDF viewers.")},
+    {"PDF", "PDF:Author", TX_NOOP("Document author.")},
+    {"PDF", "PDF:Subject", TX_NOOP("Document subject.")},
+    {"PDF", "PDF:Keywords", TX_NOOP("Keywords for searching.")},
+    {"PDF", "PDF:Creator", TX_NOOP("Application that created the original document.")},
+    {"PDF", "PDF:Producer", TX_NOOP("Application that produced the PDF.")},
+    {"PDF", "PDF:CreateDate", TX_NOOP("When the document was created. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"PDF", "PDF:ModifyDate", TX_NOOP("When the document was last modified. Format: YYYY:MM:DD HH:MM:SS.")},
+    {"GIF", "GIF:Comment", TX_NOOP("Plain-text comment stored in the GIF.")},
 };
 
 QString tag_help(const QString &key)
 {
     for (const CatalogEntry &e : TAG_CATALOG)
         if (e.key == key)
-            return e.blurb;
+            return tx(e.blurb);
     return QString();
 }
 
@@ -1228,19 +1225,20 @@ static QString kind_of(const QString &group, const QString &name, const QString 
     // what a tag accepts, in plain words: Text, Numbers only, Date/time, Choice or True/False
     static const QRegularExpression number_types(
         "^(int\\d+[su]|int16uRev|rational\\d*[su]?|real|float|double|integer|digits|fixed32[su])$");
+    // (kept in English in the tag list's cache: tag_choices translates them)
     if (has_values)
-        return "Choice";
+        return TX_NOOP("Choice");
     if (typ == "boolean")
-        return "True/False";
+        return TX_NOOP("True/False");
     if (typ == "date" || g2 == "Time")
-        return "Date/time";
+        return TX_NOOP("Date/time");
     if (typ == "struct")
-        return "Structured";
+        return TX_NOOP("Structured");
     if (group == "EXIF" && name.startsWith("XP"))   // stored as UCS-2 bytes but written as text
-        return "Text";
+        return TX_NOOP("Text");
     if (number_types.match(typ).hasMatch())
-        return "Numbers only";
-    return "Text";
+        return TX_NOOP("Numbers only");
+    return TX_NOOP("Text");
 }
 
 static QString split_name(const QString &name)
@@ -1261,9 +1259,9 @@ struct ListxInfo {
 static QHash<QPair<QString, QString>, ListxInfo> parse_listx(const QByteArray &xml, const QSet<QString> &wanted)
 {
     static const QHash<QString, QString> category = {
-        {"Author", "Author / rights info"}, {"Camera", "Camera setting"}, {"Location", "Location"},
-        {"Time", "Date / time"}, {"Image", "Image info"}, {"Video", "Video info"}, {"Audio", "Audio info"},
-        {"Document", "Document info"}, {"Preview", "Embedded preview"}};
+        {"Author", TX_NOOP("Author / rights info")}, {"Camera", TX_NOOP("Camera setting")}, {"Location", TX_NOOP("Location")},
+        {"Time", TX_NOOP("Date / time")},   {"Image", TX_NOOP("Image info")}, {"Video", TX_NOOP("Video info")},
+        {"Audio", TX_NOOP("Audio info")},   {"Document", TX_NOOP("Document info")}, {"Preview", TX_NOOP("Embedded preview")}};
     QHash<QPair<QString, QString>, ListxInfo> out;
     QXmlStreamReader r(xml);
     QString tg0, tg1;
@@ -1421,12 +1419,12 @@ const TagDb &tag_db()
 // best-effort description for tags without a hand-written one, from exiftool's name, category and values
 static QString auto_blurb(const QString &desc, const QStringList &values, const QString &category)
 {
-    QString text = (category.isEmpty() ? desc : category + ": " + desc);
+    QString text = category.isEmpty() ? desc : tx("%1: %2", "a tag's category and its description").arg(tx(category), desc);
     while (text.endsWith('.'))
         text.chop(1);
     text += ".";
     if (!values.isEmpty())
-        text += QString(" One of: %1.").arg(values.mid(0, 6).join(", ") + (values.size() > 6 ? "…" : ""));
+        text += " " + tx("One of: %1.").arg(values.mid(0, 6).join(", ") + (values.size() > 6 ? "…" : ""));
     return text;
 }
 
@@ -1445,10 +1443,10 @@ QList<Section> tag_choices(const QString &path, const TagDb *db)
             continue;
         const DbRow *row = info.value(e.key);
         QString kind = row ? row->kind : "Text";
-        common << TagChoice{e.key, e.blurb, is_list_tag(e.key) ? "Text (list)" : kind, row ? row->values : QStringList()};
+        common << TagChoice{e.key, tx(e.blurb), is_list_tag(e.key) ? tx("Text (list)") : tx(kind), row ? row->values : QStringList()};
     }
     if (!common.isEmpty())
-        out << Section("Common tags", common);
+        out << Section(tx("Common tags"), common);
     QSet<QString> seen;
     for (const TagChoice &c : common)
         seen << c.key;
@@ -1459,10 +1457,10 @@ QList<Section> tag_choices(const QString &path, const TagDb *db)
                 for (const DbRow &row : db->value(g)) {
                     QString key = g + ":" + row.name;
                     if (!seen.contains(key))
-                        items << TagChoice{key, auto_blurb(row.desc, row.values, row.category), row.kind, row.values};
+                        items << TagChoice{key, auto_blurb(row.desc, row.values, row.category), tx(row.kind), row.values};
                 }
             if (!items.isEmpty())
-                out << Section(QString("All %1 tags").arg(g), items);
+                out << Section(tx("All %1 tags").arg(g), items);
         }
     }
     return out;

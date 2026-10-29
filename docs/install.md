@@ -98,12 +98,12 @@ The installer does all of this (everything but the PATH) by running `kes-setup`,
 - **History:** the servers you connected to recently, and the folder the last Open or Save dialog was left in. These are taken out of Kestrel's settings, and every other setting stays.
 - **Starred items**, **Pinned items**, **Save locations** and **Folder covers, colours and sorts:** the lists of starred files and folders, of pinned ones, of the folders kept for other apps' Save windows, and of folders given a cover, a colour, no image previews or a sort of their own. You chose these, so BleachBit warns before cleaning them.
 
-The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files are cleaned by BleachBit's own Thumbnails and Recent documents options, and undo history is never written to disk. BleachBit won't clean while Kestrel is open. `kes-setup --undo` removes the cleaner again.
+The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files are cleaned by BleachBit's own Thumbnails and Recent documents options, and undo history is never written to disk. BleachBit won't clean while Kestrel is open. The first time BleachBit's window opens after `kes-setup --bleachbit` (and after a newer Kestrel's `kes-setup --bleachbit` changes the cleaner), it shows a "Security warning" that the cleaner definitions are new or have changed: BleachBit asks that for every cleaner you add, and remembers your OK. `kes-setup --undo` removes the cleaner again.
 
 To build by hand:
 
 ```bash
-sudo apt install g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev
+sudo apt install g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev libxcb1-dev libsecret-1-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ```

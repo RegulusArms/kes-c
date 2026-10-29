@@ -55,7 +55,7 @@ static QTreeWidget *table(const QStringList &headers, const QString &name)
 
 TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Tower");
+    setWindowTitle(tx("Tower"));
     setAttribute(Qt::WA_DeleteOnClose);
     resize(900, 560);
     auto *lay = new QVBoxLayout(this);
@@ -67,40 +67,40 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
     status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     status->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     sl->addWidget(status, 1);
-    restart = new QPushButton("Restart Tower");
-    restart->setToolTip("Stop the tower; the next Kestrel to notice starts a new one and every Kestrel checks in again");
+    restart = new QPushButton(tx("Restart Tower"));
+    restart->setToolTip(tx("Stop the tower; the next Kestrel to notice starts a new one and every Kestrel checks in again"));
     connect(restart, &QPushButton::clicked, this, [this]() {
         qint64 pid = tower_pid;
         if (pid <= 0)
             return;
-        ask_yes(this, "Restart Tower",
-                "Stop the tower? Kestrel starts a new one at once, and every Kestrel window checks in with it again.",
+        ask_yes(this, tx("Restart Tower"),
+                tx("Stop the tower? Kestrel starts a new one at once, and every Kestrel window checks in with it again."),
                 [pid]() { ::kill(pid_t(pid), SIGTERM); });
     });
     auto *rl = new QHBoxLayout;
     rl->addWidget(restart);
     rl->addStretch(1);
     sl->addLayout(rl);
-    tabs->addTab(st, "Status");
+    tabs->addTab(st, tx("Status"));
 
-    flights = table({"Kestrel", "Process", "Version", "Protocol", "Windows", "Jobs"}, "Kestrels checked in");
-    tabs->addTab(flights, "Kestrels");
+    flights = table({tx("Kestrel"), tx("Process"), tx("Version"), tx("Protocol"), tx("Windows"), tx("Jobs")}, tx("Kestrels checked in"));
+    tabs->addTab(flights, tx("Kestrels"));
 
     auto *mw = new QWidget;
     auto *ml = new QVBoxLayout(mw);
     auto *mtop = new QHBoxLayout;
-    mtop->addWidget(new QLabel("Show:"));
+    mtop->addWidget(new QLabel(tx("Show:")));
     filter = new QComboBox;
-    filter->addItem("All messages", "");
-    filter->setAccessibleName("Message type");
+    filter->addItem(tx("All messages"), "");
+    filter->setAccessibleName(tx("Message type"));
     mtop->addWidget(filter);
-    paused = new QCheckBox("Pause");
+    paused = new QCheckBox(tx("Pause"));
     mtop->addWidget(paused);
-    auto *clear = new QPushButton("Clear");
+    auto *clear = new QPushButton(tx("Clear"));
     mtop->addWidget(clear);
     mtop->addStretch(1);
     ml->addLayout(mtop);
-    messages = table({"Time", "From", "Type", "Delay", "Fields"}, "Messages");
+    messages = table({tx("Time"), tx("From"), tx("Type"), tx("Delay"), tx("Fields")}, tx("Messages"));
     messages->setColumnWidth(0, 100);
     messages->setColumnWidth(1, 110);
     messages->setColumnWidth(2, 110);
@@ -112,19 +112,19 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
             messages->topLevelItem(i)->setHidden(!type.isEmpty() && messages->topLevelItem(i)->text(2) != type);
     });
     ml->addWidget(messages, 1);
-    tabs->addTab(mw, "Messages");
+    tabs->addTab(mw, tx("Messages"));
 
-    queue = table({"Job", "Kestrel", "State", "Drives"}, "Job queue");
-    tabs->addTab(queue, "Queue && Lanes");
-    undo = table({"Undo", "What", "Items"}, "Shared undo");
-    tabs->addTab(undo, "Shared Undo");
+    queue = table({tx("Job"), tx("Kestrel"), tx("State"), tx("Drives")}, tx("Job queue"));
+    tabs->addTab(queue, tx("Queue && Lanes"));
+    undo = table({tx("Undo"), tx("What"), tx("Items")}, tx("Shared undo"));
+    tabs->addTab(undo, tx("Shared Undo"));
 
     // this Kestrel's windows as Qt sees them (windiag.h): for a window that misbehaves, compared with a fresh one
     auto *ww = new QWidget;
     auto *wl = new QVBoxLayout(ww);
-    auto *wnote = new QLabel("This Kestrel's windows (another Kestrel's show in the Tower opened from one of them): their "
+    auto *wnote = new QLabel(tx("This Kestrel's windows (another Kestrel's show in the Tower opened from one of them): their "
                              "size, the minimum and maximum they ask for, their state and screen, and their recent "
-                             "changes. When a window misbehaves, open a new one (Ctrl+N) and compare the two.");
+                             "changes. When a window misbehaves, open a new one (Ctrl+N) and compare the two."));
     wnote->setWordWrap(true);
     wl->addWidget(wnote);
     windows = new QPlainTextEdit;
@@ -134,9 +134,9 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
     windows->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     wl->addWidget(windows, 1);
     auto *wb = new QHBoxLayout;
-    auto *wrefresh = new QPushButton("Refresh");
-    auto *wcopy = new QPushButton("Copy");
-    auto *wsave = new QPushButton("Save to Home Folder");
+    auto *wrefresh = new QPushButton(tx("Refresh"));
+    auto *wcopy = new QPushButton(tx("Copy"));
+    auto *wsave = new QPushButton(tx("Save to Home Folder"));
     wsave->setObjectName("save_windows");
     wb->addWidget(wrefresh);
     wb->addWidget(wcopy);
@@ -153,12 +153,12 @@ TowerWindow::TowerWindow(QWidget *parent) : QDialog(parent)
         QString path = join(HOME(), "kestrel-windows-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".txt");
         try {
             write_text(path, windows->toPlainText().toUtf8());
-            inform(this, "Windows", "Saved as " + path);
+            inform(this, tx("Windows"), tx("Saved as %1").arg(path));
         } catch (const OSError &e) {
-            warn(this, "Windows", e.message());
+            warn(this, tx("Windows"), e.message());
         }
     });
-    int windows_tab = tabs->addTab(ww, "Windows");
+    int windows_tab = tabs->addTab(ww, tx("Windows"));
     connect(tabs, &QTabWidget::currentChanged, this, [this, windows_tab](int i) {
         if (i == windows_tab)
             show_windows();
@@ -185,8 +185,8 @@ void TowerWindow::refresh()
     QJsonObject s = QJsonDocument::fromJson(st.toUtf8()).object();
     if (st.isNull() || s.isEmpty()) {
         tower_pid = 0;
-        status->setText("<b>The tower isn't running.</b><br>Kestrel starts it when a Kestrel window opens; it lands about "
-                        "10 seconds after the last one closes.");
+        status->setText(tx("<b>The tower isn't running.</b><br>Kestrel starts it when a Kestrel window opens; it lands about "
+                        "10 seconds after the last one closes."));
         restart->setEnabled(false);
         flights->clear();
         queue->clear();
@@ -198,15 +198,18 @@ void TowerWindow::refresh()
     qint64 up = QDateTime::currentMSecsSinceEpoch() - qint64(s.value("started").toDouble());
     int landing = s.value("landing_in").toInt(-1);
     QStringList lines;
-    lines << "<b>The tower is running.</b>";
-    lines << QString("Process: %1").arg(tower_pid);
-    lines << QString("Up for: %1").arg(QString("%1:%2:%3").arg(up / 3600000).arg(up / 60000 % 60, 2, 10, QChar('0')).arg(up / 1000 % 60, 2, 10, QChar('0')));
-    lines << QString("Protocol: %1 (this Kestrel speaks %2)").arg(s.value("protocol").toInt()).arg(atc::PROTOCOL);
-    lines << QString("Kestrels checked in: %1").arg(s.value("flights").toInt());
-    lines << (landing >= 0 ? QString("Lands in %1 s (no Kestrel left)").arg((landing + 999) / 1000)
-                           : QString("Stays up while a Kestrel is checked in"));
-    lines << QString("Messages refused (malformed, unknown, another protocol): %1").arg(s.value("refused").toInt());
-    lines << QString("Job queue: %1 job(s), %2").arg(s.value("queued").toInt()).arg(s.value("mode").toString() == "one" ? "one at a time" : s.value("mode").toString() == "all" ? "all at once" : "by drive");
+    QString mode = s.value("mode").toString();
+    lines << tx("<b>The tower is running.</b>");
+    lines << tx("Process: %1").arg(tower_pid);
+    lines << tx("Up for: %1").arg(QString("%1:%2:%3").arg(up / 3600000).arg(up / 60000 % 60, 2, 10, QChar('0')).arg(up / 1000 % 60, 2, 10, QChar('0')));
+    lines << tx("Protocol: %1 (this Kestrel speaks %2)").arg(s.value("protocol").toInt()).arg(atc::PROTOCOL);
+    lines << tx("Kestrels checked in: %1").arg(s.value("flights").toInt());
+    lines << (landing >= 0 ? tx("Lands in %1 s (no Kestrel left)").arg((landing + 999) / 1000)
+                           : tx("Stays up while a Kestrel is checked in"));
+    lines << tx("Messages refused (malformed, unknown, another protocol): %1").arg(s.value("refused").toInt());
+    lines << (mode == "one" ? txn("Job queue: %Ln job(s), one at a time", s.value("queued").toInt())
+              : mode == "all" ? txn("Job queue: %Ln job(s), all at once", s.value("queued").toInt())
+                              : txn("Job queue: %Ln job(s), by drive", s.value("queued").toInt()));
     status->setText(lines.join("<br>"));
 
     // the Kestrels, with their windows and jobs (their kept state)
@@ -234,7 +237,7 @@ void TowerWindow::refresh()
         QString wins = w.isEmpty() ? QString("—")
                                    : QString("%1, last used %2").arg(w.value("count").toInt()).arg(
                                          QDateTime::fromMSecsSinceEpoch(qint64(w.value("active").toDouble())).toString("HH:mm:ss"));
-        auto *it = new QTreeWidgetItem(flights, {name + (name == me ? " (this one)" : ""), names[name],
+        auto *it = new QTreeWidgetItem(flights, {name + (name == me ? tx(" (this one)") : ""), names[name],
                                                  f.value("version").toString(), QString::number(f.value("protocol").toInt(1)),
                                                  wins, QString::number(tasks.value(name).value("tasks").toArray().size())});
         Q_UNUSED(it);
@@ -254,7 +257,7 @@ void TowerWindow::refresh()
             busy << drives;
     }
     busy.removeDuplicates();
-    queue->setToolTip(busy.isEmpty() ? QString("No drive in use") : "Drives in use: " + busy.join(", "));
+    queue->setToolTip(busy.isEmpty() ? tx("No drive in use") : tx("Drives in use: %1").arg(busy.join(", ")));
     // what Ctrl+Z would undo (shared undo), newest first
     undo->clear();
     QJsonArray ops = QJsonDocument::fromJson(atc::radio()->request("UndoList").toUtf8()).array();
@@ -281,8 +284,8 @@ void TowerWindow::heard(const QString &flight, const QString &message)
     if (text.size() > 300)
         text = text.left(300) + "…";
     QString from = flight == atc::radio()->flight() ? QString("this Kestrel") : names.value(flight, flight);
-    auto *it = new QTreeWidgetItem(messages, {QDateTime::currentDateTime().toString("HH:mm:ss.zzz"), from,
-                                              type.isEmpty() ? QString("(not a message)") : type, delay, text});
+    auto *it = new QTreeWidgetItem(messages, {QDateTime::currentDateTime().toString(tx("HH:mm:ss.zzz")), from,
+                                              type.isEmpty() ? QString(tx("(not a message)")) : type, delay, text});
     it->setToolTip(4, message);
     if (filter->findData(type) < 0 && !type.isEmpty())
         filter->addItem(type, type);

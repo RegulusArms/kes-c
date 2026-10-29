@@ -147,7 +147,7 @@ void ArchiveWindow::Listing::build()
             item->setData(0, TimeRole, e.modified);
         }
         if (e.encrypted)
-            item->setToolTip(0, "Encrypted: extracting it needs the archive's password");
+            item->setToolTip(0, tx("Encrypted: extracting it needs the archive's password"));
         add(parent, item, e.encrypted ? name + "  🔒" : name, false);
         encrypted = encrypted || e.encrypted;
         ++files;
@@ -194,7 +194,7 @@ static QString new_temp_folder()
     makedirs(root, true);
     QByteArray tmpl = enc(join(root, "XXXXXX"));
     if (!::mkdtemp(tmpl.data()))
-        throw OSError(errno, "Couldn't make a temporary folder in " + root);
+        throw OSError(errno, tx("Couldn't make a temporary folder in %1").arg(root));
     return dec(tmpl.constData());
 }
 
@@ -248,7 +248,7 @@ private:
         std::atomic<bool> done{false};
         QStringList made;
         std::thread t([&]() {
-            Task task("Extracting for a drop", [](Task *) { return QVariant(); });
+            Task task(tx("Extracting for a drop"), [](Task *) { return QVariant(); });
             try {
                 made = archive::extract_members(&task, archive, new_temp_folder(), password, members);
             } catch (const std::exception &) {
@@ -310,18 +310,18 @@ ArchiveWindow *ArchiveWindow::open(MainWindow *owner, const QString &path_in)
 ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(owner_), owner(owner_), archive_path(path)
 {
     setObjectName("archive_window");
-    setWindowTitle(basename(path) + " — Archive");
+    setWindowTitle(tx("%1 — Archive").arg(basename(path)));
     auto *lay = new QVBoxLayout(this);
     auto *bar = new QHBoxLayout;
-    extract_here = new QPushButton("Extract Here");
-    extract_here->setToolTip("Extract the selected items next to the archive");
-    extract_to = new QPushButton("Extract To…");
-    extract_to->setToolTip("Extract the selected items into a folder you choose");
-    extract_all = new QPushButton("Extract All…");
-    test = new QPushButton("Test");
-    test->setToolTip("Check every file in the archive against its checksum, without extracting");
+    extract_here = new QPushButton(tx("Extract Here"));
+    extract_here->setToolTip(tx("Extract the selected items next to the archive"));
+    extract_to = new QPushButton(tx("Extract To…"));
+    extract_to->setToolTip(tx("Extract the selected items into a folder you choose"));
+    extract_all = new QPushButton(tx("Extract All…"));
+    test = new QPushButton(tx("Test"));
+    test->setToolTip(tx("Check every file in the archive against its checksum, without extracting"));
     filter = new QLineEdit;
-    filter->setPlaceholderText("Filter by name");
+    filter->setPlaceholderText(tx("Filter by name"));
     filter->setClearButtonEnabled(true);
     for (QPushButton *b : {extract_here, extract_to, extract_all, test})
         bar->addWidget(b);
@@ -332,7 +332,7 @@ ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(
     tree->setDragEnabled(true);
     tree->setDragDropMode(QAbstractItemView::DragOnly);
     tree->setDefaultDropAction(Qt::CopyAction);
-    tree->setHeaderLabels({"Name", "Size", "Packed", "Modified"});
+    tree->setHeaderLabels({tx("Name"), tx("Size"), tx("Packed"), tx("Modified")});
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // sorted when a column's header is clicked, but not kept sorted by the tree itself, which would sort a big
     // listing again on the UI thread once it's added (it comes sorted by name)
@@ -345,7 +345,7 @@ ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(
     tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree->header()->setStretchLastSection(false);
     lay->addWidget(tree, 1);
-    status = new QLabel("Reading the archive…");
+    status = new QLabel(tx("Reading the archive…"));
     status->setWordWrap(true);
     lay->addWidget(status);
 
@@ -381,16 +381,14 @@ void ArchiveWindow::load()
     auto work = [got, asker, path](Task *task) -> QVariant {
         QString missing = archive::missing_extract_tool(path);
         if (!missing.isEmpty())
-            return QVariantMap{{"error", QString("Kestrel needs another program to open it. Install it with:  sudo apt "
-                                                 "install ") + missing}};
+            return QVariantMap{{"error", tx("Kestrel needs another program to open it. Install it with:  sudo apt install %1").arg(missing)}};
         QString pw;
         QStringList tried;
         for (;;) {
             try {
                 got->entries = archive::list(task, path, pw);
                 got->password = pw;
-                task->report(0, 0, "Reading " + basename(path) + " — sorting " + QString::number(got->entries.size()) +
-                                       " items", true);
+                task->report(0, 0, txn("Reading %1 — sorting %Ln item(s)", got->entries.size()).arg(basename(path)), true);
                 got->build();
                 return QVariantMap{{"ok", true}};
             } catch (const archive::WrongPassword &) {   // its names are encrypted
@@ -398,7 +396,7 @@ void ArchiveWindow::load()
                     tried << pw;
                 pw = archive_ui::job_password(task, asker, path, tried);
                 if (pw.isEmpty())
-                    return QVariantMap{{"error", QString("Its contents can't be shown without its password.")}};
+                    return QVariantMap{{"error", tx("Its contents can't be shown without its password.")}};
             }
         }
     };
@@ -408,7 +406,7 @@ void ArchiveWindow::load()
             return;
         QVariantMap m = r.toMap();
         if (!r.isValid()) {
-            self->status->setText("Reading the archive was cancelled.");
+            self->status->setText(tx("Reading the archive was cancelled."));
         } else if (!m["ok"].toBool()) {
             self->status->setText(m["error"].toString());
         } else {
@@ -416,11 +414,11 @@ void ArchiveWindow::load()
             self->show_listing(*got);
         }
     };
-    Task *t = fileops::queue_job(owner, "Reading " + basename(archive_path), {archive_path}, work, done);
+    Task *t = fileops::queue_job(owner, tx("Reading %1").arg(basename(archive_path)), {archive_path}, work, done);
     if (t)
         connect(t, &Task::error, this, [self](const QString &msg) {
             if (self)
-                self->status->setText("Couldn't read the archive: " + msg);
+                self->status->setText(tx("Couldn't read the archive: %1").arg(msg));
         });
 }
 
@@ -437,11 +435,9 @@ void ArchiveWindow::show_listing(Listing &l)
         tree->topLevelItem(0)->setExpanded(true);
     for (int c = 1; c < 4; ++c)
         tree->resizeColumnToContents(c);
-    status->setText(QString("%1 file%2 in %3 folder%4, %5%6. Select items to extract them; a folder brings what's "
-                            "inside.")
-                        .arg(QString::number(l.files), l.files == 1 ? "" : "s", QString::number(l.folders),
-                             l.folders == 1 ? "" : "s", human_size(l.total),
-                             l.encrypted || !password.isEmpty() ? " · encrypted" : ""));
+    status->setText(tx("%1 in %2, %3%4. Select items to extract them; a folder brings what's inside.")
+                        .arg(txn("%Ln file(s)", l.files), txn("%Ln folder(s)", l.folders), human_size(l.total),
+                             l.encrypted || !password.isEmpty() ? tx(" · encrypted") : QString()));
     is_loaded = true;
     extract_all->setEnabled(true);
     test->setEnabled(archive::can_test(archive_path));
@@ -491,11 +487,11 @@ void ArchiveWindow::context_menu(const QPoint &pos)
     QTreeWidgetItem *cur = tree->currentItem();
     if (cur && tree->selectedItems().size() == 1 && !cur->data(0, DirRole).toBool()) {
         QString member = cur->data(0, PathRole).toString();
-        m->addAction("Open", this, [this, member]() { open_member(member); });
+        m->addAction(tx("Open"), this, [this, member]() { open_member(member); });
         m->addSeparator();
     }
-    m->addAction("Extract Here", this, [this]() { extract_selected(dirname(archive_path)); });
-    m->addAction("Extract To…", this, &ArchiveWindow::choose_and_extract);
+    m->addAction(tx("Extract Here"), this, [this]() { extract_selected(dirname(archive_path)); });
+    m->addAction(tx("Extract To…"), this, &ArchiveWindow::choose_and_extract);
     m->popup(tree->viewport()->mapToGlobal(pos));
     connect(m, &QMenu::aboutToHide, m, &QObject::deleteLater);
 }
@@ -503,7 +499,7 @@ void ArchiveWindow::context_menu(const QPoint &pos)
 void ArchiveWindow::choose_and_extract()
 {
     QPointer<ArchiveWindow> self(this);
-    choose_folder(this, "Extract To", dirname(archive_path), [self](const QString &d) {
+    choose_folder(this, tx("Extract To"), dirname(archive_path), [self](const QString &d) {
         if (self)
             self->extract_selected(d);
     });
@@ -526,7 +522,7 @@ void ArchiveWindow::extract_selected(const QString &dest)
         return;
     QPointer<MainWindow> w(owner);
     QString name = basename(archive_path);
-    extract_job(owner, this, archive_path, members, dest, "Extracting from " + name, [w, dest](const QStringList &made) {
+    extract_job(owner, this, archive_path, members, dest, tx("Extracting from %1").arg(name), [w, dest](const QStringList &made) {
         if (w && w->pane() && w->pane()->dir() == dest)
             for (const QString &p : made)
                 w->pane()->select_later(p);
@@ -572,20 +568,18 @@ void ArchiveWindow::extract_job(MainWindow *owner, QPointer<ArchiveWindow> win, 
         if (!w)
             return;
         if (!r.isValid()) {
-            w->statusBar()->showMessage("Extracting from " + name + " cancelled", 4000);
+            w->statusBar()->showMessage(tx("Extracting from %1 cancelled").arg(name), 4000);
             return;
         }
         QVariantMap m = r.toMap();
         if (m["no_password"].toBool()) {
-            w->statusBar()->showMessage("Extracting from " + name + " cancelled: no password", 4000);
+            w->statusBar()->showMessage(tx("Extracting from %1 cancelled: no password").arg(name), 4000);
             return;
         }
         if (win && !pw->isEmpty())
             win->password = *pw;   // not asked again while this window is open
         QStringList made = m["made"].toStringList();
-        w->statusBar()->showMessage(QString("Extracted %1 item%2 from %3 to %4")
-                                        .arg(QString::number(made.size()), made.size() == 1 ? "" : "s", name, dest),
-                                    6000);
+        w->statusBar()->showMessage(txn("Extracted %Ln item(s) from %1 to %2", made.size()).arg(name, dest), 6000);
         if (!m["dropped"].toList().isEmpty())
             archive_ui::say_dropped_links(win ? static_cast<QWidget *>(win) : w, name, m["dropped"].toList());
         if (after)
@@ -607,7 +601,7 @@ void ArchiveWindow::open_member(const QString &member)
     try {
         dir = new_temp_folder();
     } catch (const OSError &e) {
-        warn(this, "Open", e.message());
+        warn(this, tx("Open"), e.message());
         return;
     }
     QPointer<ArchiveWindow> self(this);
@@ -619,7 +613,7 @@ void ArchiveWindow::open_member(const QString &member)
                     // read-only: it's a copy, and changing it wouldn't change the archive
                     ::chmod(enc(made.first()).constData(), 0444);
                     if (!open_default(made.first()) && self)
-                        warn(self, "Open", QString("No application is set to open “%1”.").arg(basename(made.first())));
+                        warn(self, tx("Open"), tx("No application is set to open “%1”.").arg(basename(made.first())));
                 });
 }
 
@@ -678,8 +672,8 @@ void browse(MainWindow *win, const QString &path)
 {
     QString missing = archive::missing_extract_tool(path);
     if (!missing.isEmpty()) {
-        warn(win, "Open as Archive",
-             QString("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install ").arg(basename(path)) +
+        warn(win, tx("Open as Archive"),
+             tx("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install ").arg(basename(path)) +
                  missing);
         return;
     }

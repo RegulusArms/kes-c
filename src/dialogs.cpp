@@ -59,7 +59,7 @@ static QLabel *sel_label(const QString &text = QString())
     return lab;
 }
 
-static QString fmt_ts(qint64 ts) { return fmt_time(ts, "%a %d %b %Y, %H:%M:%S"); }
+static QString fmt_ts(qint64 ts) { return i18n::date_time_secs(QDateTime::fromSecsSinceEpoch(ts)); }
 
 // stat.filemode(): "drwxr-xr-x"
 static QString filemode(mode_t m)
@@ -91,7 +91,7 @@ TextDialog::TextDialog(QWidget *parent, const QString &title, const QString &tex
     ed->setReadOnly(true);
     lay->addWidget(ed);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    QPushButton *copy = bb->addButton("Copy", QDialogButtonBox::ActionRole);
+    QPushButton *copy = bb->addButton(tx("Copy"), QDialogButtonBox::ActionRole);
     connect(copy, &QPushButton::clicked, this, [text]() { QGuiApplication::clipboard()->setText(text); });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     lay->addWidget(bb);
@@ -107,7 +107,7 @@ MetaTagDialog::MetaTagDialog(QWidget *parent, const QString &key, const QString 
     items = metadata::as_list(value_text, &value_is_list);
     for (auto it = existing_in.begin(); it != existing_in.end(); ++it)
         existing.insert(metadata::tag_identity(it.key()), it.value());
-    setWindowTitle(adding ? "Add Tag" : "Edit Tag");
+    setWindowTitle(adding ? tx("Add Tag") : tx("Edit Tag"));
     resize(600, 400);
     auto *form = new QFormLayout(this);
     if (adding) {
@@ -115,11 +115,11 @@ MetaTagDialog::MetaTagDialog(QWidget *parent, const QString &key, const QString 
         key_combo->setEditable(true);
         key_combo->setInsertPolicy(QComboBox::NoInsert);
         key_combo->setMaxVisibleItems(20);
-        key_combo->lineEdit()->setPlaceholderText("Choose or type a tag, e.g. Artist or XMP-dc:Description");
+        key_combo->lineEdit()->setPlaceholderText(tx("Choose or type a tag, e.g. Artist or XMP-dc:Description"));
         fill(metadata::tag_choices(path, metadata::tag_db_if_loaded()));
         if (!metadata::tag_db_if_loaded()) {   // the full list takes a few seconds the first time
             fileops::run_task(
-                this, "Loading tags…",
+                this, tx("Loading tags…"),
                 []() {
                     metadata::tag_db();
                     return QVariant(true);
@@ -128,11 +128,11 @@ MetaTagDialog::MetaTagDialog(QWidget *parent, const QString &key, const QString 
                 true);
         }
         connect(key_combo, &QComboBox::currentTextChanged, this, &MetaTagDialog::key_changed);
-        form->addRow("Tag:", key_combo);
+        form->addRow(tx("Tag:"), key_combo);
     } else {
         key_edit = new QLineEdit(key);
         key_edit->setReadOnly(true);
-        form->addRow("Tag:", key_edit);
+        form->addRow(tx("Tag:"), key_edit);
         if (!path.isEmpty() && metadata::tag_db_if_loaded()) {
             for (const auto &section : metadata::tag_choices(path, metadata::tag_db_if_loaded()))
                 for (const metadata::TagChoice &c : section.second) {
@@ -147,7 +147,7 @@ MetaTagDialog::MetaTagDialog(QWidget *parent, const QString &key, const QString 
     blurb->setTextFormat(Qt::PlainText);
     form->addRow("", blurb);
     value = new QPlainTextEdit(value_is_list ? items.join('\n') : value_text);
-    form->addRow("Value:", value);
+    form->addRow(tx("Value:"), value);
     note = new QLabel;
     note->setWordWrap(true);
     form->addRow("", note);
@@ -169,7 +169,7 @@ MetaTagDialog::MetaTagDialog(QWidget *parent, const QString &key, const QString 
     }
 }
 
-static const QStringList COLUMNS = {"Tag", "What it's for", "Accepts"};
+static const QStringList COLUMNS = {TX_NOOP("Tag"), TX_NOOP("What it's for"), TX_NOOP("Accepts")};
 
 void MetaTagDialog::fill(const QList<metadata::Section> &sections)
 {
@@ -179,8 +179,11 @@ void MetaTagDialog::fill(const QList<metadata::Section> &sections)
     key_combo->blockSignals(true);
     auto *model = new QStandardItemModel(0, 3, this);
     auto *flat = new QStandardItemModel(0, 3, this);
-    model->setHorizontalHeaderLabels(COLUMNS);
-    flat->setHorizontalHeaderLabels(COLUMNS);
+    QStringList columns;
+    for (const QString &c : COLUMNS)
+        columns << tx(c);
+    model->setHorizontalHeaderLabels(columns);
+    flat->setHorizontalHeaderLabels(columns);
     QList<int> headings;
     for (const auto &[heading, choices] : sections) {
         auto *h = new QStandardItem(heading);
@@ -200,7 +203,7 @@ void MetaTagDialog::fill(const QList<metadata::Section> &sections)
                                               new QStandardItem(c.kind)};
                 for (QStandardItem *it : row) {
                     it->setEditable(false);
-                    it->setToolTip(QString("%1\n%2\nAccepts: %3").arg(c.key, c.blurb, c.kind));
+                    it->setToolTip(tx("%1\n%2\nAccepts: %3").arg(c.key, c.blurb, c.kind));
                 }
                 m->appendRow(row);
             }
@@ -269,11 +272,11 @@ void MetaTagDialog::key_changed(const QString &key_in)
         b = metadata::tag_help(catalog_key(key));
     QString group = key.contains(':') ? key.section(':', 0, 0) : QString();
     if (!group.isEmpty() && !metadata::is_editable(group, "", key.section(':', 1, 1))) {
-        b = QString("%1 tags describe the file itself and can't be edited.").arg(group);
+        b = tx("%1 tags describe the file itself and can't be edited.").arg(group);
     } else if (b.isEmpty() && !key.isEmpty()) {
-        b = help.contains(key) ? "No description available for this tag."
-                               : "Custom tag — written exactly as typed. Prefix a group (e.g. XMP-dc:) to choose where "
-                                 "it goes.";
+        b = help.contains(key) ? tx("No description available for this tag.")
+                               : tx("Custom tag — written exactly as typed. Prefix a group (e.g. XMP-dc:) to choose where "
+                                    "it goes.");
     }
     blurb->setText(b);
     blurb->setVisible(!b.isEmpty());
@@ -300,13 +303,13 @@ void MetaTagDialog::update_note(const QString &key)
     if (!key.isEmpty())
         kv = kinds.value(metadata::tag_identity(key));
     if (!kv.first.isEmpty())
-        notes << QString("<b>Accepts:</b> %1.").arg(kv.first);
+        notes << tx("<b>Accepts:</b> %1.").arg(kv.first);
     if (!kv.second.isEmpty())
-        notes << "<b>Allowed values:</b> " + kv.second.join(", ").toHtmlEscaped() + ".";
+        notes << tx("<b>Allowed values:</b> %1.").arg(kv.second.join(", ").toHtmlEscaped());
     if (is_list(key))
-        notes << "List tag — one item per line.";
+        notes << tx("List tag — one item per line.");
     if (adding && !key.isEmpty() && existing.contains(metadata::tag_identity(key)))
-        notes << "This tag is already set; saving replaces its current value.";
+        notes << tx("This tag is already set; saving replaces its current value.");
     note->setText(notes.isEmpty() ? QString() : "<small>" + notes.join(' ') + "</small>");
     note->setVisible(!notes.isEmpty());
 }
@@ -318,12 +321,12 @@ void MetaTagDialog::ok()
     QString key = tag();
     static const QRegularExpression re("^[\\w-]+(:[\\w-]+)?$", QRegularExpression::UseUnicodePropertiesOption);
     if (key.isEmpty() || !re.match(key).hasMatch()) {
-        warn(this, windowTitle(), "Choose a tag, or type one like “Artist” or “XMP-dc:Description”.");
+        warn(this, windowTitle(), tx("Choose a tag, or type one like “Artist” or “XMP-dc:Description”."));
         return;
     }
     QString group = key.contains(':') ? key.section(':', 0, 0) : QString();
     if (!group.isEmpty() && !metadata::is_editable(group, "", key.section(':', 1, 1))) {
-        warn(this, windowTitle(), QString("%1 tags can't be edited.").arg(group));
+        warn(this, windowTitle(), tx("%1 tags can't be edited.").arg(group));
         return;
     }
     accept();
@@ -353,20 +356,20 @@ PropertiesDialog::PropertiesDialog(QWidget *parent, const QStringList &paths_)
     QString name = basename(rstrip(path, '/'));
     if (name.isEmpty())
         name = path;
-    setWindowTitle(single ? name + " — Properties" : QString("%1 items — Properties").arg(paths.size()));
+    setWindowTitle(single ? tx("%1 — Properties").arg(name) : txn("%Ln item(s) — Properties", paths.size()));
     resize(560, 600);
     auto *lay = new QVBoxLayout(this);
     tabs = new QTabWidget;
     lay->addWidget(tabs);
-    tabs->addTab(general_tab(), "General");
+    tabs->addTab(general_tab(), tx("General"));
     if (single) {
-        tabs->addTab(perm_tab(), "Permissions");
+        tabs->addTab(perm_tab(), tx("Permissions"));
         if (is_image(path))
-            tabs->addTab(image_tab(), "Image");
+            tabs->addTab(image_tab(), tx("Image"));
         if (isfile(path)) {
             meta_tab_widget = meta_tab();
-            tabs->addTab(meta_tab_widget, "Metadata");
-            tabs->addTab(checksum_tab(), "Checksums");
+            tabs->addTab(meta_tab_widget, tx("Metadata"));
+            tabs->addTab(checksum_tab(), tx("Checksums"));
         }
     }
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -413,32 +416,31 @@ QWidget *PropertiesDialog::general_tab()
         lstat_(path, st);
         bool is_dir = isdir(path);
         name_edit = new QLineEdit(basename(rstrip(path, '/')));
-        form->addRow("Name:", name_edit);
+        form->addRow(tx("Name:"), name_edit);
         // its type from its contents, but not on a tape or floppy (reading it makes the drive seek: by its name there)
         QMimeType mime = isfile(path) && drives::reads_allowed(path) ? mime_for_content(path) : mime_for(path);
-        form->addRow("Type:", sel_label(QString("%1 (%2)").arg(mime.comment(), mime.name())));
-        form->addRow("Location:", sel_label(dirname(abspath(path))));
+        form->addRow(tx("Type:"), sel_label(QString("%1 (%2)").arg(mime.comment(), mime.name())));
+        form->addRow(tx("Location:"), sel_label(dirname(abspath(path))));
         if (S_ISLNK(st.st_mode)) {
             QString target;
             try {
                 target = util::readlink(path);
             } catch (const OSError &) {
             }
-            form->addRow("Link target:", sel_label(target + (exists(path) ? "" : "  (broken link)")));
+            form->addRow(tx("Link target:"), sel_label(exists(path) ? target : tx("%1  (broken link)").arg(target)));
         }
-        size_label = sel_label(is_dir ? QString("Calculating…")
-                                      : QString("%1 (%2 bytes)").arg(human_size(qint64(st.st_size)),
-                                                                     group_digits(st.st_size)));
-        form->addRow("Size:", is_dir && !S_ISLNK(st.st_mode) ? size_row() : size_label);
+        size_label = sel_label(is_dir ? tx("Calculating…")
+                                      : txn("%1 (%Ln byte(s))", st.st_size).arg(human_size(qint64(st.st_size))));
+        form->addRow(tx("Size:"), is_dir && !S_ISLNK(st.st_mode) ? size_row() : size_label);
         if (is_dir && !S_ISLNK(st.st_mode))
             start_size(false);
         QDateTime bt = QFileInfo(path).birthTime();
-        form->addRow("Created:", sel_label(bt.isValid() ? fmt_ts(bt.toSecsSinceEpoch())
-                                                        : QString("unknown (not supported by filesystem)")));
-        form->addRow("Modified:", sel_label(fmt_ts(st.st_mtime)));
-        form->addRow("Accessed:", sel_label(fmt_ts(st.st_atime)));
-        form->addRow("Changed:", sel_label(fmt_ts(st.st_ctime) + "  (metadata)"));
-        form->addRow("Inode / links:", sel_label(QString("%1 / %2  (device %3)")
+        form->addRow(tx("Created:"), sel_label(bt.isValid() ? fmt_ts(bt.toSecsSinceEpoch())
+                                                        : tx("unknown (not supported by filesystem)")));
+        form->addRow(tx("Modified:"), sel_label(fmt_ts(st.st_mtime)));
+        form->addRow(tx("Accessed:"), sel_label(fmt_ts(st.st_atime)));
+        form->addRow(tx("Changed:"), sel_label(tx("%1  (metadata)").arg(fmt_ts(st.st_ctime))));
+        form->addRow(tx("Inode / links:"), sel_label(tx("%1 / %2  (device %3)")
                                                      .arg(qulonglong(st.st_ino))
                                                      .arg(qulonglong(st.st_nlink))
                                                      .arg(qulonglong(st.st_dev))));
@@ -449,16 +451,16 @@ QWidget *PropertiesDialog::general_tab()
             auto *row = new QHBoxLayout;
             app_label = new QLabel(app ? app_name(app) : QString("—"));
             row->addWidget(app_label, 1);
-            auto *btn = new QPushButton("Change…");
+            auto *btn = new QPushButton(tx("Change…"));
             connect(btn, &QPushButton::clicked, this, &PropertiesDialog::change_app);
             row->addWidget(btn);
-            form->addRow("Opens with:", row);
+            form->addRow(tx("Opens with:"), row);
         }
     } else {
-        form->addRow("Items:", sel_label(QString("%1 selected").arg(paths.size())));
-        form->addRow("Location:", sel_label(dirname(path)));
-        size_label = sel_label("Calculating…");
-        form->addRow("Total size:", size_row());
+        form->addRow(tx("Items:"), sel_label(tx("%1 selected").arg(group_digits(paths.size()))));
+        form->addRow(tx("Location:"), sel_label(dirname(path)));
+        size_label = sel_label(tx("Calculating…"));
+        form->addRow(tx("Total size:"), size_row());
         start_size(false);
     }
     // the drive's size from drives::Sizes (statfs can wait on a slow drive): filled in when it comes
@@ -468,15 +470,15 @@ QWidget *PropertiesDialog::general_tab()
         if (mt.root == root)
             fstype = mt.fstype, device = mt.source;
     QLabel *vol = sel_label(root);
-    form->addRow("Volume:", vol);
+    form->addRow(tx("Volume:"), vol);
     QPointer<QLabel> vp(vol);
     auto show_vol = [vp, root, fstype]() {
         if (!vp)
             return;
         drives::Sizes::Info info = drives::Sizes::instance()->get(root);
         QString head = fstype.isEmpty() ? root : QString("%1 (%2)").arg(root, fstype);
-        vp->setText(info.total >= 0 ? QString("%1 — %2 free of %3").arg(head, human_size(info.free), human_size(info.total))
-                                    : head + " — reading the size…");
+        vp->setText(info.total >= 0 ? tx("%1 — %2 free of %3").arg(head, human_size(info.free), human_size(info.total))
+                                    : tx("%1 — reading the size…").arg(head));
     };
     show_vol();
     connect(drives::Sizes::instance(), &drives::Sizes::changed, vol, [show_vol, root](const QString &r) {
@@ -485,9 +487,9 @@ QWidget *PropertiesDialog::general_tab()
     });
     // a drive's own Properties (its top folder): its health, from udisks on a worker (health.h)
     if (paths.size() == 1 && path == root && device.startsWith("/dev/") && prefs::get("overview_health").toBool()) {
-        QLabel *hl = sel_label("Reading…");
+        QLabel *hl = sel_label(tx("Reading…"));
         hl->setObjectName("health");
-        form->addRow("Health:", hl);
+        form->addRow(tx("Health:"), hl);
         QPointer<QLabel> hp(hl);
         QString name = basename(root).isEmpty() ? root : basename(root);
         run([device]() { return QVariant::fromValue(health::read({device}).value(device, health::Info{})); },
@@ -496,13 +498,13 @@ QWidget *PropertiesDialog::general_tab()
                     return;
                 health::Info h = v.value<health::Info>();
                 if (h.drive.isEmpty()) {   // (udisks doesn't know it, or can't be reached)
-                    hp->setText("Not available");
+                    hp->setText(tx("Not available"));
                     return;
                 }
                 hp->setTextFormat(Qt::RichText);
                 hp->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
-                hp->setText("<a href=\"health\">" + health::line(h).toHtmlEscaped() + "</a>");
-                hp->setToolTip("Drive Health… (what the drive reports about itself)");
+                hp->setText("<a href=\"health\">" + health::line(h).toHtmlEscaped() + "</a>");   // notr: markup
+                hp->setToolTip(tx("Drive Health… (what the drive reports about itself)"));
                 connect(hp, &QLabel::linkActivated, this, [this, name, h]() { health::open_window(this, name, h); });
             });
     }
@@ -516,15 +518,15 @@ void PropertiesDialog::folder_style_rows(QFormLayout *form)
     if (!t)
         return;
     style_color = new QComboBox;
-    style_color->addItem(thumbs::color_swatch(t->folder_color), "Default", QString());
+    style_color->addItem(thumbs::color_swatch(t->folder_color), tx("Default"), QString());
     for (const auto &[name, color] : thumbs::FOLDER_COLORS)
-        style_color->addItem(thumbs::color_swatch(color), name, color);
+        style_color->addItem(thumbs::color_swatch(color), tx(name), color);
     QString cur = t->custom_color(path);
     if (!cur.isEmpty() && style_color->findData(cur) < 0)
-        style_color->addItem(thumbs::color_swatch(cur), QString("Custom (%1)").arg(cur), cur);
+        style_color->addItem(thumbs::color_swatch(cur), tx("Custom (%1)").arg(cur), cur);
     style_color->setCurrentIndex(std::max(0, style_color->findData(cur)));
-    form->addRow("Folder colour:", style_color);
-    style_previews = new QCheckBox("Show image previews on this folder's icon");
+    form->addRow(tx("Folder colour:"), style_color);
+    style_previews = new QCheckBox(tx("Show image previews on this folder's icon"));
     style_previews->setChecked(t->previews_for(path));
     form->addRow("", style_previews);
 }
@@ -551,8 +553,8 @@ QWidget *PropertiesDialog::size_row()
     auto *h = new QHBoxLayout;
     size_age = new QLabel;
     size_age->setStyleSheet("color: palette(placeholder-text)");
-    recalc = new QPushButton("Recalculate");
-    recalc->setToolTip("Count the size again (a job in the Jobs window)");
+    recalc = new QPushButton(tx("Recalculate"));
+    recalc->setToolTip(tx("Count the size again (a job in the Jobs window)"));
     connect(recalc, &QPushButton::clicked, this, [this]() { start_size(true); });
     h->addWidget(size_age, 1);
     h->addWidget(recalc);
@@ -604,8 +606,8 @@ void PropertiesDialog::start_size(bool fresh)
     for (const QString &d : dirs)
         if (!known.contains(d))
             to_count << d;
-    size_label->setText("Calculating…");
-    size_age->setText(known.isEmpty() ? QString() : "Partly remembered");
+    size_label->setText(tx("Calculating…"));
+    size_age->setText(known.isEmpty() ? QString() : tx("Partly remembered"));
     recalc->setEnabled(false);
     auto work = [to_count, total_of](Task *task) {
         QHash<QString, fileops::DirStats> counted;
@@ -625,7 +627,7 @@ void PropertiesDialog::start_size(bool fresh)
             return;
         self->recalc->setEnabled(true);
         if (!res.isValid()) {
-            self->size_label->setText("Not calculated (stopped)");
+            self->size_label->setText(tx("Not calculated (stopped)"));
             return;
         }
         self->show_dir_size(res);
@@ -633,9 +635,10 @@ void PropertiesDialog::start_size(bool fresh)
         self->size_age->setText(fileops::dirsizes::age_text(known.isEmpty() ? QDateTime::currentSecsSinceEpoch() : oldest,
                                                             QDateTime::currentSecsSinceEpoch()));
     };
-    QString what = paths.size() == 1 ? "“" + basename(rstrip(path, '/')) + "”" : QString("%1 items").arg(paths.size());
+    QString title = paths.size() == 1 ? tx("Counting the size of “%1”").arg(basename(rstrip(path, '/')))
+                                      : txn("Counting the size of %Ln item(s)", paths.size());
     // Recalculate: a job of its own (in the Jobs window, with Stop); the first count is quiet, as before
-    fileops::queue_job(this, "Counting the size of " + what, to_count, work, done, true, {}, !fresh);
+    fileops::queue_job(this, title, to_count, work, done, true, {}, !fresh);
 }
 
 void PropertiesDialog::calculate_size()
@@ -653,7 +656,7 @@ void PropertiesDialog::show_metadata()
 void PropertiesDialog::show_dir_size(const QVariant &res)
 {
     auto s = res.value<fileops::DirStats>();
-    size_label->setText(QString("%1 (%2 bytes)\n%3 files, %4 folders")
+    size_label->setText(tx("%1 (%2 bytes)\n%3 files, %4 folders")
                             .arg(human_size(s.size), group_digits(s.size), group_digits(s.files), group_digits(s.dirs)));
 }
 
@@ -680,16 +683,16 @@ QWidget *PropertiesDialog::perm_tab()
     struct group *gr = getgrgid(st.st_gid);
     QString owner = pw ? QString::fromLocal8Bit(pw->pw_name) : QString::number(st.st_uid);
     QString group = gr ? QString::fromLocal8Bit(gr->gr_name) : QString::number(st.st_gid);
-    form->addRow("Owner:", new QLabel(QString("%1 (%2)").arg(owner, QString::number(st.st_uid))));
-    form->addRow("Group:", new QLabel(QString("%1 (%2)").arg(group, QString::number(st.st_gid))));
+    form->addRow(tx("Owner:"), new QLabel(QString("%1 (%2)").arg(owner, QString::number(st.st_uid))));
+    form->addRow(tx("Group:"), new QLabel(QString("%1 (%2)").arg(group, QString::number(st.st_gid))));
     lay->addLayout(form);
     auto *grid = new QGridLayout;
     bool is_dir = isdir(path);
-    QStringList cols = {"Read", "Write", is_dir ? "Access" : "Execute"};
+    QStringList cols = {tx("Read"), tx("Write"), is_dir ? tx("Access") : tx("Execute")};
     for (int c = 0; c < 3; ++c)
         grid->addWidget(new QLabel("<b>" + cols[c] + "</b>"), 0, c + 1);
     const mode_t bits[3][3] = {{S_IRUSR, S_IWUSR, S_IXUSR}, {S_IRGRP, S_IWGRP, S_IXGRP}, {S_IROTH, S_IWOTH, S_IXOTH}};
-    const QStringList who = {"Owner", "Group", "Others"};
+    const QStringList who = {tx("Owner"), tx("Group"), tx("Others")};
     for (int r = 0; r < 3; ++r) {
         grid->addWidget(new QLabel(who[r]), r + 1, 0);
         for (int c = 0; c < 3; ++c) {
@@ -702,7 +705,7 @@ QWidget *PropertiesDialog::perm_tab()
     }
     lay->addLayout(grid);
     auto *special = new QHBoxLayout;
-    const QList<QPair<mode_t, QString>> specials = {{S_ISUID, "Set UID"}, {S_ISGID, "Set GID"}, {S_ISVTX, "Sticky"}};
+    const QList<QPair<mode_t, QString>> specials = {{S_ISUID, tx("Set UID")}, {S_ISGID, tx("Set GID")}, {S_ISVTX, tx("Sticky")}};
     for (const auto &[bit, label] : specials) {
         auto *cb = new QCheckBox(label);
         cb->setChecked(orig_mode & bit);
@@ -714,14 +717,14 @@ QWidget *PropertiesDialog::perm_tab()
     octal = new QLabel;
     lay->addWidget(octal);
     if (!is_dir) {
-        auto *exe = new QCheckBox("Allow executing file as program");
+        auto *exe = new QCheckBox(tx("Allow executing file as program"));
         exe->setChecked(orig_mode & S_IXUSR);
         connect(exe, &QCheckBox::toggled, this, &PropertiesDialog::toggle_exec);
         lay->addWidget(exe);
     }
     bool editable = st.st_uid == ::getuid() || ::getuid() == 0;
     if (!editable) {
-        lay->addWidget(new QLabel("<i>You are not the owner, so you cannot change these permissions.</i>"));
+        lay->addWidget(new QLabel(tx("<i>You are not the owner, so you cannot change these permissions.</i>")));
         for (QCheckBox *cb : perm_boxes)
             cb->setEnabled(false);
     }
@@ -749,7 +752,7 @@ mode_t PropertiesDialog::mode() const
 void PropertiesDialog::update_octal()
 {
     mode_t m = mode();
-    octal->setText(QString("Octal: <b>%1</b>    Symbolic: <b>%2</b>")
+    octal->setText(tx("Octal: <b>%1</b>    Symbolic: <b>%2</b>")
                        .arg(QString::number(m, 8).rightJustified(4, '0'),
                             filemode(m | (isdir(path) ? S_IFDIR : S_IFREG))));
 }
@@ -782,11 +785,11 @@ QWidget *PropertiesDialog::meta_tab()
     auto *w = new QWidget;
     auto *lay = new QVBoxLayout(w);
     meta_filter = new QLineEdit;
-    meta_filter->setPlaceholderText("Filter tags…");
+    meta_filter->setPlaceholderText(tx("Filter tags…"));
     connect(meta_filter, &QLineEdit::textChanged, this, &PropertiesDialog::filter_meta);
     lay->addWidget(meta_filter);
     meta_tree = new QTreeWidget;
-    meta_tree->setHeaderLabels({"Group", "Tag", "Value"});
+    meta_tree->setHeaderLabels({tx("Group"), tx("Tag"), tx("Value")});
     meta_tree->setRootIsDecorated(false);
     meta_tree->setAlternatingRowColors(true);
     meta_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -798,13 +801,13 @@ QWidget *PropertiesDialog::meta_tab()
     lay->addWidget(meta_tree);
     meta_editable = metadata::can_edit() && !metadata::tag_families(path).isEmpty();
     auto *row = new QHBoxLayout;
-    meta_add_btn = new QPushButton("Add Tag…");
+    meta_add_btn = new QPushButton(tx("Add Tag…"));
     connect(meta_add_btn, &QPushButton::clicked, this, &PropertiesDialog::meta_add);
-    meta_edit_btn = new QPushButton("Edit…");
+    meta_edit_btn = new QPushButton(tx("Edit…"));
     connect(meta_edit_btn, &QPushButton::clicked, this, [this]() { meta_edit(meta_tree->currentItem()); });
-    meta_del_btn = new QPushButton("Remove");
+    meta_del_btn = new QPushButton(tx("Remove"));
     connect(meta_del_btn, &QPushButton::clicked, this, &PropertiesDialog::meta_remove);
-    meta_clear_btn = new QPushButton("Clear All Metadata…");
+    meta_clear_btn = new QPushButton(tx("Clear All Metadata…"));
     connect(meta_clear_btn, &QPushButton::clicked, this, &PropertiesDialog::meta_clear);
     for (QPushButton *b : {meta_add_btn, meta_edit_btn, meta_del_btn})
         row->addWidget(b);
@@ -814,12 +817,14 @@ QWidget *PropertiesDialog::meta_tab()
     meta_add_btn->setEnabled(meta_editable);
     meta_clear_btn->setEnabled(meta_editable);
     meta_buttons();
-    lay->addWidget(new QLabel(
-        meta_editable ? "<small>Double-click a row to edit it (greyed-out rows are read-only). "
-                        "Changes are written to the file immediately.</small>"
-                      : QString("<small>Double-click a row to see the full value. ") +
-                            (metadata::can_edit() ? "This file type's metadata can't be edited.</small>"
-                                                  : "Install exiftool (libimage-exiftool-perl) to edit metadata.</small>")));
+    lay->addWidget(new QLabel(   // notr: markup around the texts
+        "<small>" +
+        (meta_editable          ? tx("Double-click a row to edit it (greyed-out rows are read-only). Changes are written to "
+                                     "the file immediately.")
+         : metadata::can_edit() ? tx("Double-click a row to see the full value. This file type's metadata can't be edited.")
+                                : tx("Double-click a row to see the full value. Install exiftool (libimage-exiftool-perl) to "
+                                     "edit metadata.")) +
+        "</small>"));
     meta_loaded = false;
     connect(tabs, &QTabWidget::currentChanged, this, &PropertiesDialog::maybe_load_meta);
     return w;
@@ -845,7 +850,7 @@ void PropertiesDialog::meta_buttons()
     QTreeWidgetItem *cur = meta_tree->currentItem();
     meta_edit_btn->setEnabled(meta_row_editable(cur) && cur->isSelected());
     meta_del_btn->setEnabled(!sel.isEmpty());
-    meta_del_btn->setText(sel.size() > 1 ? QString("Remove %1 Tags").arg(sel.size()) : QString("Remove"));
+    meta_del_btn->setText(sel.size() > 1 ? txn("Remove %Ln Tags", sel.size()) : tx("Remove"));
 }
 
 QString PropertiesDialog::meta_key(QTreeWidgetItem *it) const
@@ -859,10 +864,10 @@ void PropertiesDialog::meta_write(std::function<QStringList()> fn)
     run([fn]() { return QVariant(fn()); },
         [this](const QVariant &warnings) {
             if (!warnings.toStringList().isEmpty())
-                inform(this, "Metadata", warnings.toStringList().join('\n'));
+                inform(this, tx("Metadata"), warnings.toStringList().join('\n'));
             reload_meta();
         },
-        "Writing metadata");
+        tx("Writing metadata"));
 }
 
 static QVariant meta_rows(const QString &path)
@@ -922,10 +927,9 @@ void PropertiesDialog::meta_remove()
     QStringList keys;
     for (QTreeWidgetItem *it : sel)
         keys << meta_key(it);
-    QString what = keys.size() == 1 ? keys.first() : QString("%1 tags").arg(keys.size());
-    auto *box = new QMessageBox(QMessageBox::Question, "Remove Metadata",
-                                "Remove " + what + " from this file?\n\nThis can't be undone.",
-                                QMessageBox::Yes | QMessageBox::No, this);
+    QString question = keys.size() == 1 ? tx("Remove %1 from this file?\n\nThis can't be undone.").arg(keys.first())
+                                        : txn("Remove %Ln tag(s) from this file?\n\nThis can't be undone.", keys.size());
+    auto *box = new QMessageBox(QMessageBox::Question, tx("Remove Metadata"), question, QMessageBox::Yes | QMessageBox::No, this);
     connect(box, &QMessageBox::buttonClicked, this, [this, box, keys](QAbstractButton *b) {
         if (b != box->button(QMessageBox::Yes))
             return;
@@ -944,13 +948,13 @@ void PropertiesDialog::meta_remove()
 
 void PropertiesDialog::meta_clear()
 {
-    auto *box = new QMessageBox(QMessageBox::Warning, "Clear All Metadata",
-                                QString("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, image-generation prompts…) "
+    auto *box = new QMessageBox(QMessageBox::Warning, tx("Clear All Metadata"),
+                                tx("Remove all metadata (EXIF, XMP, IPTC, GPS, comments, image-generation prompts…) "
                                         "from “%1”?\n\nThis can't be undone.")
                                     .arg(basename(path)),
                                 QMessageBox::Cancel, this);
-    QPushButton *clear = box->addButton("Clear All", QMessageBox::DestructiveRole);
-    auto *keep = new QCheckBox("Keep orientation and colour profile");
+    QPushButton *clear = box->addButton(tx("Clear All"), QMessageBox::DestructiveRole);
+    auto *keep = new QCheckBox(tx("Keep orientation and colour profile"));
     keep->setChecked(true);
     box->setCheckBox(keep);
     connect(box, &QMessageBox::buttonClicked, this, [this, clear, keep](QAbstractButton *b) {
@@ -970,13 +974,13 @@ void PropertiesDialog::maybe_load_meta(int idx)
     meta_loaded = true;
     if (meta_editable && !metadata::tag_db_if_loaded())
         fileops::run_task(
-            this, "Loading tags…",
+            this, tx("Loading tags…"),
             []() {
                 metadata::tag_db();
                 return QVariant(true);
             },
             nullptr, true);
-    meta_tree->addTopLevelItem(new QTreeWidgetItem(QStringList{"", "Loading…", ""}));
+    meta_tree->addTopLevelItem(new QTreeWidgetItem(QStringList{"", tx("Loading…"), ""}));
     QString p = path;
     run([p]() { return meta_rows(p); }, [this](const QVariant &r) { show_meta(r); });
 }
@@ -1024,18 +1028,18 @@ void PropertiesDialog::meta_menu(const QPoint &pos)
     QString row = QString("%1:%2 = %3").arg(it->text(0), it->text(1), val);
     QString tag = it->text(1);
     QMenu m(this);
-    m.addAction("Copy Value", this, [val]() { QGuiApplication::clipboard()->setText(val); });
-    m.addAction("Copy Row", this, [row]() { QGuiApplication::clipboard()->setText(row); });
-    m.addAction("View Value…", this, [this, tag, val]() { show_free(new TextDialog(this, tag, val)); });
+    m.addAction(tx("Copy Value"), this, [val]() { QGuiApplication::clipboard()->setText(val); });
+    m.addAction(tx("Copy Row"), this, [row]() { QGuiApplication::clipboard()->setText(row); });
+    m.addAction(tx("View Value…"), this, [this, tag, val]() { show_free(new TextDialog(this, tag, val)); });
     if (meta_editable) {
         m.addSeparator();
         if (meta_row_editable(it))
-            m.addAction("Edit Value…", this, [this, it]() { meta_edit(it); });
+            m.addAction(tx("Edit Value…"), this, [this, it]() { meta_edit(it); });
         auto sel = meta_selected();
         if (!sel.isEmpty())
-            m.addAction(sel.size() > 1 ? QString("Remove %1 Tags…").arg(sel.size()) : QString("Remove Tag…"), this,
+            m.addAction(sel.size() > 1 ? txn("Remove %Ln Tags…", sel.size()) : tx("Remove Tag…"), this,
                         &PropertiesDialog::meta_remove);
-        m.addAction("Add Tag…", this, &PropertiesDialog::meta_add);
+        m.addAction(tx("Add Tag…"), this, &PropertiesDialog::meta_add);
     }
     m.exec(meta_tree->viewport()->mapToGlobal(pos));
 }
@@ -1052,7 +1056,7 @@ QWidget *PropertiesDialog::checksum_tab()
         auto *out = new QLineEdit;
         out->setReadOnly(true);
         *outputs << out;
-        auto *btn = new QPushButton("Compute");
+        auto *btn = new QPushButton(tx("Compute"));
         row->addWidget(out, 1);
         row->addWidget(btn);
         form->addRow(name.toUpper() + ":", row);
@@ -1060,7 +1064,7 @@ QWidget *PropertiesDialog::checksum_tab()
         QCryptographicHash::Algorithm a = algo;
         connect(btn, &QPushButton::clicked, this, [this, n, a, out, btn]() {
             btn->setEnabled(false);
-            out->setText("Computing…");
+            out->setText(tx("Computing…"));
             QString p = path;
             run(
                 [p, a]() -> QVariant {
@@ -1072,36 +1076,36 @@ QWidget *PropertiesDialog::checksum_tab()
                         h.addData(f.read(4 << 20));
                     return QString::fromLatin1(h.result().toHex());
                 },
-                [out](const QVariant &r) { out->setText(r.toString()); }, "Computing " + n.toUpper());
+                [out](const QVariant &r) { out->setText(r.toString()); }, tx("Computing %1").arg(n.toUpper()));
         });
     }
     auto *verify = new QLineEdit;
-    verify->setPlaceholderText("Paste a checksum to compare…");
+    verify->setPlaceholderText(tx("Paste a checksum to compare…"));
     auto *result = new QLabel;
     connect(verify, &QLineEdit::textChanged, this, [outputs, result](const QString &text) {
         QString t = text.trimmed().toLower();
         bool match = false;
         for (QLineEdit *o : *outputs)
             match = match || o->text().toLower() == t;
-        result->setText(t.isEmpty() ? QString() : (match ? "✔ Match" : "✘ No match (compute first)"));
+        result->setText(t.isEmpty() ? QString() : (match ? tx("✔ Match") : tx("✘ No match (compute first)")));
     });
-    form->addRow("Verify:", verify);
+    form->addRow(tx("Verify:"), verify);
     form->addRow("", result);
     // or against a checksum file that lists it (SHA256SUMS, .md5, .sfv…)
     auto *hrow = new QHBoxLayout;
     hash_edit = new QLineEdit;
     hash_edit->setReadOnly(true);
-    hash_edit->setPlaceholderText("Verify against a checksum file…");
-    auto *browse = new QPushButton("Browse…");
+    hash_edit->setPlaceholderText(tx("Verify against a checksum file…"));
+    auto *browse = new QPushButton(tx("Browse…"));
     hrow->addWidget(hash_edit, 1);
     hrow->addWidget(browse);
-    form->addRow("Checksum file:", hrow);
+    form->addRow(tx("Checksum file:"), hrow);
     hash_result = new QLabel;
     hash_result->setWordWrap(true);
     form->addRow("", hash_result);
     connect(browse, &QPushButton::clicked, this, [this]() {
         QString start = hash_edit->text().isEmpty() ? dirname(path) : dirname(hash_edit->text());
-        choose_file(this, "Choose Checksum File", start, hashcheck::file_filter(),
+        choose_file(this, tx("Choose Checksum File"), start, hashcheck::file_filter(),
                     [this](const QString &f) { verify_against(f); });
     });
     return w;
@@ -1116,12 +1120,12 @@ void PropertiesDialog::verify_against(const QString &hash_path)
         hash_result->setStyleSheet(QString("color: %1").arg((good ? ok_color() : error_color()).name()));
     };
     hash_result->setStyleSheet(QString());
-    hash_result->setText("Checking…");
+    hash_result->setText(tx("Checking…"));
     QPointer<QLabel> label(hash_result);
     QString file = path;
     // the checksum file is read on the job's thread too (it can be on a tape or floppy, which takes long to read)
     fileops::queue_job(
-        this, "Verifying " + basename(path), {file, hash_path},
+        this, tx("Verifying %1").arg(basename(path)), {file, hash_path},
         [hash_path, file](Task *t) -> QVariant {
             QList<hashcheck::Entry> entries = hashcheck::parse(hash_path);
             const hashcheck::Entry *found = hashcheck::find(entries, file);
@@ -1139,18 +1143,18 @@ void PropertiesDialog::verify_against(const QString &hash_path)
             QVariantList r = res.toList();
             QString status = r.value(0).toString(), algo = r.value(4).toString();
             if (!res.isValid())
-                return said("Stopped.", false);
+                return said(tx("Stopped."), false);
             if (status == "not_checksums")
-                return said(QString("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
+                return said(tx("✘ “%1” isn't a checksum file.").arg(basename(hash_path)), false);
             if (status == "not_listed")
-                return said(QString("✘ “%1” isn't listed in it.").arg(basename(file)), false);
+                return said(tx("✘ “%1” isn't listed in it.").arg(basename(file)), false);
             if (status == "ok")
-                return said(QString("✔ Matches (%1).").arg(algo), true);
+                return said(tx("✔ Matches (%1).").arg(algo), true);
             if (status == "failed") {
-                label->setToolTip(QString("Expected: %1\nActual: %2").arg(r.value(3).toString(), r.value(1).toString()));
-                return said(QString("✘ Doesn't match (%1).").arg(algo), false);
+                label->setToolTip(tx("Expected: %1\nActual: %2").arg(r.value(3).toString(), r.value(1).toString()));
+                return said(tx("✘ Doesn't match (%1).").arg(algo), false);
             }
-            said("✘ " + (status == "missing" ? QString("Not found.") : r.value(2).toString()), false);
+            said("✘ " + (status == "missing" ? tx("Not found.") : r.value(2).toString()), false);
         });
 }
 
@@ -1167,14 +1171,14 @@ void PropertiesDialog::apply()
                     if (e == EACCES || e == EPERM) {
                         QString p = path;
                         admin::retry_as_admin(
-                            owner, "Permissions",
-                            QString("You don't have permission to change the permissions of “%1”.").arg(basename(path)),
+                            owner, tx("Permissions"),
+                            tx("You don't have permission to change the permissions of “%1”.").arg(basename(path)),
                             [p, m](Task *task) {
                                 admin::session().call(task, "chmod", {{"path", p}, {"mode", int(m)}});
                                 return QStringList();
                             });
                     } else {
-                        warn(owner, "Permissions", errno_text(e, path));   // owner: this may close below
+                        warn(owner, tx("Permissions"), errno_text(e, path));   // owner: this may close below
                     }
                 }
             }
@@ -1183,17 +1187,17 @@ void PropertiesDialog::apply()
         if (!new_name.isEmpty() && new_name != basename(rstrip(path, '/'))) {
             auto res = dialogs::do_rename(path, new_name);
             if (!res.denied && res.error.isEmpty())
-                undo::record("rename", "Rename", {qMakePair(path, join(dirname(path), new_name))});
+                undo::record("rename", TX_NOOP("Rename"), {qMakePair(path, join(dirname(path), new_name))});
             if (res.denied) {
                 QString p = path, target = join(dirname(path), new_name);
-                admin::retry_as_admin(owner, "Rename",
-                                      QString("You don't have permission to rename “%1”.").arg(basename(path)),
+                admin::retry_as_admin(owner, tx("Rename"),
+                                      tx("You don't have permission to rename “%1”.").arg(basename(path)),
                                       [p, target](Task *task) {
                                           admin::session().call(task, "rename", {{"src", p}, {"dst", target}});
                                           return QStringList();
                                       });
             } else if (!res.error.isEmpty()) {
-                warn(this, "Rename", res.error);
+                warn(this, tx("Rename"), res.error);
                 return;
             }
         }
@@ -1206,20 +1210,20 @@ void PropertiesDialog::apply()
 OpenWithDialog::OpenWithDialog(QWidget *parent, const QStringList &paths, bool launch)
     : QDialog(parent), paths(paths), launch(launch)
 {
-    setWindowTitle("Open With");
+    setWindowTitle(tx("Open With"));
     resize(420, 520);
     auto *lay = new QVBoxLayout(this);
     QString ct = content_type(paths.first());
-    lay->addWidget(new QLabel(QString("Choose an application for “%1”\n<%2>").arg(basename(paths.first()), ct)));
+    lay->addWidget(new QLabel(tx("Choose an application for “%1”\n<%2>").arg(basename(paths.first()), ct)));
     search = new QLineEdit;
-    search->setPlaceholderText("Search applications…");
+    search->setPlaceholderText(tx("Search applications…"));
     connect(search, &QLineEdit::textChanged, this, &OpenWithDialog::filter);
     lay->addWidget(search);
     list = new QListWidget;
     connect(list, &QListWidget::itemDoubleClicked, this, [this]() { ok(); });
     lay->addWidget(list);
     auto [rec, others] = apps_for(paths.first());
-    const QList<QPair<QString, QList<AppRef>>> groups = {{"Recommended", rec}, {"Other applications", others}};
+    const QList<QPair<QString, QList<AppRef>>> groups = {{tx("Recommended"), rec}, {tx("Other applications"), others}};
     for (const auto &[group, apps] : groups) {
         if (apps.isEmpty())
             continue;
@@ -1237,7 +1241,7 @@ OpenWithDialog::OpenWithDialog(QWidget *parent, const QStringList &paths, bool l
     }
     if (list->count() > 1)
         list->setCurrentRow(1);
-    default_box = new QCheckBox("Always use for this file type");
+    default_box = new QCheckBox(tx("Always use for this file type"));
     lay->addWidget(default_box);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &OpenWithDialog::ok);
@@ -1272,7 +1276,7 @@ void OpenWithDialog::ok()
         if (launch)
             launch_app(app, paths);
     } catch (const Error &e) {
-        warn(parentWidget(), "Open With", e.message());   // not this: it closes now
+        warn(parentWidget(), tx("Open With"), e.message());   // not this: it closes now
     }
     accept();
 }
@@ -1281,12 +1285,12 @@ void OpenWithDialog::ok()
 
 BatchRenameDialog::BatchRenameDialog(QWidget *parent, const QStringList &paths) : QDialog(parent), paths(paths)
 {
-    setWindowTitle(QString("Rename %1 Items").arg(paths.size()));
+    setWindowTitle(tx("Rename %1 Items").arg(paths.size()));
     resize(700, 520);
     auto *lay = new QVBoxLayout(this);
     auto *modes = new QHBoxLayout;
-    r_tmpl = new QRadioButton("Rename using a template");
-    r_repl = new QRadioButton("Find and replace text");
+    r_tmpl = new QRadioButton(tx("Rename using a template"));
+    r_repl = new QRadioButton(tx("Find and replace text"));
     r_tmpl->setChecked(true);
     auto *grp = new QButtonGroup(this);
     grp->addButton(r_tmpl);
@@ -1296,26 +1300,26 @@ BatchRenameDialog::BatchRenameDialog(QWidget *parent, const QStringList &paths) 
     lay->addLayout(modes);
     auto *form = new QFormLayout;
     tmpl = new QLineEdit("[Name] ###");
-    tmpl->setToolTip("[Name] = original name, # = number (### pads to 3 digits), [Date] = modified date");
+    tmpl->setToolTip(tx("[Name] = original name, # = number (### pads to 3 digits), [Date] = modified date"));
     start = new QSpinBox;
     start->setRange(0, 1000000);
     start->setValue(1);
     find = new QLineEdit;
     repl = new QLineEdit;
-    regex = new QCheckBox("Regular expression");
-    keep_ext = new QCheckBox("Keep file extension");
+    regex = new QCheckBox(tx("Regular expression"));
+    keep_ext = new QCheckBox(tx("Keep file extension"));
     keep_ext->setChecked(true);
-    form->addRow("Template:", tmpl);
-    form->addRow("Start number:", start);
-    form->addRow("Find:", find);
-    form->addRow("Replace with:", repl);
+    form->addRow(tx("Template:"), tmpl);
+    form->addRow(tx("Start number:"), start);
+    form->addRow(tx("Find:"), find);
+    form->addRow(tx("Replace with:"), repl);
     form->addRow("", regex);
     form->addRow("", keep_ext);
     lay->addLayout(form);
-    lay->addWidget(new QLabel("<small>Template tokens: <b>[Name]</b> original name, <b>#</b> counter "
-                              "(<b>###</b> = 001), <b>[Date]</b> modified date (YYYY-MM-DD)</small>"));
+    lay->addWidget(new QLabel(tx("<small>Template tokens: <b>[Name]</b> original name, <b>#</b> counter "
+                              "(<b>###</b> = 001), <b>[Date]</b> modified date (YYYY-MM-DD)</small>")));
     table = new QTableWidget(0, 2);
-    table->setHorizontalHeaderLabels({"Original", "New name"});
+    table->setHorizontalHeaderLabels({tx("Original"), tx("New name")});
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     lay->addWidget(table);
@@ -1323,7 +1327,7 @@ BatchRenameDialog::BatchRenameDialog(QWidget *parent, const QStringList &paths) 
     lay->addWidget(status);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     ok_btn = bb->button(QDialogButtonBox::Ok);
-    ok_btn->setText("Rename");
+    ok_btn->setText(tx("Rename"));
     connect(bb, &QDialogButtonBox::accepted, this, &BatchRenameDialog::apply);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     lay->addWidget(bb);
@@ -1414,7 +1418,7 @@ void BatchRenameDialog::preview()
         }
         table->setItem(i, 1, it);
     }
-    status->setText(problems ? QString("%1 conflicting name(s)").arg(problems) : QString());
+    status->setText(problems ? txn("%Ln conflicting name(s)", problems) : QString());
     ok_btn->setEnabled(problems == 0);
 }
 
@@ -1448,20 +1452,20 @@ void BatchRenameDialog::apply()
             try {
                 put_new(tmp, p);
             } catch (const OSError &) {
-                stuck << QString("%1 is now %2").arg(basename(p), basename(tmp));
+                stuck << tx("%1 is now %2").arg(basename(p), basename(tmp));
             }
         }
         QString msg = e.message();
         if (!stuck.isEmpty())
-            msg += "\n\nThese couldn't be put back under their old names:\n" + stuck.join('\n');
-        warn(this, "Rename", msg);
+            msg += "\n\n" + tx("These couldn't be put back under their old names:\n%1").arg(stuck.join('\n'));
+        warn(this, tx("Rename"), msg);
         return;
     }
     QList<QPair<QString, QString>> renamed;
     for (int i = 0; i < temps.size(); ++i)
         if (basename(temps[i].second) != names[i])
             renamed << qMakePair(temps[i].second, finals[i]);
-    undo::record("rename", QString("Rename %1 Items").arg(names.size()), renamed);
+    undo::record("rename", txn("Rename %Ln Items", names.size()), renamed);
     accept();
 }
 
@@ -1472,10 +1476,10 @@ namespace dialogs {
 RenameResult do_rename(const QString &path, const QString &new_name)
 {
     if (new_name.contains('/') || new_name == "." || new_name == "..")
-        return {"Invalid name.", false};
+        return {tx("Invalid name."), false};
     QString target = join(dirname(path), new_name);
     if (lexists(target) && realpath(target) != realpath(path))
-        return {QString("“%1” already exists.").arg(new_name), false};
+        return {tx("“%1” already exists.").arg(new_name), false};
     try {
         util::rename(path, target);
     } catch (const OSError &e) {
@@ -1490,7 +1494,7 @@ void ask_rename(QWidget *parent, const QString &path, std::function<void(const Q
 {
     auto *dlg = new QDialog(parent);
     bool is_dir = isdir(path);
-    dlg->setWindowTitle(is_dir ? "Rename Folder" : "Rename File");
+    dlg->setWindowTitle(is_dir ? tx("Rename Folder") : tx("Rename File"));
     auto *lay = new QVBoxLayout(dlg);
     QString old = basename(path);
     auto *edit = new QLineEdit(old);
@@ -1500,7 +1504,7 @@ void ask_rename(QWidget *parent, const QString &path, std::function<void(const Q
     err->setStyleSheet(QString("color: %1").arg(error_color().name()));
     lay->addWidget(err);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    bb->button(QDialogButtonBox::Ok)->setText("Rename");
+    bb->button(QDialogButtonBox::Ok)->setText(tx("Rename"));
     lay->addWidget(bb);
     int stem_len = is_dir ? old.size() : split_ext(old).first.size();
     QTimer::singleShot(0, edit, [edit, stem_len]() { edit->setSelection(0, stem_len); });
@@ -1510,9 +1514,9 @@ void ask_rename(QWidget *parent, const QString &path, std::function<void(const Q
         if (t.isEmpty())
             msg = " ";
         else if (t.contains('/'))
-            msg = "Names cannot contain “/”.";
+            msg = tx("Names cannot contain “/”.");
         else if (t != old && lexists(join(dirname(path), t)))
-            msg = "An item with that name already exists.";
+            msg = tx("An item with that name already exists.");
         err->setText(msg.trimmed());
         bb->button(QDialogButtonBox::Ok)->setEnabled(msg.isEmpty());
     });
@@ -1537,21 +1541,21 @@ void edit_bookmark(QWidget *parent, const QString &target, std::function<void()>
     if (idx < 0)
         return;
     auto *d = new QDialog(parent);
-    d->setWindowTitle("Edit Bookmark");
+    d->setWindowTitle(tx("Edit Bookmark"));
     d->setMinimumWidth(460);
     auto *form = new QFormLayout(d);
     auto *name = new QLineEdit(bms[idx].second);
     auto *path = new QLineEdit(bms[idx].first);
-    auto *browse = new QPushButton("Browse…");
+    auto *browse = new QPushButton(tx("Browse…"));
     QObject::connect(browse, &QPushButton::clicked, d, [d, path]() {
         QString start = path->text().trimmed();
-        choose_folder(d, "Bookmark Location", isdir(start) ? start : HOME(), [path](const QString &p) { path->setText(p); });
+        choose_folder(d, tx("Bookmark Location"), isdir(start) ? start : HOME(), [path](const QString &p) { path->setText(p); });
     });
     auto *row = new QHBoxLayout;
     row->addWidget(path, 1);
     row->addWidget(browse);
-    form->addRow("Name:", name);
-    form->addRow("Location:", row);
+    form->addRow(tx("Name:"), name);
+    form->addRow(tx("Location:"), row);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
     form->addRow(bb);
     QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
@@ -1560,11 +1564,11 @@ void edit_bookmark(QWidget *parent, const QString &target, std::function<void()>
         if (p.startsWith('~'))
             p = expanduser(p);
         if (p.isEmpty()) {
-            warn(d, "Edit Bookmark", "Location can't be empty.");
+            warn(d, tx("Edit Bookmark"), tx("Location can't be empty."));
             return;
         }
         if (!p.contains("://") && !isdir(p))
-            ask_yes(d, "Edit Bookmark", QString("“%1” is not an existing folder. Save anyway?").arg(p), [d]() { d->accept(); });
+            ask_yes(d, tx("Edit Bookmark"), tx("“%1” is not an existing folder. Save anyway?").arg(p), [d]() { d->accept(); });
         else
             d->accept();
     });

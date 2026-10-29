@@ -24,7 +24,7 @@ QString command()
 
 bool available() { return !command().isEmpty(); }
 
-QString wallpaper_label() { return available() ? "Set as Wallpaper (UWP)" : "Set as Wallpaper"; }
+QString wallpaper_label() { return available() ? tx("Set as Wallpaper (UWP)") : tx("Set as Wallpaper"); }
 
 bool set_wallpaper(const QString &path)
 {

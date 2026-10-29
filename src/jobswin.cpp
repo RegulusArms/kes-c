@@ -71,11 +71,11 @@ QString clock_text(qint64 ms)
 
 QString state_label(const QString &state)
 {
-    static const QHash<QString, QString> labels = {{"waiting", "Waiting"},     {"running", "Running"},
-                                                   {"paused", "Paused"},       {"done", "Done"},
-                                                   {"done with errors", "Done, with errors"},
-                                                   {"failed", "Failed"},       {"cancelled", "Cancelled"}};
-    return labels.value(state, state);
+    static const QHash<QString, const char *> labels = {
+        {"waiting", TX_NOOP("Waiting")}, {"running", TX_NOOP("Running")}, {"paused", TX_NOOP("Paused")},
+        {"done", TX_NOOP("Done")},       {"done with errors", TX_NOOP("Done, with errors")},
+        {"failed", TX_NOOP("Failed")},   {"cancelled", TX_NOOP("Cancelled")}};
+    return labels.contains(state) ? tx(labels.value(state)) : state;
 }
 
 }  // namespace
@@ -100,28 +100,28 @@ bool JobsWindow::is_open() { return the_window && the_window->isVisible(); }
 
 JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Jobs");
+    setWindowTitle(tx("Jobs"));
     setAttribute(Qt::WA_DeleteOnClose);
     auto *lay = new QVBoxLayout(this);
 
     auto *top = new QHBoxLayout;
-    top->addWidget(new QLabel("Run jobs:"));
+    top->addWidget(new QLabel(tx("Run jobs:")));
     mode = new QComboBox;
-    mode->addItem("By drive: jobs on different drives at the same time", "drive");
-    mode->addItem("One at a time, in order", "one");
-    mode->addItem("All at once: every job starts as it's queued", "all");
+    mode->addItem(tx("By drive: jobs on different drives at the same time"), "drive");
+    mode->addItem(tx("One at a time, in order"), "one");
+    mode->addItem(tx("All at once: every job starts as it's queued"), "all");
     mode->setCurrentIndex(mode->findData(jobs::mode()));
-    mode->setAccessibleName("How jobs run");
+    mode->setAccessibleName(tx("How jobs run"));
     connect(mode, &QComboBox::currentIndexChanged, this, [this]() { jobs::set_mode(mode->currentData().toString()); });
     top->addWidget(mode);
-    start_paused = new QCheckBox("Start new jobs paused");
+    start_paused = new QCheckBox(tx("Start new jobs paused"));
     start_paused->setChecked(jobs::Queue::instance()->start_paused());
     connect(start_paused, &QCheckBox::toggled, this, [](bool on) { jobs::Queue::instance()->set_start_paused(on); });
     top->addWidget(start_paused);
     top->addStretch(1);
-    auto *pause_all = new QPushButton("Pause All");
+    auto *pause_all = new QPushButton(tx("Pause All"));
     connect(pause_all, &QPushButton::clicked, this, []() { jobs::Queue::instance()->pause_all(true); });
-    auto *resume_all = new QPushButton("Resume All");
+    auto *resume_all = new QPushButton(tx("Resume All"));
     connect(resume_all, &QPushButton::clicked, this, []() { jobs::Queue::instance()->pause_all(false); });
     top->addWidget(pause_all);
     top->addWidget(resume_all);
@@ -132,10 +132,10 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     auto *ll = new QVBoxLayout(left);
     ll->setContentsMargins(0, 0, 0, 0);
     list = new QTreeWidget;
-    list->setAccessibleName("Jobs");
+    list->setAccessibleName(tx("Jobs"));
     list->setRootIsDecorated(false);
     list->setUniformRowHeights(true);
-    list->setHeaderLabels({"Job", "State", "Progress", "Time"});
+    list->setHeaderLabels({tx("Job"), tx("State"), tx("Progress"), tx("Time")});
     list->header()->setStretchLastSection(false);
     list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     list->setColumnWidth(1, 110);
@@ -150,22 +150,22 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     jl->setContentsMargins(0, 0, 0, 0);
     jl->addWidget(list, 1);
     auto *controls = new QHBoxLayout;
-    pause_btn = new QPushButton("Pause");
+    pause_btn = new QPushButton(tx("Pause"));
     connect(pause_btn, &QPushButton::clicked, this, [this]() {
         const Row *r = selected_row();
         act(r && r->state == "paused" ? "resume" : "pause");
     });
-    stop_btn = new QPushButton("Stop");
-    stop_btn->setToolTip("Cancel the job (Delete)");
+    stop_btn = new QPushButton(tx("Stop"));
+    stop_btn->setToolTip(tx("Cancel the job (Delete)"));
     connect(stop_btn, &QPushButton::clicked, this, [this]() { act("cancel"); });
-    now_btn = new QPushButton("Start Now");
-    now_btn->setToolTip("Start it without waiting for its turn");
+    now_btn = new QPushButton(tx("Start Now"));
+    now_btn->setToolTip(tx("Start it without waiting for its turn"));
     connect(now_btn, &QPushButton::clicked, this, [this]() { act("start_now"); });
-    up_btn = new QPushButton("Up");
+    up_btn = new QPushButton(tx("Up"));
     connect(up_btn, &QPushButton::clicked, this, [this]() { act("up"); });
-    down_btn = new QPushButton("Down");
+    down_btn = new QPushButton(tx("Down"));
     connect(down_btn, &QPushButton::clicked, this, [this]() { act("down"); });
-    auto *clear = new QPushButton("Clear Finished");
+    auto *clear = new QPushButton(tx("Clear Finished"));
     connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
     for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
         controls->addWidget(b);
@@ -176,10 +176,10 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     auto *tl = new QVBoxLayout(tbox);
     tl->setContentsMargins(0, 0, 0, 0);
     thumb_list = new QTreeWidget;
-    thumb_list->setAccessibleName("Thumbnail jobs");
+    thumb_list->setAccessibleName(tx("Thumbnail jobs"));
     thumb_list->setRootIsDecorated(false);
     thumb_list->setUniformRowHeights(true);
-    thumb_list->setHeaderLabels({"Thumbnails and folder previews", "For", "State", "Progress"});
+    thumb_list->setHeaderLabels({tx("Thumbnails and folder previews"), tx("For"), tx("State"), tx("Progress")});
     thumb_list->header()->setStretchLastSection(false);
     thumb_list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     thumb_list->setColumnWidth(1, 150);
@@ -188,9 +188,9 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     thumb_list->setItemDelegateForColumn(3, new ProgressDelegate(thumb_list));
     tl->addWidget(thumb_list, 1);
     auto *tc = new QHBoxLayout;
-    thumb_pause = new QPushButton("Pause");
-    thumb_stop = new QPushButton("Stop");
-    thumb_stop->setToolTip("Stop making this folder's previews (those made stay)");
+    thumb_pause = new QPushButton(tx("Pause"));
+    thumb_stop = new QPushButton(tx("Stop"));
+    thumb_stop->setToolTip(tx("Stop making this folder's previews (those made stay)"));
     auto thumb_act = [this](bool stop) {
         ThumbnailManager *t = ThumbnailManager::instance();
         QTreeWidgetItem *it = thumb_list->currentItem();
@@ -208,12 +208,12 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     tc->addWidget(thumb_pause);
     tc->addWidget(thumb_stop);
     tc->addSpacing(12);
-    tc->addWidget(new QLabel("Thumbnailing:"));
+    tc->addWidget(new QLabel(tx("Thumbnailing:")));
     thumb_mode = new QComboBox;
-    thumb_mode->setAccessibleName("How thumbnailing runs");
+    thumb_mode->setAccessibleName(tx("How thumbnailing runs"));
     for (const auto &[label, value] : prefs::find("thumb_mode")->choices)
-        thumb_mode->addItem(label, value);
-    thumb_mode->setToolTip(prefs::find("thumb_mode")->tip + "\nFor every Kestrel window (also Preferences → Images & Videos).");
+        thumb_mode->addItem(tx(label), value);
+    thumb_mode->setToolTip(tx("%1\nFor every Kestrel window (also Preferences → Images & Videos).").arg(tx(prefs::find("thumb_mode")->tip)));
     auto show_mode = [this]() {
         QSignalBlocker quiet(thumb_mode);
         thumb_mode->setCurrentIndex(thumb_mode->findData(ThumbnailManager::known_mode(prefs::get("thumb_mode").toString())));
@@ -237,18 +237,18 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     auto *right = new QWidget;
     auto *rl = new QVBoxLayout(right);
     rl->setContentsMargins(0, 0, 0, 0);
-    head = new QLabel("Choose a job to see what it's doing.");
+    head = new QLabel(tx("Choose a job to see what it's doing."));
     head->setWordWrap(true);
     head->setTextInteractionFlags(Qt::TextSelectableByMouse);
     rl->addWidget(head);
-    rl->addWidget(new QLabel("<b>Steps</b>"));
+    rl->addWidget(new QLabel(tx("<b>Steps</b>")));
     steps = new QListWidget;
-    steps->setAccessibleName("Steps");
+    steps->setAccessibleName(tx("Steps"));
     steps->setMaximumHeight(140);
     rl->addWidget(steps);
-    rl->addWidget(new QLabel("<b>Log and output</b>"));
+    rl->addWidget(new QLabel(tx("<b>Log and output</b>")));
     log = new QPlainTextEdit;
-    log->setAccessibleName("Log");
+    log->setAccessibleName(tx("Log"));
     log->setReadOnly(true);
     log->setLineWrapMode(QPlainTextEdit::NoWrap);
     QFont mono("monospace");
@@ -256,9 +256,9 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     log->setFont(mono);
     rl->addWidget(log, 1);
     auto *lb = new QHBoxLayout;
-    auto *copy = new QPushButton("Copy");
+    auto *copy = new QPushButton(tx("Copy"));
     connect(copy, &QPushButton::clicked, this, [this]() { QGuiApplication::clipboard()->setText(log->toPlainText()); });
-    auto *save = new QPushButton("Save Log…");
+    auto *save = new QPushButton(tx("Save Log…"));
     connect(save, &QPushButton::clicked, this, &JobsWindow::save_log);
     lb->addStretch(1);
     lb->addWidget(copy);
@@ -322,7 +322,7 @@ void JobsWindow::refresh_thumbs()
     for (int i = 0; i < now.size(); ++i) {
         const ThumbJob &j = now[i];
         QTreeWidgetItem *it = thumb_list->topLevelItem(i);
-        it->setText(0, j.title() + QString(", %1 of %2").arg(j.done).arg(j.total));
+        it->setText(0, tx("%1, %2 of %3").arg(j.title(), group_digits(j.done), group_digits(j.total)));
         it->setToolTip(0, j.folder);
         it->setText(1, j.window);
         it->setText(2, j.state());
@@ -331,7 +331,7 @@ void JobsWindow::refresh_thumbs()
     QTreeWidgetItem *cur = thumb_list->currentItem();
     thumb_pause->setEnabled(cur);
     thumb_stop->setEnabled(cur);
-    thumb_pause->setText(cur && cur->text(2) == "Paused" ? "Resume" : "Pause");
+    thumb_pause->setText(cur && cur->text(2) == tx("Paused") ? tx("Resume") : tx("Pause"));
 }
 
 void JobsWindow::keyPressEvent(QKeyEvent *ev)
@@ -418,7 +418,7 @@ void JobsWindow::refresh()
     for (int i = 0; i < now.size(); ++i) {
         const Row &r = now[i];
         QTreeWidgetItem *it = list->topLevelItem(i);
-        QString where = r.local || r.finished ? QString() : QString("  (another Kestrel)");
+        QString where = r.local || r.finished ? QString() : tx("  (another Kestrel)");
         it->setText(0, (r.admin ? "🛡 " : "") + r.title + where);
         it->setToolTip(0, r.title + (r.text.isEmpty() ? QString() : "\n" + r.text));
         it->setText(1, state_label(r.state));
@@ -429,7 +429,7 @@ void JobsWindow::refresh()
         if (r.elapsed > 0) {
             time = clock_text(r.elapsed);
             if (r.state == "running" && r.fraction > 0.02 && r.fraction < 1)
-                time += QString(" · %1 left").arg(clock_text(qint64(r.elapsed * (1 - r.fraction) / r.fraction)));
+                time = tx("%1 · %2 left").arg(time, clock_text(qint64(r.elapsed * (1 - r.fraction) / r.fraction)));
         }
         it->setText(3, time);
         if (r.key == current && list->currentItem() != it)
@@ -451,15 +451,15 @@ void JobsWindow::show_details()
 {
     const Row *r = selected_row();
     bool queued = r && !r->finished && !r->flight.isEmpty();
-    pause_btn->setText(r && r->state == "paused" ? "Resume" : "Pause");
+    pause_btn->setText(r && r->state == "paused" ? tx("Resume") : tx("Pause"));
     pause_btn->setEnabled(r && !r->finished && !(r->admin && r->state != "waiting"));
-    pause_btn->setToolTip(r && r->admin && r->state != "waiting" ? "An administrator job can't be paused" : QString());
+    pause_btn->setToolTip(r && r->admin && r->state != "waiting" ? tx("An administrator job can't be paused") : QString());
     stop_btn->setEnabled(r && !r->finished);
     now_btn->setEnabled(queued && r->state == "waiting");
     up_btn->setEnabled(queued && r->state == "waiting");
     down_btn->setEnabled(queued && r->state == "waiting");
     if (!r) {
-        head->setText("Choose a job to see what it's doing.");
+        head->setText(tx("Choose a job to see what it's doing."));
         steps->clear();
         log->clear();
         log_key.clear();
@@ -481,7 +481,7 @@ void JobsWindow::show_details()
     if (!r->text.isEmpty())
         text += "<br>" + r->text.toHtmlEscaped();
     if (!drives.isEmpty())
-        text += "<br><small>Drives: " + drives.join(", ").toHtmlEscaped() + "</small>";
+        text += "<br><small>" + tx("Drives: %1").arg(drives.join(", ")).toHtmlEscaped() + "</small>";
     head->setText(text);
     // steps: done ✔, on it ▶, still to do •
     QStringList st = r->finished ? TaskBoard::instance()->finished.value(r->finished_index).steps
@@ -492,7 +492,7 @@ void JobsWindow::show_details()
     for (int i = from; i < to; ++i)
         shown_steps << (i < at ? "✔ " : i == at ? "▶ " : "• ") + st[i];
     if (to < st.size())
-        shown_steps << QString("… and %1 more").arg(st.size() - to);
+        shown_steps << txn("… and %Ln more", st.size() - to);
     QStringList cur;
     for (int i = 0; i < steps->count(); ++i)
         cur << steps->item(i)->text();
@@ -505,9 +505,9 @@ void JobsWindow::show_details()
     QString body = r->finished      ? TaskBoard::instance()->finished.value(r->finished_index).log
                    : task           ? task->log_text()
                    : r->local       ? QString()
-                                    : QString("This job runs in another Kestrel window; its log is in that window's Jobs window.");
+                                    : tx("This job runs in another Kestrel window; its log is in that window's Jobs window.");
     if (body.isEmpty() && !r->finished)
-        body = r->state == "waiting" ? QString("Waiting for its turn: nothing done yet.") : QString();
+        body = r->state == "waiting" ? tx("Waiting for its turn: nothing done yet.") : QString();
     if (r->key != log_key || body != log->toPlainText()) {
         QScrollBar *sb = log->verticalScrollBar();
         bool at_end = r->key != log_key || sb->value() >= sb->maximum() - 4;
@@ -548,16 +548,16 @@ void JobsWindow::save_log()
         return;
     QString text = log->toPlainText(), title = r->title;
     QPointer<JobsWindow> self(this);
-    choose_folder(this, "Save Log In", HOME(), [self, text, title](const QString &dir) {
-        QString name = QString(title).replace('/', '-') + " log.txt";
+    choose_folder(this, tx("Save Log In"), HOME(), [self, text, title](const QString &dir) {
+        QString name = tx("%1 log").arg(QString(title).replace('/', '-')) + ".txt";
         QString path = unique_path(dir, name, "num");
         try {
             write_text(path, text.toUtf8());
             if (self)
-                inform(self, "Save Log", "Saved as " + path);
+                inform(self, tx("Save Log"), tx("Saved as %1").arg(path));
         } catch (const OSError &e) {
             if (self)
-                warn(self, "Save Log", e.message());
+                warn(self, tx("Save Log"), e.message());
         }
     });
 }

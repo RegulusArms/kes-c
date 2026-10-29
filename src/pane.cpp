@@ -374,21 +374,21 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     sl->setContentsMargins(0, 0, 0, 0);
     bar_lay->addLayout(sl);
     search_edit = new QLineEdit;
-    search_edit->setPlaceholderText("Search… (supports * and ? wildcards)");
-    search_edit->setAccessibleName("Search");
+    search_edit->setPlaceholderText(tx("Search… (supports * and ? wildcards)"));
+    search_edit->setAccessibleName(tx("Search"));
     search_edit->setClearButtonEnabled(true);
-    search_sub = new QCheckBox("Include subfolders");
+    search_sub = new QCheckBox(tx("Include subfolders"));
     search_sub->setChecked(win->view_value("search_recursive", false).toBool());
     auto *close = new QToolButton;
     close->setIcon(icon({"window-close-symbolic", "window-close"}));
-    close->setToolTip("Close the search (Esc)");
-    close->setAccessibleName("Close the search");
+    close->setToolTip(tx("Close the search (Esc)"));
+    close->setAccessibleName(tx("Close the search"));
     close->setAutoRaise(true);
     connect(close, &QToolButton::clicked, this, [this]() { close_search(); });
     sl->addWidget(search_edit, 1);
-    search_contents = new QCheckBox("File contents");
-    search_contents->setToolTip("Search inside files: with the desktop's search index where it covers the folder "
-                                "(instant), else by reading them (ripgrep or grep)");
+    search_contents = new QCheckBox(tx("File contents"));
+    search_contents->setToolTip(tx("Search inside files: with the desktop's search index where it covers the folder "
+                                "(instant), else by reading them (ripgrep or grep)"));
     search_contents->setChecked(win->view_value("search_contents", false).toBool());
     connect(search_contents, &QCheckBox::toggled, this, [this](bool v) {
         this->win->set_view_value("search_contents", v);
@@ -400,14 +400,14 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     auto *cl = new QHBoxLayout(content_opts);
     cl->setContentsMargins(0, 0, 0, 0);
     c_engine = new QComboBox;
-    c_engine->setAccessibleName("Search inside files with");
-    c_engine->addItems({"Automatic", "Search index", "Read the files"});
-    c_engine->setToolTip("Automatic: the desktop's search index where it covers this folder and the search is plain "
-                         "words, else reading the files (any folder, regular expressions, match case)");
+    c_engine->setAccessibleName(tx("Search inside files with"));
+    c_engine->addItems({tx("Automatic"), tx("Search index"), tx("Read the files")});
+    c_engine->setToolTip(tx("Automatic: the desktop's search index where it covers this folder and the search is plain "
+                         "words, else reading the files (any folder, regular expressions, match case)"));
     if (!can_search_contents())   // (localsearch isn't installed)
         qobject_cast<QStandardItemModel *>(c_engine->model())->item(ContentSearch::INDEX)->setEnabled(false);
-    c_regex = new QCheckBox("Regular expression");
-    c_case = new QCheckBox("Match case");
+    c_regex = new QCheckBox(tx("Regular expression"));
+    c_case = new QCheckBox(tx("Match case"));
     cl->addWidget(c_engine);
     cl->addWidget(c_regex);
     cl->addWidget(c_case);
@@ -415,11 +415,11 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
         connect(b, &QCheckBox::toggled, this, &Pane::filters_changed);
     connect(c_engine, &QComboBox::currentIndexChanged, this, &Pane::filters_changed);
     filters_btn = new QToolButton;
-    filters_btn->setText("Filters");
+    filters_btn->setText(tx("Filters"));
     filters_btn->setCheckable(true);
     filters_btn->setAutoRaise(true);
-    filters_btn->setToolTip("Find by type, size and date too (also with an empty name)");
-    filters_btn->setAccessibleName("Filters");
+    filters_btn->setToolTip(tx("Find by type, size and date too (also with an empty name)"));
+    filters_btn->setAccessibleName(tx("Filters"));
     sl->addWidget(search_sub);
     sl->addWidget(search_contents);
     sl->addWidget(content_opts);
@@ -431,7 +431,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     search_progress->setRange(0, 0);
     search_progress->setTextVisible(false);
     search_progress->setFixedHeight(4);
-    search_progress->setAccessibleName("Searching");
+    search_progress->setAccessibleName(tx("Searching"));
     bar_lay->addWidget(search_progress);
     connect(filters_btn, &QToolButton::toggled, filter_row, &QWidget::setVisible);
     // only once they have a parent: showing a parentless widget opens it as a window of its own, which on Wayland
@@ -470,7 +470,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(overview, &OverviewPage::open_file, win, [win](const QString &t) { win->open_file(t); });
     stack->addWidget(overview);
     lay->addWidget(stack);
-    empty = new QLabel("Folder is empty", stack);
+    empty = new QLabel(tx("Folder is empty"), stack);
     empty->setAlignment(Qt::AlignCenter);
     empty->setWordWrap(true);
     empty->setStyleSheet("color: palette(placeholder-text); font-size: 16px; background: transparent");
@@ -526,7 +526,7 @@ void Pane::cancel_thumbs()
 
 void Pane::setup_common(QAbstractItemView *v)
 {
-    v->setAccessibleName("Files");
+    v->setAccessibleName(tx("Files"));
     v->setSelectionMode(QAbstractItemView::ExtendedSelection);
     v->setEditTriggers(QAbstractItemView::NoEditTriggers);
     v->setDragEnabled(true);
@@ -578,7 +578,7 @@ void Pane::setup_tree()
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
     t->setSortingEnabled(true);
     t->setItemDelegate(new ListDelegate(t));
-    t->header()->setAccessibleName("Columns");
+    t->header()->setAccessibleName(tx("Columns"));
     t->setFrameShape(QFrame::NoFrame);
     t->setIconSize(QSize(list_size, list_size));
     int col = win->view_value("sort_col", 0).toInt();
@@ -806,38 +806,38 @@ void Pane::build_filter_row()
     auto *fl = new QHBoxLayout(filter_row);
     fl->setContentsMargins(0, 0, 0, 0);
     f_type = new QComboBox;
-    f_type->setAccessibleName("Type");
-    f_type->addItems({"Any type", "Images", "Videos", "Audio", "Documents", "Archives", "Folders"});
+    f_type->setAccessibleName(tx("Type"));
+    f_type->addItems({tx("Any type"), tx("Images"), tx("Videos"), tx("Audio"), tx("Documents"), tx("Archives"), tx("Folders")});
     f_size_mode = new QComboBox;
-    f_size_mode->setAccessibleName("Size");
-    f_size_mode->addItems({"Any size", "Larger than", "Smaller than"});
+    f_size_mode->setAccessibleName(tx("Size"));
+    f_size_mode->addItems({tx("Any size"), tx("Larger than"), tx("Smaller than")});
     f_size = new QDoubleSpinBox;
-    f_size->setAccessibleName("Size limit");
+    f_size->setAccessibleName(tx("Size limit"));
     f_size->setRange(0, 1e6);
     f_size->setDecimals(1);
     f_size->setValue(10);
     f_unit = new QComboBox;
-    f_unit->setAccessibleName("Size unit");
-    f_unit->addItems({"KB", "MB", "GB"});
+    f_unit->setAccessibleName(tx("Size unit"));
+    f_unit->addItems({tx("KB"), tx("MB"), tx("GB")});
     f_unit->setCurrentIndex(1);
     f_when = new QComboBox;
-    f_when->setAccessibleName("Date");
-    f_when->addItems({"Any time", "Today", "This week", "This month", "This year", "Between…"});
+    f_when->setAccessibleName(tx("Date"));
+    f_when->addItems({tx("Any time"), tx("Today"), tx("This week"), tx("This month"), tx("This year"), tx("Between…")});
     f_date_by = new QComboBox;
-    f_date_by->setAccessibleName("Date of");
-    f_date_by->addItems({"modified", "created"});
+    f_date_by->setAccessibleName(tx("Date of"));
+    f_date_by->addItems({tx("modified"), tx("created")});
     f_from = new QDateEdit(QDate::currentDate().addMonths(-1));
     f_to = new QDateEdit(QDate::currentDate());
-    f_from->setAccessibleName("From");
-    f_to->setAccessibleName("To");
+    f_from->setAccessibleName(tx("From"));
+    f_to->setAccessibleName(tx("To"));
     for (QDateEdit *d : {f_from, f_to}) {
         d->setCalendarPopup(true);
         d->setDisplayFormat(QLocale().dateFormat(QLocale::ShortFormat));
     }
     auto *clear = new QToolButton;
-    clear->setText("Clear");
+    clear->setText(tx("Clear"));
     clear->setAutoRaise(true);
-    clear->setToolTip("Clear the filters");
+    clear->setToolTip(tx("Clear the filters"));
     connect(clear, &QToolButton::clicked, this, [this]() { set_search_filter(SearchFilter()); });
     fl->addWidget(f_type);
     fl->addSpacing(8);
@@ -926,7 +926,7 @@ void Pane::filters_changed()
     f_from->setVisible(f.when == SearchFilter::RANGE);
     f_to->setVisible(f.when == SearchFilter::RANGE);
     f_date_by->setVisible(f.when != SearchFilter::ANY_TIME);
-    filters_btn->setText(f.active() ? "Filters •" : "Filters");
+    filters_btn->setText(f.active() ? tx("Filters •") : tx("Filters"));
     if (loading_filters)
         return;
     session_filter = f;
@@ -1041,11 +1041,11 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
         p = dirname(p);
     }
     if (!slow && !isdir(p)) {
-        warn(this, "Not found", QString("“%1” does not exist.").arg(p));
+        warn(this, tx("Not found"), tx("“%1” does not exist.").arg(p));
         return false;
     }
     if (!slow && !util::access(p, R_OK | X_OK)) {
-        warn(this, "Permission denied", QString("You don't have permission to open “%1”.").arg(p));
+        warn(this, tx("Permission denied"), tx("You don't have permission to open “%1”.").arg(p));
         return false;
     }
     QString prev = path;
@@ -1122,7 +1122,7 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
         if (!text.isEmpty() && !basename(p).toLower().contains(text))
             continue;
         paths << p;
-        locations.insert(p, o.isEmpty() ? QString("(unknown)") : dirname(o));
+        locations.insert(p, o.isEmpty() ? tx("(unknown)") : dirname(o));
     }
     if (!in_search) {
         in_search = true;
@@ -1390,14 +1390,14 @@ void Pane::update_empty()
     QString text;
     if (in_search && is_listing()) {
         bool searching_text = search_bar->isVisible() && !search_edit->text().trimmed().isEmpty();
-        QString none = is_trash() ? QString("Trash is empty") : places::empty_text(path);
+        QString none = is_trash() ? tx("Trash is empty") : places::empty_text(path);
         if (!search_model->rowCount())
-            text = searching_text ? QString("No matches") : none;
+            text = searching_text ? tx("No matches") : none;
     } else if (in_search) {
         // in the view itself, never a window: searching, or nothing found (and why, when something went wrong)
         if (search_model->rowCount() == 0)
-            text = searching() ? QString("Searching…")
-                               : "Nothing found" + (search_error.isEmpty() ? QString() : "\n" + search_error);
+            text = searching() ? tx("Searching…")
+                               : tx("Nothing found") + (search_error.isEmpty() ? QString() : "\n" + search_error);
     } else {
         bool named = !search_bar->isHidden() && !search_edit->text().trimmed().isEmpty();
         // filtered by the name in the search bar: what the view shows; else the folder's items
@@ -1405,7 +1405,7 @@ void Pane::update_empty()
                 : named        ? view()->model()->rowCount(view()->rootIndex())
                                : model->rowCount(model->index(path));
         if (n == 0)
-            text = named ? QString("Nothing found") : QString("Folder is empty");
+            text = named ? tx("Nothing found") : tx("Folder is empty");
     }
     empty->setText(text);
     empty->setVisible(!text.isEmpty());
@@ -1509,7 +1509,7 @@ void Pane::do_search()
     bool contents = how.on && !text.isEmpty();
     if (contents && drives::slow_kind(path) != drives::Slow::None) {   // it would read every file on the drive
         contents = false;
-        win->statusBar()->showMessage("File contents isn't searched on a tape or floppy: it would read every file", 8000);
+        win->statusBar()->showMessage(tx("File contents isn't searched on a tape or floppy: it would read every file"), 8000);
     }
     if (search_sub->isChecked() || contents || filtering) {
         if (!in_search) {
@@ -1870,11 +1870,11 @@ bool Pane::eventFilter(QObject *obj, QEvent *ev)
 QString Pane::title() const
 {
     if (is_overview())
-        return OVERVIEW_TITLE;
+        return tx(OVERVIEW_TITLE);
     if (is_listing() && !(search_bar->isVisible() && !search_edit->text().trimmed().isEmpty()))
-        return is_trash() ? QString("Trash") : places::title(path);
+        return is_trash() ? tx("Trash") : places::title(path);
     if (in_search)
-        return "Search: " + search_edit->text();
+        return tx("Search: %1").arg(search_edit->text());
     QString b = basename(rstrip(path, '/'));
     return b.isEmpty() ? "/" : b;
 }

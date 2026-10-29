@@ -827,29 +827,23 @@ QString md5(const QString &s)
     return QString::fromLatin1(QCryptographicHash::hash(enc(s), QCryptographicHash::Md5).toHex());
 }
 
+// In decimal units (1 kB = 1000 bytes, as GNOME Files counts), with the system's decimal mark (i18n.h)
 QString human_size(double n)
 {
-    const char *units[] = {"bytes", "kB", "MB", "GB", "TB", "PB"};
-    for (int i = 0; i < 6; ++i) {
-        if (n < 1000 || i == 5) {
-            if (i == 0)
-                return QString("%1 bytes").arg(qint64(n));
-            return QString("%1 %2").arg(n, 0, 'f', 1).arg(units[i]);
-        }
+    static const char *const units[] = {TX_NOOP("%1 kB"), TX_NOOP("%1 MB"), TX_NOOP("%1 GB"), TX_NOOP("%1 TB"), TX_NOOP("%1 PB")};
+    if (n < 1000)
+        return txn("%Ln byte(s)", qint64(n));
+    for (int i = 0; i < 5; ++i) {
         n /= 1000;
+        if (n < 1000 || i == 4)
+            return tx(units[i]).arg(i18n::decimal(n, 1));
     }
     return QString();
 }
 
 QString human_size(qint64 n) { return human_size(double(n)); }
 
-QString group_digits(qint64 n)
-{
-    QString s = QString::number(n < 0 ? -n : n);
-    for (int i = s.size() - 3; i > 0; i -= 3)
-        s.insert(i, ',');
-    return n < 0 ? "-" + s : s;
-}
+QString group_digits(qint64 n) { return i18n::number(n); }
 
 // natural_key: compare runs of digits by value and other text case-insensitively
 bool natural_less(const QString &a, const QString &b)

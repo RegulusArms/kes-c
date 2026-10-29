@@ -92,8 +92,8 @@ void record_paths(const QString &kind, const QString &label, const QStringList &
 QString label()
 {
     if (shared() && !shared_label.isEmpty())
-        return shared_label;
-    return stack.isEmpty() ? QString() : stack.last().label;   // also what was done here before sharing was on
+        return tx(shared_label);
+    return stack.isEmpty() ? QString() : tx(stack.last().label);   // also what was done here before sharing was on
 }
 
 // {original path: the most recently trashed copy of it in a trash files/ folder}
@@ -134,9 +134,9 @@ void undo(MainWindow *win, std::function<void()> after)
         op = stack.takeLast();
     }
     Q_EMIT signals_()->changed();
-    QString title = "Undo " + op.label;
+    QString title = tx("Undo %1").arg(tx(op.label));   // (the labels are kept in English: TX_NOOP where recorded)
     if (op.kind == "none") {
-        win->statusBar()->showMessage("Can't undo that: what was replaced is gone.", 8000);
+        win->statusBar()->showMessage(tx("Can't undo that: what was replaced is gone."), 8000);
         if (after)
             after();
         return;
@@ -150,9 +150,9 @@ void undo(MainWindow *win, std::function<void()> after)
         w->sidebar->refresh();
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            warn(w, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
+            warn(w, title, tx("Some items couldn't be put back:\n\n%1").arg(errors.mid(0, 20).join('\n')));
         else if (res.isValid())
-            w->statusBar()->showMessage("Undid: " + op.label, 4000);
+            w->statusBar()->showMessage(tx("Undid: %1").arg(tx(op.label)), 4000);
     };
 
     if (op.kind == "move" || op.kind == "move_into") {   // move each item back where it came from
@@ -163,14 +163,14 @@ void undo(MainWindow *win, std::function<void()> after)
             if (dst.isEmpty())   // (move_into's folder)
                 continue;
             if (!lexists(dst))
-                errors << QString("%1: no longer at %2").arg(basename(dst), dirname(dst));
+                errors << tx("%1: no longer at %2").arg(basename(dst), dirname(dst));
             else if (lexists(src))
-                errors << QString("%1: something new is already at %2").arg(basename(src), src);
+                errors << tx("%1: something new is already at %2").arg(basename(src), src);
             else
                 jobs << fileops::Job{"move", dst, src};
         }
         if (!errors.isEmpty())
-            warn(win, title, "Some items couldn't be put back:\n\n" + errors.mid(0, 20).join('\n'));
+            warn(win, title, tx("Some items couldn't be put back:\n\n%1").arg(errors.mid(0, 20).join('\n')));
         // the folder made for them goes once it's empty again (rmdir: not if anything else is in it)
         auto remove_made = [made]() {
             if (!made.isEmpty())
@@ -196,9 +196,9 @@ void undo(MainWindow *win, std::function<void()> after)
                 task->check();
                 const auto &[old_path, new_path] = op.items[i];
                 if (!lexists(new_path)) {
-                    errors << basename(new_path) + ": no longer exists";
+                    errors << tx("%1: no longer exists").arg(basename(new_path));
                 } else if (lexists(old_path)) {
-                    errors << basename(old_path) + ": that name is taken again";
+                    errors << tx("%1: that name is taken again").arg(basename(old_path));
                 } else {
                     try {
                         util::rename(new_path, old_path);
@@ -215,11 +215,11 @@ void undo(MainWindow *win, std::function<void()> after)
                 task->report(i, op.items.size(), basename(orig));
                 QString trashed = index.value(orig);
                 if (trashed.isEmpty()) {
-                    errors << basename(orig) + ": not in the trash any more";
+                    errors << tx("%1: not in the trash any more").arg(basename(orig));
                     continue;
                 }
                 if (lexists(orig)) {
-                    errors << QString("%1: something new is already at %2").arg(basename(orig), orig);
+                    errors << tx("%1: something new is already at %2").arg(basename(orig), orig);
                     continue;
                 }
                 try {

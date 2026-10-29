@@ -46,8 +46,9 @@ QString covers_file() { return join(CONFIG_DIR(), "covers.json"); }
 QString styles_file() { return join(CONFIG_DIR(), "folder_styles.json"); }
 
 const QList<QPair<QString, QString>> FOLDER_COLORS = {
-    {"Red", "#e01b24"},  {"Orange", "#ff7800"}, {"Yellow", "#f6d32d"}, {"Green", "#33d17a"}, {"Teal", "#2aa198"},
-    {"Blue", "#3584e4"}, {"Purple", "#9141ac"}, {"Pink", "#e66ba5"},   {"Brown", "#986a44"}, {"Grey", "#77767b"}};
+    {TX_NOOP("Red"), "#e01b24"},  {TX_NOOP("Orange"), "#ff7800"}, {TX_NOOP("Yellow"), "#f6d32d"}, {TX_NOOP("Green"), "#33d17a"},
+    {TX_NOOP("Teal"), "#2aa198"}, {TX_NOOP("Blue"), "#3584e4"},   {TX_NOOP("Purple"), "#9141ac"}, {TX_NOOP("Pink"), "#e66ba5"},
+    {TX_NOOP("Brown"), "#986a44"}, {TX_NOOP("Grey"), "#77767b"}};   // (translated where shown)
 
 QIcon color_swatch(const QString &color, int size)
 {
@@ -279,9 +280,9 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
     if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
             makedirs(cache_dir, true, 0700);
-            img.setText("Thumb::URI", uri);
-            img.setText("Thumb::MTime", QString::number(mtime));
-            img.setText("Software", APP_NAME);
+            img.setText("Thumb::URI", uri);   // notr: a PNG text key
+            img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
+            img.setText("Software", APP_NAME);   // notr: a PNG text key
             QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
             int fd = ::mkstemps(tmpl.data(), 4);
             if (fd >= 0) {
@@ -548,12 +549,12 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
     if (images.isEmpty()) {
         QImage marker(1, 1, QImage::Format_ARGB32);
         marker.fill(Qt::transparent);
-        marker.setText("FE::Tag", "empty|" + tag);
+        marker.setText("FE::Tag", "empty|" + tag);   // notr: a PNG text key
         save(marker);
         return QImage();
     }
     QImage img = compose_folder(images, size, opts.color, videos);
-    img.setText("FE::Tag", tag);
+    img.setText("FE::Tag", tag);   // notr: a PNG text key
     save(img);
     stats::count("folder previews made");
     return img;
@@ -1271,18 +1272,18 @@ void ThumbnailManager::jobs_said()
 QString ThumbJob::title() const
 {
     QString home = HOME();
-    QString where = folder == home ? QString("Home") : folder.startsWith(home + "/") ? folder.mid(home.size() + 1) : folder;
-    return "Thumbnails: " + where;
+    QString where = folder == home ? tx("Home") : folder.startsWith(home + "/") ? folder.mid(home.size() + 1) : folder;
+    return tx("Thumbnails: %1").arg(where);
 }
 
 QString ThumbJob::state() const
 {
-    return paused     ? "Paused"
-           : held_all ? "Paused (all thumbnailing)"
-           : waiting  ? "Waiting for the drive"
-           : behind   ? "Waiting for another thumbnail job on its drive"
-           : lowered  ? "Lowered (folder left)"
-                      : "Running";
+    return paused     ? tx("Paused")
+           : held_all ? tx("Paused (all thumbnailing)")
+           : waiting  ? tx("Waiting for the drive")
+           : behind   ? tx("Waiting for another thumbnail job on its drive")
+           : lowered  ? tx("Lowered (folder left)")
+                      : tx("Running");
 }
 
 void ThumbnailManager::cancel_for(const QObject *owner)

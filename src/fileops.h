@@ -62,6 +62,7 @@ public:
     // window is closed (the Jobs window shows it then); released when it's deleted.
     std::unique_ptr<QEventLoopLocker> keeps_running;
     bool failed = false;         // ended with an error
+    std::atomic<bool> had_errors{false};   // some of its items failed (it ends "done with errors")
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
     static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
 

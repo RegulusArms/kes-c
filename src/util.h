@@ -1,6 +1,8 @@
 // Shared helpers: paths, file-system calls, mime types, icons, desktop integration, trash, bookmarks.
 #pragma once
 
+#include "i18n.h"   // tx() for every text the user sees
+
 #include <QColor>
 #include <QIcon>
 #include <QJsonObject>
@@ -174,7 +176,7 @@ QString uri_to_path(const QString &uri); // null QString for non-file URIs
 QString md5(const QString &s);
 QString human_size(qint64 n);
 QString human_size(double n);
-QString group_digits(qint64 n);           // 12,345
+QString group_digits(qint64 n);           // 12,345 (the system's digit grouping: i18n::number)
 bool natural_less(const QString &a, const QString &b);
 void natural_sort(QStringList &list);
 // A free name for name in directory (name itself if it's free), without an earlier " (n)" / " (copy)": style "copy"

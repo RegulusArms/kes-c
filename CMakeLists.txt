@@ -12,7 +12,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)   # focus.cpp: activating a drop target on X11
@@ -71,10 +71,20 @@ add_executable(kes
     src/incoming.cpp
     src/pane.cpp
     src/stats.cpp
+    src/i18n.cpp
     data/kestrel.qrc
 )
 target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)
 target_compile_options(kes PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+# Translations (src/i18n.h): each translations/kestrel_<language>.ts built into kes as :/i18n/kestrel_<language>.qm,
+# so adding a language is adding its .ts. `cmake --build build --target update_translations` refreshes them from the
+# code (translations/update.sh).
+file(GLOB KES_TS_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/translations/kestrel_*.ts)
+qt_add_lrelease(kes TS_FILES ${KES_TS_FILES} QM_FILES_OUTPUT_VARIABLE KES_QM_FILES)
+qt_add_resources(kes kes_translations PREFIX /i18n BASE ${CMAKE_CURRENT_BINARY_DIR} FILES ${KES_QM_FILES})
+add_custom_target(update_translations COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/translations/update.sh
+                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} VERBATIM)
 
 # The small root helper for the admin session (started through pkexec). Qt Core only, for JSON.
 add_executable(kes-admin-helper src/admin_helper.cpp)

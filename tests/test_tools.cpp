@@ -209,7 +209,7 @@ int main(int argc, char **argv)
         delete keep_menu;
         if (found) {
             dw->set_keep(dupes::keep_oldest);
-            bool counted = dw->summary->text().contains("Not kept: 2 file(s)");
+            bool counted = dw->summary->text().contains("Not kept: 2 files");
             dw->trash_others();
             bool trashed = wait_for([&]() {
                 return exists(join(t, "in/two.bin")) && !exists(join(t, "one.bin")) && !exists(join(t, "three.bin")) &&

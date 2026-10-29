@@ -59,7 +59,7 @@ Probe parse_probe(const QByteArray &json)
     Probe p;
     QJsonDocument doc = QJsonDocument::fromJson(json);
     if (!doc.isObject()) {
-        p.error = "ffprobe couldn't read it";
+        p.error = tx("ffprobe couldn't read it");
         return p;
     }
     QJsonObject fmt = doc.object().value("format").toObject();
@@ -92,7 +92,7 @@ Probe parse_probe(const QByteArray &json)
     }
     p.ok = !p.streams.isEmpty();
     if (!p.ok)
-        p.error = "it holds no video or audio";
+        p.error = tx("it holds no video or audio");
     return p;
 }
 
@@ -142,7 +142,7 @@ QString describe(const Probe &p)
         codecs << codec_name(v->codec);
     QList<Stream> a = p.audio();
     if (!a.isEmpty())
-        codecs << codec_name(a.first().codec) + (a.size() > 1 ? QString(" (%1 tracks)").arg(a.size()) : QString());
+        codecs << (a.size() > 1 ? txn("%1 (%Ln tracks)", a.size()).arg(codec_name(a.first().codec)) : codec_name(a.first().codec));
     if (!codecs.isEmpty())
         parts << codecs.join(" / ");
     if (p.size > 0)
@@ -248,16 +248,16 @@ QList<Preset> video_presets(const QString &source_ext)
 {
     QList<Preset> l;
     VideoSpec mp4;
-    l << Preset{"mp4", "MP4 (H.264), plays everywhere", mp4};
+    l << Preset{"mp4", TX_NOOP("MP4 (H.264), plays everywhere"), mp4};
     VideoSpec small = mp4;
     small.vcodec = "hevc", small.quality = 50, small.abitrate = 128;
-    l << Preset{"smaller", "Smaller file (H.265)", small};
+    l << Preset{"smaller", TX_NOOP("Smaller file (H.265)"), small};
     VideoSpec webm;
     webm.container = "webm", webm.vcodec = "vp9", webm.audio = "encode", webm.abitrate = 128;
-    l << Preset{"webm", "WebM for the web", webm};
-    for (const auto &[id, name] : QList<QPair<QString, QString>>{{"mp3", "Audio only (MP3)"},
-                                                                 {"m4a", "Audio only (M4A)"},
-                                                                 {"opus", "Audio only (Opus)"}}) {
+    l << Preset{"webm", TX_NOOP("WebM for the web"), webm};
+    for (const auto &[id, name] : QList<QPair<QString, QString>>{{"mp3", TX_NOOP("Audio only (MP3)")},
+                                                                 {"m4a", TX_NOOP("Audio only (M4A)")},
+                                                                 {"opus", TX_NOOP("Audio only (Opus)")}}) {
         VideoSpec a;
         a.container = id, a.audio = "encode", a.abitrate = id == "opus" ? 128 : 192;
         l << Preset{"audio_" + id, name, a};
@@ -270,7 +270,7 @@ QList<Preset> video_presets(const QString &source_ext)
     same.container = QStringList{"mp4", "mkv", "webm", "mov"}.contains(ext) ? ext : QString("mkv");
     same.vcodec = same.container == "webm" ? "vp9" : "hevc";
     same.quality = 45;
-    l << Preset{"same", "Same format, just smaller", same};
+    l << Preset{"same", TX_NOOP("Same format, just smaller"), same};
     return l;
 }
 
@@ -338,11 +338,11 @@ Args video_args(const VideoSpec &s, const Probe &p, const QSet<QString> &encs)
     bool ok_start = true, ok_end = true;
     double start = parse_time(s.start, &ok_start), end = parse_time(s.end, &ok_end);
     if ((!s.start.trimmed().isEmpty() && !ok_start) || (!s.end.trimmed().isEmpty() && !ok_end)) {
-        a.error = "The start and end times are written as seconds or minutes:seconds (1:23).";
+        a.error = tx("The start and end times are written as seconds or minutes:seconds (1:23).");
         return a;
     }
     if (!s.end.trimmed().isEmpty() && end <= start) {
-        a.error = "The end time comes before the start.";
+        a.error = tx("The end time comes before the start.");
         return a;
     }
     if (start > 0)
@@ -355,12 +355,12 @@ Args video_args(const VideoSpec &s, const Probe &p, const QSet<QString> &encs)
 
     if (audio_only(s.container)) {
         if (audio.isEmpty()) {
-            a.error = "It has no sound to keep.";
+            a.error = tx("It has no sound to keep.");
             return a;
         }
         QString enc = audio_encoder_for(s.container);
         if (!encs.contains(enc)) {
-            a.error = QString("This ffmpeg can't write %1 (%2).").arg(s.container.toUpper(), enc);
+            a.error = tx("This ffmpeg can't write %1 (%2).").arg(s.container.toUpper(), enc);
             return a;
         }
         a.output << "-vn" << "-map" << "0:a:0" << "-c:a" << enc << "-b:a" << QString("%1k").arg(s.abitrate);
@@ -370,12 +370,12 @@ Args video_args(const VideoSpec &s, const Probe &p, const QSet<QString> &encs)
     } else {
         QString enc = video_encoder(s, encs);
         if (enc.isEmpty()) {
-            a.error = s.container == "gif" ? QString("This ffmpeg can't write GIFs.")
-                                           : QString("This ffmpeg has no %1 encoder.").arg(codec_name(s.vcodec));
+            a.error = s.container == "gif" ? tx("This ffmpeg can't write GIFs.")
+                                           : tx("This ffmpeg has no %1 encoder.").arg(codec_name(s.vcodec));
             return a;
         }
         if (!v) {
-            a.error = "It has no video.";
+            a.error = tx("It has no video.");
             return a;
         }
         bool copy = enc == "copy";
@@ -564,7 +564,7 @@ Args audio_args(const AudioSpec &s, const Probe &p, int track, const QString &me
     Args a;
     QList<Stream> audio = p.audio();
     if (audio.isEmpty()) {
-        a.error = "It has no sound.";
+        a.error = tx("It has no sound.");
         return a;
     }
     int t = std::clamp(track < 0 ? 0 : track, 0, int(audio.size()) - 1);
@@ -736,7 +736,7 @@ QString run(Task *task, const QString &src, const Args &a, const QString &dst_in
     QByteArray err;
     int rc = run_ffmpeg(task, argv, duration, label, base, share, &err);
     if (rc != 0)
-        throw Error(QString("ffmpeg couldn't convert %1:\n%2").arg(basename(src), last_lines(err)));
+        throw Error(tx("ffmpeg couldn't convert %1:\n%2").arg(basename(src), last_lines(err)));
     try {
         put_new(part, dst);
     } catch (const OSError &e) {
@@ -757,7 +757,7 @@ QString measure_loudness(Task *task, const QString &src, int track)
     QByteArray err;
     int rc = run_ffmpeg(task, argv, 0, QString(), 0, 0, &err);
     if (rc != 0)
-        throw Error(QString("ffmpeg couldn't measure the loudness of %1:\n%2").arg(basename(src), last_lines(err)));
+        throw Error(tx("ffmpeg couldn't measure the loudness of %1:\n%2").arg(basename(src), last_lines(err)));
     QString text = QString::fromUtf8(err);
     int open = text.lastIndexOf('{'), close = text.lastIndexOf('}');
     return open >= 0 && close > open ? text.mid(open, close - open + 1) : QString();
@@ -810,7 +810,7 @@ void convert_image(const QString &src, const QString &dst, const ImageSpec &s)
 {
     QImage img = decode(src);
     if (img.isNull())
-        throw Error(QString("Couldn't read %1.").arg(basename(src)));
+        throw Error(tx("Couldn't read %1.").arg(basename(src)));
     QSize to = resized(img.size(), s);
     if (to != img.size())
         img = img.scaled(to, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
@@ -843,7 +843,7 @@ void convert_image(const QString &src, const QString &dst, const ImageSpec &s)
         if (lossy)
             w.setQuality(s.quality);
         if (!w.write(img))
-            throw Error(QString("Couldn't write %1: %2").arg(basename(dst), w.errorString()));
+            throw Error(tx("Couldn't write %1: %2").arg(basename(dst), w.errorString()));
     } else if (which("heif-enc") && (s.format == "heic" || s.format == "avif")) {
         // heif-enc (libheif) from a lossless PNG in Kestrel's cache
         QString dir = join(APP_CACHE(), "convert");
@@ -858,16 +858,16 @@ void convert_image(const QString &src, const QString &dst, const ImageSpec &s)
             }
         } gone{{in, out}};
         if (!img.save(in, "PNG"))
-            throw Error(QString("Couldn't prepare %1.").arg(basename(src)));
+            throw Error(tx("Couldn't prepare %1.").arg(basename(src)));
         QStringList argv = {"heif-enc", "-q", QString::number(s.quality)};
         if (s.format == "avif")
             argv << "-A";
         auto r = proc::run(argv + QStringList{"-o", out, in}, 600000);
         if (r.rc != 0)
-            throw Error(QString("heif-enc couldn't write %1: %2").arg(basename(dst), QString::fromUtf8(r.err).trimmed()));
+            throw Error(tx("heif-enc couldn't write %1: %2").arg(basename(dst), QString::fromUtf8(r.err).trimmed()));
         data = read_file(out);
     } else {
-        throw Error(QString("Nothing installed here can write %1.").arg(s.format.toUpper()));
+        throw Error(tx("Nothing installed here can write %1.").arg(s.format.toUpper()));
     }
     if (s.keep_meta)
         data = imgedit::with_metadata(src, data, ext_of(dst));

@@ -12,6 +12,7 @@ Package names below are Ubuntu's; Linux Mint uses the same ones.
 |---|---|
 | `g++`, `cmake`, `pkg-config` | Compiling |
 | `qt6-base-dev` | The whole user interface (Qt 6 Widgets), image decoding, settings |
+| `qt6-tools-dev`, `qt6-l10n-tools` | Building the translations into `kes` (`lrelease`), and refreshing them from the code (`lupdate`, `translations/update.sh`) |
 | `libglib2.0-dev` | GIO: default and "Open With" apps, file type detection, trash, drive and network mounting, D-Bus for UWP |
 | `libxcb1-dev` | Giving the focus to the app files are dropped into, on X11 |
 | `libsecret-1-dev` | Remembering archive passwords in the desktop's keyring (GNOME Keyring, KWallet) |

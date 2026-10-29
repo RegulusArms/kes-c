@@ -29,7 +29,7 @@ class ThumbnailManager;
 class QVBoxLayout;
 
 extern const QString OVERVIEW;         // "overview://"
-extern const QString OVERVIEW_TITLE;   // "Overview"
+extern const char *const OVERVIEW_TITLE;   // "Overview" (in English: tx(OVERVIEW_TITLE))
 
 bool is_uri(const QString &target);
 
@@ -118,7 +118,7 @@ namespace overview {
 bool is_phone_scheme(const QString &scheme);
 QString phone_kind(const QString &scheme);                       // what the mount holds, e.g. "Photos and videos"
 QString phone_hint(const QString &scheme, const QString &name);   // what to do on the device when it won't mount
-extern const QString NO_PHONES_HINT;
+extern const char *const NO_PHONES_HINT;   // (in English: tx(NO_PHONES_HINT))
 
 // Where the Overview lists a GIO mount. known_root: its path is one of the scanned filesystems.
 enum class MountGroup { Skip, Local, Phone, Network };

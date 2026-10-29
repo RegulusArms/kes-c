@@ -87,18 +87,18 @@ static void run_batch(MainWindow *win, const QString &title, const QString &what
             if (task->cancelled)
                 break;
             task->step = i;
-            task->report(double(i) / n, 1, QString("%1 of %2 — %3").arg(QString::number(i + 1), QString::number(n), basename(sources[i])));
+            task->report(double(i) / n, 1, tx("%1 of %2 — %3").arg(group_digits(i + 1), group_digits(n), basename(sources[i])));
             try {
                 QStringList m = one(task, i, double(i) / n, 1.0 / n);
                 for (const QString &x : m)
-                    task->log("Made: " + x);
+                    task->log(tx("Made: %1").arg(x));
                 made << m;
                 done << sources[i];
             } catch (const Cancelled &) {
                 break;
             } catch (const Error &e) {
                 failed << QVariant(QStringList{sources[i], e.message()});
-                task->log("Failed: " + sources[i] + ": " + e.message());
+                task->log(tx("Failed: %1: %2").arg(sources[i], e.message()));
             }
         }
         task->was_cancelled = task->cancelled;
@@ -116,9 +116,13 @@ static void run_batch(MainWindow *win, const QString &title, const QString &what
                     p->select_later(x);
         if (trash_after && !done.isEmpty())
             self->trash_paths(done);
-        QString head = QString("%1 of %2 %3 done%4.")
-                           .arg(QString::number(done.size()), QString::number(n), what,
-                                m.value("stopped").toBool() ? QString(" (stopped)") : QString());
+        // how many were done, for each kind of file (what), and when the batch was stopped
+        static const QHash<QString, QPair<const char *, const char *>> heads = {
+            {"images", {TXN_NOOP("%1 of %Ln image(s) done."), TXN_NOOP("%1 of %Ln image(s) done (stopped).")}},
+            {"videos", {TXN_NOOP("%1 of %Ln video(s) done."), TXN_NOOP("%1 of %Ln video(s) done (stopped).")}},
+            {"files", {TXN_NOOP("%1 of %Ln file(s) done."), TXN_NOOP("%1 of %Ln file(s) done (stopped).")}}};
+        auto texts = heads.value(what, heads.value("files"));
+        QString head = txn(m.value("stopped").toBool() ? texts.second : texts.first, n).arg(group_digits(done.size()));
         if (!failed.isEmpty()) {
             QStringList lines;
             for (const QVariant &f : failed.mid(0, 8))
@@ -143,8 +147,6 @@ static QStringList lanes_for(const QStringList &sources, const QString &folder)
     return l;
 }
 
-static QString some(int n, const QString &one, const QString &many) { return n == 1 ? one : QString("%1 %2").arg(n).arg(many); }
-
 // ---------------------------------------------------------------- rotate
 
 void rotate(MainWindow *win, const QStringList &paths, int rotation, bool flip, const QString &how, bool reencode)
@@ -167,7 +169,7 @@ void rotate(MainWindow *win, const QStringList &paths, int rotation, bool flip, 
             try {
                 imgedit::rotate_file(imgs[i], rotation, flip, how, reencode);
                 done << imgs[i];
-                task->log("Turned: " + imgs[i]);
+                task->log(tx("Turned: %1").arg(imgs[i]));
             } catch (const imgedit::NotWholeBlocks &) {
                 not_whole << imgs[i];
             } catch (const Error &e) {
@@ -175,7 +177,7 @@ void rotate(MainWindow *win, const QStringList &paths, int rotation, bool flip, 
                     lossy << imgs[i];
                 else
                     failed << QVariant(QStringList{imgs[i], e.message()});
-                task->log("Not turned: " + imgs[i] + ": " + e.message());
+                task->log(tx("Not turned: %1: %2").arg(imgs[i], e.message()));
             }
         }
         task->was_cancelled = task->cancelled;
@@ -189,28 +191,34 @@ void rotate(MainWindow *win, const QStringList &paths, int rotation, bool flip, 
             self->thumbs->invalidate(p);
         QStringList not_whole = m.value("not_whole").toStringList(), lossy = m.value("lossy").toStringList();
         if (!not_whole.isEmpty()) {
-            auto *box = new QMessageBox(QMessageBox::Question, "Rotate",
-                                        some(int(not_whole.size()), "“" + basename(not_whole.first()) + "” isn't",
-                                             "JPEGs aren't") +
-                                            " a whole number of JPEG blocks wide or high (8 or 16 pixels), so it can't "
-                                            "be turned exactly without losing quality.\n\nTrim the Edge cuts off the "
-                                            "odd pixels at its right and bottom (at most 15). Set the Orientation Tag "
-                                            "only marks how to show it: the pixels stay, and most apps turn it.",
+            auto *box = new QMessageBox(QMessageBox::Question, tx("Rotate"),
+                                        (not_whole.size() == 1
+                                             ? tx("“%1” isn't a whole number of JPEG blocks wide or high (8 or 16 pixels), "
+                                                  "so it can't be turned exactly without losing quality.").arg(basename(not_whole.first()))
+                                             : txn("%Ln JPEGs aren't a whole number of JPEG blocks wide or high (8 or 16 "
+                                                   "pixels), so they can't be turned exactly without losing quality.",
+                                                   not_whole.size())) +
+                                            "\n\n" +
+                                            tx("Trim the Edge cuts off the odd pixels at its right and bottom (at most 15). "
+                                               "Set the Orientation Tag only marks how to show it: the pixels stay, and most "
+                                               "apps turn it."),
                                         QMessageBox::Cancel, self);
-            QAbstractButton *trim = box->addButton("Trim the Edge", QMessageBox::AcceptRole);
-            QAbstractButton *tag = box->addButton("Set the Orientation Tag", QMessageBox::AcceptRole);
+            QAbstractButton *trim = box->addButton(tx("Trim the Edge"), QMessageBox::AcceptRole);
+            QAbstractButton *tag = box->addButton(tx("Set the Orientation Tag"), QMessageBox::AcceptRole);
             ask_box(box, [self, not_whole, rotation, flip, trim, tag](QAbstractButton *b) {
                 if (self && (b == trim || b == tag))
                     rotate(self, not_whole, rotation, flip, b == trim ? "trim" : "tag");
             });
         }
         if (!lossy.isEmpty()) {
-            auto *box = new QMessageBox(QMessageBox::Question, "Rotate",
-                                        "Turning " + some(int(lossy.size()), "“" + basename(lossy.first()) + "”", "of these images") +
-                                            " means saving it again in its own format (HEIC, AVIF or lossy WebP), "
-                                            "which loses a little quality.",
+            auto *box = new QMessageBox(QMessageBox::Question, tx("Rotate"),
+                                        lossy.size() == 1
+                                            ? tx("Turning “%1” means saving it again in its own format (HEIC, AVIF or lossy "
+                                                 "WebP), which loses a little quality.").arg(basename(lossy.first()))
+                                            : txn("Turning %Ln of these images means saving them again in their own format "
+                                                  "(HEIC, AVIF or lossy WebP), which loses a little quality.", lossy.size()),
                                         QMessageBox::Cancel, self);
-            QAbstractButton *again = box->addButton("Save Again", QMessageBox::AcceptRole);
+            QAbstractButton *again = box->addButton(tx("Save Again"), QMessageBox::AcceptRole);
             ask_box(box, [self, lossy, rotation, flip, again](QAbstractButton *b) {
                 if (self && b == again)
                     rotate(self, lossy, rotation, flip, QString(), true);
@@ -221,14 +229,16 @@ void rotate(MainWindow *win, const QStringList &paths, int rotation, bool flip, 
             QStringList lines;
             for (const QVariant &f : failed.mid(0, 8))
                 lines << f.toStringList().value(1);
-            warn(self, "Rotate", QString("%1 couldn't be turned:\n\n%2").arg(some(int(failed.size()), "An image", "images"), lines.join('\n')));
+            warn(self, tx("Rotate"), (failed.size() == 1 ? tx("An image couldn't be turned:\n\n%1")
+                                                         : txn("%Ln images couldn't be turned:\n\n%1", failed.size()))
+                                         .arg(lines.join('\n')));
         }
     };
-    QString verb = flip ? "Flipping" : "Rotating";
-    QString title = imgs.size() == 1 ? verb + " “" + basename(imgs.first()) + "”" : QString("%1 %2 images").arg(verb).arg(imgs.size());
-    QStringList intro{QString("%1: %2").arg(flip ? "Flip" : QString("Rotate %1°").arg(rotation), some(int(imgs.size()), "1 image", "images")),
-                      "JPEGs are turned without re-compressing them (jpegtran); each file is written whole under a "
-                      "hidden name and then renamed over the original."};
+    QString title = imgs.size() == 1 ? (flip ? tx("Flipping “%1”") : tx("Rotating “%1”")).arg(basename(imgs.first()))
+                                     : flip ? txn("Flipping %Ln image(s)", imgs.size()) : txn("Rotating %Ln image(s)", imgs.size());
+    QStringList intro{flip ? txn("Flip: %Ln image(s)", imgs.size()) : txn("Rotate %1°: %Ln image(s)", imgs.size()).arg(rotation),
+                      tx("JPEGs are turned without re-compressing them (jpegtran); each file is written whole under a "
+                         "hidden name and then renamed over the original.")};
     QStringList steps;
     for (const QString &p : imgs)
         steps << basename(p);
@@ -242,22 +252,22 @@ OutputRow::OutputRow(const QString &beside_text, QWidget *parent) : QWidget(pare
     auto *v = new QVBoxLayout(this);
     v->setContentsMargins(0, 0, 0, 0);
     beside = new QRadioButton(beside_text);
-    into = new QRadioButton("Into this folder:");
+    into = new QRadioButton(tx("Into this folder:"));
     beside->setChecked(true);
     auto *h = new QHBoxLayout;
     path = new QLineEdit;
-    path->setPlaceholderText("Choose a folder…");
-    choose = new QPushButton("Choose…");
+    path->setPlaceholderText(tx("Choose a folder…"));
+    choose = new QPushButton(tx("Choose…"));
     h->addWidget(into);
     h->addWidget(path, 1);
     h->addWidget(choose);
-    trash = new QCheckBox("Move the originals to the trash afterwards");
+    trash = new QCheckBox(tx("Move the originals to the trash afterwards"));
     v->addWidget(beside);
     v->addLayout(h);
     v->addWidget(trash);
     connect(choose, &QPushButton::clicked, this, [this]() {
         QPointer<OutputRow> me(this);
-        choose_folder(this, "Where the Files Go", path->text().isEmpty() ? HOME() : path->text(), [me](const QString &d) {
+        choose_folder(this, tx("Where the Files Go"), path->text().isEmpty() ? HOME() : path->text(), [me](const QString &d) {
             if (!me)
                 return;
             me->path->setText(d);
@@ -289,7 +299,7 @@ static QPlainTextEdit *command_box()
     p->setReadOnly(true);
     p->setMaximumHeight(72);
     p->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    p->setAccessibleName("The command");
+    p->setAccessibleName(tx("The command"));
     return p;
 }
 
@@ -309,13 +319,13 @@ static bool output_ok(QWidget *d, OutputRow *o)
         return true;
     QString f = o->folder();
     if (f.isEmpty()) {
-        warn(d, "Convert", "Choose the folder the files go into.");
+        warn(d, tx("Convert"), tx("Choose the folder the files go into."));
         return false;
     }
     try {
         makedirs(f, true);
     } catch (const OSError &e) {
-        warn(d, "Convert", QString("Couldn't make the folder “%1”: %2").arg(f, e.message()));
+        warn(d, tx("Convert"), tx("Couldn't make the folder “%1”: %2").arg(f, e.message()));
         return false;
     }
     return true;
@@ -325,51 +335,51 @@ static bool output_ok(QWidget *d, OutputRow *o)
 
 ImageDialog::ImageDialog(MainWindow *win, const QStringList &paths_) : QDialog(win), paths(paths_), win(win)
 {
-    setWindowTitle(paths.size() == 1 ? "Convert Image — " + basename(paths.first())
-                                     : QString("Convert %1 Images").arg(paths.size()));
+    setWindowTitle(paths.size() == 1 ? tx("Convert Image — %1").arg(basename(paths.first()))
+                                     : txn("Convert %Ln Images", paths.size()));
     setAttribute(Qt::WA_DeleteOnClose);
     auto *lay = new QVBoxLayout(this);
     auto *form = new QFormLayout;
     lay->addLayout(form);
     format = new QComboBox;
     for (const media::ImageTarget &t : media::image_targets())
-        format->addItem(t.name + (t.lossy ? "" : "  (lossless)"), t.id);
-    form->addRow("Convert to:", format);
+        format->addItem(t.lossy ? t.name : tx("%1  (lossless)").arg(t.name), t.id);
+    form->addRow(tx("Convert to:"), format);
     auto *qrow = new QHBoxLayout;
     quality = new QSlider(Qt::Horizontal);
     quality->setRange(30, 100);
     auto *qval = new QLabel;
-    qrow->addWidget(new QLabel("Smaller file"));
+    qrow->addWidget(new QLabel(tx("Smaller file")));
     qrow->addWidget(quality, 1);
-    qrow->addWidget(new QLabel("Better quality"));
+    qrow->addWidget(new QLabel(tx("Better quality")));
     qrow->addWidget(qval);
     connect(quality, &QSlider::valueChanged, qval, [qval](int v) { qval->setText(QString::number(v)); });
-    form->addRow("Quality:", qrow);
+    form->addRow(tx("Quality:"), qrow);
     auto *rrow = new QHBoxLayout;
     resize = new QComboBox;
-    resize->addItem("Keep the size", "keep");
-    resize->addItem("Longest side, in pixels:", "long");
-    resize->addItem("Percentage of the size:", "percent");
+    resize->addItem(tx("Keep the size"), "keep");
+    resize->addItem(tx("Longest side, in pixels:"), "long");
+    resize->addItem(tx("Percentage of the size:"), "percent");
     size = new QSpinBox;
     size->setRange(1, 20000);
     rrow->addWidget(resize);
     rrow->addWidget(size);
     rrow->addStretch(1);
-    form->addRow("Size:", rrow);
-    keep_meta = new QCheckBox("Keep the metadata (camera, date taken, location)");
+    form->addRow(tx("Size:"), rrow);
+    keep_meta = new QCheckBox(tx("Keep the metadata (camera, date taken, location)"));
     form->addRow("", keep_meta);
     background = new QComboBox;
-    background->addItem("White", "#ffffff");
-    background->addItem("Black", "#000000");
-    background->addItem("Grey", "#808080");
-    form->addRow("Transparent parts:", background);
-    output = new OutputRow("Beside the originals (never replacing a file)");
-    form->addRow("Save:", output);
+    background->addItem(tx("White"), "#ffffff");
+    background->addItem(tx("Black"), "#000000");
+    background->addItem(tx("Grey"), "#808080");
+    form->addRow(tx("Transparent parts:"), background);
+    output = new OutputRow(tx("Beside the originals (never replacing a file)"));
+    form->addRow(tx("Save:"), output);
     note = new QLabel;
     note->setWordWrap(true);
     note->setForegroundRole(QPalette::PlaceholderText);
     lay->addWidget(note);
-    QPushButton *go = buttons(this, lay, "Convert");
+    QPushButton *go = buttons(this, lay, tx("Convert"));
     connect(go, &QPushButton::clicked, this, &ImageDialog::start);
 
     QJsonObject r = remembered("convert/image");
@@ -405,14 +415,14 @@ void ImageDialog::update_state()
     bool lossy = std::any_of(targets.begin(), targets.end(), [&](const auto &t) { return t.id == s.format && t.lossy; });
     quality->setEnabled(lossy);
     size->setVisible(s.resize != "keep");
-    size->setSuffix(s.resize == "percent" ? " %" : " px");
+    size->setSuffix(s.resize == "percent" ? tx(" %") : tx(" px"));
     background->setEnabled(s.format == "jpg");
     QStringList notes;
     if (format->count() == 0)
-        notes << "Nothing here can write images (Qt's image plugins are missing).";
+        notes << tx("Nothing here can write images (Qt's image plugins are missing).");
     if (s.keep_meta && !which("exiftool") && s.format != "jpg")
-        notes << "Without exiftool (libimage-exiftool-perl) the metadata is only kept from JPEG to JPEG.";
-    notes << "Photos are turned upright as their orientation says, and keep their colour profile where the format has one.";
+        notes << tx("Without exiftool (libimage-exiftool-perl) the metadata is only kept from JPEG to JPEG.");
+    notes << tx("Photos are turned upright as their orientation says, and keep their colour profile where the format has one.");
     note->setText(notes.join(' ').trimmed());
 }
 
@@ -423,22 +433,21 @@ void ImageDialog::start()
     media::ImageSpec s = spec();
     remember("convert/image", {{"format", s.format}, {"quality", s.quality}, {"resize", s.resize}, {"size", s.size},
                                {"keep_meta", s.keep_meta}, {"background", s.background}});
-    QString folder = output->folder(), ext;
+    QString folder = output->folder(), ext, name;
     for (const media::ImageTarget &t : media::image_targets())
         if (t.id == s.format)
-            ext = t.ext;
+            ext = t.ext, name = t.name;
     QStringList srcs = paths;
-    QString name = format->currentText().section("  (", 0, 0);
     auto one = [srcs, s, folder, ext](Task *, int i, double, double) -> QStringList {
         QString dst = media::output_path(srcs[i], folder.isEmpty() ? dirname(srcs[i]) : folder, "", ext);
         media::convert_image(srcs[i], dst, s);
         return {dst};
     };
-    QString title = srcs.size() == 1 ? "Converting “" + basename(srcs.first()) + "” to " + name
-                                     : QString("Converting %1 images to %2").arg(QString::number(srcs.size()), name);
+    QString title = srcs.size() == 1 ? tx("Converting “%1” to %2").arg(basename(srcs.first()), name)
+                                     : txn("Converting %Ln image(s) to %1", srcs.size()).arg(name);
     run_batch(win, title, "images", srcs, lanes_for(srcs, folder),
-              {QString("Convert Image: %1 to %2").arg(some(int(srcs.size()), "1 image", "images"), name),
-               "Each new image is written whole under a hidden name and then given its name; no file is replaced."},
+              {txn("Convert Image: %Ln image(s) to %1", srcs.size()).arg(name),
+               tx("Each new image is written whole under a hidden name and then given its name; no file is replaced.")},
               one, output->trash->isChecked());
     close();
 }
@@ -446,111 +455,111 @@ void ImageDialog::start()
 // ---------------------------------------------------------------- videos
 
 static const QList<QPair<QString, QString>> CONTAINERS = {
-    {"mp4", "MP4"}, {"mkv", "MKV"}, {"webm", "WebM"}, {"mov", "MOV"}, {"gif", "GIF (animation)"},
-    {"mp3", "MP3 (sound only)"}, {"m4a", "M4A (sound only)"}, {"opus", "Opus (sound only)"}};
+    {"mp4", "MP4"}, {"mkv", "MKV"}, {"webm", "WebM"}, {"mov", "MOV"}, {"gif", TX_NOOP("GIF (animation)")},
+    {"mp3", TX_NOOP("MP3 (sound only)")}, {"m4a", TX_NOOP("M4A (sound only)")}, {"opus", TX_NOOP("Opus (sound only)")}};
 
 VideoDialog::VideoDialog(MainWindow *win, const QStringList &paths_) : QDialog(win), paths(paths_), win(win)
 {
-    setWindowTitle(paths.size() == 1 ? "Convert Video — " + basename(paths.first())
-                                     : QString("Convert %1 Videos").arg(paths.size()));
+    setWindowTitle(paths.size() == 1 ? tx("Convert Video — %1").arg(basename(paths.first()))
+                                     : txn("Convert %Ln Videos", paths.size()));
     setAttribute(Qt::WA_DeleteOnClose);
     presets = media::video_presets(ext_of(paths.value(0)));
     auto *lay = new QVBoxLayout(this);
-    details = new QLabel("Reading the video's details…");
+    details = new QLabel(tx("Reading the video's details…"));
     details->setWordWrap(true);
     lay->addWidget(details);
     auto *form = new QFormLayout;
     lay->addLayout(form);
     preset = new QComboBox;
     for (const media::Preset &p : presets)
-        preset->addItem(p.name, p.id);
-    preset->addItem("Custom", "custom");
-    form->addRow("Preset:", preset);
+        preset->addItem(tx(p.name), p.id);
+    preset->addItem(tx("Custom"), "custom");
+    form->addRow(tx("Preset:"), preset);
     container = new QComboBox;
     for (const auto &[id, n] : CONTAINERS)
-        container->addItem(n, id);
-    form->addRow("Format:", container);
+        container->addItem(tx(n), id);
+    form->addRow(tx("Format:"), container);
     vcodec = new QComboBox;
-    form->addRow("Video:", vcodec);
+    form->addRow(tx("Video:"), vcodec);
     auto *qrow = new QHBoxLayout;
     quality = new QSlider(Qt::Horizontal);
     quality->setRange(0, 100);
-    qrow->addWidget(new QLabel("Smaller file"));
+    qrow->addWidget(new QLabel(tx("Smaller file")));
     qrow->addWidget(quality, 1);
-    qrow->addWidget(new QLabel("Better quality"));
-    form->addRow("Quality:", qrow);
+    qrow->addWidget(new QLabel(tx("Better quality")));
+    form->addRow(tx("Quality:"), qrow);
     auto *trow = new QHBoxLayout;
-    target = new QCheckBox("Aim for a size instead:");
+    target = new QCheckBox(tx("Aim for a size instead:"));
     target_mb = new QDoubleSpinBox;
     target_mb->setRange(1, 100000);
-    target_mb->setSuffix(" MB");
+    target_mb->setSuffix(tx(" MB"));
     target_mb->setValue(50);
     trow->addWidget(target);
     trow->addWidget(target_mb);
     trow->addStretch(1);
     form->addRow("", trow);
     resolution = new QComboBox;
-    for (const auto &[n, h] : QList<QPair<QString, int>>{{"Keep", 0}, {"4K (2160p)", 2160}, {"1080p", 1080}, {"720p", 720},
+    for (const auto &[n, h] : QList<QPair<QString, int>>{{tx("Keep"), 0}, {"4K (2160p)", 2160}, {"1080p", 1080}, {"720p", 720},
                                                           {"480p", 480}, {"360p", 360}})
         resolution->addItem(n, h);
-    form->addRow("Resolution:", resolution);
+    form->addRow(tx("Resolution:"), resolution);
     fps = new QComboBox;
     for (int f : {0, 60, 30, 25, 24, 15, 12})
-        fps->addItem(f ? QString("%1 a second").arg(f) : QString("Keep"), f);
-    form->addRow("Frame rate:", fps);
+        fps->addItem(f ? tx("%1 a second").arg(f) : tx("Keep"), f);
+    form->addRow(tx("Frame rate:"), fps);
     auto *arow = new QHBoxLayout;
     audio = new QComboBox;
-    audio->addItem("Keep it (copied as it is when the format takes it)", "keep");
-    audio->addItem("Convert it", "encode");
-    audio->addItem("Remove it", "remove");
+    audio->addItem(tx("Keep it (copied as it is when the format takes it)"), "keep");
+    audio->addItem(tx("Convert it"), "encode");
+    audio->addItem(tx("Remove it"), "remove");
     abitrate = new QComboBox;
     for (int b : {320, 256, 192, 160, 128, 96, 64})
-        abitrate->addItem(QString("%1 kbps").arg(b), b);
+        abitrate->addItem(tx("%1 kbps").arg(b), b);
     arow->addWidget(audio, 1);
     arow->addWidget(abitrate);
-    form->addRow("Sound:", arow);
+    form->addRow(tx("Sound:"), arow);
     auto *srow = new QHBoxLayout;
     speed = new QSlider(Qt::Horizontal);
     speed->setRange(0, 4);
     speed->setPageStep(1);
-    srow->addWidget(new QLabel("Faster"));
+    srow->addWidget(new QLabel(tx("Faster")));
     srow->addWidget(speed, 1);
-    srow->addWidget(new QLabel("Smaller file"));
-    form->addRow("Speed:", srow);
+    srow->addWidget(new QLabel(tx("Smaller file")));
+    form->addRow(tx("Speed:"), srow);
     auto *cut = new QHBoxLayout;
     start_time = new QLineEdit;
-    start_time->setPlaceholderText("the start");
+    start_time->setPlaceholderText(tx("the start"));
     end_time = new QLineEdit;
-    end_time->setPlaceholderText("the end");
-    cut->addWidget(new QLabel("From"));
+    end_time->setPlaceholderText(tx("the end"));
+    cut->addWidget(new QLabel(tx("From")));
     cut->addWidget(start_time);
-    cut->addWidget(new QLabel("to"));
+    cut->addWidget(new QLabel(tx("to")));
     cut->addWidget(end_time);
-    form->addRow("Trim:", cut);
+    form->addRow(tx("Trim:"), cut);
     auto *turn = new QHBoxLayout;
     rotate = new QComboBox;
-    rotate->addItem("Not turned", 0);
-    rotate->addItem("90° clockwise", 90);
+    rotate->addItem(tx("Not turned"), 0);
+    rotate->addItem(tx("90° clockwise"), 90);
     rotate->addItem("180°", 180);
-    rotate->addItem("90° counter-clockwise", 270);
-    flip = new QCheckBox("Mirrored");
+    rotate->addItem(tx("90° counter-clockwise"), 270);
+    flip = new QCheckBox(tx("Mirrored"));
     turn->addWidget(rotate);
     turn->addWidget(flip);
     turn->addStretch(1);
-    form->addRow("Turn:", turn);
-    hw = new QCheckBox("Use the graphics card (faster, usually larger files)");
+    form->addRow(tx("Turn:"), turn);
+    hw = new QCheckBox(tx("Use the graphics card (faster, usually larger files)"));
     hw->hide();
     form->addRow("", hw);
     extra = new QLineEdit;
-    extra->setPlaceholderText("other ffmpeg options, as they are (optional)");
-    form->addRow("Extra options:", extra);
+    extra->setPlaceholderText(tx("other ffmpeg options, as they are (optional)"));
+    form->addRow(tx("Extra options:"), extra);
     name = new QLineEdit;
     if (paths.size() == 1)
-        form->addRow("Name:", name);
+        form->addRow(tx("Name:"), name);
     else
         name->hide();
-    output = new OutputRow("Beside the originals");
-    form->addRow("Save:", output);
+    output = new OutputRow(tx("Beside the originals"));
+    form->addRow(tx("Save:"), output);
     estimate = new QLabel;
     lay->addWidget(estimate);
     problem = new QLabel;
@@ -559,7 +568,7 @@ VideoDialog::VideoDialog(MainWindow *win, const QStringList &paths_) : QDialog(w
     lay->addWidget(problem);
     preview = command_box();
     lay->addWidget(preview);
-    go = buttons(this, lay, "Convert");
+    go = buttons(this, lay, tx("Convert"));
     connect(go, &QPushButton::clicked, this, &VideoDialog::start);
 
     // the last preset used; Custom with the settings it had
@@ -598,7 +607,7 @@ VideoDialog::VideoDialog(MainWindow *win, const QStringList &paths_) : QDialog(w
             me->encs = media::encoders();
             me->first = res.value<media::Probe>();
             int n = int(me->paths.size());
-            me->details->setText((n > 1 ? QString("%1 videos; the first: ").arg(n) : QString()) + media::describe(me->first));
+            me->details->setText(n > 1 ? txn("%Ln videos; the first: %1", n).arg(media::describe(me->first)) : media::describe(me->first));
             QStringList hws = media::hardware(me->encs);
             me->hw->setVisible(!hws.isEmpty());
             me->set_spec(me->spec());   // the codecs this ffmpeg has
@@ -636,11 +645,11 @@ void VideoDialog::set_spec(const media::VideoSpec &s)
     filling = true;
     container->setCurrentIndex(std::max(0, container->findData(s.container)));
     vcodec->clear();
-    for (const auto &[id, n] : QList<QPair<QString, QString>>{{"h264", "H.264 (plays everywhere)"},
-                                                              {"hevc", "H.265 (smaller, newer devices)"},
-                                                              {"vp9", "VP9 (the web)"},
-                                                              {"av1", "AV1 (smallest, slow)"},
-                                                              {"copy", "Copy as it is (no re-encoding)"}}) {
+    for (const auto &[id, n] : QList<QPair<QString, QString>>{{"h264", tx("H.264 (plays everywhere)")},
+                                                              {"hevc", tx("H.265 (smaller, newer devices)")},
+                                                              {"vp9", tx("VP9 (the web)")},
+                                                              {"av1", tx("AV1 (smallest, slow)")},
+                                                              {"copy", tx("Copy as it is (no re-encoding)")}}) {
         media::VideoSpec t;
         t.vcodec = id;
         if (encs.isEmpty() || id == "copy" || !media::video_encoder(t, encs).isEmpty())
@@ -726,9 +735,10 @@ void VideoDialog::update_preview()
     problem->setText(a.error);
     go->setEnabled(a.error.isEmpty());
     double mb = media::estimate_mb(s, first);
-    estimate->setText(mb > 0 ? QString("Roughly %1 for the first video%2.")
-                                   .arg(human_size(qint64(mb * 1e6)), s.target_mb > 0 || sound_only || copy ? QString() : QString(" (it depends on what's in it)"))
-                             : QString());
+    estimate->setText(mb <= 0 ? QString()
+                      : s.target_mb > 0 || sound_only || copy ? tx("Roughly %1 for the first video.").arg(human_size(qint64(mb * 1e6)))
+                                                              : tx("Roughly %1 for the first video (it depends on what's in it).")
+                                                                    .arg(human_size(qint64(mb * 1e6))));
     preview->setPlainText(a.error.isEmpty() && !paths.isEmpty() ? shell_join(media::command(paths.first(), a, out_path(paths.first())))
                                                                 : QString());
 }
@@ -765,12 +775,12 @@ void VideoDialog::start()
         return {media::run(task, srcs[i], a, dst, length, basename(srcs[i]), base, share)};
     };
     QString what = preset->currentText();
-    QString title = srcs.size() == 1 ? "Converting “" + basename(srcs.first()) + "”"
-                                     : QString("Converting %1 videos").arg(srcs.size());
+    QString title = srcs.size() == 1 ? tx("Converting “%1”").arg(basename(srcs.first()))
+                                     : txn("Converting %Ln video(s)", srcs.size());
     run_batch(win, title, "videos", srcs, lanes_for(srcs, output->folder()),
-              {QString("Convert Video (%1): %2").arg(what, some(int(srcs.size()), "1 video", "videos")),
-               "ffmpeg writes each video under a hidden name, given its name when it's finished; a stop or a failure "
-               "leaves no half-made video, and no file is replaced."},
+              {txn("Convert Video (%1): %Ln video(s)", srcs.size()).arg(what),
+               tx("ffmpeg writes each video under a hidden name, given its name when it's finished; a stop or a failure "
+                  "leaves no half-made video, and no file is replaced.")},
               one, output->trash->isChecked());
     close();
 }
@@ -779,7 +789,7 @@ void VideoDialog::start()
 
 static const QHash<QString, QString> FORMAT_NAMES = {
     {"mp3", "MP3"},  {"m4a", "M4A (AAC)"}, {"opus", "Opus"}, {"ogg", "OGG (Vorbis)"},
-    {"flac", "FLAC (lossless)"}, {"wav", "WAV (lossless, uncompressed)"}, {"alac", "ALAC (lossless, Apple)"}};
+    {"flac", TX_NOOP("FLAC (lossless)")}, {"wav", TX_NOOP("WAV (lossless, uncompressed)")}, {"alac", TX_NOOP("ALAC (lossless, Apple)")}};
 
 AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_video_)
     : QDialog(win), from_video(from_video_), win(win)
@@ -793,22 +803,22 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
                 roots << p;
     }
     QString first_name = basename(paths.value(0));
-    setWindowTitle(from_video ? (paths.size() == 1 ? "Extract Audio — " + first_name : QString("Extract Audio from %1 Videos").arg(paths.size()))
-                              : (paths.size() == 1 ? "Convert Audio — " + first_name : QString("Convert %1 Audio Files").arg(paths.size())));
+    setWindowTitle(from_video ? (paths.size() == 1 ? tx("Extract Audio — %1").arg(first_name) : txn("Extract Audio from %Ln Videos", paths.size()))
+                              : (paths.size() == 1 ? tx("Convert Audio — %1").arg(first_name) : txn("Convert %Ln Audio Files", paths.size())));
     setAttribute(Qt::WA_DeleteOnClose);
     auto *lay = new QVBoxLayout(this);
-    details = new QLabel(paths.isEmpty() ? QString("There are no audio files there.") : QString("Reading the details…"));
+    details = new QLabel(paths.isEmpty() ? tx("There are no audio files there.") : tx("Reading the details…"));
     details->setWordWrap(true);
     lay->addWidget(details);
     auto *form = new QFormLayout;
     lay->addLayout(form);
     tracks = new QComboBox;
     if (from_video)
-        form->addRow("Sound track:", tracks);
+        form->addRow(tx("Sound track:"), tracks);
     else
         tracks->hide();
-    keep = new QRadioButton("Keep the sound as it is (instant, no quality lost)");
-    convert = new QRadioButton("Convert it:");
+    keep = new QRadioButton(tx("Keep the sound as it is (instant, no quality lost)"));
+    convert = new QRadioButton(tx("Convert it:"));
     auto *group = new QButtonGroup(this);
     group->addButton(keep);
     group->addButton(convert);
@@ -820,46 +830,46 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
         convert->hide();
     }
     format = new QComboBox;
-    form->addRow("Format:", format);
+    form->addRow(tx("Format:"), format);
     bitrate = new QComboBox;
-    for (const auto &[n, b] : QList<QPair<QString, int>>{{"Best (320 kbps)", 320}, {"Very good (256 kbps)", 256},
-                                                          {"Good (192 kbps)", 192}, {"Smaller (128 kbps)", 128},
-                                                          {"Smallest (96 kbps)", 96}, {"Speech (64 kbps)", 64}})
+    for (const auto &[n, b] : QList<QPair<QString, int>>{{tx("Best (320 kbps)"), 320}, {tx("Very good (256 kbps)"), 256},
+                                                          {tx("Good (192 kbps)"), 192}, {tx("Smaller (128 kbps)"), 128},
+                                                          {tx("Smallest (96 kbps)"), 96}, {tx("Speech (64 kbps)"), 64}})
         bitrate->addItem(n, b);
-    form->addRow("Quality:", bitrate);
+    form->addRow(tx("Quality:"), bitrate);
     rate = new QComboBox;
-    rate->addItem("Keep", 0);
-    rate->addItem("44.1 kHz (CD)", 44100);
-    rate->addItem("48 kHz", 48000);
+    rate->addItem(tx("Keep"), 0);
+    rate->addItem(tx("44.1 kHz (CD)"), 44100);
+    rate->addItem(tx("48 kHz"), 48000);
     channels = new QComboBox;
-    channels->addItem("Keep", 0);
-    channels->addItem("Stereo", 2);
-    channels->addItem("Mono", 1);
+    channels->addItem(tx("Keep"), 0);
+    channels->addItem(tx("Stereo"), 2);
+    channels->addItem(tx("Mono"), 1);
     if (!from_video) {
-        form->addRow("Sample rate:", rate);
-        form->addRow("Channels:", channels);
+        form->addRow(tx("Sample rate:"), rate);
+        form->addRow(tx("Channels:"), channels);
     } else {
         rate->hide();
         channels->hide();
     }
-    loudnorm = new QCheckBox("Even out the volume, so they all play as loud (slower: each file is read twice)");
+    loudnorm = new QCheckBox(tx("Even out the volume, so they all play as loud (slower: each file is read twice)"));
     if (!from_video)
         form->addRow("", loudnorm);
     else
         loudnorm->hide();
-    output = new OutputRow("Beside the originals");
+    output = new OutputRow(tx("Beside the originals"));
     if (!roots.isEmpty()) {
         output->into->setChecked(true);
-        output->path->setText(unique_path(dirname(roots.first()), basename(roots.first()) + " (converted)", "num"));
+        output->path->setText(unique_path(dirname(roots.first()), tx("%1 (converted)").arg(basename(roots.first())), "num"));
     }
-    form->addRow("Save:", output);
-    auto *tags = new QLabel(from_video ? QString() : QString("Tags (title, artist, album, track) and cover pictures are kept where the format takes them."));
+    form->addRow(tx("Save:"), output);
+    auto *tags = new QLabel(from_video ? QString() : tx("Tags (title, artist, album, track) and cover pictures are kept where the format takes them."));
     tags->setWordWrap(true);
     tags->setForegroundRole(QPalette::PlaceholderText);
     lay->addWidget(tags);
     preview = command_box();
     lay->addWidget(preview);
-    go = buttons(this, lay, from_video ? "Extract" : "Convert");
+    go = buttons(this, lay, from_video ? tx("Extract") : tx("Convert"));
     go->setEnabled(!paths.isEmpty());
     connect(go, &QPushButton::clicked, this, &AudioDialog::start);
 
@@ -874,7 +884,7 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
         format->clear();
         for (const QString &f : media::audio_formats(encs))
             if (f != "copy")
-                format->addItem(FORMAT_NAMES.value(f, f), f);
+                format->addItem(tx(FORMAT_NAMES.value(f, f)), f);
         format->setCurrentIndex(std::max(0, format->findData(want)));
     };
     fill_formats({"libmp3lame", "aac", "libopus", "flac", "pcm_s16le", "alac"});
@@ -900,9 +910,10 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
             fill_formats(media::encoders());
             me->first = res.value<media::Probe>();
             int n = int(me->paths.size());
-            QString what = me->from_video ? "videos" : "files";
-            me->details->setText((n > 1 ? QString("%1 %2; the first: ").arg(QString::number(n), what) : QString()) +
-                                 media::describe(me->first));
+            QString first = media::describe(me->first);
+            me->details->setText(n <= 1           ? first
+                                 : me->from_video ? txn("%Ln videos; the first: %1", n).arg(first)
+                                                  : txn("%Ln files; the first: %1", n).arg(first));
             QSignalBlocker quiet_tracks(me->tracks);
             me->tracks->clear();
             QList<media::Stream> audio = me->first.audio();
@@ -911,7 +922,7 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
                     const media::Stream &a = audio[i];
                     QStringList bits{media::codec_name(a.codec)};
                     if (a.channels)
-                        bits << (a.channels == 1 ? QString("mono") : a.channels == 2 ? QString("stereo") : QString("%1 channels").arg(a.channels));
+                        bits << (a.channels == 1 ? tx("mono") : a.channels == 2 ? tx("stereo") : txn("%Ln channel(s)", a.channels));
                     if (!a.lang.isEmpty() && a.lang != "und")
                         bits << a.lang;
                     if (!a.title.isEmpty())
@@ -919,10 +930,10 @@ AudioDialog::AudioDialog(MainWindow *win, const QStringList &paths_, bool from_v
                     me->tracks->addItem(QString("%1: %2").arg(QString::number(i + 1), bits.join(", ")), i);
                 }
             } else {
-                me->tracks->addItem("The first track", 0);
+                me->tracks->addItem(tx("The first track"), 0);
             }
             if (audio.size() > 1 || n > 1)
-                me->tracks->addItem("Every track (a file for each)", -1);
+                me->tracks->addItem(tx("Every track (a file for each)"), -1);
             me->update_preview();
         },
         true);
@@ -973,7 +984,7 @@ void AudioDialog::update_preview()
     QList<media::Stream> audio = first.audio();
     int t = std::max(0, track());
     QString codec = audio.value(t).codec;
-    keep->setText(QString("Keep the sound as it is (instant, no quality lost)%1")
+    keep->setText(tx("Keep the sound as it is (instant, no quality lost)%1")
                       .arg(codec.isEmpty() ? QString() : QString(": %1 → %2").arg(media::codec_name(codec), media::audio_ext("copy", codec))));
     media::Args a = media::audio_args(s, first, t, s.loudnorm ? QString("{}") : QString());
     if (!a.error.isEmpty()) {
@@ -984,7 +995,7 @@ void AudioDialog::update_preview()
     QString dst = media::output_path(paths.first(), dir, track_suffix(audio.value(t), t, track() < 0),
                                      media::audio_ext(s.format, codec));
     preview->setPlainText(shell_join(media::command(paths.first(), a, dst)) +
-                          (s.loudnorm ? QString("\n(after a first pass measuring its loudness)") : QString()));
+                          (s.loudnorm ? "\n" + tx("(after a first pass measuring its loudness)") : QString()));
 }
 
 void AudioDialog::start()
@@ -1004,7 +1015,7 @@ void AudioDialog::start()
             throw Error(p.error);
         QList<media::Stream> audio = p.audio();
         if (audio.isEmpty())
-            throw Error("It has no sound.");
+            throw Error(tx("It has no sound."));
         QList<int> picks;
         if (which_track < 0)
             for (int t = 0; t < audio.size(); ++t)
@@ -1027,16 +1038,16 @@ void AudioDialog::start()
         }
         return made;
     };
-    QString title = from_video ? (srcs.size() == 1 ? "Extracting the sound of “" + basename(srcs.first()) + "”"
-                                                   : QString("Extracting the sound of %1 videos").arg(srcs.size()))
-                               : (srcs.size() == 1 ? "Converting “" + basename(srcs.first()) + "”"
-                                                   : QString("Converting %1 audio files").arg(srcs.size()));
-    QString how = s.format == "copy" ? QString("as it is") : FORMAT_NAMES.value(s.format, s.format);
+    QString title = from_video ? (srcs.size() == 1 ? tx("Extracting the sound of “%1”").arg(basename(srcs.first()))
+                                                   : txn("Extracting the sound of %Ln video(s)", srcs.size()))
+                               : (srcs.size() == 1 ? tx("Converting “%1”").arg(basename(srcs.first()))
+                                                   : txn("Converting %Ln audio file(s)", srcs.size()));
+    QString how = s.format == "copy" ? tx("as it is") : tx(FORMAT_NAMES.value(s.format, s.format));
     run_batch(win, title, from_video ? "videos" : "files", srcs, lanes_for(srcs, folder),
-              {QString("%1: %2, %3").arg(from_video ? "Extract Audio" : "Convert Audio",
-                                         some(int(srcs.size()), "1 file", "files"), how),
-               "ffmpeg writes each file under a hidden name, given its name when it's finished; a stop or a failure "
-               "leaves no half-made file, and no file is replaced."},
+              {(from_video ? txn("Extract Audio: %Ln file(s), %1", srcs.size()) : txn("Convert Audio: %Ln file(s), %1", srcs.size()))
+                   .arg(how),
+               tx("ffmpeg writes each file under a hidden name, given its name when it's finished; a stop or a failure "
+                  "leaves no half-made file, and no file is replaced.")},
               one, output->trash->isChecked());
     close();
 }

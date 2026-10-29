@@ -32,12 +32,12 @@ static const QString NS_BOOKMARK = "http://www.freedesktop.org/standards/desktop
 static const QString NS_MIME = "http://www.freedesktop.org/standards/shared-mime-info";
 
 bool is_virtual(const QString &place) { return place == STARRED || place == RECENT; }
-QString title(const QString &place) { return place == STARRED ? "Starred" : "Recent"; }
+QString title(const QString &place) { return place == STARRED ? tx("Starred") : tx("Recent"); }
 QString icon_name(const QString &place) { return place == STARRED ? "starred" : "document-open-recent"; }
 
 QString empty_text(const QString &place)
 {
-    return place == STARRED ? "No starred items — right-click a file or folder and choose Star" : "No recent files";
+    return place == STARRED ? tx("No starred items — right-click a file or folder and choose Star") : tx("No recent files");
 }
 
 Signals *signals_()

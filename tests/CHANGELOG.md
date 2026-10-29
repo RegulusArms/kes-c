@@ -11,9 +11,29 @@ Changed:
   customised file menu's submenu of the user's own is now named "Mine & Yours". Covers the fix for "&" in tab names,
   which Qt took as a shortcut mark and showed as the next letter underlined.
 
+- Every test runs with English (US) number and date formats (`common.h`), whatever the machine's locale: Kestrel now
+  formats them by the system's, so a check of "1,234 bytes" or a date doesn't depend on where it runs.
+- `fileops`: a remembered folder size's age names its date in the system's format ("Calculated 3 days ago (…)"),
+  no longer as 2026-10-21 14:05. `archives`: the archive window counts "60,001 files" in the system's digit grouping.
+  `tools`: Find Duplicates says "Not kept: 2 files" (a count's plural, no longer "2 file(s)"). `devices`: the
+  no-phones hint is translated where it's shown. Cover the move of numbers, dates and counts to the system's formats
+  and translatable plurals.
+
 Added:
 - `prefs` checks that in a customised menu "Links & Shortcuts" and a submenu named "Mine & Yours" keep their "&".
 - `ui` checks that a folder named "Tom & Jerry" shows as that on its tab and in the window's title.
+- `ui` scans `src/` for a text passed straight to a widget or a message without `tx()` (like the modal-call scan),
+  so new code stays translatable.
+- A new test, `i18n`: every `.ts` file is built into the app and keeps its texts' `%1` and `%n`; English gives every
+  count in the code its plural forms; and with the pseudo-translation installed, the main window, its menus, the
+  Overview, Preferences, the Jobs window and Properties show no untranslated text. Covers making Kestrel
+  translatable.
+- `installer` runs `kes-setup --bleachbit` under umask 000 and checks the cleaner and its folders come out writable
+  only by the user (BleachBit ignores a world-writable cleaner, and then the dry run and the clean find nothing), with
+  no part file left, and that its output says BleachBit will ask once whether to trust it. Covers the fix for the
+  cleaner written with the user's umask.
+- CI's test jobs (`test`, `test-resolute`, `sanitizers`, `sanitizers-resolute`) and `deb` install `qt6-tools-dev`
+  and `qt6-l10n-tools`, which the build needs for the translations and `i18n` for lupdate.
 
 ## 0.3.2-alpha.26
 

@@ -46,17 +46,28 @@ QString kind_key(Kind k)
 QString kind_label(Kind k)
 {
     switch (k) {
-    case FOLDER: return "A folder";
-    case FILE: return "A file";
-    case ARCHIVE: return "An archive";
-    case SEVERAL: return "Several items";
-    case BACKGROUND: return "Empty space in a folder";
-    case VIEWER: return "The image viewer";
+    case FOLDER: return tx("A folder");
+    case FILE: return tx("A file");
+    case ARCHIVE: return tx("An archive");
+    case SEVERAL: return tx("Several items");
+    case BACKGROUND: return tx("Empty space in a folder");
+    case VIEWER: return tx("The image viewer");
     }
     return QString();
 }
 
 // ---------------------------------------------------------------- the default layouts
+
+// The built-in submenus' titles in English. A layout keeps a title in English unless the user renamed it, and shows
+// it translated, so a layout saved in one language reads right in another.
+static const char *builtin_title(const QString &id)
+{
+    static const QHash<QString, const char *> titles = {
+        {"previews", TX_NOOP("Previews")},       {"viewer_view", TX_NOOP("View")}, {"viewer_edit", TX_NOOP("Rotate and Edit")},
+        {"copy_path", TX_NOOP("Copy Path / Name")}, {"links", TX_NOOP("Links & Shortcuts")}, {"image", TX_NOOP("Image")},
+        {"rotate", TX_NOOP("Rotate")}};
+    return titles.value(id);
+}
 
 static Entry item(const QString &id, const QString &label, const QString &note = QString())
 {
@@ -82,153 +93,156 @@ static Entry submenu(const QString &id, const QString &title, const QList<Entry>
 
 static QList<Entry> previews_menu()
 {
-    return {submenu("previews", "Previews",
-                    {item("gen_previews_rec", "Generate Previews Recursively"),
-                     item("gen_folder_previews", "Generate Folder Previews"),
-                     item("gen_folder_previews_rec", "Generate Folder Previews Recursively"), sep(),
-                     item("regen_previews", "Regenerate Previews"),
-                     item("regen_previews_rec", "Regenerate Previews Recursively"),
-                     item("regen_folder_previews", "Regenerate Folder Previews"),
-                     item("regen_folder_previews_rec", "Regenerate Folder Previews Recursively")})};
+    return {submenu("previews", tx(builtin_title("previews")),
+                    {item("gen_previews_rec", tx("Generate Previews Recursively")),
+                     item("gen_folder_previews", tx("Generate Folder Previews")),
+                     item("gen_folder_previews_rec", tx("Generate Folder Previews Recursively")), sep(),
+                     item("regen_previews", tx("Regenerate Previews")),
+                     item("regen_previews_rec", tx("Regenerate Previews Recursively")),
+                     item("regen_folder_previews", tx("Regenerate Folder Previews")),
+                     item("regen_folder_previews_rec", tx("Regenerate Folder Previews Recursively"))})};
 }
 
 QList<Entry> defaults(Kind k)
 {
     QList<Entry> l;
     if (k == VIEWER) {   // ImageViewer::build_menu
-        l << item("next", "Next") << item("previous", "Previous") << sep()
-          << submenu("viewer_view", "View",
-                     {item("fullscreen", "Fullscreen"), item("slideshow", "Start / Stop Slideshow"),
-                      item("fit", "Fit to Window"), item("actual_size", "Actual Size"),
-                      item("keep_zoom", "Keep Zoom Between Images"), sep(), item("filmstrip", "Filmstrip"),
-                      item("info_panel", "Info Panel"), item("info_line", "Info Line"), sep(),
-                      item("compare", "Compare With the Next Image"),
-                      item("compare_ab", "One at a Time (A/B)", "while comparing"),
-                      item("compare_slider", "Over Each Other, With a Slider", "while comparing"),
-                      item("compare_switch", "Show A / Show B", "comparing one at a time")})
-          << submenu("viewer_edit", "Rotate and Edit",
-                     {item("rotate_right", "Rotate Right"), item("rotate_left", "Rotate Left"),
-                      item("flip", "Flip Horizontally"), item("save_changes", "Save Rotation / Changes…"),
-                      item("undo_edits", "Undo the Edits", "with crops or resizes not saved"), sep(),
-                      item("crop", "Crop…"), item("resize", "Resize…"), item("straighten", "Straighten")})
-          << sep() << item("star", "Star / Unstar") << item("pin", "Pin / Unpin")
-          << item("viewer_copy_to", "Copy To ▸") << item("viewer_move_to", "Move To ▸")
-          << item("show_in_folder", "Show in Folder") << sep()
-          << item("open_default", "Open With Default Application") << item("open_with", "Open With…")
-          << item("copy_image", "Copy Image") << item("copy_full_path", "Copy Path") << item("wallpaper", "Set as Wallpaper")
-          << item("uwp_add", "Add to Selected UWP Monitor", "while UWP's editor is open") << sep()
-          << item("properties", "Properties") << item("trash", "Move to Trash") << item("undo", "Undo");
+        l << item("next", tx("Next")) << item("previous", tx("Previous")) << sep()
+          << submenu("viewer_view", tx(builtin_title("viewer_view")),
+                     {item("fullscreen", tx("Fullscreen")), item("slideshow", tx("Start / Stop Slideshow")),
+                      item("fit", tx("Fit to Window")), item("actual_size", tx("Actual Size")),
+                      item("keep_zoom", tx("Keep Zoom Between Images")), sep(), item("filmstrip", tx("Filmstrip")),
+                      item("info_panel", tx("Info Panel")), item("info_line", tx("Info Line")), sep(),
+                      item("compare", tx("Compare With the Next Image")),
+                      item("compare_ab", tx("One at a Time (A/B)"), tx("while comparing")),
+                      item("compare_slider", tx("Over Each Other, With a Slider"), tx("while comparing")),
+                      item("compare_switch", tx("Show A / Show B"), tx("comparing one at a time"))})
+          << submenu("viewer_edit", tx(builtin_title("viewer_edit")),
+                     {item("rotate_right", tx("Rotate Right")), item("rotate_left", tx("Rotate Left")),
+                      item("flip", tx("Flip Horizontally")), item("save_changes", tx("Save Rotation / Changes…")),
+                      item("undo_edits", tx("Undo the Edits"), tx("with crops or resizes not saved")), sep(),
+                      item("crop", tx("Crop…")), item("resize", tx("Resize…")), item("straighten", tx("Straighten"))})
+          << sep() << item("star", tx("Star / Unstar")) << item("pin", tx("Pin / Unpin"))
+          << item("viewer_copy_to", tx("Copy To ▸")) << item("viewer_move_to", tx("Move To ▸"))
+          << item("show_in_folder", tx("Show in Folder")) << sep()
+          << item("open_default", tx("Open With Default Application")) << item("open_with", tx("Open With…"))
+          << item("copy_image", tx("Copy Image")) << item("copy_full_path", tx("Copy Path")) << item("wallpaper", tx("Set as Wallpaper"))
+          << item("uwp_add", tx("Add to Selected UWP Monitor"), tx("while UWP's editor is open")) << sep()
+          << item("properties", tx("Properties")) << item("trash", tx("Move to Trash")) << item("undo", tx("Undo"));
         return l;
     }
     if (k == BACKGROUND) {
-        l << item("new_folder", "New Folder…") << item("new_document", "New Document ▸") << sep() << item("paste", "Paste")
-          << item("paste_link", "Paste as Link") << item("select_all", "Select All") << sep()
-          << item("sort_by", "Sort By ▸") << item("show_hidden", "Show Hidden Files")
-          << item("collapse_groups", "Collapse All Groups", "when grouped by date")
-          << item("expand_groups", "Expand All Groups", "when grouped by date") << sep()
-          << item("open_terminal", "Open in Terminal") << item("bookmark_folder", "Bookmark This Folder")
-          << previews_menu() << item("empty_trash", "Empty Trash", "in the Trash")
-          << item("empty_trash_bleachbit", "Empty Trash with BleachBit…", "in the Trash, with BleachBit installed")
-          << item("scripts", "Scripts ▸", "when you have scripts") << sep() << item("properties", "Properties");
+        l << item("new_folder", tx("New Folder…")) << item("new_document", tx("New Document ▸")) << sep() << item("paste", tx("Paste"))
+          << item("paste_link", tx("Paste as Link")) << item("select_all", tx("Select All")) << sep()
+          << item("sort_by", tx("Sort By ▸")) << item("show_hidden", tx("Show Hidden Files"))
+          << item("collapse_groups", tx("Collapse All Groups"), tx("when grouped by date"))
+          << item("expand_groups", tx("Expand All Groups"), tx("when grouped by date")) << sep()
+          << item("open_terminal", tx("Open in Terminal")) << item("bookmark_folder", tx("Bookmark This Folder"))
+          << previews_menu() << item("empty_trash", tx("Empty Trash"), tx("in the Trash"))
+          << item("empty_trash_bleachbit", tx("Empty Trash with BleachBit…"), tx("in the Trash, with BleachBit installed"))
+          << item("scripts", tx("Scripts ▸"), tx("when you have scripts")) << sep() << item("properties", tx("Properties"));
         return l;
     }
     bool folder = k == FOLDER, file = k == FILE, arc = k == ARCHIVE, several = k == SEVERAL;
-    l << item("open", "Open");
+    l << item("open", tx("Open"));
     if (folder || several) {
-        QString n = several ? "when all are folders" : QString();
-        l << item("open_new_tab", "Open in New Tab", n) << item("open_new_window", "Open in New Window", n);
+        QString n = several ? tx("when all are folders") : QString();
+        l << item("open_new_tab", tx("Open in New Tab"), n) << item("open_new_window", tx("Open in New Window"), n);
     }
     if (folder)
-        l << item("open_in_editor", "Open in (a code editor)", "when one is installed") << item("open_with", "Open With ▸");
+        l << item("open_in_editor", tx("Open in (a code editor)"), tx("when one is installed")) << item("open_with", tx("Open With ▸"));
     if (file || several)
-        l << item("view_image", several ? "View Images" : "View Image", "for images");
-    l << item("show_in_folder", "Show in Folder", "in search results")
-      << item("collapse_group", "Collapse This Group", "when grouped by date");
+        l << item("view_image", several ? tx("View Images") : tx("View Image"), "for images");
+    l << item("show_in_folder", tx("Show in Folder"), tx("in search results"))
+      << item("collapse_group", tx("Collapse This Group"), tx("when grouped by date"));
     if (file || arc)
-        l << item("open_with", "Open With ▸");
-    l << sep() << item("cut", "Cut") << item("copy", "Copy");
+        l << item("open_with", tx("Open With ▸"));
+    l << sep() << item("cut", tx("Cut")) << item("copy", tx("Copy"));
     if (folder)
-        l << item("paste_into", "Paste Into Folder");
-    l << item("move_to", "Move To…") << item("copy_to", "Copy To…") << item("duplicate", "Duplicate")
-      << item("new_folder_with", "New Folder with Selection…")
-      << item("rename", "Rename…")
-      << submenu("copy_path", "Copy Path / Name",
-                 {item("copy_full_path", "Copy Full Path"), item("copy_name", "Copy Name"), item("copy_uri", "Copy URI")})
-      << item("star", "Star / Unstar") << item("pin", "Pin / Unpin");
-    QList<Entry> links = {item("link_sym_here", "Create Symbolic Link Here"),
-                          item("link_rel_here", "Create Relative Symbolic Link Here")};
+        l << item("paste_into", tx("Paste Into Folder"));
+    l << item("move_to", tx("Move To…")) << item("copy_to", tx("Copy To…")) << item("duplicate", tx("Duplicate"))
+      << item("new_folder_with", tx("New Folder with Selection…"))
+      << item("rename", tx("Rename…"))
+      << submenu("copy_path", tx(builtin_title("copy_path")),
+                 {item("copy_full_path", tx("Copy Full Path")), item("copy_name", tx("Copy Name")), item("copy_uri", tx("Copy URI"))})
+      << item("star", tx("Star / Unstar")) << item("pin", tx("Pin / Unpin"));
+    QList<Entry> links = {item("link_sym_here", tx("Create Symbolic Link Here")),
+                          item("link_rel_here", tx("Create Relative Symbolic Link Here"))};
     if (!folder)
-        links << item("link_hard_here", "Create Hard Link Here", "for files");
-    links << item("link_sym_in", "Create Symbolic Link In…") << sep() << item("link_desktop", "Send Link to Desktop")
-          << item("desktop_shortcut_here", "Create Desktop Shortcut (.desktop) Here")
-          << item("desktop_shortcut_desktop", "Send Shortcut (.desktop) to Desktop") << sep()
-          << item("link_target", "Open Link Target Location", "for symbolic links");
+        links << item("link_hard_here", tx("Create Hard Link Here"), tx("for files"));
+    links << item("link_sym_in", tx("Create Symbolic Link In…")) << sep() << item("link_desktop", tx("Send Link to Desktop"))
+          << item("desktop_shortcut_here", tx("Create Desktop Shortcut (.desktop) Here"))
+          << item("desktop_shortcut_desktop", tx("Send Shortcut (.desktop) to Desktop")) << sep()
+          << item("link_target", tx("Open Link Target Location"), tx("for symbolic links"));
     if (folder)
-        links << sep() << item("add_bookmark", "Add to Bookmarks");
-    l << submenu("links", "Links & Shortcuts", links) << sep();
+        links << sep() << item("add_bookmark", tx("Add to Bookmarks"));
+    l << submenu("links", tx(builtin_title("links")), links) << sep();
     if (arc || several) {
-        QString n = several ? "a split set selected whole" : QString();
-        l << item("extract_here", "Extract Here", n) << item("extract_to", "Extract To…", n)
-          << item("open_as_archive", "Open as Archive", several ? n : "when its program can list it")
-          << item("test_archive", "Test Archive", n);
+        QString n = several ? tx("a split set selected whole") : QString();
+        l << item("extract_here", tx("Extract Here"), n) << item("extract_to", tx("Extract To…"), n)
+          << item("open_as_archive", tx("Open as Archive"), several ? n : tx("when its program can list it"))
+          << item("test_archive", tx("Test Archive"), n);
     }
     if (several)
-        l << item("extract_all_here", "Extract All Here", "when all are archives")
-          << item("extract_all_to", "Extract All To…", "when all are archives")
-          << item("test_archives", "Test Archives", "when all are archives");
-    l << item("compress_quick", "Compress to “name.ext”", "once you've compressed something")
-      << item("compress", "Compress…") << item("checksum_create", "Create Checksum File…");
+        l << item("extract_all_here", tx("Extract All Here"), tx("when all are archives"))
+          << item("extract_all_to", tx("Extract All To…"), tx("when all are archives"))
+          << item("test_archives", tx("Test Archives"), tx("when all are archives"));
+    l << item("compress_quick", tx("Compress to “name.ext”"), tx("once you've compressed something"))
+      << item("compress", tx("Compress…")) << item("checksum_create", tx("Create Checksum File…"));
     if (folder || several)
-        l << item("find_duplicates", "Find Duplicates…", several ? "when all are folders" : QString());
+        l << item("find_duplicates", tx("Find Duplicates…"), several ? tx("when all are folders") : QString());
     if (folder)
-        l << item("compare_with", "Compare With…") << item("sync_to", "Sync To…");
+        l << item("compare_with", tx("Compare With…")) << item("sync_to", tx("Sync To…"));
     if (file)
-        l << item("verify_signature", "Verify Signature", "for signatures (.sig, .asc, .gpg, .sign)");
+        l << item("verify_signature", tx("Verify Signature"), tx("for signatures (.sig, .asc, .gpg, .sign)"));
     if (file)
-        l << item("uwp_add", "Add to Selected UWP Monitor", "images and videos, while UWP's editor is open")
-          << item("wallpaper", "Set as Wallpaper", "for videos, with UWP")
-          << submenu("image", "Image",
-                     {item("image_wallpaper", "Set as Wallpaper"), item("image_cover", "Use as Folder Cover"),
-                      item("image_copy", "Copy Image to Clipboard")},
-                     "for images");
+        l << item("uwp_add", tx("Add to Selected UWP Monitor"), tx("images and videos, while UWP's editor is open"))
+          << item("wallpaper", tx("Set as Wallpaper"), tx("for videos, with UWP"))
+          << submenu("image", tx(builtin_title("image")),
+                     {item("image_wallpaper", tx("Set as Wallpaper")), item("image_cover", tx("Use as Folder Cover")),
+                      item("image_copy", tx("Copy Image to Clipboard"))},
+                     tx("for images"));
     if (several)
-        l << item("compare_images", "Compare in Viewer", "for two images");
+        l << item("compare_images", tx("Compare in Viewer"), tx("for two images"));
     if (file || several) {
-        QString all = several ? "when all are " : "for ";
-        l << submenu("rotate", "Rotate",
-                     {item("rotate_cw", "Rotate 90° Clockwise"), item("rotate_180", "Rotate 180°"),
-                      item("rotate_ccw", "Rotate 90° Counter-clockwise"), sep(), item("flip_horizontal", "Flip Horizontally"),
-                      item("flip_vertical", "Flip Vertically")},
-                     all + "images")
-          << item("convert_image", "Convert Image…", all + "images")
-          << item("convert_video", "Convert Video…", all + "videos, with ffmpeg installed")
-          << item("extract_audio", "Extract Audio…", all + "videos, with ffmpeg installed");
+        QString images = several ? tx("when all are images") : tx("for images");
+        QString videos = several ? tx("when all are videos, with ffmpeg installed") : tx("for videos, with ffmpeg installed");
+        l << submenu("rotate", tx(builtin_title("rotate")),
+                     {item("rotate_cw", tx("Rotate 90° Clockwise")), item("rotate_180", "Rotate 180°"),
+                      item("rotate_ccw", tx("Rotate 90° Counter-clockwise")), sep(), item("flip_horizontal", tx("Flip Horizontally")),
+                      item("flip_vertical", tx("Flip Vertically"))},
+                     images)
+          << item("convert_image", tx("Convert Image…"), images)
+          << item("convert_video", tx("Convert Video…"), videos)
+          << item("extract_audio", tx("Extract Audio…"), videos);
     }
     if (file || several || folder)
-        l << item("convert_audio", "Convert Audio…",
-                  folder ? QString("with ffmpeg installed") : several ? QString("when all are audio files or all are folders, with ffmpeg installed") : QString("for audio files, with ffmpeg installed"));
+        l << item("convert_audio", tx("Convert Audio…"),
+                  folder    ? tx("with ffmpeg installed")
+                  : several ? tx("when all are audio files or all are folders, with ffmpeg installed")
+                            : tx("for audio files, with ffmpeg installed"));
     if (file || several)
-        l << item("wipe_metadata", "Wipe Metadata…", several ? "when images are selected" : "for images");
+        l << item("wipe_metadata", tx("Wipe Metadata…"), several ? tx("when images are selected") : tx("for images"));
     if (folder || several) {
-        QString n = several ? "when all are folders" : QString();
-        l << item("folder_colour", "Folder Colour ▸", n) << item("show_image_previews", "Show Image Previews", n);
+        QString n = several ? tx("when all are folders") : QString();
+        l << item("folder_colour", tx("Folder Colour ▸"), n) << item("show_image_previews", tx("Show Image Previews"), n);
     }
     if (folder)
-        l << item("reset_cover", "Reset Folder Cover", "when it has a cover");
+        l << item("reset_cover", tx("Reset Folder Cover"), tx("when it has a cover"));
     if (!folder)
-        l << item("send_to", "Send To ▸", "with apps to send to, not for folders");
+        l << item("send_to", tx("Send To ▸"), tx("with apps to send to, not for folders"));
     if (folder)
-        l << item("network_sharing", "Network Sharing…", "with Samba installed");
-    l << item("scripts", "Scripts ▸", "when you have scripts");
+        l << item("network_sharing", tx("Network Sharing…"), tx("with Samba installed"));
+    l << item("scripts", tx("Scripts ▸"), tx("when you have scripts"));
     if (folder)
-        l << item("regen_preview", "Regenerate Preview") << previews_menu() << item("open_terminal", "Open in Terminal");
-    l << sep() << item("trash", "Move to Trash") << item("delete", "Delete Permanently…")
-      << item("shred", "Shred with BleachBit…", "with BleachBit installed") << sep();
+        l << item("regen_preview", tx("Regenerate Preview")) << previews_menu() << item("open_terminal", tx("Open in Terminal"));
+    l << sep() << item("trash", tx("Move to Trash")) << item("delete", tx("Delete Permanently…"))
+      << item("shred", tx("Shred with BleachBit…"), tx("with BleachBit installed")) << sep();
     if (folder || several)
-        l << item("calculate_size", "Calculate Folder Size", several ? "when all are folders" : QString());
+        l << item("calculate_size", tx("Calculate Folder Size"), several ? tx("when all are folders") : QString());
     if (file || arc)
-        l << item("open_metadata", "Open Metadata", "for images; with exiftool, videos, audio and documents too");
-    l << item("properties", "Properties");
+        l << item("open_metadata", tx("Open Metadata"), tx("for images; with exiftool, videos, audio and documents too"));
+    l << item("properties", tx("Properties"));
     return l;
 }
 
@@ -243,7 +257,9 @@ static QJsonArray to_json(const QList<Entry> &items)
         if (e.type == Entry::SEP)
             a << QJsonObject{{"sep", true}};
         else if (e.type == Entry::MENU)
-            a << QJsonObject{{"menu", e.id}, {"title", e.label}, {"items", to_json(e.children)}};
+            a << QJsonObject{{"menu", e.id},
+                             {"title", builtin_title(e.id) && e.label == tx(builtin_title(e.id)) ? QString(builtin_title(e.id)) : e.label},
+                             {"items", to_json(e.children)}};
         else if (e.off)
             a << QJsonObject{{"id", e.id}, {"off", true}};
         else
@@ -280,7 +296,10 @@ static QList<Entry> from_json(const QJsonArray &a, const QList<Entry> &defs)
         if (o.value("sep").toBool()) {
             out << sep();
         } else if (o.contains("menu")) {
-            Entry m = submenu(o.value("menu").toString(), o.value("title").toString(), from_json(o.value("items").toArray(), defs));
+            QString id = o.value("menu").toString(), title = o.value("title").toString();
+            if (const char *en = builtin_title(id); en && (title == en || title.isEmpty()))
+                title = tx(en);
+            Entry m = submenu(id, title, from_json(o.value("items").toArray(), defs));
             out << m;
         } else if (o.contains("id")) {
             QString id = o.value("id").toString();
@@ -510,23 +529,23 @@ Editor::Editor(QWidget *parent) : QWidget(parent)
     setObjectName("menu_editor");
     auto *lay = new QVBoxLayout(this);
     auto *top = new QHBoxLayout;
-    top->addWidget(new QLabel("The right-click menu for:"));
+    top->addWidget(new QLabel(tx("The right-click menu for:")));
     kind_box = new QComboBox;
     kind_box->setObjectName("menu_kind");
     for (Kind k : kinds())
         kind_box->addItem(kind_label(k), int(k));
     top->addWidget(kind_box, 1);
     lay->addLayout(top);
-    auto *help = new QLabel("Untick an entry to hide it. Drag entries to reorder them or to move them into or out of a "
+    auto *help = new QLabel(tx("Untick an entry to hide it. Drag entries to reorder them or to move them into or out of a "
                             "submenu. An entry only appears when it applies (Extract for archives, a tool that's "
-                            "installed…), wherever it's placed.");
+                            "installed…), wherever it's placed."));
     help->setWordWrap(true);
     lay->addWidget(help);
     auto *mid = new QHBoxLayout;
     auto *t = new MenuTree;
     tree = t;
     tree->setObjectName("menu_tree");
-    tree->setHeaderLabels({"Entry", "Appears"});
+    tree->setHeaderLabels({tx("Entry"), tx("Appears")});
     tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree->setDragDropMode(QAbstractItemView::InternalMove);
     tree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -540,24 +559,24 @@ Editor::Editor(QWidget *parent) : QWidget(parent)
         side->addWidget(b);
         return b;
     };
-    button("Move Up", [this]() { move_selected(-1); });
-    button("Move Down", [this]() { move_selected(1); });
-    button("Add Separator", [this]() { add_separator(); });
-    button("New Submenu…", [this]() {
-        ask_text(this, "New Submenu", "Name:", "", [this](const QString &name) {
+    button(tx("Move Up"), [this]() { move_selected(-1); });
+    button(tx("Move Down"), [this]() { move_selected(1); });
+    button(tx("Add Separator"), [this]() { add_separator(); });
+    button(tx("New Submenu…"), [this]() {
+        ask_text(this, tx("New Submenu"), tx("Name:"), "", [this](const QString &name) {
             if (!name.trimmed().isEmpty())
                 add_submenu(name.trimmed());
         });
     });
-    button("Rename Submenu…", [this]() {
+    button(tx("Rename Submenu…"), [this]() {
         QTreeWidgetItem *it = tree->currentItem();
         if (it && it->data(0, TypeRole).toInt() == Entry::MENU)
             tree->editItem(it, 0);
     });
-    button("Remove", [this]() { remove_selected(); });
+    button(tx("Remove"), [this]() { remove_selected(); });
     side->addStretch(1);
-    button("Reset to Default", [this]() {
-        ask_yes(this, "Reset to Default", QString("Put the menu for “%1” back as it was?").arg(kind_box->currentText()),
+    button(tx("Reset to Default"), [this]() {
+        ask_yes(this, tx("Reset to Default"), tx("Put the menu for “%1” back as it was?").arg(kind_box->currentText()),
                 [this]() {
                     reset(kind());
                     reload();
@@ -579,14 +598,14 @@ QTreeWidgetItem *Editor::item_for(const Entry &e)
     it->setData(0, IdRole, e.id);
     Qt::ItemFlags base = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
     if (e.type == Entry::SEP) {
-        it->setText(0, "──────── separator");
+        it->setText(0, tx("──────── separator"));
         it->setFlags(base);
     } else if (e.type == Entry::MENU) {
         it->setText(0, e.label);
         QFont f = it->font(0);
         f.setBold(true);
         it->setFont(0, f);
-        it->setText(1, e.note.isEmpty() ? QString("submenu") : "submenu, " + e.note);
+        it->setText(1, e.note.isEmpty() ? tx("submenu") : tx("submenu, %1").arg(e.note));
         it->setFlags(base | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
         for (const Entry &c : e.children)
             it->addChild(item_for(c));

@@ -68,13 +68,13 @@ void MainWindow::open_checksums(const QString &f)
 {
     QPointer<MainWindow> self(this);
     fileops::run_task(
-        this, "Reading " + basename(f), [f]() { return QVariant(signature::signature_for(f)); },
+        this, tx("Reading %1").arg(basename(f)), [f]() { return QVariant(signature::signature_for(f)); },
         [self, f](const QVariant &sig) {
             if (!self)
                 return;
             auto plain = [self, f]() {
                 if (self && !self->open_file(f))
-                    warn(self, "Open", "Could not open " + f);
+                    warn(self, tx("Open"), tx("Could not open %1").arg(f));
             };
             if (sig.toString().isEmpty())
                 hashcheck::open_dialog(self, f, plain);
@@ -129,7 +129,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         else if (signature::is_signature_name(f))   // Verify Signature (a key or an encrypted file opens as usual)
             signature::open_window(this, f, [self = QPointer<MainWindow>(this), f]() {
                 if (self && !self->open_file(f))
-                    warn(self, "Open", "Could not open " + f);
+                    warn(self, tx("Open"), tx("Could not open %1").arg(f));
             });
         else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
             open_checksums(f);
@@ -166,14 +166,14 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         open_videos(videos);
     for (const QString &f : others)
         if (!open_at_line(f, p->match_line(f)) && !open_file(f))
-            warn(this, "Open", "Could not open " + f);
+            warn(this, tx("Open"), tx("Could not open %1").arg(f));
 }
 
 void MainWindow::open_videos(const QStringList &videos)
 {
     for (const QString &f : open_with_choice(videos, settings().value("video_opener", "system").toString()))
         if (!open_file(f))
-            warn(this, "Open", "Could not open " + f);
+            warn(this, tx("Open"), tx("Could not open %1").arg(f));
 }
 
 QStringList MainWindow::open_with_choice(const QStringList &files, const QString &choice)
@@ -186,7 +186,7 @@ QStringList MainWindow::open_with_choice(const QStringList &files, const QString
         launch_app(app, files);
         return {};
     } catch (const Error &e) {
-        warn(this, "Open", QString("Could not open with %1: %2").arg(app_name(app), e.message()));
+        warn(this, tx("Open"), tx("Could not open with %1: %2").arg(app_name(app), e.message()));
         return files;
     }
 }
@@ -246,11 +246,11 @@ ImageViewer *MainWindow::open_viewer(Pane *p, const QStringList &images, int idx
     cb.on_delete = [this](const QString &path) {
         try {
             util::trash(path);
-            undo::record_paths("trash", "Move to Trash", {path});
+            undo::record_paths("trash", TX_NOOP("Move to Trash"), {path});
             sidebar->refresh();
             return true;
         } catch (const OSError &e) {
-            warn(this, "Move to Trash", e.message());
+            warn(this, tx("Move to Trash"), e.message());
             return false;
         }
     };

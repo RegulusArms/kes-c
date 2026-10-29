@@ -9,6 +9,20 @@ What changed in each version of Kestrel Explorer, newest first.
   customised right-click menu, "Links & Shortcuts" and any submenu of your own with an "&" in its name.
 - **Screenshots in the feature guide.** The Overview, grouping by day, the Jobs window, Preferences and its search,
   and customising a right-click menu are now shown in [Features](docs/features.md).
+- **Numbers, sizes and dates in your system's format.** Digit grouping, the decimal mark and the order of a date follow
+  your locale's settings (as GNOME Files does), not fixed English ones: on a German system a size reads "1,5 GB" and a
+  date "28.10.2026". Dates written as 2026-10-28 (Properties, the info panel, Find Duplicates, Compare) now show in
+  your locale's own short form, with the time in its 12- or 24-hour clock; job logs keep their exact timestamps.
+- **Counts read as English.** Messages that said "1 file(s)", "2 item(s)" or "1 bytes" now say "1 file", "2 items"
+  and "1 byte", and the few that built a plural by adding an "s" read correctly throughout.
+- **BleachBit always loads Kestrel's cleaner.** `kes-setup --bleachbit` wrote the cleaner with whatever file
+  permissions the session gave new files; where those let other users edit it (a umask of 000), BleachBit ignored the
+  cleaner as a security measure and showed no Kestrel options. It's now always writable only by you, and
+  `kes-setup --bleachbit` says that BleachBit's window will ask once whether to trust the new cleaner.
+- **Ready for translations.** Every text Kestrel shows can be translated, with only English shipping for now: a
+  translation is one file in `translations/`, loaded for the desktop's language (see
+  [Development](docs/development.md#translations)). Building Kestrel now needs `qt6-tools-dev` and `qt6-l10n-tools`
+  (`./install.sh` installs them).
 
 ## 0.3.2-alpha.26 (2026-10-27)
 

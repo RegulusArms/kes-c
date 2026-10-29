@@ -51,9 +51,9 @@ static QComboBox *opener_combo(const QString &ct, bool builtin)
 {
     auto *cb = new QComboBox;
     AppRef def = default_app_for_type(ct);
-    cb->addItem(def ? QString("System default (%1)").arg(app_name(def)) : QString("System default"), "system");
+    cb->addItem(def ? tx("System default (%1)").arg(app_name(def)) : tx("System default"), "system");
     if (builtin)
-        cb->addItem(QGuiApplication::windowIcon(), "Kestrel image viewer", "builtin");
+        cb->addItem(QGuiApplication::windowIcon(), tx("Kestrel image viewer"), "builtin");
     for (const AppRef &a : apps_for_type(ct))
         cb->addItem(app_icon(a), app_name(a), app_id(a));
     return cb;
@@ -69,16 +69,17 @@ static void select_data(QComboBox *cb, const QVariant &v)
     cb->setCurrentIndex(std::max(i, 0));
 }
 
-static const QMap<QString, QString> SECTION_NAMES = {{"places", "Places"}, {"bookmarks", "Bookmarks"}, {"devices", "Devices"}, {"mounts", "Mounts"}};
+static const QMap<QString, QString> SECTION_NAMES = {
+    {"places", TX_NOOP("Places")}, {"bookmarks", TX_NOOP("Bookmarks")}, {"devices", TX_NOOP("Devices")}, {"mounts", TX_NOOP("Mounts")}};
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Preferences");
+    setWindowTitle(tx("Preferences"));
     setObjectName("preferences");
     auto *lay = new QVBoxLayout(this);
     search = new QLineEdit;
     search->setObjectName("search");
-    search->setPlaceholderText("Search all settings");
+    search->setPlaceholderText(tx("Search all settings"));
     search->setClearButtonEnabled(true);
     lay->addWidget(search);
     tabs = new QTabWidget;
@@ -94,7 +95,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
             if (p.group != group) {
                 group = p.group;
                 if (!group.isEmpty()) {
-                    auto *h = new QLabel("<b>" + group.toHtmlEscaped() + "</b>");
+                    auto *h = new QLabel("<b>" + tx(group).toHtmlEscaped() + "</b>");
                     h->setContentsMargins(0, 10, 0, 2);
                     pl->addWidget(h);
                     headings[tab + "\n" + group] = h;
@@ -107,18 +108,18 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
         scroll->setWidget(page);
         scroll->setWidgetResizable(true);
         scroll->setFrameShape(QFrame::NoFrame);
-        tabs->addTab(scroll, QString(tab).replace('&', "&&"));   // (a lone & would underline the next letter)
+        tabs->addTab(scroll, tx(tab).replace('&', "&&"));   // (a lone & would underline the next letter)
     }
     menu_editor = new menus::Editor;
-    tabs->addTab(menu_editor, "Menus");
-    tab_names << "Menus";
+    tabs->addTab(menu_editor, tx("Menus"));
+    tab_names << TX_NOOP("Menus");
 
     auto *buttons = new QHBoxLayout;
-    auto *reset_tab_btn = new QPushButton("Reset This Tab…");
+    auto *reset_tab_btn = new QPushButton(tx("Reset This Tab…"));
     reset_tab_btn->setObjectName("reset_tab");
-    auto *reset_all_btn = new QPushButton("Reset All…");
+    auto *reset_all_btn = new QPushButton(tx("Reset All…"));
     reset_all_btn->setObjectName("reset_all");
-    auto *close_btn = new QPushButton("Close");
+    auto *close_btn = new QPushButton(tx("Close"));
     buttons->addWidget(reset_tab_btn);
     buttons->addWidget(reset_all_btn);
     buttons->addStretch(1);
@@ -127,12 +128,12 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
     connect(close_btn, &QPushButton::clicked, this, &QDialog::close);
     connect(reset_tab_btn, &QPushButton::clicked, this, [this]() {
         int i = tabs->currentIndex();
-        ask_yes(this, "Reset This Tab",
-                QString("Put the settings on the %1 tab back to their defaults?").arg(tab_names[i]),
+        ask_yes(this, tx("Reset This Tab"),
+                tx("Put the settings on the %1 tab back to their defaults?").arg(tx(tab_names[i])),
                 [this, i]() { reset_tab(i); });
     });
     connect(reset_all_btn, &QPushButton::clicked, this, [this]() {
-        ask_yes(this, "Reset All", "Put every setting, and the right-click menus, back to their defaults?",
+        ask_yes(this, tx("Reset All"), tx("Put every setting, and the right-click menus, back to their defaults?"),
                 [this]() { reset_all(); });
     });
     connect(search, &QLineEdit::textChanged, this, &PreferencesDialog::apply_filter);
@@ -150,24 +151,24 @@ QWidget *PreferencesDialog::make_row(const prefs::Pref &p)
     grid->setContentsMargins(0, 2, 0, 2);
     QWidget *ed = nullptr;
     if (p.kind == prefs::BOOL) {
-        auto *b = new QCheckBox(p.label);
+        auto *b = new QCheckBox(tx(p.label));
         connect(b, &QCheckBox::toggled, this, [this, key = p.key](bool on) { save(key, on); });
         grid->addWidget(b, 0, 0, 1, 2);
         ed = b;
     } else {
-        auto *label = new QLabel(p.label + ":");
+        auto *label = new QLabel(tx("%1:").arg(tx(p.label)));
         label->setMinimumWidth(200);
         grid->addWidget(label, 0, 0, Qt::AlignTop);
         if (p.kind == prefs::INT) {
             auto *sp = new QSpinBox;
             sp->setRange(p.min, p.max);
-            sp->setSuffix(p.suffix);
+            sp->setSuffix(tx(p.suffix));
             connect(sp, &QSpinBox::valueChanged, this, [this, key = p.key](int v) { save(key, v); });
             ed = sp;
         } else if (p.kind == prefs::CHOICE) {
             auto *cb = new QComboBox;
             for (const auto &[text, value] : p.choices)
-                cb->addItem(text, value);
+                cb->addItem(tx(text), value);
             connect(cb, &QComboBox::activated, this, [this, cb, key = p.key](int i) { save(key, cb->itemData(i)); });
             ed = cb;
         } else {
@@ -179,9 +180,9 @@ QWidget *PreferencesDialog::make_row(const prefs::Pref &p)
     if (ed->objectName().isEmpty())
         ed->setObjectName(p.key);
     if (!p.tip.isEmpty())
-        ed->setToolTip(p.tip);
+        ed->setToolTip(tx(p.tip));
     if (!p.where.isEmpty())
-        grid->addWidget(note("Also: " + p.where), 1, p.kind == prefs::BOOL ? 0 : 1, 1, p.kind == prefs::BOOL ? 2 : 1);
+        grid->addWidget(note(tx("Also: %1").arg(tx(p.where))), 1, p.kind == prefs::BOOL ? 0 : 1, 1, p.kind == prefs::BOOL ? 2 : 1);
     editors[p.key] = ed;
     rows[p.key] = row;
     return row;
@@ -196,12 +197,12 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         v->setContentsMargins(0, 0, 0, 0);
         auto *mode = new QComboBox;
         mode->setObjectName("homepage_mode");
-        mode->addItems({"Overview (drives, network & bookmarks)", "Home folder", "Custom location…"});
+        mode->addItems({tx("Overview (drives, network & bookmarks)"), tx("Home folder"), tx("Custom location…")});
         auto *h = new QHBoxLayout;
         auto *edit = new QLineEdit;
         edit->setObjectName("homepage_path");
-        edit->setPlaceholderText("/path/to/folder  or  smb://server/share, sftp://user@host/path");
-        auto *browse = new QPushButton("Browse…");
+        edit->setPlaceholderText(tx("/path/to/folder  or  smb://server/share, sftp://user@host/path"));
+        auto *browse = new QPushButton(tx("Browse…"));
         h->addWidget(edit, 1);
         h->addWidget(browse);
         auto *err = new QLabel;
@@ -237,7 +238,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         connect(edit, &QLineEdit::editingFinished, this, commit);
         connect(browse, &QPushButton::clicked, this, [this, edit, commit]() {
             QString start = edit->text().startsWith('/') ? edit->text() : HOME();
-            choose_folder(this, "Choose Homepage Folder", start, [edit, commit](const QString &d) {
+            choose_folder(this, tx("Choose Homepage Folder"), start, [edit, commit](const QString &d) {
                 edit->setText(d);
                 commit();
             });
@@ -272,7 +273,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         h->setContentsMargins(0, 0, 0, 0);
         auto *btn = new QPushButton;
         btn->setObjectName("folder_color_button");
-        auto *accent = new QCheckBox("Use the desktop's accent colour");
+        auto *accent = new QCheckBox(tx("Use the desktop's accent colour"));
         accent->setObjectName("folder_color_accent");
         h->addWidget(btn);
         h->addWidget(accent, 1);
@@ -288,7 +289,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         connect(btn, &QPushButton::clicked, this, [this]() {
             QString s = prefs::get("folder_color").toString();
             auto *d = new QColorDialog(thumbs::follows_accent(s) ? accent_color() : QColor(s), this);
-            d->setWindowTitle("Folder colour");
+            d->setWindowTitle(tx("Folder colour"));
             d->setOption(QColorDialog::DontUseNativeDialog);   // the desktop's own one would be modal
             connect(d, &QColorDialog::colorSelected, this, [this](const QColor &c) { save("folder_color", c.name()); });
             show_free(d);
@@ -307,7 +308,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         list->setObjectName("sidebar_sections_list");
         list->setMaximumHeight(110);
         auto *bv = new QVBoxLayout;
-        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        auto *up = new QPushButton(tx("Up")), *down = new QPushButton(tx("Down"));
         bv->addWidget(up);
         bv->addWidget(down);
         bv->addStretch(1);
@@ -341,7 +342,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             list->clear();
             QStringList collapsed = settings().value("sidebar_collapsed").toStringList();
             for (const QString &id : sidebar::section_order(settings().value("sidebar_sections").toStringList())) {
-                auto *it = new QListWidgetItem(SECTION_NAMES.value(id, id) + "  (ticked: open; unticked: collapsed)");
+                auto *it = new QListWidgetItem(tx("%1  (ticked: open; unticked: collapsed)").arg(tx(SECTION_NAMES.value(id, id))));
                 it->setData(Qt::UserRole, id);
                 it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
                 it->setCheckState(collapsed.contains(id) ? Qt::Unchecked : Qt::Checked);
@@ -358,7 +359,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         list->setObjectName("overview_sections_list");
         list->setMaximumHeight(150);
         auto *bv = new QVBoxLayout;
-        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        auto *up = new QPushButton(tx("Up")), *down = new QPushButton(tx("Down"));
         bv->addWidget(up);
         bv->addWidget(down);
         bv->addStretch(1);
@@ -392,7 +393,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
                 for (const auto &[sid, stitle] : overview::SECTIONS)
                     if (sid == id)
                         title = stitle;
-                auto *it = new QListWidgetItem(title);
+                auto *it = new QListWidgetItem(tx(title));
                 it->setData(Qt::UserRole, id);
                 it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
                 it->setCheckState(shown ? Qt::Checked : Qt::Unchecked);
@@ -408,7 +409,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         auto *list = new QListWidget;
         list->setObjectName("slow_previews_list");
         list->setMaximumHeight(80);
-        auto *remove = new QPushButton("Remove");
+        auto *remove = new QPushButton(tx("Remove"));
         h->addWidget(list, 1);
         h->addWidget(remove, 0, Qt::AlignTop);
         connect(remove, &QPushButton::clicked, this, [this, list]() {
@@ -421,7 +422,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             list->clear();
             list->addItems(prefs::get("slow_previews").toStringList());
             remove->setEnabled(list->count() > 0);
-            list->setToolTip(list->count() ? QString() : QString("None: no tape or floppy shows previews"));
+            list->setToolTip(list->count() ? QString() : tx("None: no tape or floppy shows previews"));
         };
         return box;
     }
@@ -433,8 +434,8 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         list->setObjectName("chooser_places_list");
         list->setMaximumHeight(110);
         auto *bv = new QVBoxLayout;
-        auto *add = new QPushButton("Add…"), *remove = new QPushButton("Remove");
-        auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+        auto *add = new QPushButton(tx("Add…")), *remove = new QPushButton(tx("Remove"));
+        auto *up = new QPushButton(tx("Up")), *down = new QPushButton(tx("Down"));
         for (QPushButton *b : {add, remove, up, down})
             bv->addWidget(b);
         bv->addStretch(1);
@@ -442,7 +443,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         h->addLayout(bv);
         connect(add, &QPushButton::clicked, this, [this]() {
             QPointer<PreferencesDialog> self(this);
-            choose_folder(this, "Add a Save Location", HOME(), [self](const QString &p) {
+            choose_folder(this, tx("Add a Save Location"), HOME(), [self](const QString &p) {
                 QStringList l = prefs::get("chooser_places").toStringList();
                 if (self && !l.contains(p))
                     self->save("chooser_places", l << p);
@@ -472,7 +473,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             list->setCurrentRow(std::min(r, list->count() - 1));
             for (QPushButton *b : {remove, up, down})
                 b->setEnabled(list->count() > 0);
-            list->setToolTip(list->count() ? QString() : QString("None yet: add the folders you save to most"));
+            list->setToolTip(list->count() ? QString() : tx("None yet: add the folders you save to most"));
         };
         return box;
     }
@@ -516,11 +517,12 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         loaders[key] = [l]() {
             tapebuf::Memory m = tapebuf::memory();
             qint64 most = prefs::get("tape_buffer_gb").toLongLong() * 1000000000, b = tapebuf::budget(m);
-            QString text = QString("Up to %1 (memory %2, %3 available now)")
+            QString text = tx("Up to %1 (memory %2, %3 available now)")
                                .arg(human_size(b), human_size(m.total), human_size(m.available));
             if (most > 0 && b < most)   // the largest size isn't safe here: what's used instead, and why
-                text += "\n" + human_size(most) + " is more than this system can spare now: the buffer takes half the "
-                        "memory available at most.";
+                text += "\n" + tx("%1 is more than this system can spare now: the buffer takes half the memory available "
+                                   "at most.")
+                                    .arg(human_size(most));
             l->setText(text);
         };
         return l;
@@ -559,30 +561,31 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         auto *method = new QComboBox;
         auto *threads = new QSpinBox;
         threads->setRange(0, archive::cpu_count() * 2);
-        threads->setSpecialValueText(QString("Auto (%1 cores)").arg(archive::cpu_count()));
-        auto *solid = new QCheckBox("Solid archive");
-        auto *enc_names = new QCheckBox("Encrypt file names when encrypting");
+        threads->setSpecialValueText(tx("Auto (%1 cores)").arg(archive::cpu_count()));
+        auto *solid = new QCheckBox(tx("Solid archive"));
+        auto *enc_names = new QCheckBox(tx("Encrypt file names when encrypting"));
         auto *recovery = new QSpinBox;
         recovery->setRange(0, 10);
         recovery->setSuffix(" %");
-        recovery->setSpecialValueText("None");
-        auto *split = new QCheckBox("Split into volumes of");
+        recovery->setSpecialValueText(tx("None"));
+        auto *split = new QCheckBox(tx("Split into volumes of"));
         auto *vol = new QSpinBox;
         vol->setRange(1, 1000000);
         auto *unit = new QComboBox;
-        unit->addItems({"MB", "GB"});
+        unit->addItem(tx("MB"), "MB");
+        unit->addItem(tx("GB"), "GB");
         auto *extra = new QLineEdit;
-        extra->setPlaceholderText("Extra options for the program");
+        extra->setPlaceholderText(tx("Extra options for the program"));
         auto *split_row = new QHBoxLayout;
         split_row->addWidget(split);
         split_row->addWidget(vol);
         split_row->addWidget(unit);
         split_row->addStretch(1);
-        auto *level_lbl = new QLabel("Level:"), *method_lbl = new QLabel("Method:"), *threads_lbl = new QLabel("CPU threads:"),
+        auto *level_lbl = new QLabel(tx("Level:")), *method_lbl = new QLabel(tx("Method:")), *threads_lbl = new QLabel(tx("CPU threads:")),
              *recovery_lbl = new QLabel("Recovery record:");
         int r = 0;
         g->addWidget(fmt, r++, 0, 1, 2);
-        g->addWidget(new QLabel("Program:"), r, 0);
+        g->addWidget(new QLabel(tx("Program:")), r, 0);
         g->addWidget(tool, r++, 1);
         g->addWidget(level_lbl, r, 0);
         g->addWidget(level, r++, 1);
@@ -649,7 +652,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
             unit->setVisible(vols);
             split->setChecked(s.value(k("split"), false).toBool());
             vol->setValue(s.value(k("volume"), 4000).toInt());
-            unit->setCurrentText(s.value(k("volume_unit"), "MB").toString());
+            unit->setCurrentIndex(std::max(0, unit->findData(s.value(k("volume_unit"), "MB").toString())));
             extra->setText(s.value(k("extra"), "").toString());
         };
         auto put = [this, k](const QString &n, const QVariant &v) { save(k(n), v); };
@@ -666,20 +669,20 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
         connect(recovery, &QSpinBox::valueChanged, this, [=](int v) { put("recovery", v); });
         connect(split, &QCheckBox::toggled, this, [=](bool on) { put("split", on); });
         connect(vol, &QSpinBox::valueChanged, this, [=](int v) { put("volume", v); });
-        connect(unit, &QComboBox::activated, this, [=]() { put("volume_unit", unit->currentText()); });
+        connect(unit, &QComboBox::activated, this, [=]() { put("volume_unit", unit->currentData().toString()); });
         connect(extra, &QLineEdit::editingFinished, this, [=]() { put("extra", extra->text()); });
         loaders[key] = show;
         return box;
     }
     if (key == "archive_passwords") {
-        auto *forget = new QPushButton("Forget Saved Archive Passwords…");
+        auto *forget = new QPushButton(tx("Forget Saved Archive Passwords…"));
         forget->setObjectName("forget_passwords");
-        forget->setToolTip("Delete every archive password Kestrel saved in your login keyring");
+        forget->setToolTip(tx("Delete every archive password Kestrel saved in your login keyring"));
         connect(forget, &QPushButton::clicked, this, [this]() {
             QPointer<QWidget> owner(parentWidget() ? parentWidget() : this);   // stays open after Preferences closes
-            ask_yes(this, "Forget Saved Archive Passwords",
-                    "Delete every archive password Kestrel saved in your login keyring? Encrypted archives will ask for "
-                    "theirs again.",
+            ask_yes(this, tx("Forget Saved Archive Passwords"),
+                    tx("Delete every archive password Kestrel saved in your login keyring? Encrypted archives will ask for "
+                    "theirs again."),
                     [owner]() {
                         if (!owner)
                             return;
@@ -689,7 +692,7 @@ QWidget *PreferencesDialog::make_custom(const prefs::Pref &p)
                                 if (!owner || !r.isValid())
                                     return;
                                 int n = r.toInt();
-                                inform(owner, "Forget Saved Archive Passwords",
+                                inform(owner, tx("Forget Saved Archive Passwords"),
                                        n < 0    ? QString("No keyring answered, so there was nothing to forget.")
                                        : n == 0 ? QString("There were no saved archive passwords.")
                                                 : QString("Forgot %1 saved archive password%2.")
@@ -738,7 +741,7 @@ void PreferencesDialog::load(const QString &key)
         loaders["tape_buffer_now"]();   // follows the two settings
     if (key == "play_webm" && !which("ffmpeg")) {
         ed->setEnabled(false);
-        ed->setToolTip("Needs ffmpeg:  sudo apt install ffmpeg");
+        ed->setToolTip(tx("Needs ffmpeg:  sudo apt install ffmpeg"));
     }
     loading = was;
 }
@@ -778,10 +781,10 @@ void PreferencesDialog::apply_filter()
             for (const prefs::Pref &p : prefs::all()) {
                 if (p.tab != tab)
                     continue;
-                QString hay = QStringList{p.label, p.where, p.tip, p.group, p.tab}.join('\n');
+                QString hay = QStringList{tx(p.label), tx(p.where), tx(p.tip), tx(p.group), tx(p.tab)}.join('\n');
                 if (p.kind == prefs::CHOICE)
                     for (const auto &c : p.choices)
-                        hay += "\n" + c.first;
+                        hay += "\n" + tx(c.first);
                 bool match = t.isEmpty() || hay.contains(t, Qt::CaseInsensitive);
                 rows[p.key]->setVisible(match);
                 if (match) {
@@ -794,7 +797,7 @@ void PreferencesDialog::apply_filter()
                     it.value()->setVisible(in_group.value(it.key().section('\n', 1)) > 0);
         }
         tabs->setTabEnabled(i, shown > 0);
-        QString label = QString(tab).replace('&', "&&");
+        QString label = tx(tab).replace('&', "&&");
         tabs->setTabText(i, t.isEmpty() || shown == 0 ? label : QString("%1 (%2)").arg(label).arg(shown));
     }
     if (!tabs->isTabEnabled(tabs->currentIndex()))

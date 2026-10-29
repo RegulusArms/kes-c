@@ -115,7 +115,7 @@ Result verify(const QString &sig)
     Result r;
     r.file = sig;
     if (!have_gpg()) {
-        r.output = "gpg isn't installed (the gnupg package).";
+        r.output = tx("gpg isn't installed (the gnupg package).");
         return r;
     }
     Kind k = kind_of(sig);
@@ -138,7 +138,7 @@ Result verify(const QString &sig)
     r.file = file;
     r.output = QString::fromUtf8(p.err).trimmed();
     if (p.failed)
-        r.output = "gpg couldn't be started.";
+        r.output = tx("gpg couldn't be started.");
     return r;
 }
 
@@ -148,7 +148,7 @@ QString fetch_key(const QString &id)
     if (p.rc == 0)
         return QString();
     QStringList lines = QString::fromUtf8(p.err).split('\n', Qt::SkipEmptyParts);
-    return p.timed_out ? QString("The keyserver didn't answer.") : lines.isEmpty() ? QString("gpg failed") : lines.last();
+    return p.timed_out ? tx("The keyserver didn't answer.") : lines.isEmpty() ? tx("gpg failed") : lines.last();
 }
 
 static QString grouped(const QString &hex)   // a fingerprint in fours, as gpg shows it
@@ -163,62 +163,65 @@ QString headline(const Result &r)
 {
     switch (r.status) {
     case Result::GOOD:
-        return r.trusted ? "✔ Valid signature" : "✔ Valid signature, from a key you haven't verified";
+        return r.trusted ? tx("✔ Valid signature") : tx("✔ Valid signature, from a key you haven't verified");
     case Result::EXPIRED_KEY:
-        return "✔ Valid signature, from a key that has expired";
+        return tx("✔ Valid signature, from a key that has expired");
     case Result::BAD:
-        return "✘ Bad signature";
+        return tx("✘ Bad signature");
     case Result::REVOKED_KEY:
-        return "⚠ Signed with a revoked key";
+        return tx("⚠ Signed with a revoked key");
     case Result::NO_KEY:
-        return "? Can't check: the signer's key isn't in your keyring";
+        return tx("? Can't check: the signer's key isn't in your keyring");
     case Result::NO_SIGNATURE:
-        return "No signature in this file";
+        return tx("No signature in this file");
     case Result::MISSING_FILE:
-        return "The file it signs isn't here";
+        return tx("The file it signs isn't here");
     case Result::ERROR:
         break;
     }
-    return "The signature couldn't be checked";
+    return tx("The signature couldn't be checked");
 }
 
 QString plain(const Result &r)
 {
-    QString who = r.signer.isEmpty() ? QString("an unknown signer") : "“" + r.signer + "”";
-    QString when = r.when ? " on " + fmt_time(r.when, "%A %e %B %Y at %H:%M") : QString();
+    QString who = r.signer.isEmpty() ? tx("an unknown signer") : "“" + r.signer + "”";
+    QDateTime at = QDateTime::fromSecsSinceEpoch(r.when);
+    QString when = r.when ? tx(" on %1", "when it was signed, after “signed”")
+                                .arg(tx("%1 at %2", "a date and a time").arg(i18n::long_date(at.date()), i18n::time(at.time())))
+                          : QString();
     QString what = "“" + basename(r.file) + "”";
     switch (r.status) {
     case Result::GOOD:
-        return r.trusted ? QString("%1 is exactly what %2 signed%3. You've marked this key as trusted.").arg(what, who, when)
-                         : QString("%1 is exactly what the key named %2 signed%3, and hasn't changed since. But anyone "
-                                   "can make a key with any name: you haven't verified that this key is really theirs. "
-                                   "Compare its fingerprint (below) with the one they publish, for example on their "
-                                   "website, before trusting it.")
+        return r.trusted ? tx("%1 is exactly what %2 signed%3. You've marked this key as trusted.").arg(what, who, when)
+                         : tx("%1 is exactly what the key named %2 signed%3, and hasn't changed since. But anyone "
+                              "can make a key with any name: you haven't verified that this key is really theirs. "
+                              "Compare its fingerprint (below) with the one they publish, for example on their "
+                              "website, before trusting it.")
                                .arg(what, who, when);
     case Result::EXPIRED_KEY:
-        return QString("%1 is exactly what %2 signed%3, but their key has expired since. A signature made before it "
-                       "expired is still sound; a new release should come with a new key.")
+        return tx("%1 is exactly what %2 signed%3, but their key has expired since. A signature made before it "
+                  "expired is still sound; a new release should come with a new key.")
                    .arg(what, who, when);
     case Result::BAD:
-        return QString("%1 isn't what %2 signed: it was changed after it was signed, damaged in the download, or the "
-                       "signature is for another file. Don't trust it.")
+        return tx("%1 isn't what %2 signed: it was changed after it was signed, damaged in the download, or the "
+                  "signature is for another file. Don't trust it.")
             .arg(what, who);
     case Result::REVOKED_KEY:
-        return QString("%1 was signed with %2's key, which they have withdrawn (revoked), for example because it was "
-                       "stolen. Don't trust it.")
+        return tx("%1 was signed with %2's key, which they have withdrawn (revoked), for example because it was "
+                  "stolen. Don't trust it.")
             .arg(what, who);
     case Result::NO_KEY:
-        return QString("To check it, gpg needs the signer's public key, which isn't in your keyring. Fetch Key… gets it "
-                       "from %1; once you have it, compare its fingerprint with the one the signer publishes.")
+        return tx("To check it, gpg needs the signer's public key, which isn't in your keyring. Fetch Key… gets it "
+                  "from %1; once you have it, compare its fingerprint with the one the signer publishes.")
             .arg(keyserver());
     case Result::NO_SIGNATURE:
-        return "gpg found no signature in it: it may be encrypted, or a key.";
+        return tx("gpg found no signature in it: it may be encrypted, or a key.");
     case Result::MISSING_FILE:
-        return QString("This is a signature for %1, which should be in the same folder. Put it there and check again.").arg(what);
+        return tx("This is a signature for %1, which should be in the same folder. Put it there and check again.").arg(what);
     case Result::ERROR:
         break;
     }
-    return r.output.isEmpty() ? QString("gpg failed.") : r.output.split('\n').last();
+    return r.output.isEmpty() ? tx("gpg failed.") : r.output.split('\n').last();
 }
 
 static QVariantMap to_map(const Result &r)
@@ -250,7 +253,7 @@ static void check(QWidget *parent, const QString &sig, std::function<void(const 
     if (isfile(signed_file(sig)))
         paths << signed_file(sig);
     fileops::queue_job(
-        parent, "Checking the signature " + basename(sig), paths,
+        parent, tx("Checking the signature %1").arg(basename(sig)), paths,
         [sig](Task *) { return QVariant(to_map(verify(sig))); },
         [done](const QVariant &res) {
             if (res.isValid())
@@ -281,7 +284,7 @@ using namespace signature;
 
 SignatureWindow::SignatureWindow(MainWindow *win, const QString &sig, const Result &r) : QDialog(win), win(win), sig(sig)
 {
-    setWindowTitle("Verify Signature — " + basename(sig));
+    setWindowTitle(tx("Verify Signature — %1").arg(basename(sig)));
     setAttribute(Qt::WA_DeleteOnClose);
     resize(620, 360);
     auto *lay = new QVBoxLayout(this);
@@ -303,25 +306,25 @@ SignatureWindow::SignatureWindow(MainWindow *win, const QString &sig, const Resu
     lay->addWidget(details);
     output = new QPlainTextEdit;
     output->setReadOnly(true);
-    output->setAccessibleName("gpg's output");
+    output->setAccessibleName(tx("gpg's output"));
     output->hide();
     lay->addWidget(output, 1);
     lay->addStretch(0);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    fetch_btn = bb->addButton("Fetch Key…", QDialogButtonBox::ActionRole);
+    fetch_btn = bb->addButton(tx("Fetch Key…"), QDialogButtonBox::ActionRole);
     connect(fetch_btn, &QPushButton::clicked, this, &SignatureWindow::fetch);
-    files_btn = bb->addButton("Verify the Listed Files", QDialogButtonBox::ActionRole);
-    files_btn->setToolTip("Check every file this checksum file lists");
+    files_btn = bb->addButton(tx("Verify the Listed Files"), QDialogButtonBox::ActionRole);
+    files_btn->setToolTip(tx("Check every file this checksum file lists"));
     connect(files_btn, &QPushButton::clicked, this, [this]() {
         if (this->win)
             hashcheck::open_dialog(this->win, result.file, nullptr);
     });
-    auto *again = bb->addButton("Check Again", QDialogButtonBox::ActionRole);
+    auto *again = bb->addButton(tx("Check Again"), QDialogButtonBox::ActionRole);
     connect(again, &QPushButton::clicked, this, &SignatureWindow::check_again);
-    auto *raw = bb->addButton("Show gpg's Output", QDialogButtonBox::ActionRole);
+    auto *raw = bb->addButton(tx("Show gpg's Output"), QDialogButtonBox::ActionRole);
     connect(raw, &QPushButton::clicked, this, [this, raw]() {
         output->setVisible(!output->isVisible());
-        raw->setText(output->isVisible() ? "Hide gpg's Output" : "Show gpg's Output");
+        raw->setText(output->isVisible() ? tx("Hide gpg's Output") : tx("Show gpg's Output"));
     });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::close);
     lay->addWidget(bb);
@@ -333,13 +336,13 @@ void SignatureWindow::show_result(const Result &r)
     result = r;
     head->setText(headline(r));
     body->setText(plain(r));
-    QStringList d{"Signature: " + sig};
+    QStringList d{tx("Signature: %1").arg(sig)};
     if (r.file != sig)
-        d << "Signed file: " + r.file;
+        d << tx("Signed file: %1").arg(r.file);
     if (!r.key_id.isEmpty())
-        d << "Key ID: " + r.key_id;
+        d << tx("Key ID: %1").arg(r.key_id);
     if (!r.fingerprint.isEmpty())
-        d << "Fingerprint: " + grouped(r.fingerprint);
+        d << tx("Fingerprint: %1").arg(grouped(r.fingerprint));
     details->setText(d.join('\n'));
     output->setPlainText(r.output);
     fetch_btn->setVisible(r.status == Result::NO_KEY && !(r.fingerprint.isEmpty() && r.key_id.isEmpty()));
@@ -350,7 +353,7 @@ void SignatureWindow::show_result(const Result &r)
 void SignatureWindow::check_again()
 {
     QPointer<SignatureWindow> self(this);
-    head->setText("Checking…");
+    head->setText(tx("Checking…"));
     signature::check(this, sig, [self](const Result &r) {
         if (self)
             self->show_result(r);
@@ -361,22 +364,22 @@ void SignatureWindow::fetch()
 {
     QString id = result.fingerprint.isEmpty() ? result.key_id : result.fingerprint;
     QPointer<SignatureWindow> self(this);
-    ask_yes(this, "Fetch Key",
-            QString("Fetch the key %1 from %2 and add it to your keyring?\n\nThis connects to the internet: the "
+    ask_yes(this, tx("Fetch Key"),
+            tx("Fetch the key %1 from %2 and add it to your keyring?\n\nThis connects to the internet: the "
                     "keyserver sees which key is asked for. Having the key lets gpg check the signature; it doesn't make "
                     "the key trusted.")
                 .arg(id, keyserver()),
             [self, id]() {
                 if (!self)
                     return;
-                self->head->setText("Fetching the key…");
-                fileops::run_task(self, "Fetching key " + id, [id]() { return QVariant(fetch_key(id)); },
+                self->head->setText(tx("Fetching the key…"));
+                fileops::run_task(self, tx("Fetching key %1").arg(id), [id]() { return QVariant(fetch_key(id)); },
                                   [self](const QVariant &err) {
                                       if (!self)
                                           return;
                                       if (!err.toString().isEmpty()) {
                                           self->show_result(self->result);
-                                          warn(self, "Fetch Key", "The key couldn't be fetched: " + err.toString());
+                                          warn(self, tx("Fetch Key"), tx("The key couldn't be fetched: %1").arg(err.toString()));
                                           return;
                                       }
                                       self->check_again();

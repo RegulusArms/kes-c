@@ -40,15 +40,15 @@ Info from_ata(const QVariantMap &a)
     qint64 on = a.value("SmartPowerOnSeconds").toLongLong();
     i.power_on_s = on > 0 ? on : -1;
     if (!a.value("SmartSupported").toBool()) {
-        i.summary = "Health not available";
+        i.summary = tx("Health not available");
         return i;
     }
     if (!a.value("SmartEnabled").toBool()) {
-        i.summary = "S.M.A.R.T. is switched off";
+        i.summary = tx("S.M.A.R.T. is switched off");
         return i;
     }
     if (a.value("SmartUpdated").toLongLong() <= 0) {   // udisks hasn't read it yet (it does every 10 minutes)
-        i.summary = "Health not read yet";
+        i.summary = tx("Health not read yet");
         return i;
     }
     qint64 bad = a.value("SmartNumBadSectors", -1).toLongLong();
@@ -60,16 +60,16 @@ Info from_ata(const QVariantMap &a)
     QString test = a.value("SmartSelftestStatus").toString();
     if (a.value("SmartFailing").toBool()) {
         i.state = State::Failing;
-        i.summary = "Failing";
+        i.summary = tx("Failing");
     } else if (bad > 0) {
         i.state = State::Warning;
-        i.summary = bad == 1 ? QString("1 bad sector") : QString("%1 bad sectors").arg(bad);
+        i.summary = txn("%Ln bad sector(s)", bad);
     } else if (failing > 0) {
         i.state = State::Warning;
-        i.summary = failing == 1 ? QString("1 value past its limit") : QString("%1 values past their limit").arg(failing);
+        i.summary = txn("%Ln value(s) past its limit", failing);   // (English: "1 value past its limit", "2 values past their limit")
     } else if (test.startsWith("error") || test == "fatal") {
         i.state = State::Warning;
-        i.summary = "Its last self-test failed";
+        i.summary = tx("Its last self-test failed");
     } else {
         i.state = State::Good;
         i.summary = "Healthy";
@@ -85,32 +85,36 @@ Info from_nvme(const QVariantMap &n)
     qint64 hours = n.value("SmartPowerOnHours").toLongLong();
     i.power_on_s = hours > 0 ? hours * 3600 : -1;
     if (n.value("SmartUpdated").toLongLong() <= 0) {
-        i.summary = "Health not read yet";
+        i.summary = tx("Health not read yet");
         return i;
     }
     // the controller's critical warnings: the first three mean data is at risk
     QStringList warnings = n.value("SmartCriticalWarning").toStringList();
-    static const QList<QPair<QString, QString>> words = {
-        {"readonly", "Failing: it has made itself read-only"},
-        {"degraded", "Failing: its reliability is degraded"},
-        {"volatile_mem", "Failing: its backup memory has failed"},
-        {"pmr_readonly", "Failing: its persistent memory is read-only"},
-        {"spare", "Its spare space is running out"},
-        {"temperature", "Too hot or too cold"},
+    struct Word {
+        const char *key, *text;
+        bool failing;   // data at risk
     };
-    for (const auto &[key, text] : words)
-        if (warnings.contains(key)) {
-            i.state = text.startsWith("Failing") ? State::Failing : State::Warning;
-            i.summary = text;
+    static const Word words[] = {
+        {"readonly", TX_NOOP("Failing: it has made itself read-only"), true},
+        {"degraded", TX_NOOP("Failing: its reliability is degraded"), true},
+        {"volatile_mem", TX_NOOP("Failing: its backup memory has failed"), true},
+        {"pmr_readonly", TX_NOOP("Failing: its persistent memory is read-only"), true},
+        {"spare", TX_NOOP("Its spare space is running out"), false},
+        {"temperature", TX_NOOP("Too hot or too cold"), false},
+    };
+    for (const Word &w : words)
+        if (warnings.contains(w.key)) {
+            i.state = w.failing ? State::Failing : State::Warning;
+            i.summary = tx(w.text);
             return i;
         }
     if (!warnings.isEmpty()) {
         i.state = State::Warning;
-        i.summary = "Warning: " + warnings.join(", ");
+        i.summary = tx("Warning: %1").arg(warnings.join(", "));
         return i;
     }
     i.state = State::Good;
-    i.summary = "Healthy";
+    i.summary = tx("Healthy");
     return i;
 }
 
@@ -278,7 +282,7 @@ QHash<QString, Info> match(const QVariantMap &objects, const QStringList &device
         else if (ifaces.contains(NVME))
             i = from_nvme(ifaces.value(NVME).toMap());
         else
-            i.summary = "Health not available";   // (a USB enclosure, a card reader…)
+            i.summary = tx("Health not available");   // (a USB enclosure, a card reader…)
         QVariantMap d = ifaces.value(DRIVE).toMap();
         i.drive = drive;
         i.id = d.value("Id").toString();
@@ -320,25 +324,25 @@ QString duration(qint64 secs)
 {
     qint64 hours = secs / 3600;
     if (hours < 48)
-        return hours == 1 ? QString("1 hour") : QString("%1 hours").arg(hours);
+        return txn("%Ln hour(s)", hours);
     qint64 days = hours / 24;
     if (days < 730)
-        return QString("%1 days").arg(days);
-    return QString("%1 years").arg(days / 365.25, 0, 'f', 1);
+        return txn("%Ln day(s)", days);
+    return tx("%1 years").arg(i18n::decimal(days / 365.25, 1));
 }
 
 QString line(const Info &i)
 {
     QStringList parts;
-    parts << (i.state == State::Failing ? "⚠ " + i.summary + ": back up its files now"
+    parts << (i.state == State::Failing ? tx("⚠ %1: back up its files now").arg(i.summary)
               : i.state == State::Warning ? "⚠ " + i.summary
                                           : i.summary);
     if (i.drives > 1)
-        parts.last() += QString(" (worst of %1 drives)").arg(i.drives);
+        parts.last() = tx("%1 (worst of %2 drives)").arg(parts.last(), QString::number(i.drives));
     if (i.temp_c >= 0)
-        parts << QString("%1 °C").arg(i.temp_c);
+        parts << tx("%1 °C").arg(i.temp_c);
     if (i.power_on_s > 0)
-        parts << "on for " + duration(i.power_on_s);
+        parts << tx("on for %1").arg(duration(i.power_on_s));
     return parts.join("  ·  ");
 }
 
@@ -353,31 +357,31 @@ struct AtaWord {
 static const QHash<QString, AtaWord> &ata_words()
 {
     static const QHash<QString, AtaWord> w = {
-        {"reallocated-sector-count", {"Bad sectors moved to spares (reallocated)", true,
-                                      "Sectors that failed and were replaced by spare ones. A few can be stable; a "
-                                      "growing number means the disk is wearing out."}},
-        {"current-pending-sector", {"Sectors waiting to be checked (pending)", true,
-                                    "Sectors that couldn't be read and will be checked again when written."}},
-        {"offline-uncorrectable", {"Sectors that couldn't be read (uncorrectable)", true,
-                                   "Found by the disk's own scan: the data in them is lost."}},
-        {"reported-uncorrect", {"Errors it couldn't correct", true, ""}},
-        {"reallocated-event-count", {"Times sectors were moved to spares", true, ""}},
-        {"udma-crc-error-count", {"Cable or connection errors (CRC)", true,
-                                  "Usually a loose or faulty cable or port, not the disk itself."}},
-        {"spin-retry-count", {"Spin-up retries", true, "The motor needed more than one try to reach speed."}},
-        {"power-on-hours", {"Time powered on", false, ""}},
-        {"power-cycle-count", {"Times switched on", false, ""}},
-        {"start-stop-count", {"Spin-ups", false, ""}},
-        {"load-cycle-count", {"Head load cycles", false, ""}},
-        {"temperature-celsius-2", {"Temperature", false, ""}},
-        {"temperature-celsius", {"Temperature", false, ""}},
-        {"airflow-temperature-celsius", {"Air temperature", false, ""}},
-        {"wear-leveling-count", {"Wear (100 is new)", false, "A normalised value: it counts down as the cells wear."}},
-        {"media-wearout-indicator", {"Wear (100 is new)", false, "A normalised value: it counts down as the cells wear."}},
-        {"total-lbas-written", {"Total written", false, ""}},
-        {"total-lbas-read", {"Total read", false, ""}},
-        {"raw-read-error-rate", {"Read error rate", false, "A normalised value; its raw number means little on most drives."}},
-        {"seek-error-rate", {"Seek error rate", false, "A normalised value; its raw number means little on most drives."}},
+        {"reallocated-sector-count", {TX_NOOP("Bad sectors moved to spares (reallocated)"), true,
+                                      TX_NOOP("Sectors that failed and were replaced by spare ones. A few can be stable; a "
+                                              "growing number means the disk is wearing out.")}},
+        {"current-pending-sector", {TX_NOOP("Sectors waiting to be checked (pending)"), true,
+                                    TX_NOOP("Sectors that couldn't be read and will be checked again when written.")}},
+        {"offline-uncorrectable", {TX_NOOP("Sectors that couldn't be read (uncorrectable)"), true,
+                                   TX_NOOP("Found by the disk's own scan: the data in them is lost.")}},
+        {"reported-uncorrect", {TX_NOOP("Errors it couldn't correct"), true, ""}},
+        {"reallocated-event-count", {TX_NOOP("Times sectors were moved to spares"), true, ""}},
+        {"udma-crc-error-count", {TX_NOOP("Cable or connection errors (CRC)"), true,
+                                  TX_NOOP("Usually a loose or faulty cable or port, not the disk itself.")}},
+        {"spin-retry-count", {TX_NOOP("Spin-up retries"), true,  TX_NOOP("The motor needed more than one try to reach speed.")}},
+        {"power-on-hours", {TX_NOOP("Time powered on"), false, ""}},
+        {"power-cycle-count", {TX_NOOP("Times switched on"), false, ""}},
+        {"start-stop-count", {TX_NOOP("Spin-ups"), false, ""}},
+        {"load-cycle-count", {TX_NOOP("Head load cycles"), false, ""}},
+        {"temperature-celsius-2", {TX_NOOP("Temperature"), false, ""}},
+        {"temperature-celsius", {TX_NOOP("Temperature"), false, ""}},
+        {"airflow-temperature-celsius", {TX_NOOP("Air temperature"), false, ""}},
+        {"wear-leveling-count", {TX_NOOP("Wear (100 is new)"), false,  TX_NOOP("A normalised value: it counts down as the cells wear.")}},
+        {"media-wearout-indicator", {TX_NOOP("Wear (100 is new)"), false,  TX_NOOP("A normalised value: it counts down as the cells wear.")}},
+        {"total-lbas-written", {TX_NOOP("Total written"), false, ""}},
+        {"total-lbas-read", {TX_NOOP("Total read"), false, ""}},
+        {"raw-read-error-rate", {TX_NOOP("Read error rate"), false,  TX_NOOP("A normalised value; its raw number means little on most drives.")}},
+        {"seek-error-rate", {TX_NOOP("Seek error rate"), false,  TX_NOOP("A normalised value; its raw number means little on most drives.")}},
     };
     return w;
 }
@@ -392,24 +396,24 @@ QList<Row> ata_rows(const QVariantList &attrs)
         int id = a[0].toInt(), value = a[3].toInt(), worst_v = a[4].toInt(), threshold = a[5].toInt(), unit = a[7].toInt();
         QString name = a[1].toString();
         qint64 pretty = a[6].toLongLong();
-        AtaWord w = ata_words().value(name, {name.isEmpty() ? QString("Attribute %1").arg(id) : name, false, ""});
+        AtaWord w = ata_words().value(name, {name.isEmpty() ? tx("Attribute %1").arg(id) : name, false, ""});
         Row r;
-        r.what = w.what;
+        r.what = tx(w.what);
         switch (unit) {
         case 2: r.value = duration(pretty / 1000); break;                                      // milliseconds
-        case 3: r.value = pretty == 1 ? QString("1 sector") : QString("%1 sectors").arg(pretty); break;
-        case 4: r.value = QString("%1 °C").arg(std::lround(pretty / 1000.0 - 273.15)); break;   // millikelvin
-        default: r.value = QString::number(pretty);
+        case 3: r.value = txn("%Ln sector(s)", pretty); break;
+        case 4: r.value = tx("%1 °C").arg(std::lround(pretty / 1000.0 - 273.15)); break;   // millikelvin
+        default: r.value = i18n::number(pretty);
         }
         if (name.startsWith("total-lbas"))
             r.value = human_size(pretty * 512);
         bool past = threshold > 0 && value <= threshold;
         bool counted = w.count_bad && pretty > 0;
         r.bad = past || counted;
-        r.note = past ? "Past its limit" : counted ? "Check this" : "OK";
-        r.tip = QString("%1 (attribute %2): normalised %3, worst %4, limit %5%6")
+        r.note = past ? tx("Past its limit") : counted ? tx("Check this") : tx("OK");
+        r.tip = tx("%1 (attribute %2): normalised %3, worst %4, limit %5%6")
                     .arg(name, QString::number(id), QString::number(value), QString::number(worst_v),
-                         QString::number(threshold), w.tip.isEmpty() ? QString() : "\n" + w.tip);
+                         QString::number(threshold), w.tip.isEmpty() ? QString() : "\n" + tx(w.tip));
         rows << r;
     }
     return rows;
@@ -423,40 +427,40 @@ QList<Row> nvme_rows(const QVariantMap &a)
         r.what = what;
         r.value = value;
         r.bad = bad;
-        r.note = bad ? "Check this" : "OK";
+        r.note = bad ? tx("Check this") : tx("OK");
         r.tip = key + (tip.isEmpty() ? QString() : "\n" + tip);
         rows << r;
     };
     if (a.contains("percent_used")) {
         int used = a.value("percent_used").toInt();
-        add("Wear (of its rated life)", QString("%1%").arg(used), used >= 100, "percent_used",
-            "How much of the writes it's rated for have been used; it can go past 100%.");
+        add(tx("Wear (of its rated life)"), QString("%1%").arg(used), used >= 100, "percent_used",
+            tx("How much of the writes it's rated for have been used; it can go past 100%."));
     }
     if (a.contains("avail_spare")) {
         int spare = a.value("avail_spare").toInt(), thresh = a.value("spare_thresh").toInt();
-        add("Spare space left", QString("%1% (warns below %2%)").arg(spare).arg(thresh), spare < thresh, "avail_spare");
+        add(tx("Spare space left"), tx("%1% (warns below %2%)").arg(spare).arg(thresh), spare < thresh, "avail_spare");
     }
     if (a.contains("media_errors"))
-        add("Data errors (media and integrity)", QString::number(a.value("media_errors").toLongLong()),
+        add(tx("Data errors (media and integrity)"), QString::number(a.value("media_errors").toLongLong()),
             a.value("media_errors").toLongLong() > 0, "media_errors");
     if (a.contains("unsafe_shutdowns"))
-        add("Unsafe shutdowns (power lost)", QString::number(a.value("unsafe_shutdowns").toLongLong()), false,
+        add(tx("Unsafe shutdowns (power lost)"), QString::number(a.value("unsafe_shutdowns").toLongLong()), false,
             "unsafe_shutdowns");
     if (a.contains("power_cycles"))
-        add("Times switched on", QString::number(a.value("power_cycles").toLongLong()), false, "power_cycles");
+        add(tx("Times switched on"), QString::number(a.value("power_cycles").toLongLong()), false, "power_cycles");
     if (a.contains("total_data_written"))
-        add("Total written", human_size(a.value("total_data_written").toLongLong()), false, "total_data_written");
+        add(tx("Total written"), human_size(a.value("total_data_written").toLongLong()), false, "total_data_written");
     if (a.contains("total_data_read"))
-        add("Total read", human_size(a.value("total_data_read").toLongLong()), false, "total_data_read");
+        add(tx("Total read"), human_size(a.value("total_data_read").toLongLong()), false, "total_data_read");
     if (a.contains("ctrl_busy_time"))
-        add("Time busy", duration(a.value("ctrl_busy_time").toLongLong() * 60), false, "ctrl_busy_time");
+        add(tx("Time busy"), duration(a.value("ctrl_busy_time").toLongLong() * 60), false, "ctrl_busy_time");
     if (a.contains("num_err_log_entries"))
-        add("Error log entries", QString::number(a.value("num_err_log_entries").toLongLong()), false,
-            "num_err_log_entries", "Errors the controller logged; most are harmless (a command the system tried).");
+        add(tx("Error log entries"), QString::number(a.value("num_err_log_entries").toLongLong()), false,
+            "num_err_log_entries", tx("Errors the controller logged; most are harmless (a command the system tried)."));
     if (a.contains("warning_temp_time"))
-        add("Time too hot (warning)", duration(a.value("warning_temp_time").toLongLong() * 60), false, "warning_temp_time");
+        add(tx("Time too hot (warning)"), duration(a.value("warning_temp_time").toLongLong() * 60), false, "warning_temp_time");
     if (a.contains("critical_temp_time"))
-        add("Time too hot (critical)", duration(a.value("critical_temp_time").toLongLong() * 60),
+        add(tx("Time too hot (critical)"), duration(a.value("critical_temp_time").toLongLong() * 60),
             a.value("critical_temp_time").toLongLong() > 0, "critical_temp_time");
     return rows;
 }
@@ -487,11 +491,11 @@ void open_window(QWidget *parent, const QString &name, const Info &info)
 {
     auto *d = new QDialog(parent);
     d->setObjectName("drive_health");
-    d->setWindowTitle("Drive Health — " + name);
+    d->setWindowTitle(tx("Drive Health — %1").arg(name));
     d->setAttribute(Qt::WA_DeleteOnClose);
     d->resize(620, 460);
     auto *lay = new QVBoxLayout(d);
-    auto *head = new QLabel(info.state == State::Failing ? info.summary + ": back up its files now" : info.summary);
+    auto *head = new QLabel(info.state == State::Failing ? tx("%1: back up its files now").arg(info.summary) : info.summary);
     QFont f = head->font();
     f.setPointSizeF(f.pointSizeF() * 1.3);
     f.setBold(true);
@@ -504,27 +508,27 @@ void open_window(QWidget *parent, const QString &name, const Info &info)
     if (!info.model.isEmpty())
         facts << info.model;
     if (info.temp_c >= 0)
-        facts << QString("%1 °C").arg(info.temp_c);
+        facts << tx("%1 °C").arg(info.temp_c);
     if (info.power_on_s > 0)
-        facts << "powered on for " + duration(info.power_on_s);
+        facts << tx("powered on for %1").arg(duration(info.power_on_s));
     auto *sub = new QLabel(facts.join("  ·  "));
     sub->setTextFormat(Qt::PlainText);
     sub->setTextInteractionFlags(Qt::TextSelectableByMouse);
     lay->addWidget(sub);
-    auto *about = new QLabel("What the drive reports about itself (S.M.A.R.T.), through udisks. Hover a row for its "
-                             "own name and values.");
+    auto *about = new QLabel(tx("What the drive reports about itself (S.M.A.R.T.), through udisks. Hover a row for its "
+                             "own name and values."));
     about->setWordWrap(true);
     about->setForegroundRole(QPalette::PlaceholderText);
     lay->addWidget(about);
     auto *tree = new QTreeWidget;
     tree->setObjectName("health_rows");
-    tree->setHeaderLabels({"What", "Value", ""});
+    tree->setHeaderLabels({tx("What"), tx("Value"), ""});
     tree->setRootIsDecorated(false);
     tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     tree->header()->setStretchLastSection(false);
-    tree->addTopLevelItem(new QTreeWidgetItem(QStringList{"Reading…"}));
+    tree->addTopLevelItem(new QTreeWidgetItem(QStringList{tx("Reading…")}));
     lay->addWidget(tree, 1);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
     QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::close);
@@ -597,8 +601,8 @@ void warn_failing(const QString &name, const Info &info)
     GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
     if (!bus)
         return;
-    QString body = QString("%1%2: %3. Back up its files now.")
-                       .arg(name, info.model.isEmpty() ? QString() : " (" + info.model + ")", info.summary);
+    QString body = info.model.isEmpty() ? tx("%1: %2. Back up its files now.").arg(name, info.summary)
+                                        : tx("%1 (%2): %3. Back up its files now.").arg(name, info.model, info.summary);
     GVariantBuilder actions, hints;
     g_variant_builder_init(&actions, G_VARIANT_TYPE("as"));
     g_variant_builder_init(&hints, G_VARIANT_TYPE("a{sv}"));
