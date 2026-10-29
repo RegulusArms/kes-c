@@ -2,7 +2,26 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.32
+## 0.3.2-alpha.33
+
+- **KDE Plasma (Kubuntu 26.04).** Kestrel now follows Plasma where it followed only GNOME and Cinnamon:
+  - **Set as Wallpaper** sets Plasma's wallpaper; it did nothing there.
+  - **System Settings → Recent Files → "Do not remember"** stops Kestrel adding to Recent and counting Frequent
+    Folders, as GNOME's File History switch does. Preferences → Privacy says where to find both.
+  - **Open Terminal** opens Konsole first, even with a GNOME terminal installed too.
+  - **Dragging files into another app gives that app the focus** on Plasma on Wayland too (Kestrel asks KWin, with
+    nothing to install), as it already did on GNOME and on X11.
+  - Without KDE's Qt integration, the **icons** are Plasma's icon theme rather than GNOME's.
+- **`kes-setup` on KDE Plasma:**
+  - `--dock` (and the question `--default` asks) puts Kestrel in Plasma's taskbar in place of Dolphin, and `--undo`
+    puts Dolphin back. A "default file manager" pin already opens Kestrel.
+  - The file chooser falls back to KDE's own instead of GNOME's, which Kubuntu doesn't have (on Linux Mint, to Mint's).
+  - `--undo` no longer makes GNOME Files the app for the trash (`trash:///`) when no app had it before, as on Kubuntu;
+    it takes Kestrel out and leaves the desktop's own choice.
+  - `--default` says when an open Dolphin window keeps "Show in folder" until it's closed.
+  - `--default` and `--undo` no longer print "qtpaths: not found" on Kubuntu 26.04.
+
+## 0.3.2-alpha.32 (2026-10-29)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha32).
 

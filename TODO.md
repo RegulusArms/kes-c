@@ -105,42 +105,13 @@ into.
 
 ### Desktops
 
-- [ ] **Kubuntu 26.04 (KDE Plasma) support.** The .deb already installs on 26.04 (CI's `package` job), and Kubuntu
-  uses the same archive, so this is desktop integration: everywhere Kestrel assumes GNOME or Cinnamon. Kubuntu 26.04
-  is Wayland-only. Test in a Kubuntu VM, the way Mint was done.
-  - **Probably fine already, to confirm:** Breeze colours and fonts come through KDE's Qt integration
-    (plasma-integration), dark mode through the portal's colour scheme (`desktop_prefers_dark`), cut/paste with Dolphin
-    (`application/x-kde-cutselection`), trash (`g_file_trash`), the shared thumbnail cache, `recently-used.xbel`
-    (KDE Frameworks write it too), archive passwords in KWallet (Secret Service).
-  - **File chooser portal (kes-setup):** `PORTAL_DESKTOP` becomes `kde` (right), but the FileChooser line falls back
-    to `kestrel;gnome;gtk;`. On KDE the fallback should be `kestrel;kde;`. Check `restart_portal` and `--undo` with
-    xdg-desktop-portal-kde.
-  - **Default file manager:** remember and restore Dolphin (`org.kde.dolphin.desktop`), not Nautilus. Today that's
-    `prev:-org.gnome.Nautilus.desktop` and the `pgrep nautilus`/`nemo` handling. A running Dolphin takes
-    `org.freedesktop.FileManager1` ("Show in folder"), so `--default` has to deal with it the way it quits Nautilus.
-  - **`--dock`:** Plasma's taskbar pins (launchers in `plasma-org.kde.plasma.desktop-appletsrc`). Change them through
-    plasmashell's `evaluateScript` over D-Bus, not by editing the file. This is the same open item as Cinnamon's panel.
-  - **Drag focus on Wayland:** the GNOME Shell extension does nothing under KWin. The equivalent is a small KWin
-    script loaded through `org.kde.KWin /Scripting` that activates the window under the pointer (a new path in
-    src/focus.cpp). It may not need a log-out.
-  - **gsettings-only desktop settings** (`desktop_schema()` only maps Cinnamon):
-    - wallpaper: `set_wallpaper()` → `plasma-apply-wallpaperimage`;
-    - File History privacy switch: KDE keeps it in its activity manager settings, not `org.gnome.desktop.privacy`;
-    - icon theme: `setup_icon_theme()` reads gsettings, which KDE's GTK-config module usually fills in. Reading
-      `kdeglobals` `[Icons] Theme=` is safer.
-  - **Drives, network shares and phones without gvfs:** src/overview.cpp uses GIO's volume monitor, and the udisks2
-    and MTP monitors come from gvfs, which Kubuntu may not install. Without it, unmounted USB drives, `smb://`/`sftp://`
-    and phones wouldn't appear or mount. Either add gvfs-backends/gvfs-daemons to Recommends (and install.sh's
-    RECOMMENDED) or add a udisks2 path. Check this first; it's the item most likely to change the plan.
-  - **Terminal:** `konsole` is in `open_terminal()` but comes after ptyxis and gnome-terminal. Try the desktop's own
-    terminal first.
+- [ ] **Kubuntu 26.04 (KDE Plasma): what only a real Plasma session shows.** The rest is done (0.3.2-alpha.33, under
+  Done). Still to try in a Kubuntu VM: archive passwords saved in KWallet (Secret Service), network shares (`smb://`,
+  `sftp://`) and phones (GIO's volume monitor; the .deb's Recommends bring gvfs-backends), drop focus on Wayland
+  (dragging into Firefox should give it the focus: the KWin script), `kes-setup --dock` with Kubuntu's own taskbar
+  pins, Set as Wallpaper, and Recent Files' "Do not remember".
   - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
-    `~/.config/baloofilerc`). Without it, Kestrel falls back to its own search, which is fine.
-  - **Tests:** a `XDG_CURRENT_DESKTOP=KDE` case in `installer` (portal fallback, Dolphin restore, dock script), plus
-    unit checks for the wallpaper and icon-theme choice. No new CI job: the 26.04 package check covers installing.
-  - **Docs:** a Kubuntu section in docs/install.md, like the Mint one.
-  - Order: walk through the app in the VM (drives first), then kes-setup (portal, Dolphin, FileManager1), then the
-    wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
+    `~/.config/baloofilerc`, `baloosearch`). Without it, Kestrel uses its own search, which is fine.
 
 ### Translations
 
@@ -222,6 +193,20 @@ into.
     Kestrel does.
 
 ## Done
+- [x] **KDE Plasma (Kubuntu 26.04)** (0.3.2-alpha.33). Confirmed in a Kubuntu VM: installs, Breeze style/colours/
+  fonts/icons and a live switch to Breeze Dark (plasma-integration), USB drives, drag and drop (in Kestrel, to the
+  desktop, to Firefox), Open Terminal → Konsole, `kes-setup --default` (folders, the file chooser in Firefox) and
+  `--undo` (Dolphin back for folders, KDE's file chooser back). In an ubuntu:26.04 container with Plasma's packages:
+  cut/paste with Dolphin both ways (`application/x-kde-cutselection`), the shared trash, KIO writing
+  `recently-used.xbel`, the test suite with `XDG_CURRENT_DESKTOP=KDE`. Made: `util::is_kde()`, `kde_setting()` (KDE
+  config files, user's then system's); `wallpaper_commands` → `plasma-apply-wallpaperimage`; `remember_recent` reads
+  `kactivitymanagerd-pluginsrc` `what-to-remember` (2: Recent Files → Do not remember); `setup_icon_theme` reads
+  `kdeglobals` `[Icons] Theme`; `terminal_commands` puts Konsole first; `focus::activate_kwin` loads a KWin script per
+  drop over `org.kde.KWin /Scripting` (checked in headless `kwin_wayland --virtual`). kes-setup: `plasma_pins`
+  (plasmashell `evaluateScript`; no backslashes, gdbus unescapes them) for `--dock`/`--undo`/the question, the file
+  chooser's fallback from the desktop's portals.conf (`kestrel;kde;`), `forget_default` when `--undo` has nothing
+  recorded (was: GNOME Files), `qtpaths` found for xdg-mime, a note when Dolphin holds FileManager1. Not done: Baloo;
+  what's under the open Kubuntu item. Tests: `installer`, `theme`.
 - [x] **Finished jobs stay in the Jobs window until Clear Finished** (0.3.2-alpha.31). `TaskBoard` (src/fileops.cpp) no longer keeps only the newest 50; another Kestrel's "finished" list is merged by id (`publish_finished` sends the newest that fit in half a message), so only Clear Finished takes them away; a flight's "left" and a tower reset keep its finished jobs (`has_left`: the Jobs window says its log went with it instead of asking). Not done: the thumbnail jobs list still drops a job once it ends; finished jobs aren't kept across the last Kestrel closing. Test: `atc_tasks`.
 - [x] **Hide places from the sidebar; a Privacy tab** (0.3.2-alpha.31). `sidebar_hidden` (ids in `sidebar::PLACES`, src/widgets.cpp; a Places entry's extra is its id): Preferences → Sidebar → Places shown, and Hide from Sidebar in a place's menu (`Sidebar::hide_place`). Preferences → Privacy: `history_recent` (`places::add_recent`), `history_frequent` (`visit_folder`; the Overview says so), `history_servers` (`remember_server`), `history_viewer_folders` (`ImageViewer::remember_folder`), the desktop's File History shown (`history_desktop`), `places::clear_history` (what BleachBit's History option deletes) and `clear_recent` (the whole xbel, written empty). Test: `prefs`.
 - [x] **Drag-selecting from empty space selected nothing in the grid when dragged up and to the left** (0.3.2-alpha.26). The grid's `setSelection` (src/pane.cpp `FileView`, 0.3.2-alpha.17) told a press from a band by the rect's width and height, which are negative for `QRect(press, pointer)` dragged up-left, so the band was taken for a press on empty space; it now tests the normalized rect. Test: `ui`.

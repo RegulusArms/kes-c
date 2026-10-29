@@ -393,8 +393,10 @@ int main(int argc, char **argv)
     check(read_file(join(CONFIG_DIR(), "frequent.json")) == before && parts.isEmpty(),
           "a save that fails part-way keeps the old count whole, with no part file left");
 
-    // the desktop's File History switch off: nothing counted
+    // the desktop's File History switch off: nothing counted (GNOME's: on KDE Plasma, Kestrel reads Plasma's)
     if (has_schema_key("org.gnome.desktop.privacy", "remember-recent-files")) {
+        QByteArray desktop = qgetenv("XDG_CURRENT_DESKTOP");
+        qputenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME");
         GSettings *privacy = g_settings_new("org.gnome.desktop.privacy");
         g_settings_set_boolean(privacy, "remember-recent-files", false);
         QString hidden_dir = home_path("private");
@@ -405,6 +407,9 @@ int main(int argc, char **argv)
         bool not_counted = !frequent_file().contains(hidden_dir);
         g_settings_set_boolean(privacy, "remember-recent-files", true);
         g_object_unref(privacy);
+        qputenv("XDG_CURRENT_DESKTOP", desktop);
+        if (desktop.isNull())
+            qunsetenv("XDG_CURRENT_DESKTOP");
         check(not_counted, "with the desktop's File History off, folders opened aren't counted");
     } else {
         skip("File History off (no GNOME privacy settings here)");

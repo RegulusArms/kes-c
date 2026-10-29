@@ -289,7 +289,11 @@ QStringList recent_files(int limit)
 
 static bool remember_recent()
 {
-    // the desktop's "File History" privacy switch (GNOME's, or Cinnamon's own)
+    // the desktop's "File History" privacy switch (GNOME's, or Cinnamon's own); on KDE Plasma, System Settings →
+    // Recent Files → "Don't remember" (what-to-remember 2; 0 and 1 remember all apps' or some apps' files)
+    if (is_kde())
+        return kde_setting("kactivitymanagerd-pluginsrc", "Plugin-org.kde.ActivityManager.Resources.Scoring",
+                           "what-to-remember") != "2";
     QString schema = desktop_schema("org.gnome.desktop.privacy");
     if (!has_schema_key(schema, "remember-recent-files"))
         return true;

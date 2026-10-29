@@ -224,7 +224,7 @@ static QList<Pref> build()
     // -- Privacy
     const QString history = TX_NOOP("History");
     add(TX_NOOP("Privacy"), history, "history_desktop", TX_NOOP("The desktop's File History"), CUSTOM, QVariant(),
-        TX_NOOP("Settings → Privacy → File History & Trash"),
+        TX_NOOP("GNOME: Settings → Privacy → File History & Trash; KDE Plasma: System Settings → Recent Files"),
         TX_NOOP("Shared by every app: while it's off, Kestrel adds nothing to Recent and counts no folders, whatever is "
         "ticked below."));
     add(TX_NOOP("Privacy"), history, "history_recent", TX_NOOP("Add the files I open to Recent"), BOOL, true, QString(),

@@ -4,8 +4,8 @@
 #   ./install.sh --default              also make it the default app for opening folders and the trash
 #                                       and the system's file chooser for Save/Open dialogs (asks for sudo once)
 #                                       and puts ~/.local/bin on your PATH (for the kes command)
-#                                       (and offer to put it in the dock in place of GNOME Files)
-#   ./install.sh --dock                 put it in the dock in place of GNOME Files (without asking)
+#                                       (and offer to put it in the dock in place of GNOME Files, or Dolphin in Plasma's taskbar)
+#   ./install.sh --dock                 put it in the dock in place of GNOME Files (Dolphin), without asking
 #   ./install.sh --install-recommended  also install the recommended packages (RAW/HEIC previews, network, drives…)
 #   ./install.sh --uninstall
 # --default, --dock and --install-recommended can be combined.

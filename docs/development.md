@@ -186,7 +186,7 @@ pseudo-translation installed, that the main windows and menus show no untranslat
 | `src/animate.cpp` | Animated GIFs and WebM clips playing in the file view |
 | `src/fm1.cpp` | The `org.freedesktop.FileManager1` service ("Show in folder" from browsers and other apps) |
 | `src/chooser.cpp` | The system's file chooser: the portal backend (`kes --file-chooser`) and the Save/Open bar of chooser windows |
-| `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`) |
+| `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`), on KDE Plasma on Wayland through a KWin script loaded for each drop |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
 | `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |

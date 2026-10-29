@@ -82,6 +82,52 @@ int main(int argc, char **argv)
     }
     qputenv("XDG_CURRENT_DESKTOP", desktop);
 
+    // -- KDE Plasma's settings (Kubuntu): its own config files, the user's first, then the system's
+    {
+        QByteArray config_dirs = qgetenv("XDG_CONFIG_DIRS");
+        QString user = join(HOME(), ".config"), system = home_path("system-xdg");
+        makedirs(user, true);
+        makedirs(system, true);
+        qputenv("XDG_CONFIG_DIRS", system.toLocal8Bit());
+        write_text(join(user, "kdeglobals"), "[General]\nColorScheme=BreezeDark\n\n[Icons][Extra]\nTheme=wrong\n\n"
+                                             "[Icons]\nTheme[$e]=Papirus-Dark\n");
+        write_text(join(system, "kdeglobals"), "[Icons]\nTheme=wrong\n\n[KDE]\nSingleClick=false\n");
+        check(kde_setting("kdeglobals", "Icons", "Theme") == "Papirus-Dark" &&
+                  kde_setting("kdeglobals", "General", "ColorScheme") == "BreezeDark",
+              "a KDE setting is read from the user's config file (its group, a key with KDE's flags, not a group in a "
+              "group of the same name)");
+        check(kde_setting("kdeglobals", "KDE", "SingleClick") == "false" && kde_setting("kdeglobals", "KDE", "None").isEmpty() &&
+                  kde_setting("nofile", "Icons", "Theme").isEmpty(),
+              "...then from the system's, and is empty where neither has it");
+
+        qputenv("XDG_CURRENT_DESKTOP", "KDE");
+        check(is_kde(), "XDG_CURRENT_DESKTOP=KDE is KDE Plasma");
+        QString icons = QIcon::themeName();
+        QIcon::setThemeName(QString());   // as without KDE's Qt integration (plasma-integration)
+        setup_icon_theme();
+        check(QIcon::themeName() == "Papirus-Dark", "on KDE without its Qt integration, the icon theme is Plasma's");
+        QIcon::setThemeName(icons);
+        check(wallpaper_commands("/pics/a b.jpg") == QList<QStringList>{{"plasma-apply-wallpaperimage", "/pics/a b.jpg"}},
+              "on KDE, Set as Wallpaper uses Plasma's own command");
+        check(terminal_commands("/tmp").value(0).value(0) == "konsole", "on KDE, Open Terminal tries Konsole first");
+        QString history = join(user, "kactivitymanagerd-pluginsrc");
+        check(places::remembers_history(), "on KDE, File History is on where Recent Files was never set");
+        write_text(history, "[Plugin-org.kde.ActivityManager.Resources.Scoring]\nkeep-history-for=0\nwhat-to-remember=2\n");
+        check(!places::remembers_history(), "on KDE, Recent Files' \"Do not remember\" turns File History off");
+        write_text(history, "[Plugin-org.kde.ActivityManager.Resources.Scoring]\nwhat-to-remember=1\n");
+        check(places::remembers_history(), "...and remembering some apps' files keeps it on");
+        util::unlink(history);
+
+        qputenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME");
+        check(!is_kde() && terminal_commands("/tmp").value(0).value(0) == "ptyxis" &&
+                  !wallpaper_commands("/pics/a.jpg").value(0).contains("plasma-apply-wallpaperimage"),
+              "on GNOME, Open Terminal and Set as Wallpaper stay GNOME's");
+        qputenv("XDG_CURRENT_DESKTOP", desktop);
+        qputenv("XDG_CONFIG_DIRS", config_dirs);
+        if (config_dirs.isNull())
+            qunsetenv("XDG_CONFIG_DIRS");
+    }
+
     // -- the GTK theme's colours (Qt before 6.5)
     check(needs_gtk_palette("6.4.2") && needs_gtk_palette("6.4.0") && !needs_gtk_palette("6.5.0") &&
               !needs_gtk_palette("6.10.2"),

@@ -228,6 +228,10 @@ void setup_icon_theme();
 // and uses those; everything else uses GNOME's. has_schema_key: installed, and with that key (empty: any).
 QString desktop_schema(const QString &gnome_schema);
 bool has_schema_key(const QString &schema, const QString &key = QString());
+// KDE Plasma (Kubuntu) keeps its settings in its own config files, not in GSettings. kde_setting: a key from one of
+// them (e.g. "kdeglobals", group "Icons", key "Theme"), the user's own first, then the system's; empty if unset.
+bool is_kde();
+QString kde_setting(const QString &file, const QString &group, const QString &key);
 
 // ---------------------------------------------------------------- theme
 // Colours derived from the desktop's palette, so they suit any theme, light or dark.
@@ -279,7 +283,9 @@ void launch_app(const AppRef &app, const QStringList &paths);   // raises Error
 void set_default_for_type(const AppRef &app, const QString &ct); // raises Error
 bool which(const QString &name);
 QString which_path(const QString &name);
+QList<QStringList> terminal_commands(const QString &directory);   // the ones to try, the desktop's own first
 bool open_terminal(const QString &directory);
+QList<QStringList> wallpaper_commands(const QString &path);   // the desktop's own way (without UWP)
 void set_wallpaper(const QString &path);
 void trash(const QString &path);   // raises OSError
 void mark_trusted(const QString &path);

@@ -4,6 +4,27 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.33
+
+Added:
+- `installer`: kes-setup on KDE Plasma (Kubuntu), where Dolphin opens folders and no app opens `trash:///`.
+  `--default` takes both, makes Kestrel the file chooser with KDE's as the fallback (it was GNOME's, which Kubuntu
+  doesn't have) and says an open Dolphin keeps "Show in folder"; `--dock` swaps Dolphin for Kestrel in Plasma's taskbar
+  and says when a "default file manager" pin already opens it; `--undo` puts Dolphin back in the taskbar and for
+  folders, and doesn't hand `trash:///` to GNOME Files (it did, though GNOME Files isn't installed there); xdg-mime
+  finds `qtpaths` (26.04's xdg-mime runs it on KDE, which Ubuntu only installs as `qtpaths6`: it printed "qtpaths: not
+  found" for each change; skipped where xdg-mime doesn't run it, as on 24.04). Plasma isn't in CI, so a stand-in
+  `gdbus` answers for plasmashell; the script itself was run against a real plasmashell.
+- `theme`: KDE Plasma's settings, read from its config files (user's first, then the system's; groups, KDE's key
+  flags): the icon theme without KDE's Qt integration, Set as Wallpaper through `plasma-apply-wallpaperimage`, Konsole
+  first for Open Terminal, and Recent Files' "Do not remember" turning File History off; and that GNOME keeps its own.
+
+Changed:
+- `installer`: the stand-in `pgrep` reports `$RUNNING` as running (Dolphin, for the KDE case); otherwise nothing runs,
+  as before.
+- `overview`: "with the desktop's File History off, folders opened aren't counted" sets the desktop to GNOME for its
+  check, since it turns GNOME's switch off: run with `XDG_CURRENT_DESKTOP=KDE` it failed, as Kestrel now reads Plasma's.
+
 ## 0.3.2-alpha.32
 
 Changed:

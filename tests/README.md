@@ -38,7 +38,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
 | [`jobs`](#jobs) | 47 | The job queue, the Jobs window and the Tower window |
-| [`theme`](#theme) | 63 | Following the desktop's theme and settings; folder previews and thumbnails |
+| [`theme`](#theme) | 73 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
 | [`admin_helper`](#admin_helper) | 47 | The admin helper, the part that runs as root |
 | [`ui`](#ui) | 33 | Menus, shortcuts, accessibility, drag and drop |
@@ -49,7 +49,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`overview`](#overview) | 48 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 50 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 7 | Translations |
-| [`installer`](#installer) | 54 | `install.sh` and `kes-setup` |
+| [`installer`](#installer) | 64 | `install.sh` and `kes-setup` |
 
 ### fileops
 
@@ -428,7 +428,8 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 - **Where the settings come from:**
   - with Qt before 6.5 (Linux Mint 22), the GTK theme's named colours become the palette; a theme without the basic colours changes nothing;
-  - on Cinnamon (Linux Mint), its own settings are used for the wallpaper, file history and icon theme (and only the one wallpaper picture it has); other desktops use GNOME's.
+  - on Cinnamon (Linux Mint), its own settings are used for the wallpaper, file history and icon theme (and only the one wallpaper picture it has); other desktops use GNOME's;
+  - on KDE Plasma (Kubuntu), its config files: a setting is read from the user's file (its group, a key with KDE's `[$e]` flags, not a group in a group of the same name), then the system's; the icon theme is Plasma's when Qt has none (without KDE's Qt integration); Set as Wallpaper uses `plasma-apply-wallpaperimage`; Open Terminal tries Konsole first; Recent Files' "Do not remember" turns File History off, remembering all or some apps' files keeps it on; on GNOME, Open Terminal and Set as Wallpaper stay GNOME's.
 - **Light and dark:** palettes are told apart; Overview cards stand out from the background and error text stays readable in both.
 - **When the palette changes** (a light/dark switch, another theme):
   - registered updates run once; a deleted widget's update is dropped;
@@ -709,6 +710,11 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **Running it twice** changes nothing.
 - **`--uninstall`** puts back the previous trash handler and the dock, and doesn't touch a dock it didn't change.
 - **`kes-setup` on its own**, as after installing the .deb (`kes` in `/usr/bin`, the package's menu entry and portal definition): `--default` points the D-Bus services at that `kes`, needs no sudo and leaves the menu entry and PATH alone; `--undo` puts everything back and leaves the package's portal definition.
+- **`kes-setup` on KDE Plasma** (Kubuntu), where Dolphin opens folders and no app opens `trash:///`:
+  - `--default` takes both, and makes Kestrel the file chooser with KDE's after it (not GNOME's), keeping the rest of KDE's portals.conf; with Dolphin open it says Dolphin keeps "Show in folder" until it's closed;
+  - `--dock` swaps Dolphin for Kestrel in Plasma's taskbar through plasmashell's scripting (a stand-in `gdbus` answers for plasmashell and keeps the script, which must have no backslash: gdbus would read it as an escape) and remembers it; with a "default file manager" pin it says that already opens Kestrel;
+  - `--undo` puts Dolphin back in the taskbar, gives folders back to Dolphin, and takes Kestrel's entries for `trash:///` out, rather than naming GNOME Files (not installed there);
+  - where xdg-mime runs `qtpaths` on KDE (Ubuntu 26.04's), it finds it, with no "qtpaths: not found".
 - **On GNOME**, `--default` installs and enables the drop focus extension (only enabling the package's copy after the .deb), keeping the user's other extensions; `--uninstall` and `--undo` take it out again.
 - **`kes-setup --bleachbit`** writes BleachBit's cleaner:
   - only the user can change it (also run under umask 000: BleachBit ignores a world-writable cleaner), with no part file left, and it says BleachBit will ask once whether to trust it;
