@@ -77,7 +77,7 @@ body:
     attributes:
       label: Kestrel version
       description: The output of `kes --version` (or ☰ → About).
-      placeholder: "Kestrel Explorer 0.3.2-alpha.28"
+      placeholder: "Kestrel Explorer 0.3.2-alpha.29"
     validations:
       required: true
 

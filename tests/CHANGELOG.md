@@ -4,6 +4,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.29
+
+Changed:
+- `i18n` no longer counts the names of installed apps as untranslated English: Properties' Open With lists the apps
+  that open the file (on GitHub's 24.04 runner Firefox, Chrome, Edge and Vim), named by the apps themselves. Its check
+  failed in CI's `test` job on alpha.28 though nothing was untranslated.
+
 ## 0.3.2-alpha.28
 
 Added:

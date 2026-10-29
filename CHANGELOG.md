@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.28
+## 0.3.2-alpha.29
+
+- Version bump only.
+
+## 0.3.2-alpha.28 (2026-10-29)
 
 - **One Jobs window for all of Kestrel.** A folder opened from another app can start a separate Kestrel, and each
   had a Jobs window of its own, where the others' jobs showed without their steps or logs ("its log is in that

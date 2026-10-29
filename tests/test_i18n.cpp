@@ -272,12 +272,16 @@ int main(int argc, char **argv)
                                      "MOV", "GIF", "AAC", "Opus", "OGG", "Vorbis", "FLAC", "WAV", "ALAC", "dd", "exiftool",
                                      "zst", "lz4", "bz2", "gz"};
     // …and what the computer names: the mounts and their drives' labels (a runner's "cloudimg-rootfs"), the user and
-    // their group (a runner's "docker"), file types (the system translates those), Qt's own buttons
+    // their group (a runner's "docker"), file types and the apps that open them (Properties' Open With; the system
+    // translates those), Qt's own buttons
     const struct passwd *pw = getpwuid(getuid());
     const struct group *gr = getgrgid(getgid());
     QStringList theirs = {pw ? QString::fromLocal8Bit(pw->pw_name) : QString(), gr ? QString::fromLocal8Bit(gr->gr_name) : QString(),
                           QMimeDatabase().mimeTypeForName("text/plain").comment(),
                           QMimeDatabase().mimeTypeForName("inode/directory").comment()};
+    for (const char *type : {"text/plain", "inode/directory"})
+        for (const AppRef &app : apps_for_type(type))
+            theirs << app_name(app);
     for (const drives::Mount &mt : drives::mounts())
         theirs << basename(mt.root) << mt.fstype << drives::device_label(mt.source) << mt.source.section('/', 0, 0)
                << QStorageInfo(mt.root).displayName();
