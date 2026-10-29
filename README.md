@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.33.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.2-alpha.34.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 

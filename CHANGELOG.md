@@ -2,7 +2,18 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.33
+## 0.3.2-alpha.34
+
+- **Benchmark on Kubuntu:** `bench/kubuntu.sh` compares Kestrel with Dolphin on Kubuntu 26.04, in a Docker container,
+  as the Nemo comparison was made on Linux Mint. Its report is a "Kestrel vs Dolphin on Kubuntu" section for the
+  performance page.
+- **Benchmark: four tests of the app in use.** Besides launching the app on a folder, the benchmark now times what
+  happens in a window that's already open: going to a folder through the location bar, jumping to the end of the
+  600-image folder (until its last thumbnails are there, with the CPU time every process used for them, helpers
+  included), 5,000 files arriving in the folder it shows, and how long the window takes to answer Back and Forward
+  while it's pasting 20,000 files.
+
+## 0.3.2-alpha.33 (2026-10-29)
 
 - **KDE Plasma (Kubuntu 26.04).** Kestrel now follows Plasma where it followed only GNOME and Cinnamon:
   - **Set as Wallpaper** sets Plasma's wallpaper; it did nothing there.

@@ -35,3 +35,5 @@ Thumbs.db
 # Benchmark output (bench/README.md)
 bench/results.json
 bench/results.md
+bench/results-kubuntu.json
+bench/results-kubuntu.md

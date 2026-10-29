@@ -18,12 +18,14 @@ import hashlib
 import json
 import os
 import re
+import resource
 import shutil
 import signal
 import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 
@@ -32,6 +34,9 @@ ROOT = os.path.realpath(os.path.dirname(HERE))
 DATA = os.environ.get("KESTREL_BENCH_DATA", "/tmp/kestrel-bench-data")
 CMAKE = "/usr/bin/cmake" if os.access("/usr/bin/cmake", os.X_OK) else "cmake"
 BUILD = os.environ.get("KESTREL_BUILD_DIR", "build")  # build folder name (another machine sharing these folders)
+# set by a wrapper that runs the benchmark in a container of another desktop's distribution ("Kubuntu": bench/kubuntu.sh),
+# whose report gets sections of its own ("Kestrel vs Dolphin on Kubuntu")
+PLATFORM = os.environ.get("KESTREL_BENCH_PLATFORM", "")
 # The file managers Kestrel is compared with; the ones installed are measured (GNOME Files on Ubuntu, Nemo on Linux
 # Mint, Dolphin, Thunar, Krusader and PCManFM where they're installed). File operations go through each one's D-Bus
 # file-operations service, as other apps use it: "service" starts it, "ops" is (bus name, object path, {operation:
@@ -42,7 +47,8 @@ BUILD = os.environ.get("KESTREL_BUILD_DIR", "build")  # build folder name (anoth
 # "thumbnails": False skips the FOLDER_TESTS: Nemo makes no thumbnails in the sandbox, PCManFM doesn't save its own to
 # the shared cache, and Krusader shows none by default, so each run would only wait out the 2-minute timeout; the
 # file-list test (LIST_TEST) times how they open a folder instead. "skip" names folder tests skipped for that app
-# alone, with the reason (Dolphin's default settings leave video previews off).
+# alone, with the reason (Dolphin's default settings leave video previews off). "no_responsive" says why the
+# responsiveness test (RESPONSIVE) can't be run on that app.
 NO_BLINK = {f".config/gtk-{v}/settings.ini": "[Settings]\ngtk-cursor-blink=false\n" for v in ("3.0", "4.0")}   # the
 # file-list test watches the window's pixels: a blinking text cursor would keep changing them
 OTHERS = {
@@ -92,6 +98,10 @@ OTHERS = {
                  "skip": {}, "heading": "## Performance: Kestrel vs Krusader", "intro": "KDE's two-panel file manager",
                  "gtk": False, "helpers": "separate KIO worker processes", "search": "", "whole_folder": False,
                  "memory": "Krusader shows no thumbnails, so its figures include none; Kestrel's include those it made.",
+                 # the responsiveness test pastes in one folder and goes Back and Forward: Krusader pastes into the other
+                 # panel, and its window title doesn't follow the folder
+                 "no_responsive": "pastes into its other panel rather than the folder it shows, so it can't be driven "
+                                  "like the others",
                  "thumbnails": False, "no_thumbs_why": "shows no thumbnails with its default settings (previews are off)"},
     "pcmanfm": {"label": "PCManFM", "cmd": ["pcmanfm"], "service": None, "ops": None, "ui": "pcmanfm", "settings": [],
                 "files": {".config/libfm/libfm.conf": "[config]\nconfirm_del=0\nconfirm_trash=0\n", **NO_BLINK},
@@ -104,10 +114,19 @@ OTHERS = {
 }
 APPS = ("kestrel",) + tuple(OTHERS)
 # measured the same way for every app
-COMMON = ("startup", "open_gallery", "videos", "pdfs", "open_list", "copy", "move_xdev", "trash", "windows", "idle")
+COMMON = ("startup", "open_gallery", "videos", "pdfs", "open_list", "navigate", "scroll_end", "live", "responsive", "copy",
+          "move_xdev", "trash", "windows", "idle")
 # Kestrel only: its "open folders as tabs" setting, and features the other file managers have no equivalent of
 KESTREL_ONLY = ("windows_tabs", "bulk_thumbs", "mosaics", "search", "metadata")
 FOLDER_TESTS = ("open_gallery", "videos", "pdfs")   # "open a folder": timed by the thumbnails it makes
+SCROLL_TEST = "scroll_end"   # the 600-image folder opened, then End: timed until its last LAST files have thumbnails
+THUMB_TESTS = FOLDER_TESTS + (SCROLL_TEST,)   # skipped for an app whose thumbnails can't be timed
+LAST = 6            # ...the last LAST by name: few enough to be on screen at the end in every app's window
+NAV_TEST = "navigate"   # a running window taken to another folder (location bar): timed until its window stops changing
+LIVE_TEST = "live"      # LIVE_FILES files created at once in the folder a window shows: timed until it stops changing
+LIVE_FILES = 5000
+RESPONSIVE = "responsive"   # Back and Forward pressed while a paste runs in the window: how long until it answers
+PROBE_TIMEOUT = 30  # ...a key it hasn't answered in this long counts as this long
 LIST_TEST = "open_list"   # "open a folder of 10,000 files": timed until its window has stopped changing (the list shown)
 LIST_QUIET = 2.0          # ...for this long
 FIRST = 12          # "open a folder": time until the first FIRST files (by name) have thumbnails
@@ -134,9 +153,16 @@ def app_command(app, folder=None):
     return cmd + ([folder] if folder else [])
 
 
+def no_crash_report():
+    """In an app's process before it starts: a crash isn't handed to the desktop's crash reporter (apport), which would
+    pop up on the user's screen (PCManFM sometimes crashes as it's closed). The kernel skips a piped core_pattern for
+    a process whose core size limit is 1, its mark for the crash handler's own processes."""
+    resource.setrlimit(resource.RLIMIT_CORE, (1, 1))
+
+
 def launch(app, folder):
     return subprocess.Popen(app_command(app, folder), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            start_new_session=True)
+                            start_new_session=True, preexec_fn=no_crash_report)
 
 
 def stop(p):
@@ -300,6 +326,206 @@ def measure_list(app, folder):
         stop(p)
 
 
+def press(win, *keys, focus=True):
+    """Keys pressed in a window (XTEST), as a user would."""
+    if focus:
+        subprocess.run(["xdotool", "windowfocus", "--sync", win], capture_output=True)
+    subprocess.run(["xdotool", "key", "--clearmodifiers", *keys], check=True, capture_output=True)
+
+
+def type_location(win, folder):
+    """A folder typed into the window's location bar (Ctrl+L), without the Return that goes there."""
+    press(win, "ctrl+l")
+    subprocess.run(["xdotool", "type", "--delay", "2", "--", folder], check=True, capture_output=True)
+
+
+def window_title(win):
+    return subprocess.run(["xdotool", "getwindowname", win], capture_output=True, text=True).stdout.strip()
+
+
+def run_cpu():
+    """CPU time (ticks) of every process in this run but the benchmark's own: the app, the helpers it runs (thumbnailers,
+    KIO workers) and the session's services, with the processes each has waited for (a thumbnailer that has
+    finished). Only an app's own processes would leave out helpers that make thumbnails for it."""
+    marker = f"HOME={home()}".encode() + b"\0"
+    total = 0
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                if marker not in f.read():
+                    continue
+            with open(f"/proc/{pid}/stat") as f:
+                fields = f.read().rsplit(")", 1)[1].split()
+            total += sum(int(v) for v in fields[11:15])   # utime, stime, cutime, cstime
+        except (OSError, IndexError, ValueError):
+            pass
+    return total
+
+
+def ticks_ms(ticks):
+    return ticks * 1000 / os.sysconf("SC_CLK_TCK")
+
+
+def measure_navigate(app):
+    """A window already open (on the small folder) taken to the folder of 10,000 files, then to a small one (100 files),
+    through its location bar, as a user goes from folder to folder. Each is timed from the Return key until the window
+    has stopped changing, as for the folder of 10,000 files (settle); typing the path isn't counted."""
+    p = launch(app, f"{DATA}/small")
+    try:
+        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
+        win = window_ids(p.pid)[0]
+        settle(win, time.monotonic(), f"{app} on the small folder", 60, quiet=1.0)
+        r = {"rss_mb": None}
+        for key, folder in (("s", f"{DATA}/flat"), ("small_s", f"{DATA}/windows/folder0")):
+            type_location(win, folder)
+            time.sleep(0.5)   # the location bar's completion done
+            t0 = time.monotonic()
+            press(win, "Return", focus=False)
+            try:
+                r[key] = settle(win, t0, f"{app} going to {folder}") - t0
+            except RuntimeError:   # a text cursor still blinking in its location bar: noted instead of a time
+                r[key], r["kept_changing"] = None, True
+        r["rss_mb"] = peak_mb(p.pid)
+        return r
+    finally:
+        stop(p)
+
+
+def measure_scroll(app):
+    """Open the 600-image folder and, once its first FIRST thumbnails are there, press End: timed from that key until
+    the last LAST files have thumbnails (an app that makes them only for what's on screen starts on those then). Also
+    the CPU time of the whole run, launch to the last thumbnail, the app and its helpers (run_cpu), so an app that
+    makes thumbnails with several threads or processes can't look cheaper than it is."""
+    folder = f"{DATA}/gallery"
+    names = sorted(os.listdir(folder))
+    key = lambda n: hashlib.md5(("file://" + urllib.parse.quote(f"{folder}/{n}")).encode()).hexdigest() + ".png"  # noqa: E731
+    first, last = {key(n) for n in names[:FIRST]}, {key(n) for n in names[-LAST:]}
+    before = run_cpu()
+    p = launch(app, folder)
+    try:
+        try:
+            wait_for(lambda: first <= thumb_files() or p.poll() is not None, 120, "thumbnails never appeared")
+        except RuntimeError:
+            return {"s": None, "no_thumbs": True}
+        win = window_ids(p.pid)[0]
+        subprocess.run(["xdotool", "windowfocus", "--sync", win], capture_output=True)   # before the clock starts
+        t0 = time.monotonic()
+        press(win, "End", focus=False)
+        try:
+            wait_for(lambda: last <= thumb_files() or p.poll() is not None, 120, "no thumbnails at the end")
+        except RuntimeError:
+            return {"s": None, "no_thumbs": True}
+        s = time.monotonic() - t0
+        count, quiet = len(thumb_files()), time.monotonic()
+        while time.monotonic() - quiet < 2.0 and time.monotonic() - t0 < 180:   # until no more appear
+            time.sleep(0.05)
+            n = len(thumb_files())
+            if n != count:
+                count, quiet = n, time.monotonic()
+        return {"s": s, "cpu_ms": ticks_ms(run_cpu() - before), "n": count, "rss_mb": peak_mb(p.pid)}
+    finally:
+        stop(p)
+
+
+def measure_live(app):
+    """LIVE_FILES files created at once in the (empty) folder a window shows, as a download, an unpacked archive or a
+    build would: timed from the first one until the window has stopped changing (settle: all shown, with their count
+    where the app shows one), and the CPU time the run used meanwhile (run_cpu)."""
+    folder = os.path.join(home(), "incoming")
+    os.makedirs(folder)
+    p = launch(app, folder)
+    try:
+        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
+        win = window_ids(p.pid)[0]
+        settle(win, time.monotonic(), f"{app} on an empty folder", 60, quiet=1.0)
+        before = run_cpu()
+        t0 = time.monotonic()
+        data = b"x" * 1024
+        for i in range(LIVE_FILES):
+            with open(os.path.join(folder, f"file{i:05d}.txt"), "wb") as f:
+                f.write(data)
+        made = time.monotonic() - t0
+        try:
+            changed = settle(win, t0, f"{app} with files arriving")
+        except RuntimeError:
+            return {"s": None, "kept_changing": True}
+        return {"s": changed - t0, "cpu_ms": ticks_ms(run_cpu() - before), "made_s": made, "rss_mb": peak_mb(p.pid)}
+    finally:
+        stop(p)
+
+
+def measure_responsive(app):
+    """Whether the window keeps answering while it copies. In the app's window: Select All and Copy in a folder holding
+    the 20,000 files + 250 MB (hard links), into another folder through the location bar, then Paste, as a user
+    would. While the paste runs, Back and Forward (Alt+Left, Alt+Right) are pressed in turn, each timed until the
+    window's title shows the folder it went to. The longest and the median wait, against the median before the paste
+    (what a key costs with nothing running: xdotool, the title read)."""
+    src = stage(f"{DATA}/copysrc", os.path.join(home(), "from"))
+    want = tree_size(src)
+    to = os.path.join(home(), "to")
+    os.makedirs(to)
+    dst = os.path.join(to, os.path.basename(src))
+    p = launch(app, os.path.dirname(src))
+    try:
+        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
+        win = window_ids(p.pid)[0]
+        time.sleep(UI_SETTLE)
+        title_from = window_title(win)
+        press(win, "ctrl+a")
+        press(win, "ctrl+c")
+        type_location(win, to)
+        press(win, "Return")
+        time.sleep(UI_SETTLE)
+        title_to = window_title(win)
+        if title_from == title_to:   # its title doesn't follow the folder: nothing to watch
+            return {"s": None, "same_title": True}
+        here = [True]   # in "to" (Forward last), or in "from" (Back last)
+
+        def probe():
+            key, want_title = ("alt+Left", title_from) if here[0] else ("alt+Right", title_to)
+            # back to the folder window first (an X round trip, not the app): a progress window that opened for the
+            # paste may have taken the focus (PCManFM's does), and the key would go to it
+            subprocess.run(["xdotool", "windowfocus", "--sync", win], capture_output=True)
+            t0 = time.monotonic()
+            press(win, key, focus=False)
+            while window_title(win) != want_title:
+                if time.monotonic() - t0 > PROBE_TIMEOUT:
+                    break
+                time.sleep(0.002)
+            here[0] = not here[0]
+            return time.monotonic() - t0
+
+        idle = [probe() for _ in range(6)]
+        done = []
+
+        def watch():   # tree_size takes a while on 20,000 files: off the probing loop
+            while not done:
+                if os.path.isdir(dst) and count_files(dst) == want[0] and tree_size(dst) == want:
+                    done.append(time.monotonic())
+                    return
+                time.sleep(0.1)
+        t0 = time.monotonic()
+        press(win, "ctrl+v", focus=False)
+        watcher = threading.Thread(target=watch, daemon=True)
+        watcher.start()
+        waits = []
+        while not done:
+            if time.monotonic() - t0 > 120:
+                done.append(None)
+                raise Stuck(f"{app}: the paste didn't finish within 120 s")
+            waits.append(probe())
+            time.sleep(0.05)
+        return {"s": max(waits) if waits else None, "median_s": statistics.median(waits) if waits else None,
+                "idle_s": statistics.median(idle), "probes": len(waits), "copy_s": done[0] - t0,
+                "rss_mb": peak_mb(p.pid)}
+    finally:
+        stop(p)
+        shutil.rmtree(os.path.join(home(), "from"), ignore_errors=True)
+        shutil.rmtree(to, ignore_errors=True)
+
+
 def tree_size(path):
     files = size = 0
     for root, _dirs, names in os.walk(path):
@@ -337,7 +563,7 @@ class FileOps:
             subprocess.run(["gsettings", "set", schema, key, value], capture_output=True)
         self.bus_name, self.path, ops = conf["ops"]
         self.p = subprocess.Popen(conf["service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  start_new_session=True)
+                                  start_new_session=True, preexec_fn=no_crash_report)
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         t0 = time.monotonic()
         while True:
@@ -441,7 +667,7 @@ class UiOps:
     def __init__(self, app, args):
         self.app = app
         self.p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  start_new_session=True)
+                                  start_new_session=True, preexec_fn=no_crash_report)
         wait_for(lambda: window_ids(self.p.pid) or self.p.poll() is not None, 60, f"{app}: no window")
         self.win = window_ids(self.p.pid)[0]
         time.sleep(UI_SETTLE)
@@ -733,7 +959,15 @@ def measure(app, test):
         return measure_folder(app, f"{DATA}/{'gallery' if test == 'open_gallery' else test}")
     if test == LIST_TEST:
         return measure_list(app, f"{DATA}/flat")
+    if test == NAV_TEST:
+        return measure_navigate(app)
+    if test == SCROLL_TEST:
+        return measure_scroll(app)
+    if test == LIVE_TEST:
+        return measure_live(app)
     try:
+        if test == RESPONSIVE:
+            return measure_responsive(app)
         if test == "copy" and app in OTHERS:
             return measure_copy_other(app)
         if test == "move_xdev":
@@ -841,6 +1075,10 @@ TIMED = [("Startup (launch to window shown)", "startup", "s"),
          (f"Open a folder of 40 videos (launch to the first {FIRST} thumbnails)", "videos", "s"),
          (f"Open a folder of 40 PDFs (launch to the first {FIRST} thumbnails)", "pdfs", "s"),
          ("Open a folder of 10,000 files (launch to the full list shown)", LIST_TEST, "s"),
+         ("Go to the folder of 10,000 files in an open window (Enter to the list shown)", NAV_TEST, "s"),
+         ("Go to a folder of 100 files in an open window (Enter to the list shown)", NAV_TEST, "small_s"),
+         (f"Jump to the end of the 600-image folder (End to its last {LAST} thumbnails)", SCROLL_TEST, "s"),
+         (f"{LIVE_FILES:,} files arriving in an open folder (until all shown)", LIVE_TEST, "s"),
          ("Copy 20,000 small files + 5 × 50 MB", "copy", "s"),
          ("Move the same to another drive", "move_xdev", "s"),
          ("Move 10,000 files to the trash (all selected in one folder)", "trash", "s"),
@@ -852,7 +1090,7 @@ def tables(res, other):
     `other` couldn't be timed on."""
     apps = ("kestrel", other)
     if not OTHERS[other]["thumbnails"]:   # also drops results saved before its folder tests were skipped
-        res = {k: v for k, v in res.items() if not (k[0] == other and k[1] in FOLDER_TESTS)}
+        res = {k: v for k, v in res.items() if not (k[0] == other and k[1] in THUMB_TESTS)}
     res = {k: v for k, v in res.items() if not (k[0] == other and k[1] in OTHERS[other]["skip"])}
 
     def med(app, test, key="s"):
@@ -879,6 +1117,20 @@ def tables(res, other):
         v = med(app, "idle", "cpu_ms")
         return "—" if v is None else f"{round(v)} ms ({v / (IDLE_SECONDS * 10):.2f}% of a core)"
 
+    def cpu(app, test):
+        v = med(app, test, "cpu_ms")
+        return "—" if v is None else f"{round(v)} ms"
+
+    def answer(app):
+        worst, typical, idle_ = (med(app, RESPONSIVE, k) for k in ("s", "median_s", "idle_s"))
+        return "—" if worst is None else f"{secs(worst)} / {secs(typical)} (idle {secs(idle_)})"
+
+    t1.append(f"| Window answering while it copies (Back/Forward to the new title: longest / median) | "
+              f"{' | '.join(answer(a) for a in apps)} |")
+    t1.append(f"| CPU time to open the 600-image folder and jump to its end (app and helpers) | "
+              f"{' | '.join(cpu(a, SCROLL_TEST) for a in apps)} |")
+    t1.append(f"| CPU time for {LIVE_FILES:,} files arriving in an open folder (app and helpers) | "
+              f"{' | '.join(cpu(a, LIVE_TEST) for a in apps)} |")
     t1.append(f"| Peak memory (startup / 600-image folder open) | {' | '.join(mem(a) for a in apps)} |")
     t1.append(f"| Memory with {WINDOWS} folders opened from other apps | {' | '.join(windows(a) for a in apps)} |")
     t1.append(f"| CPU time used in {IDLE_SECONDS} s with a folder open, idle | {' | '.join(idle(a) for a in apps)} |")
@@ -900,11 +1152,15 @@ def tables(res, other):
 
     vs = []
     for label, test, key in TIMED:
-        short = {"startup": "startup", "open_gallery": "first thumbnails in a 600-image folder",
-                 "videos": "first video thumbnails", "pdfs": "first PDF thumbnails",
-                 LIST_TEST: "listing a folder of 10,000 files", "copy": "copying",
-                 "move_xdev": "moving to another drive"}.get(test, "moving to the trash" if key == "s" else
-                                                              "emptying the trash")
+        short = {("startup", "s"): "startup", ("open_gallery", "s"): "first thumbnails in a 600-image folder",
+                 ("videos", "s"): "first video thumbnails", ("pdfs", "s"): "first PDF thumbnails",
+                 (LIST_TEST, "s"): "listing a folder of 10,000 files",
+                 (NAV_TEST, "s"): "going to the folder of 10,000 files in an open window",
+                 (NAV_TEST, "small_s"): "going to a small folder in an open window",
+                 (SCROLL_TEST, "s"): "thumbnails at the end of the 600-image folder",
+                 (LIVE_TEST, "s"): "showing files as they arrive", ("copy", "s"): "copying",
+                 ("move_xdev", "s"): "moving to another drive", ("trash", "s"): "moving to the trash",
+                 ("trash", "empty_s"): "emptying the trash"}[(test, key)]
         if med(other, test, key) is not None:
             vs.append(f"- {short}: {ratio(med(other, test, key), med('kestrel', test, key))};")
     if vs:
@@ -929,7 +1185,16 @@ def tables(res, other):
                "kestrel_n": round(kes_n) if kes_n else None,
                "kestrel_all": secs(med("kestrel", "bulk_thumbs")),
                "procs": round(med("kestrel", "windows", "procs") or 0),
-               "untimed": untimed, "stuck": stuck}
+               "untimed": untimed, "stuck": stuck,
+               # the tests that couldn't give a time for this app, and why
+               "kept_changing": [what for test, what in ((NAV_TEST, "going to a folder in an open window"),
+                                                         (LIVE_TEST, "files arriving in an open folder"))
+                                 if any(r.get("kept_changing") for r in runs_of(test))],
+               "same_title": any(r.get("same_title") for r in runs_of(RESPONSIVE)),
+               # the last thumbnails already there when End was pressed (Kestrel makes the first and last screenful of
+               # a folder when it opens it)
+               "ready_at_end": [OTHERS[a]["label"] if a in OTHERS else "Kestrel" for a in apps
+                                if med(a, SCROLL_TEST) is not None and med(a, SCROLL_TEST) < 0.05]}
     # idle CPU far above Kestrel's: worth a word of caution (Nemo kept a fifth of a core busy in the Mint VM)
     busy, calm = med(other, "idle", "cpu_ms"), med("kestrel", "idle", "cpu_ms")
     summary["busy_idle"] = busy / (IDLE_SECONDS * 10) if busy and busy > 1000 and busy > 10 * (calm or 0) else None
@@ -963,12 +1228,20 @@ def machine(other):
             distro = next((ln.split("=", 1)[1].strip().strip('"') for ln in f if ln.startswith("PRETTY_NAME=")), "")
     except OSError:
         pass
+    if PLATFORM:   # the container is Ubuntu's image with the desktop's packages added
+        distro = (f"{distro.replace('Ubuntu', PLATFORM, 1)}, in a Docker container (Ubuntu's image with the {PLATFORM} "
+                  f"packages the apps use)")
     return cpu, os.cpu_count(), version or OTHERS[other]["label"], distro
 
 
 def section(t1, t2, summary, runs, other):
     cpu, threads, version, distro = machine(other)
     label = OTHERS[other]["label"]
+    heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if PLATFORM else "")
+    intro = OTHERS[other]["intro"] + (f", which it replaces on {PLATFORM}" if PLATFORM else "")
+    run_with = f"`bench/{PLATFORM.lower()}.sh`" if PLATFORM else "`bench/run.sh`"
+    kde = (" The desktop was set to KDE's, so both apps used Plasma's Qt integration and the Breeze style, as on a "
+           "Plasma desktop." if os.environ.get("XDG_CURRENT_DESKTOP") == "KDE" else "")
     bench_link = "https://github.com/RegulusArms/kes-c/tree/main/bench"
     owns = label + ("'" if label.endswith("s") else "'s")   # GNOME Files', Nemo's
     ui = OTHERS[other]["ops"] is None   # Dolphin, Krusader, PCManFM: no file-operations service, keys in its window
@@ -1001,6 +1274,22 @@ def section(t1, t2, summary, runs, other):
     if "empty" in OTHERS[other].get("confirm", ()):
         untimed += (f"\n- **Empty the trash:** {label} asks first, even when asked through its D-Bus service; the "
                     f"question was answered at once (Return), and the time counted from that answer, as for Kestrel's.")
+    if OTHERS[other].get("no_responsive"):
+        untimed += (f"\n- **Window answering while it copies:** not run for {label}, which "
+                    f"{OTHERS[other]['no_responsive']}; that row shows —.")
+    if summary["same_title"]:
+        untimed += (f"\n- **Window answering while it copies:** {owns} window title doesn't change with its folder, so "
+                    f"there was nothing to watch, and that row shows —.")
+    if summary["kept_changing"]:
+        untimed += (f"\n- **Kept changing:** for {' and '.join(summary['kept_changing'])}, {owns} window didn't stop "
+                    f"changing within 2 minutes (a text cursor blinking in it), so that row shows —.")
+    if summary["ready_at_end"]:
+        untimed += (f"\n- **Jumping to the end:** {' and '.join(summary['ready_at_end'])} already had the last "
+                    f"thumbnails when End was pressed (made when the folder opened, with the first screenful), so the "
+                    f"time is only that of seeing them.")
+    if OTHERS[other]["whole_folder"] and OTHERS[other]["thumbnails"]:
+        untimed += (f"\n- **Jumping to the end:** {label} makes thumbnails for the whole folder in the background, so "
+                    f"some may be ready before End is pressed.")
     if OTHERS[other].get("tabs"):
         untimed += (f"\n- **Several folders:** {label} opens folders from other apps as tabs in its window (its "
                     f"default), so its figure is for one window with {WINDOWS} tabs, like Kestrel's \"as tabs\" one.")
@@ -1040,13 +1329,13 @@ def section(t1, t2, summary, runs, other):
     renderers = "Qt's raster engine, GTK's cairo renderer" if OTHERS[other]["gtk"] else "Qt's raster engine, both being Qt apps"
     features = OTHERS[other].get("features") or (f"{label} has no equivalent (\"Generate Previews\", folder mosaics, "
                                                  f"metadata panels) or can't be timed from outside (search)")
-    return f"""{OTHERS[other]["heading"]}
+    return f"""{heading}
 
-Kestrel Explorer is compared here with {version}, {OTHERS[other]["intro"]}.
+Kestrel Explorer is compared here with {version}, {intro}.
 
 **Test machine:** {cpu} ({threads} threads), {distro}. The test data is on a RAM disk: 600 JPEGs at 1600×1200 with camera EXIF, 40 videos, 40 PDFs, 150 folders of 4 images, a tree of 50,000 files, 20,000 small files plus 250 MB, a folder of 10,000 files, and 200 PNGs with Stable Diffusion prompts.
 
-**How it was measured:** each test ran {runs} times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. Both apps ran on a headless X server with software rendering ({renderers}), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start{OTHERS[other].get("dbus_text", "")}, so no file indexer ran. The benchmark is in [bench/]({bench_link}) and is run with `bench/run.sh`.
+**How it was measured:** each test ran {runs} times, and the tables show medians. Every run started with a fresh home folder, so the thumbnail cache was empty. Both apps ran on a headless X server with software rendering ({renderers}), on a private session bus where only the desktop's settings and virtual file system (gvfs) services could start{OTHERS[other].get("dbus_text", "")}, so no file indexer ran.{kde} The benchmark is in [bench/]({bench_link}) and is run with {run_with}.
 
 ### Compared with {label}
 
@@ -1054,6 +1343,10 @@ Both apps are measured in the same way:
 - **Startup:** timed until the window is on screen.
 - **Opening a folder:** timed from launch until the first {FIRST} files' thumbnails are in the shared thumbnail cache.
 - **Opening a folder of 10,000 files:** timed from launch until the window has stopped changing: the list drawn, with its count of items where the app shows one. The window is captured as often as it can be (every few ms), and the time is that of its last change, once nothing has changed for {LIST_QUIET:.0f} s.
+- **Going to a folder in an open window:** the folder's path typed into the location bar of a window that's already open, timed from Enter until the window has stopped changing, as above. Most folders are opened this way rather than by starting the app.
+- **Jumping to the end of the 600-image folder:** once the first {FIRST} thumbnails are there, End is pressed, timed until the last {LAST} files have thumbnails. With it, the CPU time used from launch to the last thumbnail, by the app and every helper it ran (thumbnailers, KIO workers, services), so an app that spreads the work over threads or processes can't look cheaper than it is.
+- **Files arriving in an open folder:** {LIVE_FILES:,} small files created at once in the folder a window shows, as a download, an unpacked archive or a build would, timed until the window has stopped changing, with the CPU time used meanwhile.
+- **Window answering while it copies:** the 20,000 files + 250 MB copied and pasted in the app's window, and while the paste runs, Back and Forward pressed in turn, each timed until the window's title shows the folder it went to. The longest and the median wait, and in brackets the median with nothing running (what pressing a key and reading the title cost by themselves).
 - **File operations:** Kestrel runs them with its own copy and trash code, the same code its menus use. {ops_how}
 - **"Peak memory":** the app's highest memory use.
 - **Several folders opened from other apps:** the {WINDOWS} folders are opened one after another, as from a browser's "Show in folder". The figure is the private memory of everything the app then runs: what closing it would give back, not counting the libraries it shares with other apps. Kestrel normally starts a new process for each window ({summary['procs']} processes here, counting the tower that keeps them in sync); with "open folders as tabs" on, they become tabs in one window.
@@ -1083,7 +1376,8 @@ These are measured inside the app, because {features}.
 
 def write_results(sections):
     """bench/results.md: a Performance section (docs/performance.md) for each app compared with ("Kestrel vs GNOME Files", and/or
-    "Kestrel vs Nemo" from a run on Linux Mint), to paste into docs/performance.md."""
+    "Kestrel vs Nemo" from a run on Linux Mint, "Kestrel vs Dolphin on Kubuntu" from bench/kubuntu.sh), to paste into
+    docs/performance.md."""
     path = os.path.join(HERE, "results.md")
     with open(path, "w") as f:
         f.write("\n".join(sections))
@@ -1175,8 +1469,9 @@ def main():
             for app in apps:
                 if app in OTHERS and test in KESTREL_ONLY:
                     continue
-                if app in OTHERS and test in FOLDER_TESTS and (not OTHERS[app]["thumbnails"]
-                                                               or test in OTHERS[app]["skip"]):
+                if app in OTHERS and ((test in THUMB_TESTS and (not OTHERS[app]["thumbnails"]
+                                                                 or test in OTHERS[app]["skip"]))
+                                      or (test == RESPONSIVE and OTHERS[app].get("no_responsive"))):
                     res.pop((app, test), None)   # --only keeps saved results: drop any from before
                     continue
                 if test == "videos" and not os.path.isdir(f"{DATA}/videos"):
@@ -1192,7 +1487,10 @@ def main():
                     elif r.get("stuck_empty"):
                         detail += ", emptying didn't finish"
                     took = (f"{r['s']:.3f} s" if r["s"] is not None else "didn't finish" if r.get("stuck")
-                            else "no thumbnails" if r.get("no_thumbs") else "not offered")
+                            else "no thumbnails" if r.get("no_thumbs") else "kept changing" if r.get("kept_changing")
+                            else "title doesn't follow the folder" if r.get("same_title") else "not offered")
+                    if r.get("median_s") is not None:
+                        took += f" longest, {r['median_s']:.3f} s median, {r['idle_s']:.3f} s idle"
                     print(f"  {test:13} {app:9} run {i + 1}/{n}: {took}{detail}", flush=True)
                     if max(r.get("s") or 0, r.get("empty_s") or 0) > SLOW and i + 1 < n:
                         print(f"  {test:13} {app:9} over {SLOW // 60} minutes: measured once", flush=True)
