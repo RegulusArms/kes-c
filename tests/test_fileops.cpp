@@ -1157,12 +1157,14 @@ int main(int argc, char **argv)
             QFile rnd("/dev/urandom"), f(join(base, "noise.bin"));
             rnd.open(QIODevice::ReadOnly);
             f.open(QIODevice::WriteOnly);
-            f.write(rnd.read(48 << 20));   // doesn't compress: long enough to step in
+            f.write(rnd.read(4 << 20));
         }
         proc::run({"gzip", "-1", join(base, "noise.bin")});
-        // as with the copies above: "another program" saves noise.bin once the hidden part has appeared beside it
+        // "another program" saves noise.bin once the hidden part has appeared beside it. The job starts paused, so it
+        // waits there (before its first read) however fast it would be: racing it failed under the sanitizers' timing
         bool stepped = false;
         Task task("test", [](Task *) { return QVariant(); });
+        task.set_paused(true);
         QString said;
         std::atomic<bool> done{false};
         std::thread extracting([&]() {
@@ -1181,6 +1183,7 @@ int main(int argc, char **argv)
                 }
             QThread::usleep(200);
         }
+        task.set_paused(false);
         extracting.join();
         check(stepped && said.contains("appeared") && text_of(join(dest, "noise.bin")) == "theirs" &&
                   listdir(dest) == QStringList{"noise.bin"},

@@ -4,6 +4,17 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.2-alpha.32
+
+Changed:
+- `fileops`: "decompressing a single file: one another program saves under its name meanwhile is kept" no longer races
+  the decompression: the job starts paused, so it waits once its hidden part file is there until the test has saved
+  the other program's file, then resumes. It failed in CI's `sanitizers` job on alpha.31 when the decompression
+  finished before the test saw the part file (nothing wrong in Kestrel). Its file is 4 MB instead of 48 MB, which
+  only made that race less likely.
+- CI's 24.04 jobs are named after their release like the 26.04 ones: `test` is `test-noble`, `sanitizers` is
+  `sanitizers-noble` (`deb` needs `test-noble`).
+
 ## 0.3.2-alpha.31
 
 Added:

@@ -2,7 +2,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.31
+## 0.3.2-alpha.32
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha32).
+
+## 0.3.2-alpha.31 (2026-10-29)
 
 - **Hide places from the sidebar.** Right-click Recent, Starred, Trash or any other place in the sidebar →
   **Hide from Sidebar**, or untick it under Preferences → Sidebar → **Places shown**, where it can be ticked back.
