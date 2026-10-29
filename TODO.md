@@ -47,6 +47,17 @@ into.
   - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
     updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
 
+- [ ] **Double-clicking an encrypted archive whose password is in the keyring opens the Extract dialog.**
+  Right-click → Extract Here on the same archive (a RAR in the case seen) just extracts it, finding the password in
+  the keyring without asking, as expected; double-clicking it opens the Extract… dialog (with its Password field)
+  instead.
+  - Why: activating any archive calls `archive_ui::extract_dialog` (src/opening.cpp), which probes the archive and
+    always shows `ExtractDialog`; Extract Here calls `extract_here` → `extract_all` with `here_options()`, whose
+    password search tries the keyring before asking (src/archive_ui.cpp).
+  - To decide: should double-click do what Extract Here does (for every archive, or only an encrypted one whose
+    password is already saved), or keep the dialog but skip it when the keyring has the password? Update
+    docs/context-menus.md / the docs if what double-click does changes.
+
 ## New features
 
 ### Jobs
