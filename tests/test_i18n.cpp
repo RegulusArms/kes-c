@@ -173,6 +173,38 @@ int main(int argc, char **argv)
           "the English translation is loaded at startup and gives a count's text its plural forms (" +
               txn("%Ln file(s)", 1) + ", " + txn("%Ln file(s)", 2) + ")");
 
+    // ---- a desktop language finds its translation as i18n.cpp loads it (QTranslator by locale, from :/i18n): Brazil
+    // and Portugal each get their own Portuguese (Qt tries pt-Latn-BR first, so a plain kestrel_pt would win over
+    // pt_BR), a regional variant falls back to its language, and one with no translation stays English
+    {
+        const QList<QPair<QString, QString>> picks = {
+            {"pt_BR", "kestrel_pt_BR.qm"}, {"pt_PT", "kestrel_pt_PT.qm"}, {"de_AT", "kestrel_de.qm"},
+            {"es_MX", "kestrel_es.qm"},    {"zh_CN", "kestrel_zh_CN.qm"}, {"zh_TW", ""},
+        };
+        QStringList wrong;
+        for (const auto &[locale, file] : picks) {
+            QTranslator t;
+            bool found = t.load(QLocale(locale), "kestrel", "_", ":/i18n");
+            QString got = found ? QFileInfo(t.filePath()).fileName() : QString();
+            if (got != file)
+                wrong << locale + " → " + (got.isEmpty() ? QString("none") : got);
+        }
+        check(wrong.isEmpty(), "each desktop language loads its own translation (pt_BR, pt_PT, de_AT → de, zh_TW → none)" +
+                                   (wrong.isEmpty() ? QString() : ": " + wrong.join(", ")));
+    }
+
+    // ---- a language with other plural rules picks the right form for each count (Russian: 1 файл, 2 файла, 5 файлов,
+    // 11 файлов, 21 файл)
+    {
+        QTranslator ru;
+        QStringList forms;
+        if (ru.load(":/i18n/kestrel_ru.qm"))
+            for (int n : {1, 2, 5, 11, 21})
+                forms << ru.translate("Kestrel", "%Ln file(s)", nullptr, n).replace("%Ln", QString::number(n));
+        check(forms == QStringList{"1 файл", "2 файла", "5 файлов", "11 файлов", "21 файл"},
+              "the Russian translation picks its three plural forms by count (" + forms.join(", ") + ")");
+    }
+
     // ---- the code's texts as they are now (lupdate, through translations/update.sh): every count has English forms
     QString work = home_path("i18n");
     makedirs(work, true);

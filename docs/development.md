@@ -116,7 +116,8 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 
 ## Translations
 
-Kestrel is set up to be translated, though only English ships. Every text the user sees goes through `tx()`, and
+Kestrel ships in English and ten other languages (Chinese (Simplified), French, German, Italian, Japanese, Korean,
+Portuguese (Brazil and Portugal), Russian, Spanish; [translations.md](translations.md)). Every text the user sees goes through `tx()`, and
 `translations/kestrel_<language>.ts` holds a language's translations. Each `.ts` is built into `kes` (as
 `:/i18n/kestrel_<language>.qm`), and at startup Kestrel loads English, then the desktop's language on top when there's a
 file for it. So adding a language is adding its `.ts`, with nothing to change in the code. Numbers, sizes and dates
@@ -150,11 +151,21 @@ follow the system's formats (`LC_NUMERIC`, `LC_TIME`) whatever the language, as 
 **Adding a language:** copy `kestrel_en.ts` to `kestrel_<language>.ts` (`de`, `pt_BR`…), set its `language`
 attribute, run `translations/update.sh` to fill it with every text, and translate them, for example with Qt
 Linguist (`linguist`). Rebuild and start Kestrel with that language (`LANGUAGE=de build/kes`). Qt's own texts
-(standard buttons) come from Qt's translations for that language.
+(standard buttons) come from Qt's translations for that language (`qt6-translations-l10n`, a Recommends).
+Name the file by its language alone (`kestrel_de.ts`, which `de_AT` and `de_CH` also load) unless its variants
+differ: then each gets its own (`kestrel_pt_BR.ts`, `kestrel_pt_PT.ts`, `kestrel_zh_CN.ts`). Never a bare
+`kestrel_pt.ts` beside `kestrel_pt_BR.ts`: Qt tries `pt-Latn-BR` first and shortens it to `pt` before it gets to
+`pt-BR`, so Brazil would get the other one.
+
+**New texts:** `update.sh` adds each new text to every language's file, marked unfinished, and Kestrel shows it in
+English there until it's translated. Reports of wrong translations come in through the issue tracker's "Incorrect
+translation" form (`.github/ISSUE_TEMPLATE/incorrect_translation.yml`).
 
 The tests watch this: `ui` fails on a literal passed to a widget or message without `tx()`, and `i18n` checks that
-every `.ts` builds and keeps each text's `%1` and `%n`, that every count in the code has English forms, and, with the
-pseudo-translation installed, that the main windows and menus show no untranslated text.
+every `.ts` builds and keeps each text's `%1` and `%n`, that every count in the code has English forms, that each
+desktop language finds its file (`pt_BR`, `pt_PT`, `de_AT` → `de`), that Russian picks its three plural forms, and, with
+the pseudo-translation installed, that the main windows and menus show no untranslated text. `tests/run.sh` runs
+every test with `LANGUAGE=en`, so the English texts they check are what they get on any machine.
 
 ## Layout
 
@@ -202,7 +213,7 @@ pseudo-translation installed, that the main windows and menus show no untranslat
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |
 | `src/health.cpp` | Drive health (S.M.A.R.T.) from udisks over D-Bus: the cards' health line, the Drive Health window, the failing-drive notification |
 | `src/i18n.cpp` | Translations: loading them at startup (`tx()`, `txn()` in `i18n.h`), and the system's formats for numbers and dates |
-| `translations/` | Each language's `.ts` file (only English's plural forms ship) and `update.sh`, which refreshes them from the code and makes the pseudo-translation |
+| `translations/` | Each language's `.ts` file (English's holds only its plural forms) and `update.sh`, which refreshes them from the code and makes the pseudo-translation |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |

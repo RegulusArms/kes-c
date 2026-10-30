@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.2-alpha.34")
+set(KES_VERSION "0.3.3-alpha.0")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -131,7 +131,7 @@ if(NOT KES_LIBC_VERSION OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= ${KES_LIBC_VERSION}), libgcc-s1, libstdc++6 (>= ${KES_CXX_VERSION}), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libsecret-1-0, libqt6core6t64 (>= ${KES_QT_VERSION}) | libqt6core6 (>= ${KES_QT_VERSION}), libqt6gui6t64 (>= ${KES_QT_VERSION}) | libqt6gui6 (>= ${KES_QT_VERSION}), libqt6widgets6t64 (>= ${KES_QT_VERSION}) | libqt6widgets6 (>= ${KES_QT_VERSION}), qt6-qpa-plugins")
 # install.sh's RECOMMENDED list
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, qt6-translations-l10n, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
 # kes-setup's OPTIONAL_PACKAGES and the Optional table in docs/dependencies.md
 set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit, rar, pbzip2 | lbzip2, plzip, lz4, ripgrep, libjpeg-turbo-progs, gnupg, rsync, libheif-examples, zfsutils-linux")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)

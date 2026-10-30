@@ -164,25 +164,6 @@ into.
   - Order: build + loading + English .ts + pseudo-translation, then the `ui` check (warning only until the strings
     are done), then mark strings one area at a time, then plurals and locale formats.
 
-- [ ] **Translate Kestrel, the major languages first:** French, German, Italian, Spanish, Portuguese (both Brazilian
-  and European), Russian, Korean, Japanese and Chinese (Simplified). Needs the item above.
-  - **The files:** `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`. Translation itself: Qt Linguist,
-    or a hosted service such as Weblate (free for open source) so others can contribute.
-  - **Portuguese** comes in two versions, pt_BR and pt_PT. Check that the locale picks the right one (`pt_BR` →
-    pt_BR; `pt_PT` and plain `pt` → pt_PT).
-  - **Loading:** pick the translation from `QLocale::system()`, plus Qt's own `qtbase_*.qm` for the standard buttons
-    and dialogs (qt6-translations-l10n, a Recommends). Optionally add a Preferences setting to choose the language
-    (in src/prefs.cpp, applied on restart).
-  - **Russian** has three plural forms (1 файл, 2 файла, 5 файлов), which the `%n` plurals from the item above
-    handle; check a few counts (1, 2, 5, 11, 21) in it.
-  - **Widths:** German, French and Russian run about 30% longer. Check fixed-width buttons, Preferences rows, the status line
-    and column headers. CJK needs a font with the glyphs (the desktop's usually has them).
-  - **Outside kes:** the desktop entry (`Name[fr]=`, `Comment[…]`, `GenericName`), data/kestrel.portal, the GNOME
-    Shell extension's metadata, kes-setup's and the admin helper's messages (these could stay English at first; say
-    so in the docs).
-  - **Tests:** a run under `LANG=de_DE.UTF-8` (and Russian and one CJK locale) that checks the translation loads, plus the
-    `%1`/`%n` check from the item above over the real files.
-
 ### Tests and CI — beta release blocker
 
 *Everything in this section is to be done before the first beta.*
@@ -204,6 +185,7 @@ into.
     Kestrel does.
 
 ## Done
+- [x] **Translate Kestrel, the major languages first** (0.3.3-alpha.0). `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`, every text translated (machine-made, not yet checked by native speakers: docs/translations.md says so and points to the issue tracker's "Incorrect translation" form, `.github/ISSUE_TEMPLATE/incorrect_translation.yml`). Loaded from `QLocale::system()` as before, with Qt's `qtbase_*.qm` (qt6-translations-l10n, now a Recommends). Portuguese: `pt_BR` → pt_BR, `pt_PT` → pt_PT; plain `pt` gets pt_BR (Qt counts it as Brazil), and other regions (pt_AO…) English. The European file can't be a bare `kestrel_pt.ts`: Qt tries `pt-Latn-BR` first and would shorten it to that. `tests/run.sh` runs with `LANGUAGE=en`. Not done: a Preferences setting to choose the language; checking widths in German, French and Russian; the texts outside kes (desktop entry, data/kestrel.portal, the GNOME Shell extension, kes-setup, the admin helper), which stay English. Test: `i18n`.
 - [x] **KDE Plasma (Kubuntu 26.04)** (0.3.2-alpha.33). Confirmed in a Kubuntu VM: installs, Breeze style/colours/
   fonts/icons and a live switch to Breeze Dark (plasma-integration), USB drives, drag and drop (in Kestrel, to the
   desktop, to Firefox), Open Terminal → Konsole, `kes-setup --default` (folders, the file chooser in Firefox) and

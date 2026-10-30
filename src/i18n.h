@@ -1,7 +1,8 @@
 #pragma once
 // Translating Kestrel's texts. Every text the user sees goes through tx() (or txn() for a count), all in one context,
 // "Kestrel"; translations/update.sh collects them into translations/kestrel_<language>.ts (docs/development.md
-// "Translations"). Only English ships: its file holds just the plural forms ("%n file(s)" → "1 file" / "2 files").
+// "Translations"). English's file holds just the plural forms ("%n file(s)" → "1 file" / "2 files"); the other
+// languages' hold every text.
 //
 // - tx("Open"): a text. tx("Open", "verb") when the same English needs two translations (the second is a note for
 //   translators, not shown).

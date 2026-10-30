@@ -1,0 +1,91 @@
+name: Incorrect translation
+description: A text in Kestrel Explorer that's wrong, unclear or untranslated in your language
+labels: ["translation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping with the translations. One issue can list several texts: add a row for each to the table below.
+
+        **The quickest way:** take a screenshot of each place and write the text exactly as Kestrel shows it, so it can
+        be found in the translation file.
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - Chinese, Simplified (zh_CN)
+        - French (fr)
+        - German (de)
+        - Italian (it)
+        - Japanese (ja)
+        - Korean (ko)
+        - Portuguese, Brazil (pt_BR)
+        - Portuguese, Portugal (pt_PT)
+        - Russian (ru)
+        - Spanish (es)
+        - Another language (say which below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What's wrong
+      description: Pick every kind that applies.
+      multiple: true
+      options:
+        - Wrong meaning (it says something else)
+        - Wrong word for the thing (not what file managers in my language call it)
+        - Grammar, spelling or punctuation
+        - Wrong form for a number (1 file / 2 files…)
+        - Too formal or too informal
+        - Cut off or doesn't fit
+        - Still in English
+        - Inconsistent (the same thing has different names)
+    validations:
+      required: true
+
+  - type: textarea
+    id: texts
+    attributes:
+      label: The texts
+      description: |
+        One row per text. **Shown** is the text as Kestrel shows it now (copied exactly), **Should be** what it
+        should say, **Where** where you saw it (a menu, a window's title, Preferences → a tab…). The English is
+        optional but helps, when you know it (start Kestrel with `LANGUAGE=en kes` to see it).
+      value: |
+        | Shown now | Should be | Where | English (optional) |
+        |---|---|---|---|
+        |  |  |  |  |
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Anything that explains the change, such as the term GNOME, KDE or Windows uses for it in your language.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drop images here. They help most for texts that are cut off or out of context.
+
+  - type: input
+    id: version
+    attributes:
+      label: Kestrel version
+      description: The output of `kes --version` (or ☰ → About).
+      placeholder: "Kestrel Explorer 0.3.3-alpha.0"
+    validations:
+      required: true
+
+  - type: input
+    id: locale
+    attributes:
+      label: Locale
+      description: "The output of `echo $LANG $LANGUAGE` in a terminal."
+      placeholder: "de_DE.UTF-8"

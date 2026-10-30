@@ -4,6 +4,18 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.0
+
+Added:
+- `i18n`: each desktop language loads its own translation (`pt_BR` and `pt_PT` their own Portuguese, `de_AT` the
+  German, `zh_TW`, which has none, English), guarding against a bare `kestrel_pt` file that Qt would pick for Brazil
+  before it tries `pt_BR`; and the Russian translation picks its three plural forms by count (1, 2, 5, 11, 21), the
+  first language whose plural rules differ from English's.
+
+Changed:
+- `run.sh` runs every test with `LANGUAGE=en`: Kestrel now ships other languages and shows the desktop's, so on a
+  machine in another language the tests would get its texts instead of the English ones they check.
+
 ## 0.3.2-alpha.34
 
 Changed:

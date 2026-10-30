@@ -37,7 +37,7 @@ BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libgl
 # Recommended apt packages (see docs/dependencies.md). Most come with a standard Ubuntu desktop;
 # kimageformat6-plugins (camera RAW, HEIC, AVIF, JPEG XL, PSD previews) usually doesn't.
 RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-formats-plugins 'qt6-svg-plugins|libqt6svg6'
-             kimageformat6-plugins adwaita-icon-theme qt6-gtk-platformtheme
+             kimageformat6-plugins adwaita-icon-theme qt6-gtk-platformtheme qt6-translations-l10n
              '7zip|p7zip-full' unrar zip unzip pigz zpaq zstd xz-utils bzip2 lzip)   # archives (unrar is in multiverse)
 # a|b: the first of these the system has (7zip is p7zip-full on Debian 12 and older Ubuntu releases; the SVG plugins
 # come with libqt6svg6 on Ubuntu 24.04 / Linux Mint 22)

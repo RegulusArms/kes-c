@@ -32,6 +32,7 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 | `kimageformat6-plugins` | Camera RAW (`.raf`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`…), HEIC, AVIF, JPEG XL and PSD. Without it these files get no preview and don't open in the viewer |
 | `adwaita-icon-theme` | Fallback icons when your icon theme is missing one |
 | `qt6-gtk-platformtheme` | The desktop's theme on GTK desktops (GNOME, Cinnamon, MATE, Xfce, Budgie): its colours, accent and fonts. Without it Qt uses its own generic look there, though Kestrel still follows the desktop's light or dark style. KDE Plasma has its own (`plasma-integration`) |
+| `qt6-translations-l10n` | Qt's own texts (standard buttons such as OK and Cancel, the colour and font pickers) in the desktop's language, when Kestrel is shown in one other than English |
 | `7zip` (or `p7zip-full` on older releases) | Creating and extracting 7z and zip (with AES-256 passwords and split volumes), and extracting iso, cab, deb, rpm and other formats |
 | `unrar` (in Ubuntu's multiverse section) | Extracting `.rar`, including encrypted and multi-volume archives. 7-Zip on Ubuntu can't decompress RAR |
 | `zip`, `unzip` | zip archives without 7-Zip |

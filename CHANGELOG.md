@@ -2,7 +2,19 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.34
+## 0.3.3-alpha.0
+
+- **Kestrel in ten more languages:** Chinese (Simplified), French, German, Italian, Japanese, Korean, Portuguese
+  (Brazil and Portugal), Russian and Spanish. It uses the desktop's language, and English where it has no
+  translation. Every text is translated, including the counts each language words differently (Russian's three forms).
+  The translations are new and not yet checked by native speakers, so some may be wrong or awkward:
+  [docs/translations.md](docs/translations.md) says how to report one.
+- **An "Incorrect translation" issue form** in the issue tracker: the language, what's wrong, and a table of the texts
+  as Kestrel shows them, what they should say and where they appear.
+- **Qt's own texts** (standard buttons, the colour and font pickers) follow the language too, with
+  `qt6-translations-l10n`, now a recommended package (the .deb's Recommends and `install.sh --install-recommended`).
+
+## 0.3.2-alpha.34 (2026-10-29)
 
 - **Benchmark on Kubuntu:** `bench/kubuntu.sh` compares Kestrel with Dolphin on Kubuntu 26.04, in a Docker container,
   as the Nemo comparison was made on Linux Mint. Its report is a "Kestrel vs Dolphin on Kubuntu" section for the

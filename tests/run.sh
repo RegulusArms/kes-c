@@ -35,6 +35,9 @@ echo "Building…"
     { tail -30 "$HERE/build.log"; echo "Build failed (full log: tests/build.log)"; exit 1; }
 
 export KES_CXX="$ROOT/$B/kes"
+# Kestrel shows its texts in the desktop's language (translations/): the tests check the English ones, whatever
+# this machine's language is. (test_i18n loads the other translations itself.)
+export LANGUAGE=en
 
 failed=()
 for t in "${TESTS[@]}"; do
