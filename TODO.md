@@ -67,6 +67,12 @@ into.
   - Check every other quiet `queue_job` / `run_job` caller for the same thing, and that a job whose window
     (Properties) is closed while it runs still ends up in the finished list.
 
+- [ ] **Two right-click menu texts aren't translated.** In the menu layouts (src/menus.cpp `defaults()`), View
+  Image's note "for images" (around line 156) and "Rotate 180°" in the Rotate submenu (around line 212) are plain
+  literals, not `tx()`, so Preferences → Menus shows them in English in every language. Wrap them in `tx()`, run
+  translations/update.sh, and find out why the `ui` / `i18n` tests didn't catch them (a check that does, in
+  tests/CHANGELOG.md).
+
 ## New features
 
 ### Jobs
@@ -327,5 +333,30 @@ into.
   6. **Undo:** Undo never acts on a file another application has replaced since the original operation (a different
      inode, size or time than what was recorded): it leaves that file alone and says so.
   - Note what's found that doesn't hold, fix it, and add the checks to tests/CHANGELOG.md.
+
+- [ ] **Security review of the admin helper (kes-admin-helper).** It runs as root (through pkexec) and does what
+  Kestrel's JSON requests on its stdin ask (src/admin_helper.cpp, its header comment lists the ops and the safety
+  rules), so it's one of the most sensitive parts. Check, and cover with tests that fail when it's broken:
+  1. **Validation before privileged execution:** every request's fields (op, id, paths, mode, text, merge) are
+     checked for type and range before anything is done; a malformed, unknown or oversized request is refused, never
+     half-run.
+  2. **Paths and file names passed safely:** no shell anywhere; names with newlines, leading `-`, `..`, empty
+     components, invalid UTF-8 or very long paths can't escape the walk or be misread (JSON encoding both ways).
+  3. **Symlinks revalidated at execution:** the walk-from-`/` without following symlinks holds at the moment of each
+     operation, not only when the request arrives (swapping a folder for a symlink mid-copy, mid-delete or between
+     two requests); the "root-controlled link" rule can't be met by a user's link.
+  4. **Only operations the GUI is authorized to request:** the op list and POLICY are the whole surface; ops that
+     act for the user (hardlink "only the user's own files") know which user that is (pkexec's `PKEXEC_UID`), and
+     nothing lets a request read or change files outside what the policy allows (e.g. `write`/`chmod` on
+     `/etc/shadow`, a protected folder or a home folder itself).
+  5. **Temporary files and intermediate destinations:** the helper's part files and folders built aside are created
+     with safe owner and permissions (not readable or writable by others while being written, no window where a
+     setuid bit or a user's ownership is live on a root-owned copy), and can't be pre-created or replaced by the
+     user.
+  6. **Cancellation and partial failures:** behave as in Kestrel's own jobs (see Check the file-safety guarantees):
+     a cancel or failure removes only the part, leaves nothing half-made under a real name, and the reply says what
+     was done.
+  - Also: the helper exits when stdin closes, and an admin session can't be driven by another process.
+  - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done

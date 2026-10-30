@@ -90,12 +90,13 @@ BleachBit and uninstalling.
 - **Ubuntu 26.04 (GNOME):** the main platform; everything is tested here.
 - **Linux Mint 22 (Cinnamon):** supported since 0.2.0. Kestrel builds and runs there, and the [benchmark against Nemo](docs/performance.md#performance-kestrel-vs-nemo) was run there.
 - **Ubuntu 24.04 (GNOME):** tested; Kestrel installs and runs there (from the apt repository too). It has the same base as Linux Mint 22.
+- **Kubuntu 26.04 (KDE Plasma):** supported since 0.3.2-alpha.33; Kestrel follows Plasma's look and settings (see the [install guide](docs/install.md#kubuntu-2604-kde-plasma)). Some parts are still to be tried in a full Plasma session: passwords in KWallet, network shares and phones, and drop focus on Wayland.
 
 ## Documentation
 
 | Page | What's in it |
 |---|---|
-| [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint and Ubuntu 24.04 notes |
+| [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint, Ubuntu 24.04 and Kubuntu notes |
 | [Dependencies](docs/dependencies.md) | The packages needed to build, the recommended ones and the optional ones, and what each is used for |
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
 | [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |

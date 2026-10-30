@@ -22,7 +22,11 @@ Kestrel doesn't make its own version of things Linux already does well. When a f
 | **Convert Image…** to HEIC and AVIF | `heif-enc` |
 | The full Metadata tab and editing metadata | `exiftool` |
 | Lossless **Rotate** and **Straighten** of JPEGs | `jpegtran` |
-| Searching inside files | `rg` (ripgrep), else `grep` |
+| Searching inside files | `localsearch` (the desktop's index), else `rg` (ripgrep), else `grep` |
+| Writing files onto a tape with dd | `dd` |
+| **Network Sharing…**, **Send To** | `net` (Samba), `xdg-email`, `bluetooth-sendto` |
+| ZFS pools on the Overview | `zfs`, `zpool` |
+| Thumbnails of PDFs, fonts and other files | The system's thumbnailers (as GNOME Files uses) |
 | **Shred with BleachBit…** | `bleachbit` |
 | The admin session | `pkexec` |
 | Drives, trash, network locations, default apps | GIO, gvfs, udisks |
