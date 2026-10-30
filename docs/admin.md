@@ -1,6 +1,6 @@
 # Admin session
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Features](features.md) · [Install guide](install.md)
 
 Running a whole file manager as root (`sudo kes`) is risky and mostly doesn't work on a modern desktop. Kestrel instead keeps running as you, and does only the operations that need admin rights as root.
 

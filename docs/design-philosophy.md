@@ -1,6 +1,6 @@
 # Design philosophy
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md)
 
 Kestrel doesn't make its own version of things Linux already does well. When a feature needs real work done (compressing, encrypting, syncing, converting video, reading metadata), the first question is: **which command-line tool do Linux users already trust for this, the one that's already the default?** Kestrel then wraps that tool in a file manager's interface. The tool does the work; Kestrel makes it easy to reach, safe to use and clear when something goes wrong.
 

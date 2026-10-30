@@ -1,6 +1,6 @@
 # Installing Kestrel Explorer
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Compared with other file managers](comparison.md) · [Dependencies](dependencies.md) · [Features](features.md)
 
 ## Install with apt
 
@@ -13,7 +13,7 @@ Kestrel's apt repository (https://regulusarms.github.io/kes-c/, amd64) has a pac
 
 Not sure which you have? `grep UBUNTU_CODENAME /etc/os-release` prints `resolute` or `noble` (Linux Mint prints the Ubuntu release it's based on). Other releases, such as Ubuntu 26.10, have no package yet: [build from source](#build--install) there.
 
-**Ubuntu 26.04:**
+**Ubuntu 26.04 and Kubuntu 26.04** (and the other 26.04 flavours):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings

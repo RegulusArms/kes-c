@@ -1,5 +1,14 @@
 # Kestrel Explorer (C++)
 
+[![Release build](https://img.shields.io/github/actions/workflow/status/RegulusArms/kes-c/deb.yml?branch=main&label=release%20build)](https://github.com/RegulusArms/kes-c/actions/workflows/deb.yml?query=branch%3Amain)
+[![Dev build](https://img.shields.io/github/actions/workflow/status/RegulusArms/kes-c/deb.yml?branch=DEV&label=dev%20build)](https://github.com/RegulusArms/kes-c/actions/workflows/deb.yml?query=branch%3ADEV)
+[![Release](https://img.shields.io/github/v/release/RegulusArms/kes-c?include_prereleases&sort=semver)](https://github.com/RegulusArms/kes-c/releases)
+[![apt repository](https://img.shields.io/badge/apt-regulusarms.github.io%2Fkes--c-blue?logo=debian&logoColor=white)](https://regulusarms.github.io/kes-c/)
+[![Runs on](https://img.shields.io/badge/runs%20on-Ubuntu%2024.04%20%7C%2026.04%20%C2%B7%20Kubuntu%2026.04%20%C2%B7%20Mint%2022-E95420?logo=ubuntu&logoColor=white)](#supported-systems)
+[![C++ / Qt 6](https://img.shields.io/badge/C%2B%2B%20%2F%20Qt-6-41CD52?logo=qt&logoColor=white)](docs/development.md)
+[![Languages](https://img.shields.io/badge/languages-11-8A2BE2)](docs/translations.md)
+[![License: MIT](https://img.shields.io/github/license/RegulusArms/kes-c)](LICENSE)
+
 **Version 0.3.3-alpha.0.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
@@ -19,40 +28,14 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 - **Shortcuts out:** Open in Terminal or VS Code, your Nautilus scripts, and Samba network sharing.
 - **Secure deletion:** with [BleachBit](https://www.bleachbit.org) installed, shred files and folders or empty the trash so they can't be recovered, from the right-click menu; `kes-setup --bleachbit` also adds a cleaner for Kestrel's own cache and history to BleachBit.
 
-**Improvements over GNOME Files:**
-- Undo for moves, renames, Move to Trash and new files.
-- One Trash for every drive, and an Overview page of drives with usage bars.
-- Folder icons that preview the images inside, plus per-folder colours.
-- A built-in image viewer, and GIF/WebM playback in the file view.
-- Background copies with progress and Cancel in the status bar.
-- Phones and cameras (iPhone, Android, PTP cameras) on the Overview page and in the sidebar, with thumbnails from the phone's own previews.
-- A sidebar you can rearrange and collapse.
-- A sort for each folder, and grouping by date (Today, Last week… or one group per day), by the date modified, created
-  or taken (from photos' and videos' metadata), with each group still sorted by name, size or type.
-- Follows the desktop's theme and accent colour, also when you change them while it's open.
-- Other apps' Open and Save dialogs, such as a browser's "Save image as", can open in Kestrel.
-- Several windows that stay in sync.
-- Faster in most measurements (see [Performance: Kestrel vs GNOME Files](docs/performance.md#performance-kestrel-vs-gnome-files)).
-
-**Improvements over Nemo** (Linux Mint's file manager):
-- Archives created and extracted with every option in the window, instead of handing off to a separate archive app.
-- Admin rights for just the operation that needs them, instead of opening a whole Nemo window as root.
-- Folder icons that preview the images inside.
-- A built-in image viewer, and GIF/WebM playback in the file view.
-- Metadata viewing and editing (EXIF, XMP, and the prompts image generators such as Stable Diffusion save in the file) and checksums in Properties.
-- Phones: thumbnails from the phone's own previews, and iPhone videos copied once so they play smoothly.
-- Faster file operations in the benchmark: copying about 20× faster, moving to another drive 5.4× faster, and emptying the trash several hundred times faster (see [Performance: Kestrel vs Nemo](docs/performance.md#performance-kestrel-vs-nemo)).
-
-**Installs alongside GNOME Files:** Kestrel installs next to GNOME Files (or Nemo on Linux Mint) instead of replacing it. The two share bookmarks, thumbnails, the clipboard, the trash and Recent files, so you can use either. `./install.sh --default` (or `kes-setup --default` with the apt package) makes Kestrel open folders and "Show in folder" requests and show other apps' Open/Save dialogs, and `./install.sh --uninstall` (`kes-setup --undo`) hands them back.
-
-This began as a C++ port of the Python/PyQt6 [Kestrel Explorer](https://github.com/RegulusArms/kestrel-explorer). The two were the same up to 0.3.1-alpha.2; since then each is developed on its own. They still use the same settings folder, bookmarks and caches, but aren't kept compatible any more.
+**Compared with GNOME Files, Nemo and Dolphin:** what Kestrel adds over each, what it doesn't have yet, and how it installs alongside them without changing them: [Kestrel compared with other file managers](docs/comparison.md).
 
 ## Install
 
 **With apt** (amd64), from the releases channel. Each Ubuntu release has its own package, so use your system's
-commands (`grep UBUNTU_CODENAME /etc/os-release` prints `resolute` on 26.04, `noble` on 24.04 and Linux Mint 22).
+commands (`grep UBUNTU_CODENAME /etc/os-release` prints `resolute` on Ubuntu 26.04 and Kubuntu 26.04, `noble` on 24.04 and Linux Mint 22).
 
-**Ubuntu 26.04:**
+**Ubuntu 26.04 and Kubuntu 26.04** (and the other 26.04 flavours):
 
 ```bash
 sudo install -d -m 755 /etc/apt/keyrings
@@ -62,6 +45,10 @@ printf 'Types: deb\nURIs: https://regulusarms.github.io/kes-c\nSuites: resolute\
 sudo apt update && sudo apt install kestrel-explorer
 kes-setup --default   # optional: make it your file manager (kes-setup --undo puts things back)
 ```
+
+On Kubuntu, `kes-setup --default` makes Kestrel open folders in place of Dolphin (and, if Dolphin is pinned in the taskbar,
+asks whether to put Kestrel in its place); Dolphin stays installed and keeps working, and `kes-setup --undo` gives folders back to it. See
+[Kubuntu 26.04](docs/install.md#kubuntu-2604-kde-plasma) in the install guide.
 
 **Ubuntu 24.04 and Linux Mint 22:**
 
@@ -98,6 +85,7 @@ BleachBit and uninstalling.
 |---|---|
 | [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint, Ubuntu 24.04 and Kubuntu notes |
 | [Dependencies](docs/dependencies.md) | The packages needed to build, the recommended ones and the optional ones, and what each is used for |
+| [Compared with other file managers](docs/comparison.md) | What Kestrel adds over GNOME Files, Nemo and Dolphin, what it doesn't have yet, and how it installs alongside them |
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
 | [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |

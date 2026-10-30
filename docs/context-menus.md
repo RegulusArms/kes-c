@@ -1,6 +1,6 @@
 # Right-click menus
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md)
 
 Every right-click menu in Kestrel, what each entry does, and what it works on. An entry only shows when it applies
 (the **Shows** column); otherwise it's left out of the menu.

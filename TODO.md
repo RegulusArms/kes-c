@@ -1,5 +1,7 @@
 # To do
 
+← Back to [the README](README.md) · [Changelog](CHANGELOG.md) · [Bugs found elsewhere](docs/bugs-elsewhere.md)
+
 Things to add, fix or change. Newest at the bottom; tick an item off (`[x]`) when it's done, with the version it went
 into.
 

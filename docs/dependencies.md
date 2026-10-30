@@ -1,6 +1,6 @@
 # Dependencies
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Archives](archives.md) · [Design philosophy](design-philosophy.md) · [Features](features.md) · [Install guide](install.md)
 
 Package names below are Ubuntu's; Linux Mint uses the same ones.
 

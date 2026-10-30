@@ -1,6 +1,6 @@
 # Performance
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Compared with other file managers](comparison.md) · [Development](development.md) · [Performance summary](performance-summary.md) · [Benchmark](../bench/README.md)
 
 **Short on time?** Read the [performance summary](performance-summary.md).
 

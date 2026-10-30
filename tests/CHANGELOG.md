@@ -1,5 +1,7 @@
 # Test changelog
 
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Tests](README.md)
+
 What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workflows/deb.yml`) for each version,
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).

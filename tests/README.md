@@ -1,5 +1,7 @@
 # Tests
 
+← Back to [the README](../README.md) · [Development](../docs/development.md) · [Test changelog](CHANGELOG.md)
+
 Automated tests for Kestrel Explorer. What changed in them for each version, and why: [CHANGELOG.md](CHANGELOG.md).
 
 ```bash

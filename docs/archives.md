@@ -1,6 +1,6 @@
 # Archives
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Right-click menus](context-menus.md) · [Features](features.md)
 
 Double-clicking an archive opens Kestrel's Extract dialog instead of another app (packages, disk images and apps such as `.deb`, `.iso` and `.apk` still open with the system's app). Kestrel doesn't contain its own compression code. It drives the command-line tools installed on your system, and offers the formats those tools support. Anything whose tool is missing is shown greyed out with the package to install. `./install.sh --install-recommended` installs the common ones (see [Dependencies](dependencies.md)).
 

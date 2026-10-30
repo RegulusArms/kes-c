@@ -1,5 +1,7 @@
 # Performance summary
 
+← Back to [the README](../README.md) · [Performance](performance.md)
+
 [Full results and methods →](performance.md)
 
 Kestrel was benchmarked against GNOME Files, Dolphin, Thunar, Krusader and PCManFM on one machine with the same test

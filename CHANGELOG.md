@@ -1,5 +1,7 @@
 # Changelog
 
+← Back to [the README](README.md) · [Bugs found elsewhere](docs/bugs-elsewhere.md) · [Install guide](docs/install.md) · [Test changelog](tests/CHANGELOG.md)
+
 What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.3-alpha.0

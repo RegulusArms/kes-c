@@ -1,6 +1,6 @@
 # Features
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Right-click menus](context-menus.md) · [Install guide](install.md)
 
 ![The right-click menu on a file: Open, Open With, Cut, Copy, Move To, Copy To, Duplicate, Rename, Copy Path / Name, Star, Links & Shortcuts, Compress, Send To, Move to Trash, Delete Permanently and Properties](screenshot-context-menu.png)
 

@@ -1,6 +1,6 @@
 # Development
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md)
 
 ## Tests
 
@@ -224,7 +224,7 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
 | `tests/` | The test suite (see [Tests](#tests)) |
-| `bench/` | The benchmark against GNOME Files, Nemo, Dolphin (also on Kubuntu), Thunar, Krusader and PCManFM (see [Performance](performance.md), [at a glance](performance.md#at-a-glance)) |
+| `bench/` | [The benchmark](../bench/README.md) against GNOME Files, Nemo, Dolphin (also on Kubuntu), Thunar, Krusader and PCManFM (see [Performance](performance.md), [at a glance](performance.md#at-a-glance)) |
 | `CMakeLists.txt` | Build configuration, and the .deb (CPack) |
 | `kes-setup` | Makes Kestrel the default file manager for the current user, and puts things back (run by `install.sh`; also in the .deb) |
 | `data/` | The app icon (`icons/hicolor`, built into `kes` through `kestrel.qrc`), the .deb's app menu entry and file chooser portal files, and the GNOME Shell drop focus extension |
