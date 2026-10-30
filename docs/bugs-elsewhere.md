@@ -1,6 +1,6 @@
 # Bugs found outside Kestrel
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md)
 
 Problems found while working on Kestrel that get in its way but aren't caused by it: bugs or unlucky behaviour in the
 desktop, other programs, drivers or file systems. Each entry says what it does, how it was tracked down, how to work

@@ -1,5 +1,7 @@
 # Tests
 
+← Back to [the README](../README.md) · [Development](../docs/development.md) · [Test changelog](CHANGELOG.md)
+
 Automated tests for Kestrel Explorer. What changed in them for each version, and why: [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
@@ -27,9 +29,9 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 |---|---|---|
 | [`fileops`](#fileops) | 137 | File operations |
 | [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
-| [`prefs`](#prefs) | 27 | Preferences and the right-click menus' layouts |
+| [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
-| [`atc_tasks`](#atc_tasks) | 31 | The shared task list |
+| [`atc_tasks`](#atc_tasks) | 35 | The shared task list |
 | [`atc_undo`](#atc_undo) | 20 | Undo between Kestrels |
 | [`atc_tabs`](#atc_tabs) | 18 | Open folders as tabs |
 | [`devices`](#devices) | 22 | Phones and cameras |
@@ -38,17 +40,17 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
 | [`jobs`](#jobs) | 47 | The job queue, the Jobs window and the Tower window |
-| [`theme`](#theme) | 73 | Following the desktop's theme and settings; folder previews and thumbnails |
+| [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
 | [`admin_helper`](#admin_helper) | 47 | The admin helper, the part that runs as root |
 | [`ui`](#ui) | 33 | Menus, shortcuts, accessibility, drag and drop |
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
-| [`viewer`](#viewer) | 76 | The image viewer and saving its changes |
+| [`viewer`](#viewer) | 89 | The image viewer and saving its changes |
 | [`tools`](#tools) | 31 | Find Duplicates, Compare, Sync, Verify Signature |
-| [`overview`](#overview) | 48 | The Overview, Starred, Frequent Folders, drive health |
-| [`media`](#media) | 50 | Rotating image files and converting media |
-| [`i18n`](#i18n) | 7 | Translations |
+| [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
+| [`media`](#media) | 59 | Rotating image files and converting media |
+| [`i18n`](#i18n) | 9 | Translations |
 | [`installer`](#installer) | 64 | `install.sh` and `kes-setup` |
 
 ### fileops

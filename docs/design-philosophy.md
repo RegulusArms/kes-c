@@ -1,6 +1,6 @@
 # Design philosophy
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md)
 
 Kestrel doesn't make its own version of things Linux already does well. When a feature needs real work done (compressing, encrypting, syncing, converting video, reading metadata), the first question is: **which command-line tool do Linux users already trust for this, the one that's already the default?** Kestrel then wraps that tool in a file manager's interface. The tool does the work; Kestrel makes it easy to reach, safe to use and clear when something goes wrong.
 
@@ -22,7 +22,11 @@ Kestrel doesn't make its own version of things Linux already does well. When a f
 | **Convert Image…** to HEIC and AVIF | `heif-enc` |
 | The full Metadata tab and editing metadata | `exiftool` |
 | Lossless **Rotate** and **Straighten** of JPEGs | `jpegtran` |
-| Searching inside files | `rg` (ripgrep), else `grep` |
+| Searching inside files | `localsearch` (the desktop's index), else `rg` (ripgrep), else `grep` |
+| Writing files onto a tape with dd | `dd` |
+| **Network Sharing…**, **Send To** | `net` (Samba), `xdg-email`, `bluetooth-sendto` |
+| ZFS pools on the Overview | `zfs`, `zpool` |
+| Thumbnails of PDFs, fonts and other files | The system's thumbnailers (as GNOME Files uses) |
 | **Shred with BleachBit…** | `bleachbit` |
 | The admin session | `pkexec` |
 | Drives, trash, network locations, default apps | GIO, gvfs, udisks |

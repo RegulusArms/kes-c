@@ -1,5 +1,7 @@
 # Benchmark
 
+← Back to [the README](../README.md) · [Development](../docs/development.md)
+
 Compares Kestrel Explorer (this C++ version) with GNOME Files, Nemo (on Linux Mint), Dolphin (on Ubuntu, and on Kubuntu in a container: `bench/kubuntu.sh`), Thunar, Krusader and PCManFM, whichever are installed, on the same data and in the same conditions. The results are the sections of [docs/performance.md](../docs/performance.md). Each run writes them to `bench/results.md`: a "Kestrel vs …" section for each one installed, ready to paste into docs/performance.md in place of the old section (a run on Mint gives the Nemo section; the GNOME one stays as it is). docs/performance.md is never changed by the benchmark itself.
 
 ```bash

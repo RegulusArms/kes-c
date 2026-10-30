@@ -1,6 +1,6 @@
 # Translations
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Development](development.md)
 
 Kestrel Explorer is translated into Chinese (Simplified), French, German, Italian, Japanese, Korean, Portuguese
 (Brazil and Portugal), Russian and Spanish. It uses your desktop's language, and English where it has no translation.

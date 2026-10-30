@@ -1,6 +1,6 @@
 # Dependencies
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Archives](archives.md) · [Design philosophy](design-philosophy.md) · [Features](features.md) · [Install guide](install.md)
 
 Package names below are Ubuntu's; Linux Mint uses the same ones.
 
@@ -24,7 +24,7 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 | Package | Used for |
 |---|---|
 | `libglib2.0-bin` | `gio` (launching `.desktop` shortcuts, unmounting) and `gsettings` (icon theme, set as wallpaper) |
-| `xdg-utils` | `xdg-open` (opening files if GIO can't) and `xdg-mime` (making Kestrel the default folder app) |
+| `xdg-utils` | `xdg-open` (opening files if GIO can't), `xdg-mime` (making Kestrel the default folder app) and `xdg-email` (**Send To** → Email) |
 | `gvfs`, `gvfs-backends` | Network locations (`smb://`, `sftp://`, `nfs://`, `ftp://`…), the drive list on the Overview page, and phones and cameras (iPhone, Android, PTP cameras; iPhones also use `usbmuxd`, which comes with them) |
 | `udisks2` | Mounting, unlocking and ejecting drives from the Overview page, and each drive's health (S.M.A.R.T.) |
 | `qt6-image-formats-plugins` | WebP, TIFF, TGA, ICNS and MNG images |
@@ -43,20 +43,23 @@ At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` 
 
 **Optional** (features are hidden or fall back when missing)
 
-`kes-setup --install-optional` installs the ones apt has that are missing (`zfsutils-linux` only when a ZFS file system is mounted; `rar` needs Ubuntu's multiverse section). UWP isn't an apt package.
+`kes-setup --install-optional` installs the ones apt has that are missing (`zfsutils-linux` only when a ZFS file system is mounted; `rar` needs Ubuntu's multiverse section), except `pkexec`, `localsearch`, `samba` and `gnome-bluetooth-sendto`, which are part of the desktop or a choice of your own. UWP isn't an apt package.
 
 | Package | Used for |
 |---|---|
 | `libimage-exiftool-perl` | The full Metadata tab, plus editing, adding and clearing metadata; in the image viewer, saving the rotation of a JPEG that has no orientation tag |
 | `ffmpeg` | Video thumbnails and video stills in folder previews (`ffmpeg` and `ffprobe`); **Convert Video…**, **Extract Audio…** and **Convert Audio…**; reading images for Convert Image… that Qt's plugins can't |
 | `zfsutils-linux` | Showing a ZFS pool as one card with pool-level usage on the Overview page |
-| `pkexec` | The **admin session**: retrying operations that fail with "permission denied" as administrator (usually already installed) |
+| `pkexec` | The **admin session**: retrying operations that fail with "permission denied" as administrator (usually already installed; the .deb recommends it) |
 | `rar` (non-free, multiverse; a trial version of WinRAR's command-line tool) | Creating `.rar` archives (passwords, volumes, recovery records) |
 | `bleachbit` | **Shred with BleachBit…** and **Empty Trash with BleachBit…**, and the cleaner `kes-setup --bleachbit` adds to it |
 | `pbzip2` or `lbzip2`, `plzip`, `lz4` | Multi-core `.bz2` and `.lz`, and `.lz4` archives. Kestrel offers whichever are installed |
+| `localsearch` (Ubuntu 26.04's desktop search index, usually already installed) | Searching inside files with the index (search bar → *File contents* → *Search index*, and *Automatic* where the index covers the folder). Ubuntu 24.04's index (`tracker3`) isn't used: there Kestrel reads the files |
 | `ripgrep` | Searching inside files by reading them (search bar → *File contents*), much faster than `grep`, which is used without it |
 | `gnupg` (usually already installed) | A password for tar archives (`.tar.gz.gpg`…): Compress… encrypts them with `gpg`, and opening, testing and extracting them needs it; **Verify Signature** (`.sig`, `.asc`, `.gpg`) |
 | `rsync` (usually already installed) | **Sync To…** / Sync Folders copies with it: an interrupted sync resumes, and only what changed is sent. Without it, Kestrel's own copy does the syncing |
 | `libjpeg-turbo-progs` | The image viewer's **Straighten** and the right-click menu's **Rotate** (`jpegtran`): turning a JPEG's pixels without losing quality (without it, Rotate only sets a JPEG's orientation tag) |
 | `libheif-examples` | **Convert Image…** to HEIC and AVIF (`heif-enc`), where Qt's image plugins can't write them |
+| `samba` | **Network Sharing…** for folders (Samba usershares, through its `net` command) |
+| `gnome-bluetooth-sendto` | **Send To** → Bluetooth Device… (`bluetooth-sendto`) |
 | [UWP](https://github.com/RegulusArms/UWP) (not an apt package; install with its `install.sh`) | "Set as Wallpaper" through UWP profiles, and "Add to Selected UWP Monitor". Found as `uwp` on your PATH or in `~/.local/bin` |
