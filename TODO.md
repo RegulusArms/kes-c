@@ -109,19 +109,6 @@ into.
   - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
     guessing.~~
 
-- [ ] ~~**LTFS and slow drives: what's left.** The slow-drives work (0.3.1-alpha.11) covered recognising tapes and
-  floppies, never waiting on them in the window, no previews unless allowed, one job at a time, tape order, index
-  sync, the Overview card and safer unmounting. Still to do:~~ *Struck for now.*
-  - ~~Check on the real tape that LTFS's virtual extended attributes have the names Kestrel reads
-    (`user.ltfs.startblock`, `partition`, `volumeName`, `mediaLoads`, `mediaStorageAlert`, `sync`; plain `ltfs.*`
-    also tried): with the tape mounted, `getfattr -d -m -` on the tape's mount point and on a file. Fix the names
-    where they differ.~~
-  - ~~Check with the real USB floppy drive that it's recognised (a removable `sd` disk of at most 4 MB) and that
-    browsing it no longer freezes.~~
-  - ~~Mount and format tapes (`ltfs`, `mkltfs`) from Kestrel (needs permissions on the drive device; within the admin
-    session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
-    what's on which tape).~~
-
 - [ ] **Back up a whole drive to an image file (dd), optionally encrypted with gpg.** Right-click a drive (sidebar
   Devices, Overview card) → Back Up Drive to Image…: pick where to save it, then a job copies the raw device
   (whole disk or one partition) to an image file, with progress, speed and a log in the Jobs window.
@@ -217,43 +204,28 @@ into.
 
 ### Translations
 
-- [ ] **Make Kestrel translatable, still English only.** Kestrel is set up as if it were translated, but ships only
-  English, so nothing changes for users. Afterwards, adding a language means writing one .ts file and nothing in the
-  code. Nothing goes through `tr()` today, and every text is an English literal in src/.
-  - **Build:** add `LinguistTools` to `find_package(Qt6 …)` and `qt_add_translations` (on Qt 6.4, CI's oldest). Build
-    the .qm files into kes as resources, the way the icon is (data/kestrel.qrc), so the .deb and install.sh need no new
-    paths. Add `qt6-l10n-tools` to the build deps (install.sh, CI, docs/dependencies.md).
-  - **Loading:** install a `QTranslator` for the UI language at startup.
-  - **An English .ts:** plurals need it. Once `n == 1 ? "file" : "files"` becomes `tr("%n file(s)", "", n)`, the
-    English file turns it back into "1 file" / "2 files" (`lupdate -pluralonly`). So "English only" is still one real
-    translation file.
-  - **Mark the strings:** wrap every user-visible text in `tr()`/`QCoreApplication::translate()`: menus,
-    Preferences labels (src/prefs.cpp's `label` and choice labels), messages, job logs, status line, Overview, archive
-    window, viewer, tooltips. Leave out settings keys, menu ids (`menus::tag`), file names, command lines and what
-    goes to other programs. Do it file by file, menus and Preferences first.
-  - **Things that break when translated:**
-    - **Plurals:** about 37 `n == 1 ? "file" : "files"` spots, changed to `%n` (languages have different plural
-      rules, and CJK has none).
-    - **Sentences built from pieces** (`"Copying " + name + " to " + dest`): turn each into one string with `%1 %2`
-      in a single multi-argument `.arg()`, so translators can reorder the parts. This matches the existing rule
-      against chained `.arg()` after user text.
-    - **Numbers, sizes and dates:** `group_digits` hardcodes `,`, `human_size` prints `1.5 MB` with a `.` and
-      English units, and about 10 `toString("…")` calls use fixed date formats. Move them to `QLocale` (`toString`,
-      `formattedDataSize`, `dateFormat`). Check the date groups (src/groups.cpp) and sorting. Decide whether formats
-      follow the UI language or the system's number/date locale (`LC_NUMERIC`/`LC_TIME`, as GNOME does). The latter
-      changes what users see in this item already.
-    - **Code that compares displayed text** (`name->text() == …` and similar) or finds things by label: change these
-      to compare data, not translations.
-  - **Workflow:** add a script (or CMake target) that runs `lupdate` to refresh the .ts files, and a section in
-    docs/development.md on marking new strings and adding a language.
-  - **Pseudo-translation (a test tool, not shipped):** a generated .ts that pads and accents every text
-    (`[Ǫρéñ ƒöłðéř······]`). With only English, the app looks the same whether a string is marked or not, so this is
-    how missed strings and clipped layouts show up.
-  - **Tests:** a check in `ui` (like the modal-call check) that fails on a user-visible literal in a widget call
-    (`setText("…")`, `QAction("…")`, `warn(…, "…")`) not wrapped in `tr()`, so new code stays translatable. A check
-    that the .ts files build and that no translation drops a `%1`/`%n`. A run with the pseudo-translation.
-  - Order: build + loading + English .ts + pseudo-translation, then the `ui` check (warning only until the strings
-    are done), then mark strings one area at a time, then plurals and locale formats.
+### Packaging
+
+- [ ] **Show Kestrel in the software centres (AppStream).** Once a user has added Kestrel's apt repo, Kestrel should
+  appear as a proper app (name, icon, summary, screenshots, Install button, updates) in GNOME Software, KDE Discover
+  (Kubuntu), Ubuntu's App Center (search with the "Debian packages" filter) and Mint's Software Manager. Today
+  Discover and GNOME Software don't show it at all (no AppStream data), and Mint's Software Manager lists it as a bare
+  package. Users who haven't added the repo still won't see it; that would need Debian/universe (below).
+  - **data/kestrel-explorer.metainfo.xml**, installed to `/usr/share/metainfo/` (CMakeLists.txt, also by
+    install.sh): id `kestrel-explorer`, name, summary, description, license, `<launchable>` →
+    `kestrel-explorer.desktop`, screenshot URLs (hosted on gh-pages), `<releases>`. Kept valid with
+    `appstreamcli validate` (a check in the tests), and in tests/check_package.sh (the .deb ships it).
+  - **DEP-11 metadata in the apt repo:** reprepro doesn't make it. CI's apt job generates
+    `dists/<suite>/main/dep11/Components-amd64.yml.gz` and the icon tarballs for every suite (appstream-generator or
+    a small script) and lists them in the signed `Release` file. apt only downloads them where a software centre asks,
+    so nothing changes for other users.
+  - Check on Kubuntu (the kes-kubuntu image or a VM: Discover), Ubuntu (App Center, GNOME Software) and Mint 22
+    (Software Manager: how much of the AppStream data it uses).
+  - **Not chosen for now:** a strictly confined snap (no hidden files at the top of `~`, no files outside `~` and
+    the removable-media mounts, no admin helper, no host tools, no portal or FileManager1 role, settings under
+    `~/snap/`): a crippled Kestrel. A classic-confinement snap needs the Snap Store's approval, which file managers
+    may not get. Debian (→ Ubuntu universe, so every user sees it with no setup) needs Debian policy packaging, an
+    ITP and a sponsor, and Debian's release pace: worth it after a stable 1.0, not during the alpha.
 
 ### Tests and CI — beta release blocker
 
