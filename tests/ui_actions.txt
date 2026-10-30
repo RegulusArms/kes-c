@@ -143,6 +143,7 @@ context menu, empty space > ---
 context menu, empty space > Open in Terminal
 context menu, empty space > Bookmark This Folder
 context menu, empty space > Previews
+context menu, empty space > Previews > Generate Previews
 context menu, empty space > Previews > Generate Previews Recursively
 context menu, empty space > Previews > Generate Folder Previews
 context menu, empty space > Previews > Generate Folder Previews Recursively
@@ -238,6 +239,7 @@ context menu, a folder > Folder Colour > Default (toggle)
 context menu, a folder > Show Image Previews (toggle)
 context menu, a folder > Regenerate Preview
 context menu, a folder > Previews
+context menu, a folder > Previews > Generate Previews
 context menu, a folder > Previews > Generate Previews Recursively
 context menu, a folder > Previews > Generate Folder Previews
 context menu, a folder > Previews > Generate Folder Previews Recursively

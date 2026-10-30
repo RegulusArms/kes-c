@@ -30,6 +30,10 @@ namespace test {
 
 inline int fails = 0;
 
+// Numbers and dates in the tests' own formats, whatever the machine's locale: Kestrel formats them by the system's
+// (QLocale(), src/i18n.h), so a test that checks one sees "1,234" and US English dates.
+inline const bool english_formats = (QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates)), true);
+
 inline void check(bool ok, const QString &what)
 {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what.toUtf8().constData());

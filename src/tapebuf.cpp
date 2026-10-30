@@ -262,7 +262,7 @@ bool Buffer::begin(const QString &path, dev_t dev, ino_t ino)
             return false;
         l.unlock();   // (the callback may ask the buffer for its figures: not under its lock)
         if (waiting && filling)
-            waiting(QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
+            waiting(tx("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
         cv.notify_all();
         l.lock();
         wait_a_little(l);
@@ -299,13 +299,13 @@ qint64 Buffer::next(const char **data)
                 if (filling)
                     ++wait_count;
             }
-            tell(l, filling ? QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
-                            : QString("Waiting for the source"));
+            tell(l, filling ? tx("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load()))
+                            : tx("Waiting for the source"));
             wait_a_little(l);
             continue;
         }
         if (filling && !reader_done && held.load() < cap.load() - chunk_size()) {
-            tell(l, QString("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
+            tell(l, tx("Filling the buffer — %1 of %2").arg(human_size(held.load()), human_size(cap.load())));
             wait_a_little(l);
             continue;
         }
@@ -382,12 +382,10 @@ QString Buffer::status() const
 
 QString Buffer::summary() const
 {
-    QString s = QString("Tape buffer: %1; written to the tape at %2 on average, read from the source at %3")
+    QString s = tx("Tape buffer: %1; written to the tape at %2 on average, read from the source at %3")
                     .arg(human_size(cap.load()), rate(tape_rate()), rate(source_rate()));
     int n = waits();
-    s += n == 0 ? QString("; the tape never had to wait for it.")
-                : QString("; the tape had to wait for it %1 time%2.").arg(QString::number(n), n == 1 ? "" : "s");
-    return s;
+    return n == 0 ? tx("%1; the tape never had to wait for it.").arg(s) : txn("%1; the tape had to wait for it %Ln time(s).", n).arg(s);
 }
 
 }  // namespace tapebuf

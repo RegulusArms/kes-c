@@ -4,8 +4,8 @@
 #   ./install.sh --default              also make it the default app for opening folders and the trash
 #                                       and the system's file chooser for Save/Open dialogs (asks for sudo once)
 #                                       and puts ~/.local/bin on your PATH (for the kes command)
-#                                       (and offer to put it in the dock in place of GNOME Files)
-#   ./install.sh --dock                 put it in the dock in place of GNOME Files (without asking)
+#                                       (and offer to put it in the dock in place of GNOME Files, or Dolphin in Plasma's taskbar)
+#   ./install.sh --dock                 put it in the dock in place of GNOME Files (Dolphin), without asking
 #   ./install.sh --install-recommended  also install the recommended packages (RAW/HEIC previews, network, drives…)
 #   ./install.sh --uninstall
 # --default, --dock and --install-recommended can be combined.
@@ -33,11 +33,11 @@ LEGACY_BIN="$HOME/.local/bin/folder-explorer"
 LEGACY_DESKTOP="$HOME/.local/share/applications/folder-explorer.desktop"
 
 # Packages needed to build (all in Ubuntu's main archive)
-BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev libglib2.0-dev libxcb1-dev libsecret-1-dev)
+BUILD_DEPS=(g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev libxcb1-dev libsecret-1-dev)
 # Recommended apt packages (see docs/dependencies.md). Most come with a standard Ubuntu desktop;
 # kimageformat6-plugins (camera RAW, HEIC, AVIF, JPEG XL, PSD previews) usually doesn't.
 RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-formats-plugins 'qt6-svg-plugins|libqt6svg6'
-             kimageformat6-plugins adwaita-icon-theme qt6-gtk-platformtheme
+             kimageformat6-plugins adwaita-icon-theme qt6-gtk-platformtheme qt6-translations-l10n
              '7zip|p7zip-full' unrar zip unzip pigz zpaq zstd xz-utils bzip2 lzip)   # archives (unrar is in multiverse)
 # a|b: the first of these the system has (7zip is p7zip-full on Debian 12 and older Ubuntu releases; the SVG plugins
 # come with libqt6svg6 on Ubuntu 24.04 / Linux Mint 22)

@@ -163,12 +163,12 @@ void save_rotation(const QString &path, int rotation, bool flip)
         int v = compose(1, rotation, flip);
         auto r = proc::run({"exiftool", "-q", "-overwrite_original", "-Orientation#=" + QString::number(v), path}, 60000);
         if (r.rc != 0)
-            throw Error(QString("exiftool couldn't save the rotation of %1: %2")
+            throw Error(tx("exiftool couldn't save the rotation of %1: %2")
                             .arg(basename(path), QString::fromUtf8(r.err).trimmed()));
     } else if (how == "pixels") {
         save_edit(path, path, Edit{rotation, flip, QRect(), QSize()});
     } else {
-        throw Error(QString("%1: Kestrel can't save a rotation in this format without losing quality.").arg(basename(path)));
+        throw Error(tx("%1: Kestrel can't save a rotation in this format without losing quality.").arg(basename(path)));
     }
 }
 
@@ -195,10 +195,10 @@ static void turn_jpeg(const QString &path, int n, bool trim)
         if (r.rc != 0 || r.out.isEmpty()) {
             QString err = QString::fromUtf8(r.err).trimmed();
             if (err.contains("perfect", Qt::CaseInsensitive))
-                throw NotWholeBlocks(QString("%1: its width or height isn't a whole number of JPEG blocks, so turning "
-                                             "it exactly would lose a strip at the edge")
+                throw NotWholeBlocks(tx("%1: its width or height isn't a whole number of JPEG blocks, so turning "
+                                        "it exactly would lose a strip at the edge")
                                          .arg(basename(path)));
-            throw Error(QString("Couldn't turn %1: %2").arg(basename(path), err.isEmpty() ? QString("jpegtran failed") : err));
+            throw Error(tx("Couldn't turn %1: %2").arg(basename(path), err.isEmpty() ? tx("jpegtran failed") : err));
         }
         data = r.out;
     }
@@ -243,10 +243,10 @@ void rotate_file(const QString &path, int rotation, bool flip, const QString &ho
         save_edit(path, path, {Edit{rotation, flip, QRect(), QSize()}}, ext_of(path) == ".webp" ? 100 : -1, true);
     } else if (method == "reencode") {
         if (!reencode)
-            throw Error(QString("%1: turning it means saving it again, which loses a little quality.").arg(basename(path)));
+            throw Error(tx("%1: turning it means saving it again, which loses a little quality.").arg(basename(path)));
         save_edit(path, path, {Edit{rotation, flip, QRect(), QSize()}}, 92, true);
     } else {
-        throw Error(QString("%1: Kestrel can't turn images in this format.").arg(basename(path)));
+        throw Error(tx("%1: Kestrel can't turn images in this format.").arg(basename(path)));
     }
 }
 
@@ -260,9 +260,9 @@ void straighten(const QString &path)
 {
     metadata::OrientationTag tag = metadata::orientation_tag(path);
     if (!can_straighten(path))
-        throw Error(basename(path) + ": not a JPEG turned by its orientation tag.");
+        throw Error(tx("%1: not a JPEG turned by its orientation tag.").arg(basename(path)));
     if (!which("jpegtran"))
-        throw Error("Straightening a JPEG without losing quality needs jpegtran (package libjpeg-turbo-progs).");
+        throw Error(tx("Straightening a JPEG without losing quality needs jpegtran (package libjpeg-turbo-progs)."));
     static const QMap<int, QStringList> OPS = {{2, {"-flip", "horizontal"}}, {3, {"-rotate", "180"}},
                                                {4, {"-flip", "vertical"}},   {5, {"-transpose"}},
                                                {6, {"-rotate", "90"}},       {7, {"-transverse"}},
@@ -271,8 +271,8 @@ void straighten(const QString &path)
     if (r.rc != 0 || r.out.isEmpty()) {
         QString err = QString::fromUtf8(r.err).trimmed();
         if (err.contains("perfect", Qt::CaseInsensitive))
-            err = "its width or height isn't a whole number of JPEG blocks, so turning it would lose a strip at the edge";
-        throw Error(QString("Couldn't straighten %1: %2").arg(basename(path), err.isEmpty() ? QString("jpegtran failed") : err));
+            err = tx("its width or height isn't a whole number of JPEG blocks, so turning it would lose a strip at the edge");
+        throw Error(tx("Couldn't straighten %1: %2").arg(basename(path), err.isEmpty() ? tx("jpegtran failed") : err));
     }
     QByteArray data = r.out;
     metadata::OrientationTag t2 = metadata::orientation_tag_in(data);   // copied with -copy all
@@ -372,12 +372,12 @@ void save_edit(const QString &src, const QString &dst, const QList<Edit> &steps,
     bool replace = dst == src;
     QByteArray fmt = writer_format(dst);
     if (fmt.isEmpty())
-        throw Error(QString("Kestrel can't write %1 files.").arg(ext_of(dst).mid(1).toUpper()));
+        throw Error(tx("Kestrel can't write %1 files.").arg(ext_of(dst).mid(1).toUpper()));
     QImageReader reader(src);
     reader.setAutoTransform(true);
     QImage img = reader.read();
     if (img.isNull())
-        throw Error(QString("Couldn't read %1: %2").arg(basename(src), reader.errorString()));
+        throw Error(tx("Couldn't read %1: %2").arg(basename(src), reader.errorString()));
     for (const Edit &e : steps)
         img = apply(img, e);   // keeps a PNG's text chunks (generation prompts), which the writer writes again
     QBuffer buf;
@@ -388,7 +388,7 @@ void save_edit(const QString &src, const QString &dst, const QList<Edit> &steps,
     else if (fmt == "jpg" || fmt == "jpeg" || fmt == "webp")
         w.setQuality(95);
     if (!w.write(img))
-        throw Error(QString("Couldn't write %1: %2").arg(basename(dst), w.errorString()));
+        throw Error(tx("Couldn't write %1: %2").arg(basename(dst), w.errorString()));
     QByteArray data = buf.data();
     if (is_jpeg(src) && (fmt == "jpg" || fmt == "jpeg"))
         data = with_app1(data, app1_segments(src));

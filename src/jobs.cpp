@@ -128,7 +128,7 @@ void Queue::submit(Task *t)
     l.drives = ids;
     l.paused = start_paused();
     t->queued = true;
-    t->text = l.paused ? "Paused (not started)" : all ? "Starting…" : "Waiting for its turn (its drive is in use)…";
+    t->text = l.paused ? tx("Paused (not started)") : all ? tx("Starting…") : tx("Waiting for its turn (its drive is in use)…");
     local << l;
     connect(t, &QThread::finished, this, [this, t]() { finished(t); });
     connect(t, &Task::cancel_asked, this, [this, t]() {   // cancelled while waiting: its thread starts only to end
@@ -239,7 +239,7 @@ void Queue::apply(Task *t, const QString &action)
         bool on = action == "pause";
         if (t->queued) {
             l->paused = on;
-            t->text = on ? "Paused (not started)" : "Waiting for its turn (its drive is in use)…";
+            t->text = on ? tx("Paused (not started)") : tx("Waiting for its turn (its drive is in use)…");
         } else {
             t->set_paused(on);
         }

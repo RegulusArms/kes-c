@@ -84,7 +84,7 @@ bool store(const QString &fp, const QString &name, const QString &password)
     if (fp.isEmpty() || password.isEmpty())
         return false;
     GError *err = nullptr;
-    QByteArray f = fp.toUtf8(), label = ("Kestrel Explorer: archive password for " + name).toUtf8(), pw = password.toUtf8();
+    QByteArray f = fp.toUtf8(), label = tx("Kestrel Explorer: archive password for %1").arg(name).toUtf8(), pw = password.toUtf8();
     gboolean ok = secret_password_store_sync(schema(), SECRET_COLLECTION_DEFAULT, label.constData(), pw.constData(), nullptr,
                                              &err, "fingerprint", f.constData(), "kind", "archive", nullptr);
     g_clear_error(&err);

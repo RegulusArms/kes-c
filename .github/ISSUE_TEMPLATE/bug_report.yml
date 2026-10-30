@@ -1,0 +1,152 @@
+name: Bug report
+description: Something in Kestrel Explorer doesn't work as it should
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. The details below let it be reproduced without asking you again.
+
+        **Before you post:** logs, paths and file names can show personal details (your user name, folder and
+        file names, servers). Look through what you paste and replace anything private.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, including any message Kestrel showed (its exact words help).
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From opening Kestrel to the problem, one step per line.
+      placeholder: |
+        1. Open a folder on a USB drive
+        2. Select 3 files and press Ctrl+C
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-often
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where in Kestrel the problem is.
+      options:
+        - Copying, moving, deleting, the Jobs window
+        - Archives (compress, extract, Open as Archive)
+        - Image viewer and media conversion
+        - Overview, sidebar, drives and network shares
+        - Tapes (LTFS) and floppy disks
+        - Other apps' Open and Save windows (file chooser)
+        - Admin session
+        - Search, sorting and grouping
+        - Preferences and right-click menus
+        - Windows, tabs and drag and drop
+        - BleachBit (shred, cleaner)
+        - Installing (install.sh, kes-setup, the .deb, apt)
+        - Speed or memory use
+        - Crash
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Kestrel version
+      description: The output of `kes --version` (or ☰ → About).
+      placeholder: "Kestrel Explorer 0.3.2-alpha.29"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How Kestrel was installed
+      options:
+        - apt, the release's own suite (noble, resolute)
+        - apt, its -dev suite (noble-dev, resolute-dev)
+        - apt, stable or dev (older setup)
+        - A downloaded .deb
+        - Built from source (install.sh or cmake)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Linux distribution and release
+      placeholder: "Ubuntu 26.04, Linux Mint 22.1…"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: desktop
+    attributes:
+      label: Desktop
+      options:
+        - GNOME
+        - Cinnamon
+        - KDE Plasma
+        - Xfce
+        - MATE
+        - Budgie
+        - Other (say which below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: session
+    attributes:
+      label: Session
+      description: "If you're not sure: `echo $XDG_SESSION_TYPE` in a terminal."
+      options:
+        - Wayland
+        - X11
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      description: |
+        Whatever fits the problem (check it for private details first):
+        - **A job that failed** (copy, move, extract, compress…): the Jobs window (Ctrl+Shift+J) → select the job → **Save Log…**, and attach the file.
+        - **A crash, or a message in a terminal:** start Kestrel from a terminal with `kes`, make it happen again and paste what it prints. After a crash, `coredumpctl gdb kes` and then `bt` in gdb gives a backtrace.
+        - **A window that's the wrong size or misbehaves:** Preferences → Show developer tools, then ☰ → Tower… → Windows → save, and attach the file.
+        - **A drive or folder:** `findmnt -T /the/folder` (its file system and how it's mounted).
+        - **Slowness:** start it with `KESTREL_STATS=1 kes`, do the slow thing, quit with ☰ → Quit, and paste the summary it prints.
+      render: shell
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: |
+        For example: the file system or drive involved (USB, NVMe, network share, LTFS), the archive's format,
+        which optional tools are installed (exiftool, ffmpeg, 7-Zip, rar, BleachBit, ripgrep), your language
+        and locale (`locale`), screenshots.

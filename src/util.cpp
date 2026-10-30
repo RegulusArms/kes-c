@@ -827,29 +827,23 @@ QString md5(const QString &s)
     return QString::fromLatin1(QCryptographicHash::hash(enc(s), QCryptographicHash::Md5).toHex());
 }
 
+// In decimal units (1 kB = 1000 bytes, as GNOME Files counts), with the system's decimal mark (i18n.h)
 QString human_size(double n)
 {
-    const char *units[] = {"bytes", "kB", "MB", "GB", "TB", "PB"};
-    for (int i = 0; i < 6; ++i) {
-        if (n < 1000 || i == 5) {
-            if (i == 0)
-                return QString("%1 bytes").arg(qint64(n));
-            return QString("%1 %2").arg(n, 0, 'f', 1).arg(units[i]);
-        }
+    static const char *const units[] = {TX_NOOP("%1 kB"), TX_NOOP("%1 MB"), TX_NOOP("%1 GB"), TX_NOOP("%1 TB"), TX_NOOP("%1 PB")};
+    if (n < 1000)
+        return txn("%Ln byte(s)", qint64(n));
+    for (int i = 0; i < 5; ++i) {
         n /= 1000;
+        if (n < 1000 || i == 4)
+            return tx(units[i]).arg(i18n::decimal(n, 1));
     }
     return QString();
 }
 
 QString human_size(qint64 n) { return human_size(double(n)); }
 
-QString group_digits(qint64 n)
-{
-    QString s = QString::number(n < 0 ? -n : n);
-    for (int i = s.size() - 3; i > 0; i -= 3)
-        s.insert(i, ',');
-    return n < 0 ? "-" + s : s;
-}
+QString group_digits(qint64 n) { return i18n::number(n); }
 
 // natural_key: compare runs of digits by value and other text case-insensitively
 bool natural_less(const QString &a, const QString &b)
@@ -1195,6 +1189,37 @@ QString desktop_schema(const QString &gnome_schema)
     return gnome_schema;
 }
 
+bool is_kde()
+{
+    return QString::fromLocal8Bit(qgetenv("XDG_CURRENT_DESKTOP")).toLower().split(':').contains("kde");
+}
+
+QString kde_setting(const QString &file, const QString &group, const QString &key)
+{
+    QStringList dirs = {env_or("XDG_CONFIG_HOME", HOME() + "/.config")};
+    dirs += env_or("XDG_CONFIG_DIRS", "/etc/xdg").split(':', Qt::SkipEmptyParts);
+    for (const QString &dir : dirs) {
+        bool ok = false;
+        QByteArray data = read_file(join(dir, file), &ok);
+        if (!ok)
+            continue;
+        QString section;
+        for (const QString &raw : QString::fromUtf8(data).split('\n')) {
+            QString line = raw.trimmed();
+            if (line.startsWith('[') && line.endsWith(']')) {
+                section = line.mid(1, line.size() - 2);   // "[A][B]", a group in a group: "A][B"
+                continue;
+            }
+            int eq = line.indexOf('=');
+            QString name = line.left(eq).trimmed();
+            name = name.left(name.indexOf('['));   // "Theme[$e]": KDE's flags on a key
+            if (section == group && eq > 0 && name == key)
+                return line.mid(eq + 1).trimmed();
+        }
+    }
+    return QString();
+}
+
 void setup_icon_theme()
 {
     QStringList paths = QIcon::themeSearchPaths();
@@ -1208,10 +1233,15 @@ void setup_icon_theme()
     QIcon::setThemeSearchPaths(paths);
     if (QIcon::themeName().isEmpty() || QIcon::themeName() == "hicolor") {
         QString theme = "Adwaita";
-        auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
-        QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
-        if (r.rc == 0 && !out.isEmpty())
-            theme = out;
+        if (is_kde()) {   // Qt asks Plasma itself when KDE's Qt integration is installed; without it, Plasma's setting
+            QString kde = kde_setting("kdeglobals", "Icons", "Theme");
+            theme = kde.isEmpty() ? "breeze" : kde;
+        } else {
+            auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
+            QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
+            if (r.rc == 0 && !out.isEmpty())
+                theme = out;
+        }
         QIcon::setThemeName(theme);
     }
     QIcon::setFallbackThemeName("Adwaita");
@@ -1700,9 +1730,9 @@ void set_default_for_type(const AppRef &app, const QString &ct)
 QString which_path(const QString &name) { return QStandardPaths::findExecutable(name); }
 bool which(const QString &name) { return !which_path(name).isEmpty(); }
 
-bool open_terminal(const QString &directory)
+QList<QStringList> terminal_commands(const QString &directory)
 {
-    const QList<QStringList> candidates = {
+    QList<QStringList> candidates = {
         {"ptyxis", "--new-window", "--working-directory=" + directory},
         {"gnome-terminal", "--working-directory=" + directory},
         {"kgx", "--working-directory=" + directory},
@@ -1710,7 +1740,14 @@ bool open_terminal(const QString &directory)
         {"xfce4-terminal", "--working-directory=" + directory},
         {"x-terminal-emulator"},
     };
-    for (const QStringList &cmd : candidates) {
+    if (is_kde())   // Plasma's own, even with a GNOME terminal installed too
+        candidates.move(3, 0);
+    return candidates;
+}
+
+bool open_terminal(const QString &directory)
+{
+    for (const QStringList &cmd : terminal_commands(directory)) {
         if (which(cmd[0])) {
             proc::start_detached(cmd, directory);
             return true;
@@ -1719,16 +1756,26 @@ bool open_terminal(const QString &directory)
     return false;
 }
 
+QList<QStringList> wallpaper_commands(const QString &path)
+{
+    if (is_kde())   // every screen; Plasma keeps it in its own config, not GSettings
+        return {{"plasma-apply-wallpaperimage", path}};
+    QList<QStringList> cmds;
+    QString uri = file_uri(path);
+    QString schema = desktop_schema("org.gnome.desktop.background");
+    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
+        if (has_schema_key(schema, key))
+            cmds.append({"gsettings", "set", schema, key, uri});
+    return cmds;
+}
+
 void set_wallpaper(const QString &path)
 {
     // through UWP when it's installed (a new UWP profile with the image on every monitor), else the desktop's own
     if (uwp::set_wallpaper(path))
         return;
-    QString uri = file_uri(path);
-    QString schema = desktop_schema("org.gnome.desktop.background");
-    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
-        if (has_schema_key(schema, key))
-            proc::run({"gsettings", "set", schema, key, uri}, 5000);
+    for (const QStringList &cmd : wallpaper_commands(path))
+        proc::run(cmd, 5000);
 }
 
 void trash(const QString &path)

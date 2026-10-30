@@ -9,7 +9,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are 792 checks in 21 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), archives (extracting several at once, looking inside one, testing, and remembered passwords with a real keyring), Preferences and the right-click menus' layouts, the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar and its Mounts section, searching (filters, and inside files with the index, ripgrep or grep), pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), the job queue and its windows, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, the image viewer (lossless rotations, crop and resize, compare, the filmstrip and info panel), and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 and 26.04 on every push that changes more than Markdown files, also with AddressSanitizer and UndefinedBehaviorSanitizer, builds a .deb on each, installs each on a clean system of its release, and, once they're published, installs them again from each release's apt suite. Details: [tests/README.md](../tests/README.md).
+There are 792 checks in 21 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), archives (extracting several at once, looking inside one, testing, and remembered passwords with a real keyring), Preferences and the right-click menus' layouts, the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar and its Mounts section, searching (filters, and inside files with the index, ripgrep or grep), pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), the job queue and its windows, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, the image viewer (lossless rotations, crop and resize, compare, the filmstrip and info panel), and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 and 26.04 on every push that changes more than Markdown files and the benchmark, also with AddressSanitizer and UndefinedBehaviorSanitizer, builds a .deb on each, installs each on a clean system of its release, and, once they're published, installs them again from each release's apt suite. Details: [tests/README.md](../tests/README.md).
 
 ## Architecture
 
@@ -68,6 +68,9 @@ Kestrel isn't single-instance: a folder opened from another app may start a Kest
        │   cleared caches                                              │
        │ • hands folders to an open window ("open folders as tabs")    │
        │ • the job queue: lanes on drives for every Kestrel's jobs     │
+       │ • one Jobs window: each Kestrel's finished and thumbnail      │
+       │   jobs, a job's steps and log when the window asks for them,  │
+       │   and which Kestrel has the window open                       │
        │                                                               │
        │ Checks every message (protocol version, known types, the      │
        │ types of known fields, absolute paths, size); so does each    │
@@ -111,6 +114,59 @@ To keep it that way, a new window:
 
 tests/test_ui.cpp checks the source for modal calls, so one that slips in fails the tests.
 
+## Translations
+
+Kestrel ships in English and ten other languages (Chinese (Simplified), French, German, Italian, Japanese, Korean,
+Portuguese (Brazil and Portugal), Russian, Spanish; [translations.md](translations.md)). Every text the user sees goes through `tx()`, and
+`translations/kestrel_<language>.ts` holds a language's translations. Each `.ts` is built into `kes` (as
+`:/i18n/kestrel_<language>.qm`), and at startup Kestrel loads English, then the desktop's language on top when there's a
+file for it. So adding a language is adding its `.ts`, with nothing to change in the code. Numbers, sizes and dates
+follow the system's formats (`LC_NUMERIC`, `LC_TIME`) whatever the language, as GNOME does.
+
+**Marking a new text** (`src/i18n.h`, included by `util.h`):
+
+- `tx("Open")` for a text. All of Kestrel's texts share one context, so the same English is one translation everywhere;
+  when it needs two (a verb and a noun), tell them apart: `tx("Open", "verb")`.
+- `txn("%Ln file(s)", n)` for a text with a count: the translation picks the form for `n`, as each language counts
+  (English has two, some have one or several). `%Ln` writes the number with the system's digit grouping (`%n`
+  without). After adding one, run `translations/update.sh` and write its two English forms in
+  `translations/kestrel_en.ts` ("%Ln file" and "%Ln files"), or a count of one shows as "1 file(s)".
+- A sentence with parts in it is one text: `tx("Copying “%1” to %2").arg(name, folder)` with every part in a single
+  `.arg()`, never pieces joined with `+`, so a translation can put the parts in its own order.
+- A text kept in a table is marked where it's written with `TX_NOOP("Name")` (`TXN_NOOP` for a count's) and passed
+  through `tx()` (`txn()`) where it's shown. Use this when the English is also a key, as Preferences' tab and group
+  names and the Overview's section titles are.
+- Not for settings keys, menu ids, file names, command lines, or what's handed to other programs. A line that passes a
+  literal straight to a widget or a message on purpose says why with `notr:` in a comment.
+- Code never compares what a widget shows: a combo box keeps its value as the item's data, not its text.
+
+**The tools:**
+
+- `translations/update.sh` (or `cmake --build build --target update_translations`) refreshes every `.ts` from the code
+  with `lupdate`: new texts added, gone ones dropped, translations kept. English keeps only the plural forms.
+- `translations/update.sh --pseudo pseudo.qm` makes the pseudo-translation, where every text is padded and accented
+  (`[Öρéñ··]`). Run Kestrel with it, `KESTREL_TEST_TRANSLATION=pseudo.qm build/kes`: a text still in plain English
+  wasn't marked, and a clipped one needs more room, as translations are often longer than English.
+
+**Adding a language:** copy `kestrel_en.ts` to `kestrel_<language>.ts` (`de`, `pt_BR`…), set its `language`
+attribute, run `translations/update.sh` to fill it with every text, and translate them, for example with Qt
+Linguist (`linguist`). Rebuild and start Kestrel with that language (`LANGUAGE=de build/kes`). Qt's own texts
+(standard buttons) come from Qt's translations for that language (`qt6-translations-l10n`, a Recommends).
+Name the file by its language alone (`kestrel_de.ts`, which `de_AT` and `de_CH` also load) unless its variants
+differ: then each gets its own (`kestrel_pt_BR.ts`, `kestrel_pt_PT.ts`, `kestrel_zh_CN.ts`). Never a bare
+`kestrel_pt.ts` beside `kestrel_pt_BR.ts`: Qt tries `pt-Latn-BR` first and shortens it to `pt` before it gets to
+`pt-BR`, so Brazil would get the other one.
+
+**New texts:** `update.sh` adds each new text to every language's file, marked unfinished, and Kestrel shows it in
+English there until it's translated. Reports of wrong translations come in through the issue tracker's "Incorrect
+translation" form (`.github/ISSUE_TEMPLATE/incorrect_translation.yml`).
+
+The tests watch this: `ui` fails on a literal passed to a widget or message without `tx()`, and `i18n` checks that
+every `.ts` builds and keeps each text's `%1` and `%n`, that every count in the code has English forms, that each
+desktop language finds its file (`pt_BR`, `pt_PT`, `de_AT` → `de`), that Russian picks its three plural forms, and, with
+the pseudo-translation installed, that the main windows and menus show no untranslated text. `tests/run.sh` runs
+every test with `LANGUAGE=en`, so the English texts they check are what they get on any machine.
+
 ## Layout
 
 | File | Purpose |
@@ -141,7 +197,7 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/animate.cpp` | Animated GIFs and WebM clips playing in the file view |
 | `src/fm1.cpp` | The `org.freedesktop.FileManager1` service ("Show in folder" from browsers and other apps) |
 | `src/chooser.cpp` | The system's file chooser: the portal backend (`kes --file-chooser`) and the Save/Open bar of chooser windows |
-| `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`) |
+| `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`), on KDE Plasma on Wayland through a KWin script loaded for each drop |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
 | `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
 | `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
@@ -156,6 +212,8 @@ tests/test_ui.cpp checks the source for modal calls, so one that slips in fails 
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |
 | `src/health.cpp` | Drive health (S.M.A.R.T.) from udisks over D-Bus: the cards' health line, the Drive Health window, the failing-drive notification |
+| `src/i18n.cpp` | Translations: loading them at startup (`tx()`, `txn()` in `i18n.h`), and the system's formats for numbers and dates |
+| `translations/` | Each language's `.ts` file (English's holds only its plural forms) and `update.sh`, which refreshes them from the code and makes the pseudo-translation |
 | `src/util.cpp` | Shared helpers: paths and file-system calls, file types, icons, desktop integration (default apps, wallpaper, terminal), trash on every drive, GTK bookmarks |
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |

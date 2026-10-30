@@ -2,15 +2,16 @@
 //
 // Starred items are Kestrel's own list (~/.config/kestrel-explorer/starred.json). Recent is the desktop's shared
 // recently-used list (~/.local/share/recently-used.xbel), which GTK apps write too; files opened from Kestrel are
-// added to it unless "Remember recent files" is off in GNOME's privacy settings.
+// added to it unless "Remember recent files" is off in GNOME's privacy settings, or Preferences → Privacy's
+// "history_recent" is.
 //
 // Pinned items (~/.config/kestrel-explorer/pinned.json, {folder: [names]}) aren't listed anywhere: "Pinned & Starred
 // First" sorts them to the top of their folder.
 //
 // Frequent folders (~/.config/kestrel-explorer/frequent.json, {folder: [visits, last visit]}): the folders opened in
-// Kestrel's windows (not in file choosers), counted while the desktop's File History switch is on, as Recent is. The
-// Overview can show the most used. Counted in memory and written a few seconds later, merged with the file as it is
-// then (so another Kestrel's visits stay); the 200 most used are kept.
+// Kestrel's windows (not in file choosers), counted while the desktop's File History switch is on, as Recent is, and
+// Preferences → Privacy's "history_frequent". The Overview can show the most used. Counted in memory and written a few
+// seconds later, merged with the file as it is then (so another Kestrel's visits stay); the 200 most used are kept.
 //
 // Folder sorts (~/.config/kestrel-explorer/sorts.json, {folder: [column, order, group, group_by]}): each folder keeps
 // the sort it was last given, and its grouping (groups.h: none, by period or by day, of the date modified, created or
@@ -72,5 +73,11 @@ void save_frequent();                              // write the visits counted s
 
 QStringList recent_files(int limit = 500);   // local files from the recently-used list, newest first
 void add_recent(const QStringList &paths);   // files opened from Kestrel (as GNOME Files does)
+
+// Preferences → Privacy. The history Kestrel keeps (Frequent Folders, recent servers, the last Save folder, the image
+// viewer's recent folders): forgotten here and in the other Kestrels. clear_recent: the desktop's whole Recent list,
+// every app's; false if it couldn't be written.
+void clear_history();
+bool clear_recent();
 
 }  // namespace places

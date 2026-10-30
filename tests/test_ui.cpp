@@ -34,6 +34,103 @@ static bool depends_on_computer(const QString &text)
            (text.startsWith("Open in ") && !ALWAYS.contains(text));
 }
 
+// Calls in the source that are given a bare string literal holding a word ("…", QString("…"), {"…", …}) as one of
+// their arguments, where it would be shown: "file:line: the call". A call spread over lines is read whole; a literal
+// in a nested call (icon({"go-up"}), settings().value("key")) isn't one of its arguments. "notr:" in a comment on
+// the call's first line excuses it.
+static QStringList untranslated_literals(const QString &dir)
+{
+    static const QRegularExpression call(
+        R"((?<![\w.>:])(?:\w+(?:\.|->))?\b(setText|setToolTip|setWindowTitle|setPlaceholderText|setStatusTip|setWhatsThis|)"
+        R"(showMessage|setTitle|setLabelText|setAccessibleName|setAccessibleDescription|addAction|addMenu|addTab|)"
+        R"(insertTab|setTabText|setTabToolTip|setHeaderLabels|setHeaderLabel|addItem|addItems|insertItem|setItemText|)"
+        R"(setSpecialValueText|setSuffix|setPrefix|setInformativeText|setDetailedText|setButtonText|addButton|addRow|)"
+        R"(QAction|QLabel|QPushButton|QCheckBox|QRadioButton|QGroupBox|QMenu|QTreeWidgetItem|QListWidgetItem|)"
+        R"(QStandardItem|QMessageBox|warn|inform|ask|ask_yes|ask_box|ask_text|tell|choose_folder|choose_file|show_osd|clear_image|)"
+        R"(small|row)\()");
+    static const QRegularExpression word("[A-Za-z]{2}");
+    QStringList out;
+    QDir src(dir);
+    for (const QString &f : src.entryList({"*.cpp", "*.h"}, QDir::Files)) {
+        if (f == "admin_helper.cpp" || f == "i18n.h")   // (the root helper shows nothing; i18n.h documents tx())
+            continue;
+        const QString text = QString::fromUtf8(read_file(src.filePath(f)));
+        auto it = call.globalMatch(text);
+        while (it.hasNext()) {
+            QRegularExpressionMatch m = it.next();
+            int line_start = text.lastIndexOf('\n', m.capturedStart()) + 1;
+            QString line = text.mid(line_start, text.indexOf('\n', m.capturedStart()) - line_start);
+            if (line.trimmed().startsWith("//") || line.trimmed().startsWith("*") || line.contains("notr:"))
+                continue;
+            // its arguments, at the top level: split on commas outside brackets, strings and characters
+            QStringList args;
+            QString cur;
+            int depth = 0;
+            for (int i = m.capturedEnd(); i < text.size(); ++i) {
+                QChar c = text[i];
+                if (c == '"' || c == '\'') {   // a literal, whole
+                    int j = i + 1;
+                    while (j < text.size() && text[j] != c)
+                        j += text[j] == '\\' ? 2 : 1;
+                    cur += text.mid(i, j - i + 1);
+                    i = j;
+                    continue;
+                }
+                if (depth == 0 && (c == ',' || c == ')')) {
+                    args << cur.trimmed();
+                    cur.clear();
+                    if (c == ')')
+                        break;
+                    continue;
+                }
+                if (c == '(' || c == '{' || c == '[')
+                    ++depth;
+                else if (c == ')' || c == '}' || c == ']')
+                    --depth;
+                cur += c;
+            }
+            // which arguments are shown: a message's all (title, text, buttons); a text window's title and label; a
+            // chooser's title and filter; otherwise the first one holding a literal (an icon's names aside): after it
+            // come data (a combo box item's value, a key)
+            const QString fn = m.captured(1);
+            static const QStringList all = {"warn", "inform", "tell", "ask", "ask_yes", "QMessageBox"};
+            QList<int> shown;
+            if (all.contains(fn)) {
+                for (int k = 0; k < args.size(); ++k)
+                    shown << k;
+            } else if (fn == "ask_text") {
+                shown = {1, 2};
+            } else if (fn == "choose_folder" || fn == "choose_file") {
+                shown = {1, 3};
+            } else {
+                for (int k = 0; k < args.size(); ++k)
+                    if (args[k].contains('"') && !args[k].startsWith("icon(") && !args[k].startsWith("theme_icon(") &&
+                        !args[k].startsWith("QIcon")) {
+                        shown << k;
+                        break;
+                    }
+            }
+            for (int k : shown) {
+                QString a = args.value(k);
+                for (const char *wrap : {"QString(", "QStringLiteral(", "QLatin1String(", "{"})
+                    if (a.startsWith(wrap))
+                        a = a.mid(int(strlen(wrap))).trimmed();
+                if (!a.startsWith('"'))
+                    continue;
+                int end = 1;
+                while (end < a.size() && a[end] != '"')
+                    end += a[end] == '\\' ? 2 : 1;
+                if (word.match(a.mid(1, end - 1)).hasMatch()) {
+                    out << f + ":" + QString::number(text.left(m.capturedStart()).count('\n') + 1) + ": " +
+                               line.trimmed().left(140);
+                    break;
+                }
+            }
+        }
+    }
+    return out;
+}
+
 static QString label(const QAction *a)   // the text without its mnemonic ("&&" is a real "&")
 {
     return QString(a->text()).replace("&&", "\x01").remove('&').replace('\x01', '&');
@@ -415,6 +512,20 @@ int main(int argc, char **argv)
         w->set_view("grid");
         w->navigate(home);
         wait_for([&]() { return w->pane()->path == home; });
+    }
+
+    // -- a folder whose name holds "&": its tab doubles it, which the tab bar shows as one "&" (a lone one underlined
+    // the next letter instead), and the window's title has it as it is
+    {
+        QString dir = home_path("Tom & Jerry");
+        makedirs(dir, true);
+        Pane *own = w->new_tab(dir);
+        spin(100);
+        int i = w->tabs->indexOf(own);
+        check(w->tabs->tabText(i) == "Tom && Jerry" && w->windowTitle().startsWith("Tom & Jerry — "),
+              "a folder named “Tom & Jerry” shows as that on its tab and in the window's title (tab: " + w->tabs->tabText(i) +
+                  ", title: " + w->windowTitle() + ")");
+        w->close_tab(i);
     }
 
     // -- a drag that starts in the view itself, grouped by period or by day: what it carries is what the view's own
@@ -904,6 +1015,14 @@ int main(int argc, char **argv)
         }
         check(found.isEmpty(), "no window is opened modally anywhere in the source" +
                                    (found.isEmpty() ? QString() : ":\n  " + found.join("\n  ")));
+
+        // the source: no text the user sees passed straight to a widget or a message (setText("…"), QAction("…"),
+        // warn(…, "…")…) without tx() or txn() (src/i18n.h), so it can be translated. A line can say why one isn't,
+        // with "notr:" in a comment.
+        QStringList bare = untranslated_literals(QString(TESTS_DIR) + "/../src");
+        check(bare.isEmpty(), "every text given to a widget or a message goes through tx() (" +
+                                  QString::number(bare.size()) + " don't" +
+                                  (bare.isEmpty() ? QString(")") : "):\n  " + bare.mid(0, 40).join("\n  ")));
     }
 
     // -- QStorageInfo asks drives for their size (statfs), which waits on a busy tape or a floppy: it's used only in the

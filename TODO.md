@@ -47,6 +47,17 @@ into.
   - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
     updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
 
+- [ ] **Double-clicking an encrypted archive whose password is in the keyring opens the Extract dialog.**
+  Right-click → Extract Here on the same archive (a RAR in the case seen) just extracts it, finding the password in
+  the keyring without asking, as expected; double-clicking it opens the Extract… dialog (with its Password field)
+  instead.
+  - Why: activating any archive calls `archive_ui::extract_dialog` (src/opening.cpp), which probes the archive and
+    always shows `ExtractDialog`; Extract Here calls `extract_here` → `extract_all` with `here_options()`, whose
+    password search tries the keyring before asking (src/archive_ui.cpp).
+  - To decide: should double-click do what Extract Here does (for every archive, or only an encrypted one whose
+    password is already saved), or keep the dialog but skip it when the keyring has the password? Update
+    docs/context-menus.md / the docs if what double-click does changes.
+
 ## New features
 
 ### Jobs
@@ -105,42 +116,13 @@ into.
 
 ### Desktops
 
-- [ ] **Kubuntu 26.04 (KDE Plasma) support.** The .deb already installs on 26.04 (CI's `package` job), and Kubuntu
-  uses the same archive, so this is desktop integration: everywhere Kestrel assumes GNOME or Cinnamon. Kubuntu 26.04
-  is Wayland-only. Test in a Kubuntu VM, the way Mint was done.
-  - **Probably fine already, to confirm:** Breeze colours and fonts come through KDE's Qt integration
-    (plasma-integration), dark mode through the portal's colour scheme (`desktop_prefers_dark`), cut/paste with Dolphin
-    (`application/x-kde-cutselection`), trash (`g_file_trash`), the shared thumbnail cache, `recently-used.xbel`
-    (KDE Frameworks write it too), archive passwords in KWallet (Secret Service).
-  - **File chooser portal (kes-setup):** `PORTAL_DESKTOP` becomes `kde` (right), but the FileChooser line falls back
-    to `kestrel;gnome;gtk;`. On KDE the fallback should be `kestrel;kde;`. Check `restart_portal` and `--undo` with
-    xdg-desktop-portal-kde.
-  - **Default file manager:** remember and restore Dolphin (`org.kde.dolphin.desktop`), not Nautilus. Today that's
-    `prev:-org.gnome.Nautilus.desktop` and the `pgrep nautilus`/`nemo` handling. A running Dolphin takes
-    `org.freedesktop.FileManager1` ("Show in folder"), so `--default` has to deal with it the way it quits Nautilus.
-  - **`--dock`:** Plasma's taskbar pins (launchers in `plasma-org.kde.plasma.desktop-appletsrc`). Change them through
-    plasmashell's `evaluateScript` over D-Bus, not by editing the file. This is the same open item as Cinnamon's panel.
-  - **Drag focus on Wayland:** the GNOME Shell extension does nothing under KWin. The equivalent is a small KWin
-    script loaded through `org.kde.KWin /Scripting` that activates the window under the pointer (a new path in
-    src/focus.cpp). It may not need a log-out.
-  - **gsettings-only desktop settings** (`desktop_schema()` only maps Cinnamon):
-    - wallpaper: `set_wallpaper()` → `plasma-apply-wallpaperimage`;
-    - File History privacy switch: KDE keeps it in its activity manager settings, not `org.gnome.desktop.privacy`;
-    - icon theme: `setup_icon_theme()` reads gsettings, which KDE's GTK-config module usually fills in. Reading
-      `kdeglobals` `[Icons] Theme=` is safer.
-  - **Drives, network shares and phones without gvfs:** src/overview.cpp uses GIO's volume monitor, and the udisks2
-    and MTP monitors come from gvfs, which Kubuntu may not install. Without it, unmounted USB drives, `smb://`/`sftp://`
-    and phones wouldn't appear or mount. Either add gvfs-backends/gvfs-daemons to Recommends (and install.sh's
-    RECOMMENDED) or add a udisks2 path. Check this first; it's the item most likely to change the plan.
-  - **Terminal:** `konsole` is in `open_terminal()` but comes after ptyxis and gnome-terminal. Try the desktop's own
-    terminal first.
+- [ ] **Kubuntu 26.04 (KDE Plasma): what only a real Plasma session shows.** The rest is done (0.3.2-alpha.33, under
+  Done). Still to try in a Kubuntu VM: archive passwords saved in KWallet (Secret Service), network shares (`smb://`,
+  `sftp://`) and phones (GIO's volume monitor; the .deb's Recommends bring gvfs-backends), drop focus on Wayland
+  (dragging into Firefox should give it the focus: the KWin script), `kes-setup --dock` with Kubuntu's own taskbar
+  pins, Set as Wallpaper, and Recent Files' "Do not remember".
   - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
-    `~/.config/baloofilerc`). Without it, Kestrel falls back to its own search, which is fine.
-  - **Tests:** a `XDG_CURRENT_DESKTOP=KDE` case in `installer` (portal fallback, Dolphin restore, dock script), plus
-    unit checks for the wallpaper and icon-theme choice. No new CI job: the 26.04 package check covers installing.
-  - **Docs:** a Kubuntu section in docs/install.md, like the Mint one.
-  - Order: walk through the app in the VM (drives first), then kes-setup (portal, Dolphin, FileManager1), then the
-    wallpaper/privacy/icon mapping, then KWin drag focus, then `--dock`.
+    `~/.config/baloofilerc`, `baloosearch`). Without it, Kestrel uses its own search, which is fine.
 
 ### Translations
 
@@ -182,25 +164,6 @@ into.
   - Order: build + loading + English .ts + pseudo-translation, then the `ui` check (warning only until the strings
     are done), then mark strings one area at a time, then plurals and locale formats.
 
-- [ ] **Translate Kestrel, the major languages first:** French, German, Italian, Spanish, Portuguese (both Brazilian
-  and European), Russian, Korean, Japanese and Chinese (Simplified). Needs the item above.
-  - **The files:** `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`. Translation itself: Qt Linguist,
-    or a hosted service such as Weblate (free for open source) so others can contribute.
-  - **Portuguese** comes in two versions, pt_BR and pt_PT. Check that the locale picks the right one (`pt_BR` →
-    pt_BR; `pt_PT` and plain `pt` → pt_PT).
-  - **Loading:** pick the translation from `QLocale::system()`, plus Qt's own `qtbase_*.qm` for the standard buttons
-    and dialogs (qt6-translations-l10n, a Recommends). Optionally add a Preferences setting to choose the language
-    (in src/prefs.cpp, applied on restart).
-  - **Russian** has three plural forms (1 файл, 2 файла, 5 файлов), which the `%n` plurals from the item above
-    handle; check a few counts (1, 2, 5, 11, 21) in it.
-  - **Widths:** German, French and Russian run about 30% longer. Check fixed-width buttons, Preferences rows, the status line
-    and column headers. CJK needs a font with the glyphs (the desktop's usually has them).
-  - **Outside kes:** the desktop entry (`Name[fr]=`, `Comment[…]`, `GenericName`), data/kestrel.portal, the GNOME
-    Shell extension's metadata, kes-setup's and the admin helper's messages (these could stay English at first; say
-    so in the docs).
-  - **Tests:** a run under `LANG=de_DE.UTF-8` (and Russian and one CJK locale) that checks the translation loads, plus the
-    `%1`/`%n` check from the item above over the real files.
-
 ### Tests and CI — beta release blocker
 
 *Everything in this section is to be done before the first beta.*
@@ -222,6 +185,23 @@ into.
     Kestrel does.
 
 ## Done
+- [x] **Translate Kestrel, the major languages first** (0.3.3-alpha.0). `translations/kestrel_{fr,de,it,es,pt_BR,pt_PT,ru,ko,ja,zh_CN}.ts`, every text translated (machine-made, not yet checked by native speakers: docs/translations.md says so and points to the issue tracker's "Incorrect translation" form, `.github/ISSUE_TEMPLATE/incorrect_translation.yml`). Loaded from `QLocale::system()` as before, with Qt's `qtbase_*.qm` (qt6-translations-l10n, now a Recommends). Portuguese: `pt_BR` → pt_BR, `pt_PT` → pt_PT; plain `pt` gets pt_BR (Qt counts it as Brazil), and other regions (pt_AO…) English. The European file can't be a bare `kestrel_pt.ts`: Qt tries `pt-Latn-BR` first and would shorten it to that. `tests/run.sh` runs with `LANGUAGE=en`. Not done: a Preferences setting to choose the language; checking widths in German, French and Russian; the texts outside kes (desktop entry, data/kestrel.portal, the GNOME Shell extension, kes-setup, the admin helper), which stay English. Test: `i18n`.
+- [x] **KDE Plasma (Kubuntu 26.04)** (0.3.2-alpha.33). Confirmed in a Kubuntu VM: installs, Breeze style/colours/
+  fonts/icons and a live switch to Breeze Dark (plasma-integration), USB drives, drag and drop (in Kestrel, to the
+  desktop, to Firefox), Open Terminal → Konsole, `kes-setup --default` (folders, the file chooser in Firefox) and
+  `--undo` (Dolphin back for folders, KDE's file chooser back). In an ubuntu:26.04 container with Plasma's packages:
+  cut/paste with Dolphin both ways (`application/x-kde-cutselection`), the shared trash, KIO writing
+  `recently-used.xbel`, the test suite with `XDG_CURRENT_DESKTOP=KDE`. Made: `util::is_kde()`, `kde_setting()` (KDE
+  config files, user's then system's); `wallpaper_commands` → `plasma-apply-wallpaperimage`; `remember_recent` reads
+  `kactivitymanagerd-pluginsrc` `what-to-remember` (2: Recent Files → Do not remember); `setup_icon_theme` reads
+  `kdeglobals` `[Icons] Theme`; `terminal_commands` puts Konsole first; `focus::activate_kwin` loads a KWin script per
+  drop over `org.kde.KWin /Scripting` (checked in headless `kwin_wayland --virtual`). kes-setup: `plasma_pins`
+  (plasmashell `evaluateScript`; no backslashes, gdbus unescapes them) for `--dock`/`--undo`/the question, the file
+  chooser's fallback from the desktop's portals.conf (`kestrel;kde;`), `forget_default` when `--undo` has nothing
+  recorded (was: GNOME Files), `qtpaths` found for xdg-mime, a note when Dolphin holds FileManager1. Not done: Baloo;
+  what's under the open Kubuntu item. Tests: `installer`, `theme`.
+- [x] **Finished jobs stay in the Jobs window until Clear Finished** (0.3.2-alpha.31). `TaskBoard` (src/fileops.cpp) no longer keeps only the newest 50; another Kestrel's "finished" list is merged by id (`publish_finished` sends the newest that fit in half a message), so only Clear Finished takes them away; a flight's "left" and a tower reset keep its finished jobs (`has_left`: the Jobs window says its log went with it instead of asking). Not done: the thumbnail jobs list still drops a job once it ends; finished jobs aren't kept across the last Kestrel closing. Test: `atc_tasks`.
+- [x] **Hide places from the sidebar; a Privacy tab** (0.3.2-alpha.31). `sidebar_hidden` (ids in `sidebar::PLACES`, src/widgets.cpp; a Places entry's extra is its id): Preferences → Sidebar → Places shown, and Hide from Sidebar in a place's menu (`Sidebar::hide_place`). Preferences → Privacy: `history_recent` (`places::add_recent`), `history_frequent` (`visit_folder`; the Overview says so), `history_servers` (`remember_server`), `history_viewer_folders` (`ImageViewer::remember_folder`), the desktop's File History shown (`history_desktop`), `places::clear_history` (what BleachBit's History option deletes) and `clear_recent` (the whole xbel, written empty). Test: `prefs`.
 - [x] **Drag-selecting from empty space selected nothing in the grid when dragged up and to the left** (0.3.2-alpha.26). The grid's `setSelection` (src/pane.cpp `FileView`, 0.3.2-alpha.17) told a press from a band by the rect's width and height, which are negative for `QRect(press, pointer)` dragged up-left, so the band was taken for a press on empty space; it now tests the normalized rect. Test: `ui`.
 - [x] **apt suites by Ubuntu release, so dropping one doesn't strand its users** (0.3.2-alpha.25; a .deb per release: alpha.26). Suites `noble`, `resolute` and their `-dev` ones beside `stable`/`dev`, in `.github/apt/distributions`; the apt job copies it and the page (`.github/apt/index.html`) to gh-pages and runs `reprepro includedeb` for each release's .deb into its suite and `APT_GENERAL`'s (noble) into `stable`/`dev` (`deb.yml`). A .deb per release, built in its container (`deb` matrix), version `…~ubuntu24.04`/`~ubuntu26.04`, Depends' libc/libstdc++/Qt minimums from the build system (CMakeLists.txt); `publish` makes the GitHub releases with both. Install instructions (page, docs/install.md, README): a block per release naming its suite (alpha.26; alpha.25's picked it from `/etc/os-release` and fell back to `stable`/`dev`, which could hand 26.04 the 24.04 package), how to switch from `stable`/`dev`, which GitHub download is whose; the page is copied to gh-pages only with a release. `apt-check` installs from each suite on its release's container (`check_package.sh --apt`), with a place for frozen suites. Dropping a release, the runner image's retirement and the signing key: docs/development.md "The apt repository and Ubuntu releases". Still to do when the time comes: the in-Kestrel notice for `stable`/`dev` users on a dropped release, and extending the signing key (expires 2029-10-04).
 - [x] **Compare two images in the viewer with a slider** (0.3.2-alpha.24). `compare == 3`: B's canvas draws A (`under`, the hidden `pinned`, kept at its size) right of the divider (`split`, `divider_x`) and itself left of it; a press near the divider, or anywhere while the images fit, moves it (Alt+drag still drags out). Zoom and pan linked by `link_view`; images of different sizes are each fitted to the window. D toggles it (`toggle_slider`); Compare in Viewer (`compare_images`, two images) → `MainWindow::compare_in_viewer` → `compare_first_two(3)`, A: the first in the folder's order. Test: `viewer`.

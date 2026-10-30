@@ -48,9 +48,9 @@ bool same_bytes(const QString &a, const QString &b, Task *task)
 {
     QFile fa(a), fb(b);
     if (!fa.open(QIODevice::ReadOnly))
-        throw OSError(EACCES, "Can't read " + a);
+        throw OSError(EACCES, tx("Can't read %1").arg(a));
     if (!fb.open(QIODevice::ReadOnly))
-        throw OSError(EACCES, "Can't read " + b);
+        throw OSError(EACCES, tx("Can't read %1").arg(b));
     if (fa.size() != fb.size())
         return false;
     const qint64 CHUNK = 1 << 20;
@@ -110,7 +110,7 @@ static void diff_dir(const QString &left, const QString &right, const QString &r
             it.kind = readlink(join(l, name)) == readlink(join(r, name)) ? SAME : DIFFERENT;
         } else {
             if (task)
-                task->report(0, 0, "Comparing " + sub);
+                task->report(0, 0, tx("Comparing %1").arg(sub));
             bool size = ls.st_size == rs.st_size, time = same_time(ls.st_mtime, rs.st_mtime);
             auto bytes_same = [&]() {
                 try {
@@ -141,17 +141,17 @@ QString kind_text(Kind k, const QString &left_name, const QString &right_name)
 {
     switch (k) {
     case SAME:
-        return "The same";
+        return tx("The same");
     case ONLY_LEFT:
-        return "Only in " + left_name;
+        return tx("Only in %1").arg(left_name);
     case ONLY_RIGHT:
-        return "Only in " + right_name;
+        return tx("Only in %1").arg(right_name);
     case LEFT_NEWER:
-        return "Newer in " + left_name;
+        return tx("Newer in %1").arg(left_name);
     case RIGHT_NEWER:
-        return "Newer in " + right_name;
+        return tx("Newer in %1").arg(right_name);
     case DIFFERENT:
-        return "Different contents";
+        return tx("Different contents");
     }
     return QString();
 }
@@ -232,7 +232,7 @@ void run_rsync(Task *task, const QString &source, const QString &dest, bool dele
             while (it.hasNext())
                 last = it.next().captured(1).toInt();
             if (last >= 0)
-                task->report(last, 100, QString("rsync: %1%").arg(last));
+                task->report(last, 100, tx("rsync: %1%").arg(last));
         }
         return true;
     };
@@ -264,8 +264,8 @@ void run_rsync(Task *task, const QString &source, const QString &dest, bool dele
     int rc = p->wait();
     if (rc != 0 && rc != 24) {   // 24: files vanished on the source meanwhile (the rest is done)
         QStringList lines = QString::fromUtf8(err).split('\n', Qt::SkipEmptyParts);
-        throw Error(QString("rsync stopped with an error (%1): %2")
-                        .arg(QString::number(rc), lines.isEmpty() ? QString("no message") : lines.mid(lines.size() - 3).join(" ")));
+        throw Error(tx("rsync stopped with an error (%1): %2")
+                        .arg(QString::number(rc), lines.isEmpty() ? tx("no message") : lines.mid(lines.size() - 3).join(" ")));
     }
 }
 
@@ -358,7 +358,7 @@ Pair make_pair(const QString &name, const QString &source, const QString &dest, 
 void open_compare(MainWindow *win, const QString &left)
 {
     QPointer<MainWindow> w(win);
-    choose_folder(win, "Compare “" + basename(left) + "” With", dirname(left), [w, left](const QString &right) {
+    choose_folder(win, tx("Compare “%1” With").arg(basename(left)), dirname(left), [w, left](const QString &right) {
         if (!w)
             return;
         auto *cw = new CompareWindow(w, left, right);
@@ -377,30 +377,30 @@ static QString side_text(bool there, bool dir, qint64 size, qint64 mtime)
 {
     if (!there)
         return "—";
-    return (dir ? QString("Folder") : human_size(size)) + " · " + fmt_time(mtime, "%Y-%m-%d %H:%M");
+    return (dir ? tx("Folder") : human_size(size)) + " · " + i18n::date_time(QDateTime::fromSecsSinceEpoch(mtime));
 }
 
 // ---------------------------------------------------------------- Compare With…
 
 CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString &right) : QDialog(win), win(win)
 {
-    setWindowTitle("Compare Folders");
+    setWindowTitle(tx("Compare Folders"));
     setAttribute(Qt::WA_DeleteOnClose);
     resize(960, 600);
     auto *lay = new QVBoxLayout(this);
     auto *grid = new QGridLayout;
     left_edit = new QLineEdit(left);
-    left_edit->setAccessibleName("Left folder");
+    left_edit->setAccessibleName(tx("Left folder"));
     right_edit = new QLineEdit(right);
-    right_edit->setAccessibleName("Right folder");
+    right_edit->setAccessibleName(tx("Right folder"));
     int row = 0;
     for (QLineEdit *e : {left_edit, right_edit}) {
-        grid->addWidget(new QLabel(e == left_edit ? "Left:" : "Right:"), row, 0);
+        grid->addWidget(new QLabel(e == left_edit ? tx("Left:") : tx("Right:")), row, 0);
         grid->addWidget(e, row, 1);
-        auto *choose = new QPushButton("Choose…");
+        auto *choose = new QPushButton(tx("Choose…"));
         connect(choose, &QPushButton::clicked, this, [this, e]() {
             QPointer<QLineEdit> edit(e);
-            choose_folder(this, "Compare", e->text(), [edit](const QString &d) {
+            choose_folder(this, tx("Compare"), e->text(), [edit](const QString &d) {
                 if (edit)
                     edit->setText(d);
             });
@@ -408,7 +408,7 @@ CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString
         grid->addWidget(choose, row, 2);
         ++row;
     }
-    auto *swap = new QPushButton("⇅ Swap");
+    auto *swap = new QPushButton(tx("⇅ Swap"));
     connect(swap, &QPushButton::clicked, this, [this]() {
         QString l = left_edit->text();
         left_edit->setText(right_edit->text());
@@ -419,12 +419,12 @@ CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString
     lay->addLayout(grid);
 
     auto *opts = new QHBoxLayout;
-    deep = new QCheckBox("Compare contents (slower: reads the files)");
-    deep->setToolTip("Without it, files of the same size and date count as the same");
+    deep = new QCheckBox(tx("Compare contents (slower: reads the files)"));
+    deep->setToolTip(tx("Without it, files of the same size and date count as the same"));
     opts->addWidget(deep);
     opts->addStretch(1);
-    compare_btn = new QPushButton("Compare");
-    stop_btn = new QPushButton("Stop");
+    compare_btn = new QPushButton(tx("Compare"));
+    stop_btn = new QPushButton(tx("Stop"));
     stop_btn->setEnabled(false);
     connect(compare_btn, &QPushButton::clicked, this, &CompareWindow::run);
     connect(stop_btn, &QPushButton::clicked, this, [this]() {
@@ -436,10 +436,10 @@ CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString
     lay->addLayout(opts);
 
     auto *show = new QHBoxLayout;
-    show->addWidget(new QLabel("Show:"));
-    const QList<QPair<QString, bool>> kinds = {{"The same", false},   {"Only on the left", true}, {"Only on the right", true},
-                                               {"Newer on the left", true}, {"Newer on the right", true},
-                                               {"Different contents", true}};
+    show->addWidget(new QLabel(tx("Show:")));
+    const QList<QPair<QString, bool>> kinds = {{tx("The same"), false},   {tx("Only on the left"), true}, {tx("Only on the right"), true},
+                                               {tx("Newer on the left"), true}, {tx("Newer on the right"), true},
+                                               {tx("Different contents"), true}};
     for (const auto &[label, on] : kinds) {   // in Kind's order
         auto *b = new QCheckBox(label);
         b->setChecked(on);
@@ -458,11 +458,11 @@ CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString
     summary->setWordWrap(true);
     lay->addWidget(summary);
     tree = new QTreeWidget;
-    tree->setAccessibleName("Differences");
+    tree->setAccessibleName(tx("Differences"));
     tree->setRootIsDecorated(false);
     tree->setUniformRowHeights(true);
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    tree->setHeaderLabels({"Item", "Difference", "Left", "Right"});
+    tree->setHeaderLabels({tx("Item"), tx("Difference"), tx("Left"), tx("Right")});
     tree->header()->setStretchLastSection(false);
     tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree->setColumnWidth(1, 170);
@@ -482,16 +482,16 @@ CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString
         connect(b, &QPushButton::clicked, this, fn);
         acts->addWidget(b);
     };
-    add("Open Left", "Open the left folder's copy", [this]() { open_side(false); });
-    add("Open Right", "Open the right folder's copy", [this]() { open_side(true); });
-    add("Copy to Right →", "Copy the left's items to the right (replacing what's there, asking first)",
+    add(tx("Open Left"), tx("Open the left folder's copy"), [this]() { open_side(false); });
+    add(tx("Open Right"), tx("Open the right folder's copy"), [this]() { open_side(true); });
+    add(tx("Copy to Right →"), tx("Copy the left's items to the right (replacing what's there, asking first)"),
         [this]() { copy_across(true); });
-    add("← Copy to Left", "Copy the right's items to the left (replacing what's there, asking first)",
+    add(tx("← Copy to Left"), tx("Copy the right's items to the left (replacing what's there, asking first)"),
         [this]() { copy_across(false); });
-    add("Trash on Left", "Move the left's items to the trash", [this]() { trash_side(false); });
-    add("Trash on Right", "Move the right's items to the trash", [this]() { trash_side(true); });
+    add(tx("Trash on Left"), tx("Move the left's items to the trash"), [this]() { trash_side(false); });
+    add(tx("Trash on Right"), tx("Move the right's items to the trash"), [this]() { trash_side(true); });
     acts->addStretch(1);
-    auto *close = new QPushButton("Close");
+    auto *close = new QPushButton(tx("Close"));
     connect(close, &QPushButton::clicked, this, &QDialog::close);
     acts->addWidget(close);
     lay->addLayout(acts);
@@ -516,7 +516,7 @@ void CompareWindow::run()
         task->cancel();
     QString l = left_edit->text(), r = right_edit->text();
     if (!isdir(l) || !isdir(r)) {
-        summary->setText("Choose two folders to compare.");
+        summary->setText(tx("Choose two folders to compare."));
         return;
     }
     items.clear();
@@ -524,13 +524,13 @@ void CompareWindow::run()
     compare_btn->setEnabled(false);
     stop_btn->setEnabled(true);
     bar->show();
-    summary->setText("Comparing…");
+    summary->setText(tx("Comparing…"));
     auto found = std::make_shared<QList<Item>>();
     bool d = deep->isChecked();
     QPointer<CompareWindow> self(this);
     QWidget *parent = win ? static_cast<QWidget *>(win) : this;
     task = fileops::queue_job(
-        parent, "Comparing " + basename(l) + " and " + basename(r), {l, r},
+        parent, tx("Comparing %1 and %2").arg(basename(l), basename(r)), {l, r},
         [l, r, d, found](Task *t) {
             *found = diff(l, r, d, t);
             return QVariant(true);
@@ -545,7 +545,7 @@ void CompareWindow::run()
             self->items = res.isValid() ? *found : QList<Item>();
             self->fill();
             if (!res.isValid())
-                self->summary->setText("Stopped.");
+                self->summary->setText(tx("Stopped."));
             Q_EMIT self->compared();
         },
         true, {}, false, {}, true);
@@ -555,8 +555,8 @@ void CompareWindow::fill()
 {
     QString ln = basename(left_edit->text()), rn = basename(right_edit->text());
     if (ln == rn) {
-        ln = "the left";
-        rn = "the right";
+        ln = tx("the left");
+        rn = tx("the right");
     }
     tree->clear();
     QHash<Kind, int> counts;
@@ -575,14 +575,14 @@ void CompareWindow::fill()
     if (task)
         return;
     int differ = int(items.size()) - counts.value(SAME);
-    summary->setText(items.isEmpty() ? QString("Both folders are empty.")
-                     : differ == 0   ? QString("The folders are the same (%1 items).").arg(items.size())
-                                     : QString("%1 difference(s): %2 only on the left, %3 only on the right, %4 newer on the "
-                                               "left, %5 newer on the right, %6 with other contents. %7 the same.")
-                                           .arg(QString::number(differ), QString::number(counts.value(ONLY_LEFT)),
-                                                QString::number(counts.value(ONLY_RIGHT)), QString::number(counts.value(LEFT_NEWER)),
-                                                QString::number(counts.value(RIGHT_NEWER)), QString::number(counts.value(DIFFERENT)),
-                                                QString::number(counts.value(SAME))));
+    summary->setText(items.isEmpty() ? tx("Both folders are empty.")
+                     : differ == 0   ? txn("The folders are the same (%Ln item(s)).", items.size())
+                                     : txn("%Ln difference(s): %1 only on the left, %2 only on the right, %3 newer on the "
+                                           "left, %4 newer on the right, %5 with other contents. %6 the same.",
+                                           differ)
+                                           .arg(group_digits(counts.value(ONLY_LEFT)), group_digits(counts.value(ONLY_RIGHT)),
+                                                group_digits(counts.value(LEFT_NEWER)), group_digits(counts.value(RIGHT_NEWER)),
+                                                group_digits(counts.value(DIFFERENT)), group_digits(counts.value(SAME))));
 }
 
 QList<Item> CompareWindow::selected() const
@@ -627,14 +627,14 @@ void CompareWindow::copy_across(bool to_right)
     auto go = [self, w, jobs, to]() {
         if (!self || !w)
             return;
-        fileops::start_ops(w, jobs, "Copying to " + basename(to), [self]() {
+        fileops::start_ops(w, jobs, tx("Copying to %1").arg(basename(to)), [self]() {
             if (self)
                 self->run();
-        }, "Copy");
+        }, tx("Copy"));
     };
     if (replacing)
-        ask_yes(this, "Copy Across",
-                QString("Replace %1 item(s) in “%2” with the copies from “%3”? What's replaced can't be brought back.")
+        ask_yes(this, tx("Copy Across"),
+                tx("Replace %1 item(s) in “%2” with the copies from “%3”? What's replaced can't be brought back.")
                     .arg(QString::number(replacing), basename(to), basename(from)),
                 go);
     else
@@ -676,21 +676,21 @@ void CompareWindow::trash_side(bool right)
 
 SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &dest) : QDialog(win), win(win)
 {
-    setWindowTitle("Sync Folders");
+    setWindowTitle(tx("Sync Folders"));
     setAttribute(Qt::WA_DeleteOnClose);
     resize(820, 600);
     auto *lay = new QVBoxLayout(this);
 
     auto *saved_row = new QHBoxLayout;
-    saved_row->addWidget(new QLabel("Saved:"));
+    saved_row->addWidget(new QLabel(tx("Saved:")));
     saved = new QComboBox;
-    saved->setAccessibleName("Saved sync pairs");
+    saved->setAccessibleName(tx("Saved sync pairs"));
     saved->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     saved_row->addWidget(saved, 1);
-    auto *run = new QPushButton("Run");
-    run->setToolTip("Preview the saved pair and sync it (asking first when it deletes)");
+    auto *run = new QPushButton(tx("Run"));
+    run->setToolTip(tx("Preview the saved pair and sync it (asking first when it deletes)"));
     connect(run, &QPushButton::clicked, this, [this]() { run_pair(saved->currentIndex()); });
-    auto *remove = new QPushButton("Remove");
+    auto *remove = new QPushButton(tx("Remove"));
     connect(remove, &QPushButton::clicked, this, [this]() {
         QList<Pair> l = pairs();
         int i = saved->currentIndex();
@@ -700,7 +700,7 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
         try {
             save_pairs(l);
         } catch (const OSError &e) {
-            warn(this, "Sync Folders", e.message());
+            warn(this, tx("Sync Folders"), e.message());
         }
         fill_saved();
     });
@@ -710,17 +710,17 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
 
     auto *grid = new QGridLayout;
     source_edit = new QLineEdit(source);
-    source_edit->setAccessibleName("Source folder");
+    source_edit->setAccessibleName(tx("Source folder"));
     dest_edit = new QLineEdit(dest);
-    dest_edit->setAccessibleName("Destination folder");
+    dest_edit->setAccessibleName(tx("Destination folder"));
     int row = 0;
     for (QLineEdit *e : {source_edit, dest_edit}) {
-        grid->addWidget(new QLabel(e == source_edit ? "From:" : "To:"), row, 0);
+        grid->addWidget(new QLabel(e == source_edit ? tx("From:") : tx("To:")), row, 0);
         grid->addWidget(e, row, 1);
-        auto *choose = new QPushButton("Choose…");
+        auto *choose = new QPushButton(tx("Choose…"));
         connect(choose, &QPushButton::clicked, this, [this, e]() {
             QPointer<QLineEdit> edit(e);
-            choose_folder(this, e == source_edit ? "Sync From" : "Sync To", e->text().isEmpty() ? HOME() : e->text(),
+            choose_folder(this, e == source_edit ? tx("Sync From") : tx("Sync To"), e->text().isEmpty() ? HOME() : e->text(),
                           [edit](const QString &d) {
                               if (edit)
                                   edit->setText(d);
@@ -730,26 +730,26 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
         connect(e, &QLineEdit::textChanged, this, [this]() {   // what the preview showed is for other folders
             steps.clear();
             list->clear();
-            summary->setText("Preview to see what will be done.");
+            summary->setText(tx("Preview to see what will be done."));
             sync_btn->setEnabled(false);
         });
         ++row;
     }
     lay->addLayout(grid);
-    deletes = new QCheckBox("Also delete what's on the destination but not in the source (asks again)");
-    deletes->setToolTip("Off: the destination keeps files you've deleted from the source");
+    deletes = new QCheckBox(tx("Also delete what's on the destination but not in the source (asks again)"));
+    deletes->setToolTip(tx("Off: the destination keeps files you've deleted from the source"));
     lay->addWidget(deletes);
     auto *how = new QHBoxLayout;
-    how->addWidget(new QLabel("Copy with:"));
-    use_rsync = new QRadioButton("rsync (resumes interrupted copies, only sends what changed)");
-    use_kestrel = new QRadioButton("Kestrel's own copy");
+    how->addWidget(new QLabel(tx("Copy with:")));
+    use_rsync = new QRadioButton(tx("rsync (resumes interrupted copies, only sends what changed)"));
+    use_kestrel = new QRadioButton(tx("Kestrel's own copy"));
     auto *group = new QButtonGroup(this);
     group->addButton(use_rsync);
     group->addButton(use_kestrel);
     bool rs = have_rsync();
     use_rsync->setEnabled(rs);
     if (!rs)
-        use_rsync->setToolTip("rsync isn't installed");
+        use_rsync->setToolTip(tx("rsync isn't installed"));
     (rs ? use_rsync : use_kestrel)->setChecked(true);
     how->addWidget(use_rsync);
     how->addWidget(use_kestrel);
@@ -761,13 +761,13 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
     });
 
     auto *pv = new QHBoxLayout;
-    preview_btn = new QPushButton("Preview");
+    preview_btn = new QPushButton(tx("Preview"));
     connect(preview_btn, &QPushButton::clicked, this, [this]() { preview(); });
-    auto *save = new QPushButton("Save Pair…");
-    save->setToolTip("Keep these folders and choices, to sync them again in one click");
+    auto *save = new QPushButton(tx("Save Pair…"));
+    save->setToolTip(tx("Keep these folders and choices, to sync them again in one click"));
     connect(save, &QPushButton::clicked, this, [this]() {
         QPointer<SyncWindow> self(this);
-        ask_text(this, "Save Sync Pair", "Name:",
+        ask_text(this, tx("Save Sync Pair"), tx("Name:"),
                  basename(source_edit->text()) + " → " + basename(dest_edit->text()), [self](const QString &name) {
                      if (self && !name.trimmed().isEmpty())
                          self->save_pair(name.trimmed());
@@ -777,14 +777,14 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
     pv->addWidget(save);
     pv->addStretch(1);
     lay->addLayout(pv);
-    summary = new QLabel("Preview to see what will be done.");
+    summary = new QLabel(tx("Preview to see what will be done."));
     summary->setWordWrap(true);
     lay->addWidget(summary);
     list = new QTreeWidget;
-    list->setAccessibleName("What the sync will do");
+    list->setAccessibleName(tx("What the sync will do"));
     list->setRootIsDecorated(false);
     list->setUniformRowHeights(true);
-    list->setHeaderLabels({"Will", "Item", "Size"});
+    list->setHeaderLabels({tx("Will"), tx("Item"), tx("Size")});
     list->header()->setStretchLastSection(false);
     list->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     list->setColumnWidth(0, 200);
@@ -795,7 +795,7 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
     bar->hide();
     lay->addWidget(bar);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    sync_btn = bb->addButton("Sync Now", QDialogButtonBox::AcceptRole);
+    sync_btn = bb->addButton(tx("Sync Now"), QDialogButtonBox::AcceptRole);
     sync_btn->setEnabled(false);
     connect(sync_btn, &QPushButton::clicked, this, &SyncWindow::sync_now);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::close);
@@ -820,9 +820,10 @@ void SyncWindow::fill_saved()
 {
     saved->clear();
     for (const Pair &p : pairs())
-        saved->addItem(p.name + "  (" + p.source + " → " + p.dest + (p.deletes ? ", deleting" : "") + ")");
+        saved->addItem(p.deletes ? tx("%1  (%2 → %3, deleting)").arg(p.name, p.source, p.dest)
+                                 : QString("%1  (%2 → %3)").arg(p.name, p.source, p.dest));
     if (!saved->count())
-        saved->addItem("None yet: choose the folders, then Save Pair…");
+        saved->addItem(tx("None yet: choose the folders, then Save Pair…"));
     saved->setEnabled(!pairs().isEmpty());
 }
 
@@ -841,7 +842,7 @@ void SyncWindow::save_pair(const QString &name)
     try {
         save_pairs(l);
     } catch (const OSError &e) {
-        warn(this, "Save Sync Pair", e.message());
+        warn(this, tx("Save Sync Pair"), e.message());
         return;
     }
     fill_saved();
@@ -869,12 +870,12 @@ void SyncWindow::preview(bool then_run)
         return;
     QString src = rstrip(source_edit->text(), '/'), dst = rstrip(dest_edit->text(), '/');
     if (!isdir(src) || !isdir(dst)) {
-        summary->setText(!isdir(src) ? "The source folder isn't there (a drive not connected?)."
-                                     : "The destination folder isn't there (a drive not connected?).");
+        summary->setText(!isdir(src) ? tx("The source folder isn't there (a drive not connected?).")
+                                     : tx("The destination folder isn't there (a drive not connected?)."));
         return;
     }
     if (src == dst || dst.startsWith(src + "/") || src.startsWith(dst + "/")) {
-        summary->setText("Choose two separate folders: one can't be inside the other.");
+        summary->setText(tx("Choose two separate folders: one can't be inside the other."));
         return;
     }
     bool del = deletes->isChecked();
@@ -882,12 +883,12 @@ void SyncWindow::preview(bool then_run)
     sync_btn->setEnabled(false);
     bar->setRange(0, 0);
     bar->show();
-    summary->setText("Comparing…");
+    summary->setText(tx("Comparing…"));
     auto found = std::make_shared<QList<Item>>();
     QPointer<SyncWindow> self(this);
     QWidget *parent = win ? static_cast<QWidget *>(win) : this;
     task = fileops::queue_job(
-        parent, "Comparing " + basename(src) + " and " + basename(dst), {src, dst},
+        parent, tx("Comparing %1 and %2").arg(basename(src), basename(dst)), {src, dst},
         [src, dst, found](Task *t) {
             *found = diff(src, dst, false, t);
             return QVariant(true);
@@ -899,7 +900,7 @@ void SyncWindow::preview(bool then_run)
             self->preview_btn->setEnabled(true);
             self->bar->hide();
             if (!res.isValid()) {
-                self->summary->setText("Stopped.");
+                self->summary->setText(tx("Stopped."));
                 return;
             }
             self->steps = plan(*found, del);
@@ -910,9 +911,9 @@ void SyncWindow::preview(bool then_run)
             int copy = 0, replace = 0, remove = 0, newer = 0;
             qint64 bytes = 0;
             for (const Step &s : std::as_const(self->steps)) {
-                QString what = s.op == Step::COPY      ? QString("Copy")
-                               : s.op == Step::REPLACE ? QString(s.dest_newer ? "Replace (the destination's is newer)" : "Replace")
-                                                       : QString("Delete from the destination");
+                QString what = s.op == Step::COPY      ? tx("Copy")
+                               : s.op == Step::REPLACE ? (s.dest_newer ? tx("Replace (the destination's is newer)") : tx("Replace"))
+                                                       : tx("Delete from the destination");
                 (s.op == Step::COPY ? copy : s.op == Step::REPLACE ? replace : remove) += 1;
                 newer += s.dest_newer;
                 if (s.op != Step::DELETE)
@@ -920,14 +921,14 @@ void SyncWindow::preview(bool then_run)
                 auto *row = new QTreeWidgetItem(self->list, {what, s.rel + (s.dir ? "/" : ""), s.dir ? QString() : human_size(s.bytes)});
                 row->setToolTip(1, join(s.op == Step::DELETE ? dst : src, s.rel));
             }
-            self->summary->setText(
-                self->steps.isEmpty()
-                    ? QString("Nothing to do: “%1” already matches “%2”.").arg(basename(dst), basename(src))
-                    : QString("%1 to copy, %2 to replace%3%4 (%5 of files, besides whole folders).")
-                          .arg(QString::number(copy), QString::number(replace),
-                               del ? QString(", %1 to delete").arg(remove) : QString(),
-                               newer ? QString("; %1 replaced where the destination's copy is newer").arg(newer) : QString(),
-                               human_size(bytes)));
+            QString plan = tx("%1 to copy, %2 to replace").arg(group_digits(copy), group_digits(replace));
+            if (del)
+                plan = tx("%1, %2 to delete").arg(plan, group_digits(remove));
+            if (newer)
+                plan = tx("%1; %2 replaced where the destination's copy is newer").arg(plan, group_digits(newer));
+            self->summary->setText(self->steps.isEmpty()
+                                       ? tx("Nothing to do: “%1” already matches “%2”.").arg(basename(dst), basename(src))
+                                       : tx("%1 (%2 of files, besides whole folders).").arg(plan, human_size(bytes)));
             self->sync_btn->setEnabled(!self->steps.isEmpty());
             Q_EMIT self->previewed();
             if (then_run && !self->steps.isEmpty())
@@ -956,10 +957,11 @@ void SyncWindow::sync_now()
         return;
     }
     QPointer<SyncWindow> self(this);
-    ask_yes(this, "Delete on the Destination",
-            QString("The sync will also delete %1 item(s) in “%2” that aren't in “%3”. They're deleted for good, not "
-                    "moved to the trash.\n\nDelete them and sync?")
-                .arg(QString::number(remove), dst, src),
+    ask_yes(this, tx("Delete on the Destination"),
+            txn("The sync will also delete %Ln item(s) in “%1” that aren't in “%2”. They're deleted for good, not "
+                "moved to the trash.\n\nDelete them and sync?",
+                remove)
+                .arg(dst, src),
             [self, src, dst, st, rs]() {
                 if (self)
                     self->start(src, dst, st, true, rs);
@@ -971,7 +973,8 @@ void SyncWindow::start(const QString &source, const QString &dest, const QList<S
     if (!win)
         return;
     QPointer<SyncWindow> self(this);
-    QString title = "Syncing " + basename(source) + " to " + basename(dest) + (rsync ? " (with rsync)" : "");
+    QString title = rsync ? tx("Syncing %1 to %2 (with rsync)").arg(basename(source), basename(dest))
+                          : tx("Syncing %1 to %2").arg(basename(source), basename(dest));
     auto after = [self]() {
         if (!self)
             return;

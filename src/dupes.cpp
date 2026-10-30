@@ -69,7 +69,7 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
         seen_inodes << inode;
         by_size[st.st_size] << File{path, qint64(st.st_size), qint64(st.st_mtime), inode.first, inode.second};
         if (++found % 500 == 0 && task)
-            task->report(0, 0, QString("Looking through the files: %1 found").arg(group_digits(found)));
+            task->report(0, 0, tx("Looking through the files: %1 found").arg(group_digits(found)));
     };
     for (const QString &root : roots) {
         struct stat rst;
@@ -114,7 +114,7 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
         for (const File &f : c) {
             check();
             if (task)
-                task->report(read, to_read * 2, QString("Comparing the beginnings of %1 files").arg(group_digits(to_read)));
+                task->report(read, to_read * 2, txn("Comparing the beginnings of %Ln file(s)", to_read));
             ++read;
             QByteArray h = head_hash(f.path);
             if (h.isEmpty()) {
@@ -147,7 +147,7 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
                         [&](qint64 n, qint64) {
                             if (task)
                                 task->report(before + n, std::max<qint64>(bytes, 1),
-                                             "Comparing the files of the same size: " + basename(f.path));
+                                             tx("Comparing the files of the same size: %1").arg(basename(f.path)));
                         },
                         check);
                     by_hash[h] << f;
@@ -240,18 +240,18 @@ QStringList link_over(const File &keep, const QList<File> &others, QStringList *
     QStringList errors;
     if (changed(keep)) {
         for (const File &o : others)
-            errors << o.path + ": the copy kept (" + keep.path + ") changed since the search";
+            errors << tx("%1: the copy kept (%2) changed since the search").arg(o.path, keep.path);
         return errors;
     }
     for (const File &o : others) {
         if (o.dev != keep.dev) {
-            errors << o.path + ": on another drive than the copy kept";
+            errors << tx("%1: on another drive than the copy kept").arg(o.path);
             continue;
         }
         if (o.ino == keep.ino)   // already the same file
             continue;
         if (changed(o)) {
-            errors << o.path + ": changed since the search";
+            errors << tx("%1: changed since the search").arg(o.path);
             continue;
         }
         // the link under a part name beside it, renamed over it: the file is itself or the link, never missing
@@ -294,36 +294,37 @@ DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(wi
     QStringList shown;
     for (const QString &r : roots)
         shown << (r.startsWith(HOME() + "/") ? "~" + r.mid(HOME().size()) : r);
-    setWindowTitle("Find Duplicates — " + (roots.size() == 1 ? basename(roots.first()) : QString("%1 folders").arg(roots.size())));
+    setWindowTitle(roots.size() == 1 ? tx("Find Duplicates — %1").arg(basename(roots.first()))
+                                     : txn("Find Duplicates — %Ln folder(s)", roots.size()));
     setAttribute(Qt::WA_DeleteOnClose);
     resize(900, 600);
     auto *lay = new QVBoxLayout(this);
     auto *where = new QLabel;
     where->setWordWrap(true);
     where->setTextFormat(Qt::PlainText);
-    where->setText("Files with the same contents in: " + shown.join(", "));
+    where->setText(tx("Files with the same contents in: %1").arg(shown.join(", ")));
     lay->addWidget(where);
 
     auto *opts = new QHBoxLayout;
-    opts->addWidget(new QLabel("Files of at least"));
+    opts->addWidget(new QLabel(tx("Files of at least")));
     min_kb = new QSpinBox;
     min_kb->setRange(0, 100000000);
-    min_kb->setSuffix(" KB");
-    min_kb->setAccessibleName("Smallest file size");
+    min_kb->setSuffix(tx(" KB"));
+    min_kb->setAccessibleName(tx("Smallest file size"));
     min_kb->setValue(prefs::get("dupes_min_kb").toInt());
     opts->addWidget(min_kb);
-    recursive = new QCheckBox("Look in subfolders");
+    recursive = new QCheckBox(tx("Look in subfolders"));
     recursive->setChecked(prefs::get("dupes_recursive").toBool());
-    hidden = new QCheckBox("Include hidden files");
+    hidden = new QCheckBox(tx("Include hidden files"));
     hidden->setChecked(prefs::get("dupes_hidden").toBool());
-    skip_links = new QCheckBox("Skip hard links");
-    skip_links->setToolTip("Hard links to one file are that file, not copies of it: they take no extra space");
+    skip_links = new QCheckBox(tx("Skip hard links"));
+    skip_links->setToolTip(tx("Hard links to one file are that file, not copies of it: they take no extra space"));
     skip_links->setChecked(prefs::get("dupes_skip_hardlinks").toBool());
     for (QCheckBox *b : {recursive, hidden, skip_links})
         opts->addWidget(b);
     opts->addStretch(1);
-    search_btn = new QPushButton("Search");
-    stop_btn = new QPushButton("Stop");
+    search_btn = new QPushButton(tx("Search"));
+    stop_btn = new QPushButton(tx("Stop"));
     stop_btn->setEnabled(false);
     connect(search_btn, &QPushButton::clicked, this, &DupesWindow::search);
     connect(stop_btn, &QPushButton::clicked, this, [this]() {
@@ -336,7 +337,7 @@ DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(wi
 
     bar = new QProgressBar;
     bar->setRange(0, 1000);
-    bar->setAccessibleName("Progress");
+    bar->setAccessibleName(tx("Progress"));
     bar->hide();
     lay->addWidget(bar);
     status = new QLabel;
@@ -348,8 +349,8 @@ DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(wi
     lay->addWidget(summary);
 
     tree = new QTreeWidget;
-    tree->setAccessibleName("Duplicates");
-    tree->setHeaderLabels({"Keep", "Name", "Folder", "Modified", "Size"});
+    tree->setAccessibleName(tx("Duplicates"));
+    tree->setHeaderLabels({tx("Keep"), tx("Name"), tx("Folder"), tx("Modified"), tx("Size")});
     tree->setIconSize(QSize(48, 48));
     tree->setUniformRowHeights(false);
     tree->header()->setStretchLastSection(false);
@@ -374,21 +375,21 @@ DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(wi
     lay->addWidget(tree, 1);
 
     auto *helpers = new QHBoxLayout;
-    helpers->addWidget(new QLabel("Keep in each group:"));
-    auto *oldest = new QPushButton("The Oldest");
+    helpers->addWidget(new QLabel(tx("Keep in each group:")));
+    auto *oldest = new QPushButton(tx("The Oldest"));
     connect(oldest, &QPushButton::clicked, this, [this]() { set_keep(keep_oldest); });
-    auto *newest = new QPushButton("The Newest");
+    auto *newest = new QPushButton(tx("The Newest"));
     connect(newest, &QPushButton::clicked, this, [this]() { set_keep(keep_newest); });
-    auto *in_folder = new QPushButton("Those in a Folder…");
-    in_folder->setToolTip("Keep the files in a folder you choose (and below it); a group with none there stays as it is");
+    auto *in_folder = new QPushButton(tx("Those in a Folder…"));
+    in_folder->setToolTip(tx("Keep the files in a folder you choose (and below it); a group with none there stays as it is"));
     connect(in_folder, &QPushButton::clicked, this, [this]() {
         QPointer<DupesWindow> self(this);
-        choose_folder(this, "Keep the Files In", this->roots.value(0, HOME()), [self](const QString &dir) {
+        choose_folder(this, tx("Keep the Files In"), this->roots.value(0, HOME()), [self](const QString &dir) {
             if (self)
                 self->set_keep([dir](const Group &g) { return keep_in(g, dir); });
         });
     });
-    auto *all = new QPushButton("All");
+    auto *all = new QPushButton(tx("All"));
     connect(all, &QPushButton::clicked, this, [this]() {
         set_keep([](const Group &g) { return QList<bool>(g.files.size(), true); });
     });
@@ -398,11 +399,11 @@ DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(wi
     lay->addLayout(helpers);
 
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    trash_btn = bb->addButton("Move the Others to Trash", QDialogButtonBox::ActionRole);
-    trash_btn->setToolTip("The files not kept go to the trash (Undo brings them back)");
-    link_btn = bb->addButton("Replace the Others with Hard Links…", QDialogButtonBox::ActionRole);
-    link_btn->setToolTip("Each file not kept becomes a hard link to the one kept: the same file under both names, "
-                         "taking its space once. Only on the same drive.");
+    trash_btn = bb->addButton(tx("Move the Others to Trash"), QDialogButtonBox::ActionRole);
+    trash_btn->setToolTip(tx("The files not kept go to the trash (Undo brings them back)"));
+    link_btn = bb->addButton(tx("Replace the Others with Hard Links…"), QDialogButtonBox::ActionRole);
+    link_btn->setToolTip(tx("Each file not kept becomes a hard link to the one kept: the same file under both names, "
+                         "taking its space once. Only on the same drive."));
     connect(trash_btn, &QPushButton::clicked, this, &DupesWindow::trash_others);
     connect(link_btn, &QPushButton::clicked, this, &DupesWindow::link_others);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::close);
@@ -443,14 +444,14 @@ void DupesWindow::search()
     stop_btn->setEnabled(true);
     bar->setValue(0);
     bar->show();
-    status->setText("Waiting for the drive…");
+    status->setText(tx("Waiting for the drive…"));
     auto found = std::make_shared<QList<Group>>();
     auto unreadable = std::make_shared<QStringList>();
     QStringList r = roots;
     QPointer<DupesWindow> self(this);
     QWidget *parent = win ? static_cast<QWidget *>(win) : this;
     task = fileops::queue_job(
-        parent, "Finding duplicates in " + (r.size() == 1 ? basename(r.first()) : QString("%1 folders").arg(r.size())), r,
+        parent, r.size() == 1 ? tx("Finding duplicates in %1").arg(basename(r.first())) : txn("Finding duplicates in %Ln folder(s)", r.size()), r,
         [r, o, found, unreadable](Task *t) {
             *found = dupes::find(r, o, t, unreadable.get());
             return QVariant(true);
@@ -467,10 +468,11 @@ void DupesWindow::search()
                 for (const Group &g : std::as_const(self->groups))
                     self->keep << QList<bool>(g.files.size(), true);
                 self->status->setText(unreadable->isEmpty() ? QString()
-                                                            : QString("%1 file(s) couldn't be read and were left out, such as %2")
-                                                                  .arg(QString::number(unreadable->size()), unreadable->first()));
+                                                            : txn("%Ln file(s) couldn't be read and were left out, such as %1",
+                                                                  unreadable->size())
+                                                                  .arg(unreadable->first()));
             } else {
-                self->status->setText("Stopped.");
+                self->status->setText(tx("Stopped."));
             }
             self->show_results();
             Q_EMIT self->finished_search();
@@ -492,7 +494,7 @@ void DupesWindow::show_results()
     for (int gi = 0; gi < groups.size(); ++gi) {
         const Group &g = groups[gi];
         auto *gr = new QTreeWidgetItem(tree);
-        gr->setText(0, QString("%1 identical files, %2 each").arg(QString::number(g.files.size()), human_size(g.size)));
+        gr->setText(0, tx("%1 identical files, %2 each").arg(QString::number(g.files.size()), human_size(g.size)));
         gr->setFirstColumnSpanned(true);
         QFont f = gr->font(0);
         f.setBold(true);
@@ -507,7 +509,7 @@ void DupesWindow::show_results()
             it->setData(1, Qt::UserRole, x.path);
             it->setToolTip(1, x.path);
             it->setText(2, dirname(x.path));
-            it->setText(3, fmt_time(x.mtime, "%Y-%m-%d %H:%M"));
+            it->setText(3, i18n::date_time(QDateTime::fromSecsSinceEpoch(x.mtime)));
             it->setText(4, human_size(x.size));
             QIcon thumb = t ? t->get_icon(x.path, x.mtime, false, 48, x.size, this) : QIcon();
             it->setIcon(1, thumb.isNull() ? icons.icon(QFileInfo(x.path)) : thumb);
@@ -538,7 +540,7 @@ void DupesWindow::icon_ready(const QString &path)
 void DupesWindow::update_summary()
 {
     if (groups.isEmpty()) {
-        summary->setText(searching() ? QString() : QString("No files with the same contents were found."));
+        summary->setText(searching() ? QString() : tx("No files with the same contents were found."));
     } else {
         int copies = 0, marked = 0;
         qint64 going = 0;
@@ -549,10 +551,9 @@ void DupesWindow::update_summary()
                 going += freed(groups[gi], keep[gi]);
             }
         }
-        summary->setText(QString("<b>%1 can be freed</b>: %2 group(s) of identical files, %3 copies more than needed. "
-                                 "Not kept: %4 file(s), freeing %5.")
-                             .arg(human_size(freed(groups)), QString::number(groups.size()), QString::number(copies),
-                                  QString::number(marked), human_size(going)));
+        summary->setText(tx("<b>%1 can be freed</b>: %2, %3 more than needed. Not kept: %4, freeing %5.")
+                             .arg(human_size(freed(groups)), txn("%Ln group(s) of identical files", groups.size()),
+                                  txn("%Ln copy(ies)", copies), txn("%Ln file(s)", marked), human_size(going)));
     }
     bool any = false;
     for (int gi = 0; gi < keep.size(); ++gi)
@@ -622,12 +623,12 @@ void DupesWindow::trash_others()
         win->trash_paths(paths);
     QStringList notes;
     if (no_keeper)
-        notes << QString("%1 group(s) with no file kept were left as they are: keep at least one in each.").arg(no_keeper);
+        notes << txn("%Ln group(s) with no file kept were left as they are: keep at least one in each.", no_keeper);
     if (!changed_files.isEmpty())
-        notes << QString("%1 file(s) changed since the search and were left as they are, such as %2.")
-                     .arg(QString::number(changed_files.size()), changed_files.first());
+        notes << txn("%Ln file(s) changed since the search and were left as they are, such as %1.", changed_files.size())
+                     .arg(changed_files.first());
     if (!notes.isEmpty())
-        inform(this, "Move the Others to Trash", notes.join("\n\n"));
+        inform(this, tx("Move the Others to Trash"), notes.join("\n\n"));
     QSet<QString> gone(paths.begin(), paths.end());
     drop_files(gone);
 }
@@ -656,18 +657,19 @@ void DupesWindow::link_others()
     if (work.isEmpty())
         return;
     QPointer<DupesWindow> self(this);
-    ask_yes(this, "Replace with Hard Links",
-            QString("Replace %1 file(s) with hard links to the copy kept in each group?\n\n"
-                    "Each then is the same file as the one kept, under its own name: one date, one set of permissions, "
-                    "and a change to it shows under every name. Files on another drive than the one kept are left as "
-                    "they are.%2\n\nThis can't be undone.")
-                .arg(QString::number(n), no_keeper ? QString("\n\nGroups with no file kept are left as they are.") : QString()),
+    ask_yes(this, tx("Replace with Hard Links"),
+            txn("Replace %Ln file(s) with hard links to the copy kept in each group?\n\n"
+                "Each then is the same file as the one kept, under its own name: one date, one set of permissions, "
+                "and a change to it shows under every name. Files on another drive than the one kept are left as "
+                "they are.%1\n\nThis can't be undone.",
+                n)
+                .arg(no_keeper ? "\n\n" + tx("Groups with no file kept are left as they are.") : QString()),
             [self, work, all]() {
                 if (!self || !self->win)
                     return;
                 auto replaced = std::make_shared<QStringList>();
                 fileops::queue_job(
-                    self->win, "Replacing duplicates with hard links", all,
+                    self->win, tx("Replacing duplicates with hard links"), all,
                     [work, replaced](Task *t) {
                         QStringList errors;
                         for (int i = 0; i < work.size(); ++i) {
@@ -682,8 +684,8 @@ void DupesWindow::link_others()
                             return;
                         QStringList errors = res.toStringList();
                         if (!errors.isEmpty())
-                            warn(self, "Replace with Hard Links",
-                                 QString("%1 file(s) were left as they are:\n%2")
+                            warn(self, tx("Replace with Hard Links"),
+                                 tx("%1 file(s) were left as they are:\n%2")
                                      .arg(QString::number(errors.size()), errors.mid(0, 10).join("\n")));
                         self->drop_files(QSet<QString>(replaced->begin(), replaced->end()));
                     },

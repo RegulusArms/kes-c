@@ -109,6 +109,13 @@ struct ThumbJob {
     QString state() const;           // "Running", "Paused", "Waiting for the drive", "Lowered (left)"…
 };
 
+// Another Kestrel's thumbnail job, as it reported it (the Jobs window shows every Kestrel's)
+struct RemoteThumbJob {
+    QString flight, id, title, folder, window, state;
+    int done = 0, total = 0;
+    bool paused = false;
+};
+
 class ThumbnailManager : public QObject {
     Q_OBJECT
 public:
@@ -132,6 +139,9 @@ public:
     QList<ThumbJob> thumb_jobs() const;   // newest (highest) first
     void pause_job(quint64 id, bool on);
     void stop_job(quint64 id);            // its thumbnails made so far stay
+    // the other Kestrels' (the app's manager only), and theirs paused, resumed or stopped through the tower
+    QList<RemoteThumbJob> remote_jobs() const;
+    void control_remote(const RemoteThumbJob &job, const QString &action);   // "pause", "resume" or "stop"
     int job_minutes = 3;                  // a lowered job stops after this long (Preferences)
     // when thumbnail jobs run (ThumbJob): "drive", "wait" or "paused" (known_mode); applied to the jobs at once
     void set_mode(const QString &mode);
@@ -203,6 +213,10 @@ private:
     QMutex run_lock;
     quint64 next_id = 0;
     QHash<quint64, ThumbJob> jobs;   // by id
+    QMap<QString, QList<RemoteThumbJob>> remote;   // flight -> its jobs (the app's manager)
+    QByteArray published;                          // what publish_jobs last told (told again only when it changes)
+    void publish_jobs();
+    void on_heard(const QJsonObject &m);
     QHash<QPair<const QObject *, QString>, quint64> job_ids;   // (owner, folder) → its job
     QSet<QPair<const QObject *, QString>> stopped;            // jobs stopped (Stop) while their view is still there
     int job_prio = 0;                // the newest job's priority

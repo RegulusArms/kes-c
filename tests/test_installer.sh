@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installer test: --default (folders, trash:///, the file chooser, the drop focus extension, PATH), --dock, asking
-# about the dock, and --uninstall putting it all back; kes-setup on its own, and its BleachBit cleaner (checked by
+# about the dock, and --uninstall putting it all back; kes-setup on its own (also on KDE), and its BleachBit cleaner (checked by
 # BleachBit itself when it's installed). Runs ../install.sh with a throwaway HOME and a keyfile GSettings backend (never
 # your real settings or dock), with the portal definition going to a throwaway folder, and with stub `pgrep`, `sudo`
 # and `systemctl` so it can't close a running GNOME Files, install packages or restart your desktop portal. run.sh
@@ -11,7 +11,7 @@ INSTALL="$HERE/../install.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/kestrel-installer-test.XXXXXX")"
 trap 'case "$WORK" in */kestrel-installer-test.*) rm -rf "$WORK" ;; esac' EXIT
 mkdir -p "$WORK/stubs"
-printf '#!/bin/sh\nexit 1\n' > "$WORK/stubs/pgrep"
+printf '#!/bin/sh\n[ -n "$RUNNING" ] && [ "$2" = "$RUNNING" ]\n' > "$WORK/stubs/pgrep"   # only $RUNNING runs
 printf '#!/bin/sh\necho "sudo is disabled in the installer test" >&2\nexit 1\n' > "$WORK/stubs/sudo"
 printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$WORK" > "$WORK/stubs/systemctl"
 chmod +x "$WORK/stubs/pgrep" "$WORK/stubs/sudo" "$WORK/stubs/systemctl"
@@ -166,15 +166,69 @@ check '[[ -f "$WORK/portals/kestrel.portal" ]]' "kes-setup --undo: leaves the pa
 dock_check '[[ "$(exts)" == "$EXTS_BEFORE" && -d "$WORK/extensions/$FOCUS_UUID" ]]' \
     "kes-setup --undo: disables the drop focus extension and leaves the package's copy"
 
+# kes-setup on KDE Plasma (Kubuntu): Dolphin opens folders, and nothing opens trash:/// until Kestrel does
+fresh
+rm "$HOME/.local/share/applications/xfce4-file-manager.desktop"
+sed -i '/^x-scheme-handler\/trash=/d' "$HOME/.config/mimeapps.list"
+printf '[Desktop Entry]\nType=Application\nName=Dolphin\nExec=true\nMimeType=inode/directory;\n' \
+    > "$HOME/.local/share/applications/org.kde.dolphin.desktop"
+xdg-mime default org.kde.dolphin.desktop inode/directory
+printf '[preferred]\ndefault=kde\norg.freedesktop.impl.portal.Secret=kwallet\n' > "$WORK/xdg/xdg-desktop-portal/kde-portals.conf"
+# Plasma's taskbar: a stand-in gdbus answers plasmashell's evaluateScript with $PLASMA (what the script would print
+# there: swapped, already, follows, none) and keeps each script; other calls go to the real gdbus
+mkdir -p "$WORK/plasma-stubs"
+printf '#!/bin/bash\nif [[ " $* " == *" org.kde.PlasmaShell.evaluateScript "* ]]; then\n' > "$WORK/plasma-stubs/gdbus"
+printf '    [[ -n "$PLASMA" ]] || exit 1\n    printf "%%s\\n---\\n" "${@: -1}" >> "%s/plasma-scripts"\n' "$WORK" >> "$WORK/plasma-stubs/gdbus"
+printf '    echo "('"'"'$PLASMA'"'"',)"\n    exit 0\nfi\nexec /usr/bin/gdbus "$@"\n' >> "$WORK/plasma-stubs/gdbus"
+chmod +x "$WORK/plasma-stubs/gdbus"
+kde() { XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true KDE_SESSION_VERSION=6 PATH="$WORK/plasma-stubs:$PATH" "$SETUP" --kes /usr/bin/kes "$@"; }
+RUNNING=dolphin kde --default </dev/null >"$WORK/out-kde" 2>&1
+check '[[ "$(folder_handler)" == kestrel-explorer.desktop && "$(trash_handler)" == kestrel-explorer.desktop ]]' \
+    "kes-setup --default on KDE: folders and trash:/// open in Kestrel"
+check 'grep -qx "org.freedesktop.impl.portal.FileChooser=kestrel;kde;" "$HOME/.config/xdg-desktop-portal/kde-portals.conf" &&
+       grep -qx "org.freedesktop.impl.portal.Secret=kwallet" "$HOME/.config/xdg-desktop-portal/kde-portals.conf"' \
+    "kes-setup --default on KDE: the file chooser is Kestrel, then KDE's (not GNOME's), and the rest of KDE's portals.conf stays"
+check 'grep -q "Dolphin is open: until its windows are closed" "$WORK/out-kde"' \
+    "kes-setup --default on KDE: says an open Dolphin keeps \"Show in folder\" until it's closed"
+rm -f "$WORK/plasma-scripts"
+PLASMA=swapped kde --dock </dev/null >"$WORK/out-dock" 2>&1
+check 'grep -q "in the taskbar in place of Dolphin" "$WORK/out-dock" && grep -qx "dock=plasma" "$(STATE_FILE)" &&
+       grep -q "from = '"'"'applications:org.kde.dolphin.desktop'"'"', to = '"'"'applications:kestrel-explorer.desktop'"'"', dry = false" "$WORK/plasma-scripts"' \
+    "kes-setup --dock on KDE: swaps Dolphin for Kestrel in Plasma's taskbar, through plasmashell, and remembers it"
+check '[[ -s "$WORK/plasma-scripts" ]] && ! grep -qF "\\" "$WORK/plasma-scripts"' "...with no backslash in the script (gdbus would read it as an escape)"
+PLASMA=follows kde --dock </dev/null >"$WORK/out-dock2" 2>&1
+check 'grep -q "already opens Kestrel" "$WORK/out-dock2"' \
+    "kes-setup --dock on KDE: says a \"default file manager\" pin already opens Kestrel"
+rm -f "$WORK/plasma-scripts"
+PLASMA=swapped kde --undo >>"$WORK/out-kde" 2>&1
+check 'grep -q "Put Dolphin back in the taskbar" "$WORK/out-kde" &&
+       grep -q "from = '"'"'applications:kestrel-explorer.desktop'"'"', to = '"'"'applications:org.kde.dolphin.desktop'"'"', dry = false" "$WORK/plasma-scripts"' \
+    "kes-setup --undo on KDE: puts Dolphin back in Plasma's taskbar"
+check '[[ "$(folder_handler)" == org.kde.dolphin.desktop ]]' "kes-setup --undo on KDE: folders open in Dolphin again"
+check '! grep -q "^x-scheme-handler/trash=" "$HOME/.config/mimeapps.list"' \
+    "kes-setup --undo on KDE: trash:/// isn't handed to GNOME Files when no app had it before (Kestrel's entries are taken out)"
+# xdg-mime (26.04's) runs qtpaths on KDE, which Ubuntu only installs as qtpaths6 (and in Qt's own folder)
+if grep -q qtpaths "$(command -v xdg-mime)" && ! command -v qtpaths >/dev/null && [[ -x /usr/lib/qt6/bin/qtpaths ]]; then
+    check '! grep -q "qtpaths" "$WORK/out-kde"' "kes-setup on KDE: xdg-mime finds qtpaths (no \"qtpaths: not found\")"
+else
+    echo "SKIP kes-setup on KDE: xdg-mime finds qtpaths (this xdg-mime doesn't run it, qtpaths is on PATH, or Qt 6's isn't installed)"
+fi
+
 # kes-setup --bleachbit: Kestrel's cleaner for BleachBit. Checked as text (it may only touch Kestrel's own files), against
 # BleachBit's schema, and by BleachBit itself in this throwaway home: a dry run (--preview) must list exactly Kestrel's
 # files and change nothing, then a real clean must leave everything else (other apps' caches, GNOME's thumbnails, a
 # folder linked from the cache, the settings it doesn't name) as it was.
 fresh
 CLEANER="$HOME/.config/bleachbit/cleaners/kestrel-explorer.xml"
-"$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1
+# under umask 000 (as docker exec gives): BleachBit ignores a world-writable cleaner, so it must not come out as one
+(umask 000; "$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1)
 check '[[ -f "$CLEANER" ]] && python3 -c "import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$CLEANER"' \
     "kes-setup --bleachbit: writes BleachBit's cleaner, as well-formed XML"
+check '[[ "$(stat -c %a "$CLEANER")" == 644 && "$(stat -c %a "$(dirname "$CLEANER")")" == 755 &&
+         "$(stat -c %a "$HOME/.config/bleachbit")" == 755 && -z "$(ls -A "$(dirname "$CLEANER")" | grep -v "^kestrel-explorer.xml$")" ]]' \
+    "...only the user can change it, also under umask 000 (BleachBit ignores a world-writable cleaner), and no part file is left"
+check 'grep -q "asks whether to trust the new cleaner" "$WORK/out8"' \
+    "...and says BleachBit will ask once whether to trust it"
 cleaner_actions() {   # each action as "command path [parameter]", sorted
     grep -o '<action [^>]*>' "$CLEANER" | sed -E 's/.*command="([^"]*)".*path="([^"]*)"( section="[^"]*" parameter="([^"]*)")?.*/\1 \2 \4/' |
         sed 's/ *$//' | LC_ALL=C sort | tr '\n' ';'

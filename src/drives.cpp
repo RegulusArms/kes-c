@@ -525,10 +525,10 @@ void sync_tape_job(QWidget *parent, const QString &root)
 {
     QPointer<QWidget> p(parent);
     fileops::run_task(
-        parent, "Writing the tape's index", [root]() { return QVariant(sync_tape(root)); },
+        parent, tx("Writing the tape's index"), [root]() { return QVariant(sync_tape(root)); },
         [p, root](const QVariant &err) {
             if (!err.toString().isEmpty())
-                warn(p, "Write Tape Index", "The tape's index couldn't be written: " + err.toString());
+                warn(p, tx("Write Tape Index"), tx("The tape's index couldn't be written: %1").arg(err.toString()));
         });
 }
 

@@ -2,7 +2,108 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.2-alpha.26
+## 0.3.3-alpha.0
+
+- **Kestrel in ten more languages:** Chinese (Simplified), French, German, Italian, Japanese, Korean, Portuguese
+  (Brazil and Portugal), Russian and Spanish. It uses the desktop's language, and English where it has no
+  translation. Every text is translated, including the counts each language words differently (Russian's three forms).
+  The translations are new and not yet checked by native speakers, so some may be wrong or awkward:
+  [docs/translations.md](docs/translations.md) says how to report one.
+- **An "Incorrect translation" issue form** in the issue tracker: the language, what's wrong, and a table of the texts
+  as Kestrel shows them, what they should say and where they appear.
+- **Qt's own texts** (standard buttons, the colour and font pickers) follow the language too, with
+  `qt6-translations-l10n`, now a recommended package (the .deb's Recommends and `install.sh --install-recommended`).
+
+## 0.3.2-alpha.34 (2026-10-29)
+
+- **Benchmark on Kubuntu:** `bench/kubuntu.sh` compares Kestrel with Dolphin on Kubuntu 26.04, in a Docker container,
+  as the Nemo comparison was made on Linux Mint. Its report is a "Kestrel vs Dolphin on Kubuntu" section for the
+  performance page.
+- **Benchmark: four tests of the app in use.** Besides launching the app on a folder, the benchmark now times what
+  happens in a window that's already open: going to a folder through the location bar, jumping to the end of the
+  600-image folder (until its last thumbnails are there, with the CPU time every process used for them, helpers
+  included), 5,000 files arriving in the folder it shows, and how long the window takes to answer Back and Forward
+  while it's pasting 20,000 files.
+
+## 0.3.2-alpha.33 (2026-10-29)
+
+- **KDE Plasma (Kubuntu 26.04).** Kestrel now follows Plasma where it followed only GNOME and Cinnamon:
+  - **Set as Wallpaper** sets Plasma's wallpaper; it did nothing there.
+  - **System Settings → Recent Files → "Do not remember"** stops Kestrel adding to Recent and counting Frequent
+    Folders, as GNOME's File History switch does. Preferences → Privacy says where to find both.
+  - **Open Terminal** opens Konsole first, even with a GNOME terminal installed too.
+  - **Dragging files into another app gives that app the focus** on Plasma on Wayland too (Kestrel asks KWin, with
+    nothing to install), as it already did on GNOME and on X11.
+  - Without KDE's Qt integration, the **icons** are Plasma's icon theme rather than GNOME's.
+- **`kes-setup` on KDE Plasma:**
+  - `--dock` (and the question `--default` asks) puts Kestrel in Plasma's taskbar in place of Dolphin, and `--undo`
+    puts Dolphin back. A "default file manager" pin already opens Kestrel.
+  - The file chooser falls back to KDE's own instead of GNOME's, which Kubuntu doesn't have (on Linux Mint, to Mint's).
+  - `--undo` no longer makes GNOME Files the app for the trash (`trash:///`) when no app had it before, as on Kubuntu;
+    it takes Kestrel out and leaves the desktop's own choice.
+  - `--default` says when an open Dolphin window keeps "Show in folder" until it's closed.
+  - `--default` and `--undo` no longer print "qtpaths: not found" on Kubuntu 26.04.
+
+## 0.3.2-alpha.32 (2026-10-29)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha32).
+
+## 0.3.2-alpha.31 (2026-10-29)
+
+- **Hide places from the sidebar.** Right-click Recent, Starred, Trash or any other place in the sidebar →
+  **Hide from Sidebar**, or untick it under Preferences → Sidebar → **Places shown**, where it can be ticked back.
+  It applies to every window and every Kestrel.
+- **A Privacy tab in Preferences.** Turn off, one by one, what Kestrel remembers as you use it: adding the files you
+  open to Recent, counting the folders you open (Frequent Folders), the servers you connect to, and the image
+  viewer's Move To / Copy To folders. It shows whether the desktop's File History switch is on, and has
+  **Clear Kestrel's History…** and **Clear Recent Files…** (the desktop's list, which other apps share).
+- **Finished jobs stay in the Jobs window until Clear Finished.** Only the newest 50 were kept, and a Kestrel that
+  closed took its finished jobs out of the other Kestrels' Jobs window. Now every finished job stays listed until
+  you clear them; one from a Kestrel that has closed says its log went with it.
+- **Generate Previews, for just this folder.** The Previews submenu had Generate Previews Recursively and Regenerate
+  Previews but nothing to make the missing previews of only the folder itself: **Generate Previews** does that.
+
+## 0.3.2-alpha.30 (2026-10-29)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha30).
+
+## 0.3.2-alpha.29 (2026-10-29)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha29).
+
+## 0.3.2-alpha.28 (2026-10-29)
+
+- **One Jobs window for all of Kestrel.** A folder opened from another app can start a separate Kestrel, and each
+  had a Jobs window of its own, where the others' jobs showed without their steps or logs ("its log is in that
+  window's Jobs window") and their finished jobs and thumbnail jobs didn't show at all. Now there's one: opened from
+  any window, it closes the one another Kestrel had open, and shows every job wherever it runs, whole: its steps and
+  log (running or finished), every Kestrel's finished jobs, and every Kestrel's thumbnail jobs, which Pause and Stop
+  work on. Pause works on another Kestrel's job too, and Clear Finished clears every Kestrel's. Kestrels on this
+  version and older ones don't share jobs (the tower's messages changed).
+
+## 0.3.2-alpha.27 (2026-10-29)
+
+- **"&" shows as "&" in tab and submenu names.** The Preferences tab "Images & Videos" read "Images Videos" with
+  the V underlined (or "Images_Videos"), as did a folder's tab when its name has an "&" ("Tom & Jerry"), and, in a
+  customised right-click menu, "Links & Shortcuts" and any submenu of your own with an "&" in its name.
+- **Screenshots in the feature guide.** The Overview, grouping by day, the Jobs window, Preferences and its search,
+  and customising a right-click menu are now shown in [Features](docs/features.md).
+- **Numbers, sizes and dates in your system's format.** Digit grouping, the decimal mark and the order of a date follow
+  your locale's settings (as GNOME Files does), not fixed English ones: on a German system a size reads "1,5 GB" and a
+  date "28.10.2026". Dates written as 2026-10-28 (Properties, the info panel, Find Duplicates, Compare) now show in
+  your locale's own short form, with the time in its 12- or 24-hour clock; job logs keep their exact timestamps.
+- **Counts read as English.** Messages that said "1 file(s)", "2 item(s)" or "1 bytes" now say "1 file", "2 items"
+  and "1 byte", and the few that built a plural by adding an "s" read correctly throughout.
+- **BleachBit always loads Kestrel's cleaner.** `kes-setup --bleachbit` wrote the cleaner with whatever file
+  permissions the session gave new files; where those let other users edit it (a umask of 000), BleachBit ignored the
+  cleaner as a security measure and showed no Kestrel options. It's now always writable only by you, and
+  `kes-setup --bleachbit` says that BleachBit's window will ask once whether to trust the new cleaner.
+- **Ready for translations.** Every text Kestrel shows can be translated, with only English shipping for now: a
+  translation is one file in `translations/`, loaded for the desktop's language (see
+  [Development](docs/development.md#translations)). Building Kestrel now needs `qt6-tools-dev` and `qt6-l10n-tools`
+  (`./install.sh` installs them).
+
+## 0.3.2-alpha.26 (2026-10-27)
 
 - **A package for each Ubuntu release.** Each release now gets a .deb built on it, with its own Qt and libraries,
   instead of one 24.04 build for all: Ubuntu 26.04 gets the build its tests ran on. The release suites get their
@@ -56,7 +157,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.22 (2026-10-27)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha22).
 
 ## 0.3.2-alpha.21 (2026-10-27)
 
@@ -79,7 +180,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.19 (2026-10-26)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha19).
 
 ## 0.3.2-alpha.18 (2026-10-26)
 
@@ -356,7 +457,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.2-alpha.4 (2026-10-21)
 
-- Version bump only.
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#032-alpha4).
 
 ## 0.3.2-alpha.3 (2026-10-21)
 

@@ -1,6 +1,6 @@
 # Kestrel Explorer (C++)
 
-**Version 0.3.2-alpha.26.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.3-alpha.0.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
@@ -100,6 +100,7 @@ BleachBit and uninstalling.
 | [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
 | [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
+| [Translations](docs/translations.md) | The languages Kestrel is shown in, and how to report a wrong translation |
 | [Admin session](docs/admin.md) | Retry as Administrator: how it works, what it covers, and how the root helper is kept safe |
 | [Performance](docs/performance.md) | Benchmarks against GNOME Files, Nemo, Dolphin, Thunar, Krusader and PCManFM |
 | [Bugs found elsewhere](docs/bugs-elsewhere.md) | Problems in the desktop and other programs that get in Kestrel's way, how they were found, and how to work around them |

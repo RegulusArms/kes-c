@@ -3,8 +3,9 @@
 #   kes-setup --default          the default app for opening folders and the trash, "Show in folder" from other apps,
 #                                and the system's file chooser for Save/Open dialogs (may ask for sudo once);
 #                                on GNOME, an extension that focuses the app a file from Kestrel is dropped into
-#                                (and offer to put it in the dock in place of GNOME Files)
-#   kes-setup --dock             put it in the dock in place of GNOME Files (without asking)
+#                                (and offer to put it in the dock in place of GNOME Files, or in Plasma's taskbar
+#                                in place of Dolphin)
+#   kes-setup --dock             put it in the dock (or Plasma's taskbar) in place of GNOME Files (Dolphin), without asking
 #   kes-setup --bleachbit        add a cleaner for Kestrel's cache, history and lists of folders to BleachBit
 #   kes-setup --install-optional install the optional packages (exiftool, ffmpeg, BleachBit, rar, more archivers)
 #   kes-setup --undo             put back everything --default, --dock and --bleachbit changed
@@ -49,6 +50,13 @@ OPTIONAL_PACKAGES=(libimage-exiftool-perl ffmpeg bleachbit rar pbzip2 lbzip2 plz
                    libheif-examples)
 # The system's gsettings (an Anaconda copy earlier on PATH can't see the desktop's settings)
 GSETTINGS=/usr/bin/gsettings
+# xdg-mime on KDE runs `qtpaths`, which Ubuntu 26.04 only has as qtpaths6 (in Qt's own folder as qtpaths):
+# without it, xdg-mime prints "qtpaths: not found" on every change (and writes the generic mimeapps.list anyway)
+if ! command -v qtpaths >/dev/null; then
+    for qt_bin in /usr/lib/qt6/bin /usr/lib/qt5/bin; do
+        if [[ -x "$qt_bin/qtpaths" ]]; then PATH="$PATH:$qt_bin"; break; fi
+    done
+fi
 
 DEFAULT=0 DOCK=0 BLEACHBIT=0 OPTIONAL=0 UNDO=0 KES=""
 while (( $# )); do
@@ -59,13 +67,13 @@ while (( $# )); do
         --install-optional) OPTIONAL=1 ;;
         --undo) UNDO=1 ;;
         --kes) KES="${2:?--kes needs a path}"; shift ;;
-        -h|--help) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,13s/^# \{0,1\}//p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1 (see kes-setup --help)" >&2; exit 2 ;;
     esac
     shift
 done
 if (( ! DEFAULT && ! DOCK && ! BLEACHBIT && ! OPTIONAL && ! UNDO )); then
-    sed -n '2,12s/^# \{0,1\}//p' "$0"
+    sed -n '2,13s/^# \{0,1\}//p' "$0"
     exit 2
 fi
 if [[ -z "$KES" ]]; then
@@ -79,6 +87,25 @@ default_for() {   # the default app for a MIME type or URL scheme, as GNOME sees
         xdg-mime query default "$1" 2>/dev/null
     fi
 }
+forget_default() {   # forget_default TYPE: take Kestrel out as TYPE's default, so the desktop's own applies again
+    # (from its default and from the associations xdg-mime added on KDE; other apps in those lists stay)
+    local list part
+    for list in "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" "$HOME/.local/share/applications/mimeapps.list"; do
+        [[ -f "$list" ]] || continue
+        part="$(dirname "$list")/.mimeapps.list.part"
+        awk -v type="$1" '/^\[/ { ours = ($0 == "[Default Applications]" || $0 == "[Added Associations]") }
+            ours && index($0, type "=") == 1 {
+                n = split(substr($0, length(type) + 2), apps, ";"); kept = ""; dropped = 0
+                for (i = 1; i <= n; i++)
+                    if (apps[i] == "kestrel-explorer.desktop" || apps[i] == "folder-explorer.desktop") dropped++
+                    else if (apps[i] != "") kept = kept apps[i] ";"
+                if (dropped && kept == "") next
+                if (dropped) $0 = type "=" kept
+            }
+            { print }' "$list" > "$part" && { cmp -s "$part" "$list" || mv "$part" "$list"; }
+        rm -f "$part"
+    done
+}
 state_get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
 state_set() {
     mkdir -p "$(dirname "$STATE")"
@@ -90,6 +117,31 @@ dock_replace() {   # dock_replace OLD.desktop NEW.desktop: swap one pinned app f
     fav="$(dock_favorites)" || return 1
     [[ "$fav" == *"'$1'"* && "$fav" != *"'$2'"* ]] || return 1
     "$GSETTINGS" set org.gnome.shell favorite-apps "${fav//"'$1'"/"'$2'"}"
+}
+plasma_pins() {   # plasma_pins FROM.desktop TO.desktop [true]: swap one app pinned in Plasma's task managers for another
+    # (true: only say what would happen). Prints swapped, already (TO is pinned), follows (a "default file manager" pin,
+    # which opens whatever --default chose), none, or nothing when Plasma isn't running. Through plasmashell's own
+    # scripting, which keeps its config file consistent (gdbus turns a backslash in the script into an escape: none here).
+    local script="var from = 'applications:$1', to = 'applications:$2', dry = ${3:-false}, result = 'none';
+panels().forEach(function (panel) {
+    panel.widgets().forEach(function (w) {
+        if (w.type != 'org.kde.plasma.icontasks' && w.type != 'org.kde.plasma.taskmanager')
+            return;
+        w.currentConfigGroup = ['General'];
+        var pins = String(w.readConfig('launchers') || '').split(',').filter(function (p) { return p != ''; });
+        if (pins.indexOf(to) >= 0) {
+            if (result == 'none' || result == 'follows') result = 'already';
+        } else if (pins.indexOf(from) >= 0) {
+            if (!dry) { pins[pins.indexOf(from)] = to; w.writeConfig('launchers', pins); w.reloadConfig(); }
+            result = 'swapped';
+        } else if (pins.indexOf('preferred://filemanager') >= 0 && result == 'none') {
+            result = 'follows';
+        }
+    });
+});
+print(result);"
+    gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+        --method org.kde.PlasmaShell.evaluateScript "$script" 2>/dev/null | sed -n "s/^('\(.*\)',)\$/\1/p" || true
 }
 shell_extensions() { [[ -x "$GSETTINGS" ]] && "$GSETTINGS" get org.gnome.shell enabled-extensions 2>/dev/null; }
 reload_dbus() {   # make the session bus re-read its service files
@@ -199,27 +251,32 @@ if (( OPTIONAL )); then
 fi
 
 if (( UNDO )); then
-    prev="$(state_get folder_handler)"   # GNOME Files, Nemo on Linux Mint, …
+    # the apps --default recorded (GNOME Files, Nemo on Linux Mint, Dolphin on KDE…); where none was (nothing on KDE
+    # opens trash:///), Kestrel's entry is taken out, rather than naming GNOME Files, which may not be installed
+    prev="$(state_get folder_handler)"
     for mt in "${FOLDER_TYPES[@]}"; do
         if [[ "$(xdg-mime query default "$mt")" =~ ^(kestrel-explorer|folder-explorer)\.desktop$ ]]; then
-            xdg-mime default "${prev:-org.gnome.Nautilus.desktop}" "$mt"
+            if [[ -n "$prev" ]]; then xdg-mime default "$prev" "$mt"; else forget_default "$mt"; fi
         fi
     done
     if [[ "$(default_for "$TRASH_TYPE")" =~ ^(kestrel-explorer|folder-explorer)\.desktop$ ]]; then
         prev="$(state_get trash_handler)"
-        xdg-mime default "${prev:-org.gnome.Nautilus.desktop}" "$TRASH_TYPE"
+        if [[ -n "$prev" ]]; then xdg-mime default "$prev" "$TRASH_TYPE"; else forget_default "$TRASH_TYPE"; fi
     fi
     if [[ "$(state_get dock)" == swapped ]] && dock_replace kestrel-explorer.desktop org.gnome.Nautilus.desktop; then
         echo "Put GNOME Files back in the dock."
     fi
-    # the file chooser: GNOME's again (the portal definition stays: install.sh --uninstall or apt removes it)
+    if [[ "$(state_get dock)" == plasma && "$(plasma_pins kestrel-explorer.desktop org.kde.dolphin.desktop)" == swapped ]]; then
+        echo "Put Dolphin back in the taskbar."
+    fi
+    # the file chooser: the desktop's own again (the portal definition stays: install.sh --uninstall or apt removes it)
     if grep -qsF "$PORTAL_MARK" "$PORTAL_CONF"; then
         if [[ "$(state_get chooser_conf)" == backup && -f "$PORTAL_BACKUP" ]]; then
             mv "$PORTAL_BACKUP" "$PORTAL_CONF"
         else
             rm -f "$PORTAL_CONF"
         fi
-        echo "The file chooser is GNOME's again."
+        echo "The file chooser is the desktop's own again."
     fi
     if grep -qs -- "--file-chooser" "$CHOOSER_SERVICE"; then
         rm -f "$CHOOSER_SERVICE"
@@ -282,8 +339,14 @@ if (( DEFAULT )); then
                 state_set chooser_conf created
                 base="$(portal_base)"
             fi
+            # Kestrel first, then what this desktop used for the file chooser (KDE's, GNOME's, Mint's xapp…)
+            fallback="$(printf '%s\n' "$base" | sed -n 's/^org\.freedesktop\.impl\.portal\.FileChooser=//p' | head -1)"
+            [[ -n "$fallback" ]] || fallback="$(printf '%s\n' "$base" | sed -n 's/^default=//p' | head -1)"
+            fallback="${fallback//kestrel;/}"
+            [[ -n "$fallback" ]] || fallback="gnome;gtk;"
+            [[ "$fallback" == *";" ]] || fallback+=";"
             { echo "$PORTAL_MARK"
-              printf '%s\n' "$base" | awk -v line="org.freedesktop.impl.portal.FileChooser=kestrel;gnome;gtk;" '
+              printf '%s\n' "$base" | awk -v line="org.freedesktop.impl.portal.FileChooser=kestrel;$fallback" '
                   /^org\.freedesktop\.impl\.portal\.FileChooser=/ { next }
                   { print }
                   /^\[preferred\]/ && !done { print line; done = 1 }
@@ -294,7 +357,7 @@ if (( DEFAULT )); then
         echo "Kestrel is now the file chooser (Open/Save dialogs) for apps that use the desktop portal: browsers," \
              "Flatpak and Snap apps…"
     else
-        echo "Couldn't install $PORTAL_FILE, so the file chooser stays GNOME's." >&2
+        echo "Couldn't install $PORTAL_FILE, so the file chooser stays the desktop's own." >&2
     fi
     rm -f "$portal_tmp"
     # drop focus on GNOME: the shell extension (the .deb's, or a copy of this clone's); the shell loads a newly
@@ -321,6 +384,10 @@ if (( DEFAULT )); then
         echo "Closing Nemo so it releases the file-manager D-Bus service (it starts again when you open it)."
         nemo --quit 2>/dev/null || true
     fi
+    if pgrep -x dolphin >/dev/null; then   # KDE's: a window open takes the service too, and closing it would lose it
+        echo "Dolphin is open: until its windows are closed, \"Show in folder\" from other apps opens in Dolphin rather" \
+             "than Kestrel."
+    fi
     if [[ "$(xdg-mime query default inode/directory)" == kestrel-explorer.desktop ]]; then
         echo "Set as default folder handler (${FOLDER_TYPES[*]})."
     else
@@ -340,9 +407,21 @@ if (( DEFAULT )); then
     if (( ! DOCK )) && [[ -t 0 ]] && [[ "$(dock_favorites)" == *"'org.gnome.Nautilus.desktop'"* ]]; then
         read -r -p "Replace GNOME Files in the dock with Kestrel Explorer? [y/N] " answer
         [[ "$answer" =~ ^[Yy] ]] && DOCK=1
+    elif (( ! DOCK )) && [[ -t 0 ]] && [[ "$(plasma_pins org.kde.dolphin.desktop kestrel-explorer.desktop true)" == swapped ]]; then
+        read -r -p "Replace Dolphin in the taskbar with Kestrel Explorer? [y/N] " answer
+        [[ "$answer" =~ ^[Yy] ]] && DOCK=1
     fi
 fi
-if (( DOCK )); then
+if (( DOCK )) && plasma="$(plasma_pins org.kde.dolphin.desktop kestrel-explorer.desktop)" && [[ -n "$plasma" ]]; then
+    # KDE Plasma: its task manager's pins (Kubuntu)
+    case "$plasma" in
+        swapped) state_set dock plasma
+                 echo "Kestrel Explorer is now in the taskbar in place of Dolphin." ;;
+        already) echo "Kestrel Explorer is already in the taskbar." ;;
+        follows) echo "The taskbar's file manager button already opens Kestrel (it follows the default file manager)." ;;
+        *)       echo "Dolphin isn't pinned in the taskbar, so nothing to replace (pin Kestrel from the app menu instead)." ;;
+    esac
+elif (( DOCK )); then
     if dock_replace org.gnome.Nautilus.desktop kestrel-explorer.desktop; then
         state_set dock swapped
         echo "Kestrel Explorer is now in the dock in place of GNOME Files."
@@ -353,9 +432,17 @@ if (( DOCK )); then
     fi
 fi
 if (( BLEACHBIT )); then
-    mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
-    bleachbit_cleaner > "$BLEACHBIT_CLEANER"
+    # Only the user may change it, whatever the umask: BleachBit ignores a cleaner others could edit (world-writable)
+    # as a security measure. Written whole under a hidden name, then renamed into place.
+    (
+        umask 022
+        mkdir -p "$(dirname "$BLEACHBIT_CLEANER")"
+        part="$(dirname "$BLEACHBIT_CLEANER")/.kestrel-explorer.xml.part"
+        bleachbit_cleaner > "$part" && chmod 644 "$part" && sync "$part" && mv -f "$part" "$BLEACHBIT_CLEANER" ||
+            { rm -f "$part"; exit 1; }
+    ) || { echo "Couldn't write BleachBit's cleaner ($BLEACHBIT_CLEANER)." >&2; exit 1; }
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder, frequent" \
-         "folders), Starred, pinned items, and folder covers, colours and sorts."
+         "folders), Starred, pinned items, and folder covers, colours and sorts. The first time BleachBit opens" \
+         "afterwards, it asks whether to trust the new cleaner (a check it makes for every cleaner you add): choose OK."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

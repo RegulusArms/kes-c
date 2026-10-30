@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run the test suite (see tests/README.md).
 #   tests/run.sh                    every test
-#   tests/run.sh fileops atc_undo   only these (names: fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search viewer tools overview media installer)
+#   tests/run.sh fileops atc_undo   only these (names: fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search viewer tools overview media i18n installer)
 # Each test runs with a throwaway HOME on a private D-Bus session bus: your files, settings, dock and running
 # Kestrel windows are never touched.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
-ALL=(fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search viewer tools overview media installer)
+ALL=(fileops archives prefs atc_sync atc_tasks atc_undo atc_tabs devices sidebar pinned groups slow jobs theme chooser admin_helper ui parsing search viewer tools overview media i18n installer)
 TESTS=("$@")
 (( ${#TESTS[@]} )) || TESTS=("${ALL[@]}")
 for t in "${TESTS[@]}"; do
@@ -35,6 +35,9 @@ echo "Building…"
     { tail -30 "$HERE/build.log"; echo "Build failed (full log: tests/build.log)"; exit 1; }
 
 export KES_CXX="$ROOT/$B/kes"
+# Kestrel shows its texts in the desktop's language (translations/): the tests check the English ones, whatever
+# this machine's language is. (test_i18n loads the other translations itself.)
+export LANGUAGE=en
 
 failed=()
 for t in "${TESTS[@]}"; do
@@ -51,7 +54,8 @@ for t in "${TESTS[@]}"; do
         HOME="$work/home" QT_QPA_PLATFORM=offscreen \
         timeout 600 dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
     rc=$?
-    grep -E '^(PASS|FAIL|SKIP) ' "$work/log"
+    # (with a failed check's indented lines under it: what it found)
+    awk '/^(PASS|FAIL|SKIP) / { more = /^FAIL/; print; next } more && /^  / { print; next } { more = 0 }' "$work/log"
     if grep -q '^ALL PASSED' "$work/log" && (( rc == 0 )); then
         grep '^ALL PASSED' "$work/log"
     else

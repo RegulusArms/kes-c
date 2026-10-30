@@ -119,6 +119,7 @@ previews* are only the folders' mosaics; without *Recursively*, it's this folder
 
 | Entry | What it does |
 |---|---|
+| **Generate Previews** | Thumbnails and previews in this folder that aren't made yet |
 | **Generate Previews Recursively** | Thumbnails and folder previews for everything below the folder |
 | **Generate Folder Previews** | Mosaics for this folder and the folders directly in it |
 | **Generate Folder Previews Recursively** | Mosaics for every folder below |
@@ -248,6 +249,7 @@ Right-click a tab's title.
 | **Unmount** | Unmounts the drive (a tape writes its index first); asks first while a job still uses it | Drives, mounted network shares |
 | **Remove from Recent Servers** | Forgets a recently used server | Servers not connected |
 | **Eject** / **Unmount** | Disconnects the phone or camera | Mounted phones and cameras |
+| **Hide from Sidebar** | Takes the place out of the sidebar, in every window; Preferences → Sidebar → Places shown brings it back | Places (Overview, Home, Recent, Starred, the user folders, Trash) |
 
 ## Overview cards
 

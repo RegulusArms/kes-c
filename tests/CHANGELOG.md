@@ -4,6 +4,134 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.0
+
+Added:
+- `i18n`: each desktop language loads its own translation (`pt_BR` and `pt_PT` their own Portuguese, `de_AT` the
+  German, `zh_TW`, which has none, English), guarding against a bare `kestrel_pt` file that Qt would pick for Brazil
+  before it tries `pt_BR`; and the Russian translation picks its three plural forms by count (1, 2, 5, 11, 21), the
+  first language whose plural rules differ from English's.
+
+Changed:
+- `run.sh` runs every test with `LANGUAGE=en`: Kestrel now ships other languages and shows the desktop's, so on a
+  machine in another language the tests would get its texts instead of the English ones they check.
+
+## 0.3.2-alpha.34
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes the benchmark (`bench/`) no longer starts the workflow, as
+  for Markdown: nothing the tests, the build or the package use is in it, so the runs only cost time.
+
+## 0.3.2-alpha.33
+
+Added:
+- `installer`: kes-setup on KDE Plasma (Kubuntu), where Dolphin opens folders and no app opens `trash:///`.
+  `--default` takes both, makes Kestrel the file chooser with KDE's as the fallback (it was GNOME's, which Kubuntu
+  doesn't have) and says an open Dolphin keeps "Show in folder"; `--dock` swaps Dolphin for Kestrel in Plasma's taskbar
+  and says when a "default file manager" pin already opens it; `--undo` puts Dolphin back in the taskbar and for
+  folders, and doesn't hand `trash:///` to GNOME Files (it did, though GNOME Files isn't installed there); xdg-mime
+  finds `qtpaths` (26.04's xdg-mime runs it on KDE, which Ubuntu only installs as `qtpaths6`: it printed "qtpaths: not
+  found" for each change; skipped where xdg-mime doesn't run it, as on 24.04). Plasma isn't in CI, so a stand-in
+  `gdbus` answers for plasmashell; the script itself was run against a real plasmashell.
+- `theme`: KDE Plasma's settings, read from its config files (user's first, then the system's; groups, KDE's key
+  flags): the icon theme without KDE's Qt integration, Set as Wallpaper through `plasma-apply-wallpaperimage`, Konsole
+  first for Open Terminal, and Recent Files' "Do not remember" turning File History off; and that GNOME keeps its own.
+
+Changed:
+- `installer`: the stand-in `pgrep` reports `$RUNNING` as running (Dolphin, for the KDE case); otherwise nothing runs,
+  as before.
+- `overview`: "with the desktop's File History off, folders opened aren't counted" sets the desktop to GNOME for its
+  check, since it turns GNOME's switch off: run with `XDG_CURRENT_DESKTOP=KDE` it failed, as Kestrel now reads Plasma's.
+
+## 0.3.2-alpha.32
+
+Changed:
+- `fileops`: "decompressing a single file: one another program saves under its name meanwhile is kept" no longer races
+  the decompression: the job starts paused, so it waits once its hidden part file is there until the test has saved
+  the other program's file, then resumes. It failed in CI's `sanitizers` job on alpha.31 when the decompression
+  finished before the test saw the part file (nothing wrong in Kestrel). Its file is 4 MB instead of 48 MB, which
+  only made that race less likely.
+- CI's 24.04 jobs are named after their release like the 26.04 ones: `test` is `test-noble`, `sanitizers` is
+  `sanitizers-noble` (`deb` needs `test-noble`).
+
+## 0.3.2-alpha.31
+
+Added:
+- `prefs`: Preferences → Sidebar → Places shown (an unticked place leaves every window's sidebar, Hide from Sidebar
+  shows unticked there), and the new Privacy tab: each history switch (Recent, Frequent Folders, recent servers) keeps
+  it from being recorded when off, the desktop's File History is shown, and Clear Kestrel's History / Clear Recent
+  Files ask, then clear. The tab list now includes Privacy.
+- `atc_tasks`: finished jobs stay until Clear Finished: another Kestrel's newer list adds to its older one, a Kestrel
+  that closes leaves its finished jobs listed (saying its log is gone), and 60 of our own all stay listed and told
+  (only 50 were kept before).
+- `theme`: Generate Previews (the new non-recursive entry) makes thumbnails of the folder's own files only, and the
+  Previews submenu lists it first; `ui`'s list of every menu entry has it.
+
+## 0.3.2-alpha.30
+
+Changed:
+- `i18n` no longer counts any installed app's name as untranslated English, wherever it's listed: Preferences' image
+  and video opener lists name every app that opens JPEGs and MP4s (on GitHub's 24.04 runner Firefox, Chrome and
+  Edge), which alpha.29's fix (only the apps for a text file and a folder) missed. Its check failed again in CI's
+  `test` job on alpha.29 though nothing was untranslated.
+
+## 0.3.2-alpha.29
+
+Changed:
+- `i18n` no longer counts the names of installed apps as untranslated English: Properties' Open With lists the apps
+  that open the file (on GitHub's 24.04 runner Firefox, Chrome, Edge and Vim), named by the apps themselves. Its check
+  failed in CI's `test` job on alpha.28 though nothing was untranslated.
+
+## 0.3.2-alpha.28
+
+Added:
+- `i18n` checks that Properties → Metadata's Remove removes the tag a row stands for when the row shows its group
+  under another name, as a translation could. Covers the fix that keeps the tag apart from the row's text (it was
+  read back from what the row showed).
+- `atc_tasks` checks the one Jobs window across Kestrels (a stand-in second Kestrel): opening it tells the others and
+  one opened elsewhere closes ours; another Kestrel's running and finished jobs are listed, their steps and logs asked
+  for and shown, its thumbnail jobs listed, and Pause and Stop on them sent to it; ours are told and answered for a
+  Jobs window elsewhere, and paused and resumed from it; Clear Finished clears every Kestrel's. Covers making the
+  Jobs window one for all Kestrels.
+
+Changed:
+- `i18n` no longer counts the names the computer gives as untranslated English: the user's group (on GitHub's runner
+  it's `docker`, shown in Properties → Permissions), drive labels and the names the system gives a mount (shown on
+  Overview cards). Its check failed in both of CI's test jobs on alpha.27 though nothing was untranslated.
+- `run.sh` prints a failed check's indented lines under it (what it found), not only its first line, so CI's log
+  shows them. Alpha.27's failure in CI listed nothing.
+
+## 0.3.2-alpha.27
+
+Changed:
+- `prefs` expects the Preferences tab "Images & Videos" written "Images && Videos" (shown as "&"), and its
+  customised file menu's submenu of the user's own is now named "Mine & Yours". Covers the fix for "&" in tab names,
+  which Qt took as a shortcut mark and showed as the next letter underlined.
+
+- Every test runs with English (US) number and date formats (`common.h`), whatever the machine's locale: Kestrel now
+  formats them by the system's, so a check of "1,234 bytes" or a date doesn't depend on where it runs.
+- `fileops`: a remembered folder size's age names its date in the system's format ("Calculated 3 days ago (…)"),
+  no longer as 2026-10-21 14:05. `archives`: the archive window counts "60,001 files" in the system's digit grouping.
+  `tools`: Find Duplicates says "Not kept: 2 files" (a count's plural, no longer "2 file(s)"). `devices`: the
+  no-phones hint is translated where it's shown. Cover the move of numbers, dates and counts to the system's formats
+  and translatable plurals.
+
+Added:
+- `prefs` checks that in a customised menu "Links & Shortcuts" and a submenu named "Mine & Yours" keep their "&".
+- `ui` checks that a folder named "Tom & Jerry" shows as that on its tab and in the window's title.
+- `ui` scans `src/` for a text passed straight to a widget or a message without `tx()` (like the modal-call scan),
+  so new code stays translatable.
+- A new test, `i18n`: every `.ts` file is built into the app and keeps its texts' `%1` and `%n`; English gives every
+  count in the code its plural forms; and with the pseudo-translation installed, the main window, its menus, the
+  Overview, Preferences, the Jobs window and Properties show no untranslated text. Covers making Kestrel
+  translatable.
+- `installer` runs `kes-setup --bleachbit` under umask 000 and checks the cleaner and its folders come out writable
+  only by the user (BleachBit ignores a world-writable cleaner, and then the dry run and the clean find nothing), with
+  no part file left, and that its output says BleachBit will ask once whether to trust it. Covers the fix for the
+  cleaner written with the user's umask.
+- CI's test jobs (`test`, `test-resolute`, `sanitizers`, `sanitizers-resolute`) and `deb` install `qt6-tools-dev`
+  and `qt6-l10n-tools`, which the build needs for the translations and `i18n` for lupdate.
+
 ## 0.3.2-alpha.26
 
 Added:

@@ -1153,7 +1153,7 @@ int main(int argc, char **argv)
                        name(last) == "a.txt" && first->childCount() == 200 && name(first->child(0)) == "f000" &&
                        name(first->child(199)) == "f199";
         check(res.rc == 0 && bw->loaded() && worst < 500 && ordered &&
-                  last->data(0, Qt::UserRole + 4).toDateTime() == when && bw->status->text().startsWith("60001 files in 301 folders"),
+                  last->data(0, Qt::UserRole + 4).toDateTime() == when && bw->status->text().startsWith(QLocale().toString(60001) + " files in 301 folders"),
               QString("a big archive (60,000 files) opens without holding up the window (longest pause %1 ms), folders "
                       "first, by name, with the files' times (%2, %3 … %4)")
                   .arg(QString::number(worst), name(first), name(first ? first->child(0) : nullptr), name(last)));

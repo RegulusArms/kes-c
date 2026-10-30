@@ -140,7 +140,7 @@ void ViewerCanvas::fit()
 {
     zoom.reset();
     offset = QPointF(0, 0);
-    show_osd("Fit");
+    show_osd(tx("Fit"));
     Q_EMIT view_changed();
 }
 
@@ -273,8 +273,8 @@ void ViewerCanvas::paintEvent(QPaintEvent *)
             p.drawRect(sel);
         }
         QRect r = crop_rect();
-        bubble(p, rect(), sel.isEmpty() ? QString("Drag over the part to keep · Esc: cancel")
-                                        : QString("%1 × %2 · Enter: crop · Esc: cancel").arg(r.width()).arg(r.height()),
+        bubble(p, rect(), sel.isEmpty() ? tx("Drag over the part to keep · Esc: cancel")
+                                        : tx("%1 × %2 · Enter: crop · Esc: cancel").arg(r.width()).arg(r.height()),
                Qt::AlignBottom | Qt::AlignHCenter);
     }
     if (!overlay.isEmpty())
@@ -597,7 +597,7 @@ void ViewerInfo::wheelEvent(QWheelEvent *ev)
 
 void ViewerInfo::row(const QString &k, const QString &v, bool rich)
 {
-    auto *l = new QLabel(QString("<span style=\"color:#8a8a8a\">%1</span><br>%2").arg(k.toHtmlEscaped(), rich ? v : v.toHtmlEscaped()));
+    auto *l = new QLabel(tx("<span style=\"color:#8a8a8a\">%1</span><br>%2").arg(k.toHtmlEscaped(), rich ? v : v.toHtmlEscaped()));
     l->setWordWrap(true);
     l->setTextInteractionFlags(rich ? Qt::TextBrowserInteraction : Qt::TextSelectableByMouse);
     l->setOpenExternalLinks(rich);
@@ -634,11 +634,11 @@ void ViewerInfo::show_path(const QString &p)
     title->setText(basename(p));
     struct stat st;
     if (stat_(p, st)) {
-        row("Size", human_size(qint64(st.st_size)));
-        row("Modified", fmt_time(st.st_mtime, "%Y-%m-%d %H:%M"));
+        row(tx("Size"), human_size(qint64(st.st_size)));
+        row(tx("Modified"), i18n::date_time(QDateTime::fromSecsSinceEpoch(st.st_mtime)));
     }
-    row("Folder", dirname(p));
-    auto *reading = new QLabel("Reading its details…");
+    row(tx("Folder"), dirname(p));
+    auto *reading = new QLabel(tx("Reading its details…"));
     rows->addWidget(reading);
     QPointer<ViewerInfo> self(this);
     fileops::run_task(
@@ -671,7 +671,7 @@ void ViewerInfo::show_path(const QString &p)
                 if (kv.value(0) == "GPS" && gps.size() == 2) {
                     QString lat = QString::number(gps[0].toDouble(), 'f', 6), lon = QString::number(gps[1].toDouble(), 'f', 6);
                     self->map_url = QString("https://www.openstreetmap.org/?mlat=%1&mlon=%2#map=16/%1/%2").arg(lat, lon);
-                    self->row("GPS", QString("%1 · <a href=\"%2\">Show on a map</a>").arg(kv.value(1).toHtmlEscaped(), self->map_url), true);
+                    self->row(tx("GPS"), tx("%1 · <a href=\"%2\">Show on a map</a>").arg(kv.value(1).toHtmlEscaped(), self->map_url), true);
                 } else {
                     self->row(kv.value(0), kv.value(1));
                 }
@@ -682,11 +682,11 @@ void ViewerInfo::show_path(const QString &p)
                     self->row(k, v);
                     continue;
                 }
-                auto *lab = new QLabel(QString("<span style=\"color:#8a8a8a\">%1</span>").arg(k.toHtmlEscaped()));
+                auto *lab = new QLabel(tx("<span style=\"color:#8a8a8a\">%1</span>").arg(k.toHtmlEscaped()));
                 auto *ed = new QPlainTextEdit(v);
                 ed->setReadOnly(true);
                 ed->setMaximumHeight(120);
-                auto *btn = new QPushButton("Copy");
+                auto *btn = new QPushButton(tx("Copy"));
                 btn->setFocusPolicy(Qt::NoFocus);
                 QObject::connect(btn, &QPushButton::clicked, self, [v]() { QGuiApplication::clipboard()->setText(v); });
                 self->rows->addWidget(lab);
@@ -706,7 +706,7 @@ void ViewerInfo::show_path(const QString &p)
                 html += QString("<span style=\"color:#8a8a8a\">%1</span> %2<br>").arg(m.value(1).toHtmlEscaped(), v.toHtmlEscaped());
             }
             if (!html.isEmpty()) {
-                auto *all = new QLabel("<span style=\"color:#8a8a8a\">All metadata</span><br><br>" + html);
+                auto *all = new QLabel("<span style=\"color:#8a8a8a\">" + tx("All metadata") + "</span><br><br>" + html);   // notr: markup
                 all->setWordWrap(true);
                 all->setTextInteractionFlags(Qt::TextSelectableByMouse);
                 self->rows->addWidget(all);
@@ -865,7 +865,7 @@ void ImageViewer::show_on(ViewerCanvas *c, const QString &path)
     if (it == cache.constEnd())
         return;
     if (it->pix.isNull()) {
-        c->clear_image("Cannot display this image");
+        c->clear_image(tx("Cannot display this image"));
     } else if (c == canvas && path == shown && !steps.isEmpty()) {   // the edits, previewed on the decoded copy
         QSize real;
         c->set_image(QPixmap::fromImage(imgedit::preview(it->pix.toImage(), it->full, steps, &real)), real);
@@ -947,7 +947,7 @@ void ImageViewer::show_current()
         if (auto *tm = ThumbnailManager::instance(); tm && shown_bytes >= 0)
             thumb = tm->get(path, qint64(st.st_mtime), false, 256, shown_bytes, this);
         if (thumb.isNull())
-            canvas->clear_image("Loading…");
+            canvas->clear_image(tx("Loading…"));
         else
             canvas->set_image(thumb, thumb.size().scaled(canvas->size(), Qt::KeepAspectRatio));
         request(path);
@@ -996,11 +996,11 @@ void ImageViewer::update_overlay()
         if (places::is_starred(path))
             parts << "★";
         if (slideshow.isActive())
-            parts << "▶ slideshow";
+            parts << tx("▶ slideshow");
         if (!steps.isEmpty())
-            parts << "✎ not saved (Ctrl+S saves, Esc undoes)";
+            parts << tx("✎ not saved (Ctrl+S saves, Esc undoes)");
         if (compare == 3)   // A is under B, its line hidden
-            parts << "A: " + basename(pinned_path);
+            parts << tx("A: %1").arg(basename(pinned_path));
         canvas->overlay = parts.join("    ");
         if (compare)
             pinned->overlay = QString("%1    %2%").arg(basename(pinned_path)).arg(qRound(pinned->scale() * 100));
@@ -1086,13 +1086,13 @@ void ImageViewer::leave_image()
 void ImageViewer::ask_rotation(const QString &path, int rotation, bool flip, bool closing_viewer)
 {
     QString how = imgedit::rotation_method(path);
-    auto *box = new QMessageBox(QMessageBox::Question, "Save Rotation",
-                                QString("Save the rotation of “%1”?").arg(basename(path)), QMessageBox::NoButton, this);
-    box->setInformativeText(how == "pixels" ? "It's written again, turned, in the same lossless format."
-                                            : "Only its orientation tag changes: the image itself isn't re-encoded.");
-    QAbstractButton *save = box->addButton("Save", QMessageBox::AcceptRole);
-    QAbstractButton *always = box->addButton("Always Save", QMessageBox::AcceptRole);
-    QAbstractButton *dont = box->addButton("Don't Save", QMessageBox::DestructiveRole);
+    auto *box = new QMessageBox(QMessageBox::Question, tx("Save Rotation"),
+                                tx("Save the rotation of “%1”?").arg(basename(path)), QMessageBox::NoButton, this);
+    box->setInformativeText(how == "pixels" ? tx("It's written again, turned, in the same lossless format.")
+                                            : tx("Only its orientation tag changes: the image itself isn't re-encoded."));
+    QAbstractButton *save = box->addButton(tx("Save"), QMessageBox::AcceptRole);
+    QAbstractButton *always = box->addButton(tx("Always Save"), QMessageBox::AcceptRole);
+    QAbstractButton *dont = box->addButton(tx("Don't Save"), QMessageBox::DestructiveRole);
     QAbstractButton *cancel = closing_viewer ? box->addButton(QMessageBox::Cancel) : nullptr;
     box->setDefaultButton(qobject_cast<QPushButton *>(save));
     QPointer<ImageViewer> self(this);
@@ -1123,7 +1123,7 @@ bool ImageViewer::write_rotation(const QString &path, int rotation, bool flip)
     try {
         imgedit::save_rotation(path, rotation, flip);
     } catch (const Error &e) {
-        warn(this, "Save Rotation", e.message());
+        warn(this, tx("Save Rotation"), e.message());
         return false;
     }
     after_write(path);
@@ -1168,15 +1168,15 @@ void ImageViewer::save_changes()
         return;
     }
     if (canvas->rotation == 0 && !canvas->flip_h) {
-        canvas->show_osd("It isn't turned (R, L, H turn it)");
+        canvas->show_osd(tx("It isn't turned (R, L, H turn it)"));
         return;
     }
     if (imgedit::rotation_method(shown).isEmpty()) {
-        warn(this, "Save Rotation", QString("Kestrel can't save a rotation of “%1” without losing quality.").arg(basename(shown)));
+        warn(this, tx("Save Rotation"), tx("Kestrel can't save a rotation of “%1” without losing quality.").arg(basename(shown)));
         return;
     }
     if (write_rotation(shown, canvas->rotation, canvas->flip_h))
-        canvas->show_osd("Rotation saved");
+        canvas->show_osd(tx("Rotation saved"));
 }
 
 void ImageViewer::delete_current()
@@ -1312,6 +1312,8 @@ QStringList ImageViewer::recent_folders() { return settings().value("viewer_rece
 
 void ImageViewer::remember_folder(const QString &folder)
 {
+    if (!prefs::get("history_viewer_folders").toBool())
+        return;
     QStringList l = recent_folders();
     l.removeAll(folder);
     l.prepend(folder);
@@ -1326,7 +1328,7 @@ void ImageViewer::transfer_file(const QString &path, const QString &folder_in, c
     if (path.isEmpty() || folder.isEmpty() || !cb.on_transfer)
         return;
     if (folder == dirname(path)) {
-        canvas->show_osd("It's in that folder already");
+        canvas->show_osd(tx("It's in that folder already"));
         return;
     }
     remember_folder(folder);
@@ -1346,14 +1348,14 @@ void ImageViewer::transfer_file(const QString &path, const QString &folder_in, c
             }
         }
     }
-    canvas->show_osd(QString("%1 to %2").arg(op == "move" ? "Moving" : "Copying", basename(folder)));
+    canvas->show_osd((op == "move" ? tx("Moving to %1") : tx("Copying to %1")).arg(basename(folder)));
 }
 
 void ImageViewer::transfer_recent(int n, const QString &op)
 {
     QStringList l = recent_folders();
     if (n < 1 || n > l.size()) {
-        canvas->show_osd(QString("No recent folder %1 yet (M or C picks one)").arg(n));
+        canvas->show_osd(tx("No recent folder %1 yet (M or C picks one)").arg(n));
         return;
     }
     transfer(l[n - 1], op);
@@ -1397,7 +1399,7 @@ void ImageViewer::undo()
         }
         if (to >= 0) {
             self->go_to(to);
-            self->canvas->show_osd("Put back");
+            self->canvas->show_osd(tx("Put back"));
         }
     });
 }
@@ -1409,7 +1411,7 @@ void ImageViewer::toggle_star()
         return;
     bool on = !places::is_starred(path);
     places::set_starred({path}, on);
-    canvas->show_osd(on ? "★ Starred" : "Not starred");
+    canvas->show_osd(on ? tx("★ Starred") : tx("Not starred"));
     update_overlay();
 }
 
@@ -1420,7 +1422,7 @@ void ImageViewer::toggle_pin()
         return;
     bool on = !places::is_pinned(path);
     places::set_pinned({path}, on);
-    canvas->show_osd(on ? "Pinned in its folder" : "Not pinned");
+    canvas->show_osd(on ? tx("Pinned in its folder") : tx("Not pinned"));
 }
 
 // ------------------------------------------------------------ edits
@@ -1428,11 +1430,11 @@ void ImageViewer::toggle_pin()
 void ImageViewer::start_crop()
 {
     if (compare)
-        canvas->show_osd("Stop comparing first (X)");
+        canvas->show_osd(tx("Stop comparing first (X)"));
     else if (movie)
-        canvas->show_osd("Animations can't be cropped");
+        canvas->show_osd(tx("Animations can't be cropped"));
     else if (!cache.contains(shown) || canvas->pix.isNull())
-        canvas->show_osd("Still loading");
+        canvas->show_osd(tx("Still loading"));
     else
         canvas->start_crop();
 }
@@ -1475,14 +1477,14 @@ static QSize parse_size(const QString &text, QSize now)
 void ImageViewer::resize_image()
 {
     if (compare || movie || !cache.contains(shown)) {
-        canvas->show_osd(compare ? "Stop comparing first (X)" : movie ? "Animations can't be resized" : "Still loading");
+        canvas->show_osd(compare ? tx("Stop comparing first (X)") : movie ? tx("Animations can't be resized") : tx("Still loading"));
         return;
     }
     QString path = shown;
     QSize now = canvas->img_size().toSize();
     QPointer<ImageViewer> self(this);
-    ask_text(this, "Resize",
-             QString("“%1” is %2 × %3. New size: a percentage (50%), width × height (1920x1080), or the longer side "
+    ask_text(this, tx("Resize"),
+             tx("“%1” is %2 × %3. New size: a percentage (50%), width × height (1920x1080), or the longer side "
                      "in pixels (1920):")
                  .arg(basename(path), QString::number(now.width()), QString::number(now.height())),
              "50%", [self, path, now](const QString &t) {
@@ -1490,7 +1492,7 @@ void ImageViewer::resize_image()
                      return;
                  QSize s = parse_size(t, now);
                  if (s.isEmpty())
-                     warn(self, "Resize", QString("“%1” isn't a size Kestrel understands.").arg(t));
+                     warn(self, tx("Resize"), tx("“%1” isn't a size Kestrel understands.").arg(t));
                  else
                      self->add_edit(QRect(), s);
              });
@@ -1519,7 +1521,7 @@ void ImageViewer::discard_edits()
     canvas->reset_view();
     show_on(canvas, shown);
     update_overlay();
-    canvas->show_osd("Edits undone");
+    canvas->show_osd(tx("Edits undone"));
 }
 
 void ImageViewer::ask_edit(const QString &src, const QList<imgedit::Edit> &edits, int how)
@@ -1529,18 +1531,20 @@ void ImageViewer::ask_edit(const QString &src, const QList<imgedit::Edit> &edits
         crops |= !e.crop.isEmpty();
         sizes |= !e.size.isEmpty();
     }
-    QString what = crops && sizes ? "edited" : crops ? "cropped" : sizes ? "resized" : "turned";
-    QString title = crops && !sizes ? "Crop" : sizes && !crops ? "Resize" : "Edit";
+    QString what = crops && sizes ? "edited" : crops ? "cropped" : sizes ? "resized" : "turned";   // (in the new file's name)
+    QString title = crops && !sizes ? TX_NOOP("Crop") : sizes && !crops ? TX_NOOP("Resize") : TX_NOOP("Edit");   // (and the undo label)
     bool can_replace = imgedit::can_write(src);
-    auto *box = new QMessageBox(QMessageBox::Question, title,
-                                QString("Save the %1 image as a new file, “%2”, or replace “%3” with it?")
-                                    .arg(what, basename(imgedit::new_name(src, what)), basename(src)),
-                                QMessageBox::NoButton, this);
-    box->setInformativeText(can_replace ? "Replacing the original can't be undone."
-                                        : "Kestrel can't write this format, so it can only make a new JPEG file.");
-    QAbstractButton *as_new = box->addButton("Save as New File", QMessageBox::AcceptRole);
-    QAbstractButton *replace = can_replace ? box->addButton("Replace Original", QMessageBox::DestructiveRole) : nullptr;
-    QAbstractButton *discard = how ? box->addButton("Discard", QMessageBox::RejectRole) : nullptr;
+    QString question = crops && sizes ? tx("Save the edited image as a new file, “%1”, or replace “%2” with it?")
+                       : crops        ? tx("Save the cropped image as a new file, “%1”, or replace “%2” with it?")
+                       : sizes        ? tx("Save the resized image as a new file, “%1”, or replace “%2” with it?")
+                                      : tx("Save the turned image as a new file, “%1”, or replace “%2” with it?");
+    auto *box = new QMessageBox(QMessageBox::Question, tx(title),
+                                question.arg(basename(imgedit::new_name(src, what)), basename(src)), QMessageBox::NoButton, this);
+    box->setInformativeText(can_replace ? tx("Replacing the original can't be undone.")
+                                        : tx("Kestrel can't write this format, so it can only make a new JPEG file."));
+    QAbstractButton *as_new = box->addButton(tx("Save as New File"), QMessageBox::AcceptRole);
+    QAbstractButton *replace = can_replace ? box->addButton(tx("Replace Original"), QMessageBox::DestructiveRole) : nullptr;
+    QAbstractButton *discard = how ? box->addButton(tx("Discard"), QMessageBox::RejectRole) : nullptr;
     if (how != 1)
         box->addButton(QMessageBox::Cancel);
     box->setDefaultButton(qobject_cast<QPushButton *>(as_new));
@@ -1556,7 +1560,7 @@ void ImageViewer::ask_edit(const QString &src, const QList<imgedit::Edit> &edits
         bool over = b == replace;
         QString dst = over ? src : imgedit::new_name(src, what);   // named now: one may have appeared meanwhile
         fileops::run_task(
-            nullptr, "Saving " + basename(dst),
+            nullptr, tx("Saving %1").arg(basename(dst)),
             [src, dst, edits]() -> QVariant {
                 try {
                     imgedit::save_edit(src, dst, edits);
@@ -1567,14 +1571,14 @@ void ImageViewer::ask_edit(const QString &src, const QList<imgedit::Edit> &edits
             },
             [self, src, dst, over, title](const QVariant &res) {
                 if (!res.toString().isEmpty()) {
-                    warn(self, title, res.toString());
+                    warn(self, tx(title), res.toString());
                     return;
                 }
                 if (over) {
                     undo::record("none", title, {});   // what was replaced is gone
                     if (self) {
                         self->after_write(src);
-                        self->canvas->show_osd("Saved");
+                        self->canvas->show_osd(tx("Saved"));
                     }
                     return;
                 }
@@ -1608,17 +1612,17 @@ void ImageViewer::straighten()
     if (path.isEmpty())
         return;
     if (!imgedit::can_straighten(path)) {
-        canvas->show_osd("Nothing to straighten: no orientation tag turns it");
+        canvas->show_osd(tx("Nothing to straighten: no orientation tag turns it"));
         return;
     }
     try {
         imgedit::straighten(path);
     } catch (const Error &e) {
-        warn(this, "Straighten", e.message());
+        warn(this, tx("Straighten"), e.message());
         return;
     }
     after_write(path);
-    canvas->show_osd("Straightened");
+    canvas->show_osd(tx("Straightened"));
 }
 
 // ------------------------------------------------------------ view
@@ -1655,7 +1659,7 @@ void ImageViewer::toggle_keep_zoom()
 {
     keep_zoom = !keep_zoom;
     prefs::set("viewer_keep_zoom", keep_zoom);
-    canvas->show_osd(keep_zoom ? "Zoom kept from image to image" : "Each image fits the window");
+    canvas->show_osd(keep_zoom ? tx("Zoom kept from image to image") : tx("Each image fits the window"));
 }
 
 void ImageViewer::toggle_compare()
@@ -1668,11 +1672,11 @@ void ImageViewer::toggle_compare()
         return;
     }
     if (paths.size() < 2) {
-        canvas->show_osd("Comparing needs two images");
+        canvas->show_osd(tx("Comparing needs two images"));
         return;
     }
     if (!steps.isEmpty()) {
-        canvas->show_osd("Save (Ctrl+S) or undo (Esc) the edits first");
+        canvas->show_osd(tx("Save (Ctrl+S) or undo (Esc) the edits first"));
         return;
     }
     leave_image();
@@ -1695,7 +1699,7 @@ void ImageViewer::toggle_compare()
 void ImageViewer::toggle_ab()
 {
     if (!compare) {
-        canvas->show_osd("Not comparing (X compares)");
+        canvas->show_osd(tx("Not comparing (X compares)"));
         return;
     }
     compare = compare == 2 ? 1 : 2;
@@ -1706,7 +1710,7 @@ void ImageViewer::toggle_ab()
 void ImageViewer::toggle_slider()
 {
     if (!compare) {
-        canvas->show_osd("Not comparing (X compares)");
+        canvas->show_osd(tx("Not comparing (X compares)"));
         return;
     }
     compare = compare == 3 ? 1 : 3;
@@ -1837,7 +1841,7 @@ QMimeData *ImageViewer::image_data(ViewerCanvas *c, bool clipboard, QString *fil
             QGuiApplication::restoreOverrideCursor();
         } catch (const std::exception &e) {
             QGuiApplication::restoreOverrideCursor();
-            c->show_osd(QString("Couldn't make a copy as shown: %1").arg(QString::fromUtf8(e.what())));
+            c->show_osd(tx("Couldn't make a copy as shown: %1").arg(QString::fromUtf8(e.what())));
             return nullptr;
         }
     }
@@ -1862,7 +1866,7 @@ void ImageViewer::drag_out(ViewerCanvas *c)
     if (!md)
         return;
     if (file != (c == pinned ? pinned_path : shown))
-        c->show_osd("Dragging a copy as shown (not saved)");
+        c->show_osd(tx("Dragging a copy as shown (not saved)"));
     // its picture: the image as shown, small, under the pointer (Kestrel's own on Wayland, as the file views')
     QPixmap pm = c->pix.isNull() ? QPixmap() : c->pix.scaled(160, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     if (!pm.isNull() && (c->rotation || c->flip_h)) {
@@ -1891,7 +1895,7 @@ void ImageViewer::copy_image()
     // the picture for image apps, and the file for file managers (Ctrl+V pastes a copy of it)
     if (QMimeData *md = image_data(canvas, true)) {
         QGuiApplication::clipboard()->setMimeData(md);
-        canvas->show_osd("Copied");
+        canvas->show_osd(tx("Copied"));
     }
 }
 
@@ -2040,44 +2044,44 @@ QMenu *ImageViewer::build_menu()
         menus::tag(s->menuAction(), id);
         return s;
     };
-    add(m, "next", "Next\tRight", [this]() { navigate(1); });
-    add(m, "previous", "Previous\tLeft", [this]() { navigate(-1); });
+    add(m, "next", tx("Next\tRight"), [this]() { navigate(1); });
+    add(m, "previous", tx("Previous\tLeft"), [this]() { navigate(-1); });
     m->addSeparator();
-    QMenu *view = sub("viewer_view", "View");
-    add(view, "fullscreen", isFullScreen() ? "Exit Fullscreen\tF" : "Fullscreen\tF", [this]() { toggle_fullscreen(); });
-    add(view, "slideshow", slideshow.isActive() ? "Stop Slideshow\tS" : "Start Slideshow\tS", [this]() { toggle_slideshow(); });
-    add(view, "fit", "Fit to Window\t0", [this]() { fit(); });
-    add(view, "actual_size", "Actual Size\t1", [this]() { active()->set_zoom(1.0); });
-    check(view, "keep_zoom", "Keep Zoom Between Images\tK", keep_zoom, [this]() { toggle_keep_zoom(); });
+    QMenu *view = sub("viewer_view", tx("View"));
+    add(view, "fullscreen", isFullScreen() ? tx("Exit Fullscreen\tF") : tx("Fullscreen\tF"), [this]() { toggle_fullscreen(); });
+    add(view, "slideshow", slideshow.isActive() ? tx("Stop Slideshow\tS") : tx("Start Slideshow\tS"), [this]() { toggle_slideshow(); });
+    add(view, "fit", tx("Fit to Window\t0"), [this]() { fit(); });
+    add(view, "actual_size", tx("Actual Size\t1"), [this]() { active()->set_zoom(1.0); });
+    check(view, "keep_zoom", tx("Keep Zoom Between Images\tK"), keep_zoom, [this]() { toggle_keep_zoom(); });
     view->addSeparator();
-    check(view, "filmstrip", "Filmstrip\tT", !filmstrip->isHidden(), [this]() { toggle_filmstrip(); });
-    check(view, "info_panel", "Info Panel\tI", !info->isHidden(), [this]() { toggle_info(); });
-    check(view, "info_line", "Info Line\tTab", show_overlay, [this]() { toggle_overlay(); });
+    check(view, "filmstrip", tx("Filmstrip\tT"), !filmstrip->isHidden(), [this]() { toggle_filmstrip(); });
+    check(view, "info_panel", tx("Info Panel\tI"), !info->isHidden(), [this]() { toggle_info(); });
+    check(view, "info_line", tx("Info Line\tTab"), show_overlay, [this]() { toggle_overlay(); });
     view->addSeparator();
-    check(view, "compare", "Compare With the Next Image\tX", compare, [this]() { toggle_compare(); });
+    check(view, "compare", tx("Compare With the Next Image\tX"), compare, [this]() { toggle_compare(); });
     if (compare) {
-        check(view, "compare_ab", "One at a Time (A/B)\tV", compare == 2, [this]() { toggle_ab(); });
-        check(view, "compare_slider", "Over Each Other, With a Slider\tD", compare == 3, [this]() { toggle_slider(); });
+        check(view, "compare_ab", tx("One at a Time (A/B)\tV"), compare == 2, [this]() { toggle_ab(); });
+        check(view, "compare_slider", tx("Over Each Other, With a Slider\tD"), compare == 3, [this]() { toggle_slider(); });
         if (compare == 2)
-            add(view, "compare_switch", showing_a ? "Show B\tB" : "Show A\tB", [this]() { flip_ab(); });
+            add(view, "compare_switch", showing_a ? tx("Show B\tB") : tx("Show A\tB"), [this]() { flip_ab(); });
     }
-    QMenu *edit = sub("viewer_edit", "Rotate and Edit");
-    add(edit, "rotate_right", "Rotate Right\tR", [this]() { canvas->rotate(90); });
-    add(edit, "rotate_left", "Rotate Left\tL", [this]() { canvas->rotate(-90); });
-    add(edit, "flip", "Flip Horizontally\tH", [this]() { canvas->flip(); });
-    add(edit, "save_changes", steps.isEmpty() ? "Save Rotation\tCtrl+S" : "Save Changes…\tCtrl+S", [this]() { save_changes(); });
+    QMenu *edit = sub("viewer_edit", tx("Rotate and Edit"));
+    add(edit, "rotate_right", tx("Rotate Right\tR"), [this]() { canvas->rotate(90); });
+    add(edit, "rotate_left", tx("Rotate Left\tL"), [this]() { canvas->rotate(-90); });
+    add(edit, "flip", tx("Flip Horizontally\tH"), [this]() { canvas->flip(); });
+    add(edit, "save_changes", steps.isEmpty() ? tx("Save Rotation\tCtrl+S") : tx("Save Changes…\tCtrl+S"), [this]() { save_changes(); });
     if (!steps.isEmpty())
-        add(edit, "undo_edits", "Undo the Edits\tEsc", [this]() { discard_edits(); });
+        add(edit, "undo_edits", tx("Undo the Edits\tEsc"), [this]() { discard_edits(); });
     edit->addSeparator();
-    add(edit, "crop", "Crop…\tShift+C", [this]() { start_crop(); });
-    add(edit, "resize", "Resize…\tShift+S", [this]() { resize_image(); });
-    add(edit, "straighten", "Straighten (Apply the Orientation Tag)\tShift+O", [this]() { straighten(); });
+    add(edit, "crop", tx("Crop…\tShift+C"), [this]() { start_crop(); });
+    add(edit, "resize", tx("Resize…\tShift+S"), [this]() { resize_image(); });
+    add(edit, "straighten", tx("Straighten (Apply the Orientation Tag)\tShift+O"), [this]() { straighten(); });
     m->addSeparator();
-    add(m, "star", places::is_starred(path) ? "Unstar\t*" : "Star\t*", [this]() { toggle_star(); });
-    add(m, "pin", places::is_pinned(path) ? "Unpin\tP" : "Pin in Its Folder\tP", [this]() { toggle_pin(); });
+    add(m, "star", places::is_starred(path) ? tx("Unstar\t*") : tx("Star\t*"), [this]() { toggle_star(); });
+    add(m, "pin", places::is_pinned(path) ? tx("Unpin\tP") : tx("Pin in Its Folder\tP"), [this]() { toggle_pin(); });
     QStringList recent = recent_folders();
     for (const QString &op : {QString("copy"), QString("move")}) {
-        QMenu *to = sub(op == "copy" ? "viewer_copy_to" : "viewer_move_to", op == "copy" ? "Copy To" : "Move To");
+        QMenu *to = sub(op == "copy" ? "viewer_copy_to" : "viewer_move_to", op == "copy" ? tx("Copy To") : tx("Move To"));
         for (int i = 0; i < recent.size(); ++i) {
             QString f = recent[i];
             to->addAction(QString("%1\t%2+%3").arg(basename(f), op == "copy" ? "Alt" : "Ctrl", QString::number(i + 1)), this,
@@ -2086,26 +2090,26 @@ QMenu *ImageViewer::build_menu()
         }
         if (!recent.isEmpty())
             to->addSeparator();
-        to->addAction(QString("Other Folder…\t%1").arg(op == "copy" ? "C" : "M"), this, [this, op]() { choose_transfer(op); });
+        to->addAction(tx("Other Folder…\t%1").arg(op == "copy" ? "C" : "M"), this, [this, op]() { choose_transfer(op); });
     }
     if (cb.on_reveal)
-        add(m, "show_in_folder", "Show in Folder\tG", [this, path]() { cb.on_reveal(path); });
+        add(m, "show_in_folder", tx("Show in Folder\tG"), [this, path]() { cb.on_reveal(path); });
     m->addSeparator();
-    add(m, "open_default", "Open With Default Application", [path]() { open_default(path); });
+    add(m, "open_default", tx("Open With Default Application"), [path]() { open_default(path); });
     if (cb.on_open_with)
-        add(m, "open_with", "Open With…\tO", [this, path]() { cb.on_open_with(path); });
-    add(m, "copy_image", "Copy Image\tCtrl+C", [this]() { copy_image(); });
-    add(m, "copy_full_path", "Copy Path", [path]() { QGuiApplication::clipboard()->setText(path); });
+        add(m, "open_with", tx("Open With…\tO"), [this, path]() { cb.on_open_with(path); });
+    add(m, "copy_image", tx("Copy Image\tCtrl+C"), [this]() { copy_image(); });
+    add(m, "copy_full_path", tx("Copy Path"), [path]() { QGuiApplication::clipboard()->setText(path); });
     add(m, "wallpaper", uwp::wallpaper_label(), [path]() { set_wallpaper(path); });
     if (uwp::editor_open())
-        add(m, "uwp_add", "Add to Selected UWP Monitor", [path]() { uwp::add_to_selected(path); });
+        add(m, "uwp_add", tx("Add to Selected UWP Monitor"), [path]() { uwp::add_to_selected(path); });
     m->addSeparator();
     if (cb.on_properties)
-        add(m, "properties", "Properties\tAlt+Return", [this, path]() { cb.on_properties(path); });
+        add(m, "properties", tx("Properties\tAlt+Return"), [this, path]() { cb.on_properties(path); });
     if (cb.on_delete)
-        add(m, "trash", "Move to Trash\tDelete", [this]() { delete_current(); });
+        add(m, "trash", tx("Move to Trash\tDelete"), [this]() { delete_current(); });
     if (cb.on_undo)
-        add(m, "undo", "Undo\tCtrl+Z", [this]() { undo(); });
+        add(m, "undo", tx("Undo\tCtrl+Z"), [this]() { undo(); });
     menus::arrange(m, menus::VIEWER);
     return m;
 }

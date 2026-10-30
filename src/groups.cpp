@@ -47,23 +47,23 @@ QString title(int key, const QDate &today)
 {
     switch (key) {
     case FUTURE:
-        return "In the future";
+        return tx("In the future");
     case TODAY:
-        return "Today";
+        return tx("Today");
     case YESTERDAY:
-        return "Yesterday";
+        return tx("Yesterday");
     case THIS_WEEK:
-        return "Earlier this week";
+        return tx("Earlier this week");
     case LAST_WEEK:
-        return "Last week";
+        return tx("Last week");
     case THIS_MONTH:
-        return "Earlier this month";
+        return tx("Earlier this month");
     case LAST_MONTH:
-        return "Last month";
+        return tx("Last month");
     case THIS_YEAR:
-        return "Earlier this year";
+        return tx("Earlier this year");
     case NO_DATE:
-        return "No date";
+        return tx("No date");
     default:
         return QString::number(today.year() - (key - YEARS));
     }
@@ -81,13 +81,13 @@ int day_key(const QDate &date)
 QString day_title(int key, const QDate &today)
 {
     if (key >= NO_DATE + DAY_BASE)
-        return "No date";
+        return tx("No date");
     QDate d = QDate::fromJulianDay(DAY_BASE - key);
-    QString text = QLocale().toString(d, QLocale::LongFormat);
+    QString text = i18n::long_date(d);
     if (d == today)
-        return "Today, " + text;
+        return tx("Today, %1").arg(text);
     if (d == today.addDays(-1))
-        return "Yesterday, " + text;
+        return tx("Yesterday, %1").arg(text);
     return text;
 }
 
@@ -502,13 +502,13 @@ QVariant DateGroupProxy::data(const QModelIndex &i, int role) const
     QString title = mode == groups::DAY ? groups::day_title(row.key, today) : groups::title(row.key, today);
     QString count = util::group_digits(counts.value(row.key));
     if (i.column() == 0 && row.src == FOOTER && (role == Qt::DisplayRole || role == Qt::AccessibleTextRole))
-        return "Collapse " + title + " (" + count + ")";
+        return tx("Collapse %1 (%2)").arg(title, count);
     if (i.column() == 0 && row.src == FOOTER && role == Qt::ToolTipRole)
-        return QString("Collapse this group (also Ctrl+Left on any of its items)");
+        return tx("Collapse this group (also Ctrl+Left on any of its items)");
     if (i.column() == 0 && (role == Qt::DisplayRole || role == Qt::AccessibleTextRole))
-        return title + " (" + count + ")";
+        return QString("%1 (%2)").arg(title, count);
     if (i.column() == 0 && role == Qt::AccessibleDescriptionRole)
-        return row.src == FOOTER ? QString("Collapses the group") : folded.contains(row.key) ? QString("Collapsed group") : QString("Group");
+        return row.src == FOOTER ? tx("Collapses the group") : folded.contains(row.key) ? tx("Collapsed group") : tx("Group");
     return QVariant();
 }
 

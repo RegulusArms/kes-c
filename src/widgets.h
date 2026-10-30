@@ -277,9 +277,11 @@ private:
 // ---------------------------------------------------------------- sidebar
 
 // The sidebar's sections and their saved order (settings: sidebar_sections, sidebar_collapsed, sidebar_places_order,
-// sidebar_devices_order; the bookmarks' order is the GTK bookmarks file's).
+// sidebar_devices_order; the bookmarks' order is the GTK bookmarks file's), and the places hidden (sidebar_hidden).
 namespace sidebar {
 extern const QStringList SECTIONS;   // "places", "bookmarks", "devices": the default order
+// every entry Places can have, in its natural order: (id, name; TX_NOOP); sidebar_hidden lists the ids of hidden ones
+extern const QList<QPair<QString, QString>> PLACES;
 QStringList section_order(const QStringList &saved);   // the saved order, without unknown ids, plus any missing
 // keys in the saved order (those present), then the rest in their natural order
 QStringList ordered(const QStringList &keys, const QStringList &saved);
@@ -303,6 +305,7 @@ public:
     QStringList shown_sections() const;                   // in order
     QStringList entry_keys(const QString &section) const;   // in order; empty when collapsed
     void forget_server(const QString &uri);   // takes a recent server out of the Mounts section (and the Overview)
+    static void hide_place(const QString &id);   // Hide from Sidebar: an id in sidebar::PLACES
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);

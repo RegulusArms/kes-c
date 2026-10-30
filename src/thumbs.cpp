@@ -46,8 +46,9 @@ QString covers_file() { return join(CONFIG_DIR(), "covers.json"); }
 QString styles_file() { return join(CONFIG_DIR(), "folder_styles.json"); }
 
 const QList<QPair<QString, QString>> FOLDER_COLORS = {
-    {"Red", "#e01b24"},  {"Orange", "#ff7800"}, {"Yellow", "#f6d32d"}, {"Green", "#33d17a"}, {"Teal", "#2aa198"},
-    {"Blue", "#3584e4"}, {"Purple", "#9141ac"}, {"Pink", "#e66ba5"},   {"Brown", "#986a44"}, {"Grey", "#77767b"}};
+    {TX_NOOP("Red"), "#e01b24"},  {TX_NOOP("Orange"), "#ff7800"}, {TX_NOOP("Yellow"), "#f6d32d"}, {TX_NOOP("Green"), "#33d17a"},
+    {TX_NOOP("Teal"), "#2aa198"}, {TX_NOOP("Blue"), "#3584e4"},   {TX_NOOP("Purple"), "#9141ac"}, {TX_NOOP("Pink"), "#e66ba5"},
+    {TX_NOOP("Brown"), "#986a44"}, {TX_NOOP("Grey"), "#77767b"}};   // (translated where shown)
 
 QIcon color_swatch(const QString &color, int size)
 {
@@ -279,9 +280,9 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
     if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
             makedirs(cache_dir, true, 0700);
-            img.setText("Thumb::URI", uri);
-            img.setText("Thumb::MTime", QString::number(mtime));
-            img.setText("Software", APP_NAME);
+            img.setText("Thumb::URI", uri);   // notr: a PNG text key
+            img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
+            img.setText("Software", APP_NAME);   // notr: a PNG text key
             QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
             int fd = ::mkstemps(tmpl.data(), 4);
             if (fd >= 0) {
@@ -548,12 +549,12 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
     if (images.isEmpty()) {
         QImage marker(1, 1, QImage::Format_ARGB32);
         marker.fill(Qt::transparent);
-        marker.setText("FE::Tag", "empty|" + tag);
+        marker.setText("FE::Tag", "empty|" + tag);   // notr: a PNG text key
         save(marker);
         return QImage();
     }
     QImage img = compose_folder(images, size, opts.color, videos);
-    img.setText("FE::Tag", tag);
+    img.setText("FE::Tag", tag);   // notr: a PNG text key
     save(img);
     stats::count("folder previews made");
     return img;
@@ -678,8 +679,16 @@ ThumbnailManager *ThumbnailManager::instance() { return first_manager; }
 
 ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 {
-    if (!first_manager)
+    if (!first_manager) {
         first_manager = this;
+        // the app's thumbnail jobs, for the one Jobs window (in whichever Kestrel has it open), and the others'
+        connect(this, &ThumbnailManager::jobs_changed, this, &ThumbnailManager::publish_jobs);
+        connect(atc::radio(), &atc::Radio::heard, this, &ThumbnailManager::on_heard);
+        connect(atc::radio(), &atc::Radio::reset, this, [this]() {
+            remote.clear();
+            Q_EMIT jobs_changed();
+        });
+    }
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     device_pool.setMaxThreadCount(1);   // phones and cameras serve one request at a time (is_device_path)
@@ -1142,6 +1151,63 @@ QList<ThumbJob> ThumbnailManager::thumb_jobs() const
     return out;
 }
 
+void ThumbnailManager::publish_jobs()
+{
+    QJsonArray list;
+    for (const ThumbJob &j : thumb_jobs())
+        list << QJsonObject{{"id", QString::number(j.id)}, {"title", j.title()}, {"folder", j.folder}, {"window", j.window},
+                            {"state", j.state()},           {"done", j.done},     {"total", j.total},   {"paused", j.paused}};
+    QByteArray now = QJsonDocument(list).toJson(QJsonDocument::Compact);
+    if (now == published)   // (hearing the others' lists says jobs_changed too: not told again for that)
+        return;
+    published = now;
+    atc::announce("thumbs", {{"jobs", list}}, true);
+}
+
+void ThumbnailManager::on_heard(const QJsonObject &m)
+{
+    if (m.value("own").toBool())
+        return;
+    QString type = m.value("type").toString(), from = m.value("from").toString();
+    if (type == "thumbs") {
+        QList<RemoteThumbJob> l;
+        for (const QJsonValue &v : m.value("jobs").toArray()) {
+            QJsonObject o = v.toObject();
+            l << RemoteThumbJob{from, o.value("id").toString(), o.value("title").toString(), o.value("folder").toString(),
+                                o.value("window").toString(), o.value("state").toString(), o.value("done").toInt(),
+                                o.value("total").toInt(), o.value("paused").toBool()};
+        }
+        if (l.isEmpty())
+            remote.remove(from);
+        else
+            remote[from] = l;
+        Q_EMIT jobs_changed();
+    } else if (type == "left") {
+        if (remote.remove(from))
+            Q_EMIT jobs_changed();
+    } else if (type == "thumb_control" && m.value("flight").toString() == atc::radio()->flight()) {
+        quint64 id = m.value("id").toString().toULongLong();
+        QString action = m.value("action").toString();
+        if (action == "stop")
+            stop_job(id);
+        else if (action == "pause" || action == "resume")
+            pause_job(id, action == "pause");
+    }
+}
+
+QList<RemoteThumbJob> ThumbnailManager::remote_jobs() const
+{
+    QList<RemoteThumbJob> out;
+    for (const QList<RemoteThumbJob> &l : remote)
+        out << l;
+    return out;
+}
+
+void ThumbnailManager::control_remote(const RemoteThumbJob &job, const QString &action)
+{
+    atc::announce("thumb_control", {{"flight", job.flight}, {"id", job.id}, {"action", action}});
+}
+
 void ThumbnailManager::pause_job(quint64 id, bool on)
 {
     auto j = jobs.find(id);
@@ -1271,18 +1337,18 @@ void ThumbnailManager::jobs_said()
 QString ThumbJob::title() const
 {
     QString home = HOME();
-    QString where = folder == home ? QString("Home") : folder.startsWith(home + "/") ? folder.mid(home.size() + 1) : folder;
-    return "Thumbnails: " + where;
+    QString where = folder == home ? tx("Home") : folder.startsWith(home + "/") ? folder.mid(home.size() + 1) : folder;
+    return tx("Thumbnails: %1").arg(where);
 }
 
 QString ThumbJob::state() const
 {
-    return paused     ? "Paused"
-           : held_all ? "Paused (all thumbnailing)"
-           : waiting  ? "Waiting for the drive"
-           : behind   ? "Waiting for another thumbnail job on its drive"
-           : lowered  ? "Lowered (folder left)"
-                      : "Running";
+    return paused     ? tx("Paused")
+           : held_all ? tx("Paused (all thumbnailing)")
+           : waiting  ? tx("Waiting for the drive")
+           : behind   ? tx("Waiting for another thumbnail job on its drive")
+           : lowered  ? tx("Lowered (folder left)")
+                      : tx("Running");
 }
 
 void ThumbnailManager::cancel_for(const QObject *owner)
