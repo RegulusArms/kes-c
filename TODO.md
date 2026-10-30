@@ -122,6 +122,37 @@ into.
     session's scope), and a catalogue of tapes that aren't loaded (their index saved when last mounted, to search
     what's on which tape).~~
 
+- [ ] **Back up a whole drive to an image file (dd), optionally encrypted with gpg.** Right-click a drive (sidebar
+  Devices, Overview card) → Back Up Drive to Image…: pick where to save it, then a job copies the raw device
+  (whole disk or one partition) to an image file, with progress, speed and a log in the Jobs window.
+  - Reading the device needs root: through the admin session / kes-admin-helper (a new operation there, kept to
+    reading block devices), not by running Kestrel as root.
+  - Options: compress (zstd) and/or encrypt with a password through `gpg --symmetric`, the same way Compress…'s
+    password-encrypted tar archives do it (the password on gpg's fd 3, `--no-symkey-cache`), so the image never
+    exists unencrypted on disk. Later: to a recipient's key (see Encrypt / Decrypt with gpg).
+  - Failure-atomic: written under a part name and renamed into place when whole; a cancel or failure deletes the
+    part. Refuse to save the image onto the drive being read; check free space first (the device size, or warn when
+    compressed and it can't be known).
+  - Better done while the drive's file systems are unmounted or read-only; ask when one is mounted read-write.
+  - Maybe later: a checksum of the image saved beside it, and Restore Image to Drive… (destructive: a strong
+    confirmation naming the target drive).
+  - Add the menu entries to docs/context-menus.md.
+
+- [ ] **Open and mount disk image files (.img, maybe .iso and others), including encrypted ones.** Double-click
+  or right-click → Mount Image on a `.img`: it's set up as a loop device and its partitions mounted, showing in the
+  sidebar and Overview like a plugged-in drive, with Unmount (which also detaches the loop device).
+  - Without root where possible: udisks2 (`udisksctl loop-setup` / the D-Bus LoopSetup, then mount each
+    partition), as GNOME Files' Disk Image Mounter does; read-only by default, read-write as an option.
+  - Note: drives.cpp's drive detection leaves out loop devices (around `src/drives.cpp:261`); a mounted image's
+    loop device has to show anyway (but not snap's squashfs loops).
+  - Encrypted images: LUKS inside the image (udisks2 Unlock, asking for the password; maybe offer to keep it in the
+    keyring like archive passwords), and the gpg-encrypted images from Back Up Drive to Image (`.img.gpg`, maybe
+    `.img.zst.gpg`): these have to be decrypted first, to a file in the cache (as big as the drive: check free space,
+    ask first, delete it on unmount) or streamed where the format allows; decide which.
+  - Also decide: compressed images (`.img.zst`, `.img.xz`), and which other formats (.iso currently opens as an
+    archive through 7-Zip; keep that as Open as Archive and add Mount).
+  - Add the menu entries to docs/context-menus.md.
+
 ### Views and search
 
 ### File tools
@@ -131,6 +162,39 @@ into.
   window.~~ *Struck for now.*
 
 - [ ] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
+
+- [ ] **A window for making, viewing and editing links.** One "Link…" window instead of (or ahead of) the many
+  Links & Shortcuts ▸ entries. Layout (the user's design):
+  - Two browsers side by side, each like the file chooser (navigable: path bar, sidebar places, folders):
+    - Left: the source, what the links will point to. Pick one item, or select several.
+    - Right: where the links will be made. Navigate to the folder; the left side's picks show there as previews of
+      the links-to-be (ghosted, among the folder's real items), each one renamable in place.
+    - (Naming in the UI: say "Points to" / "Link goes in", not "source" / "target": in symlink terms the *target* is
+      what the link points to, i.e. the left side, which would confuse.)
+  - Options for the kind: symbolic, relative symbolic, hard link (files on the same drive only), maybe `.desktop`
+    shortcut.
+  - Below both browsers: a list of all the uncommitted links (pending ones: new links and edits), each showing its
+    name, folder, what it points to and the kind; problems flagged (name taken, broken target, hard link across
+    drives). Clicking one sets the left side to what it points to and the right side to its folder, selected, to
+    change it; a Remove button drops it. More links can be added to the list from other folders before committing.
+  - OK shows a summary of everything that will be made or changed (new links, changed targets, renames), with a
+    final OK; only then are the links made or edited, as one job (with a log in the Jobs window), the whole batch
+    undoable.
+  - Right-click a symbolic link → Edit Link…: the same window opened with that link already in the pending list
+    (left side at what it points to, or showing it's broken; right side at its folder), to change what it points to,
+    switch absolute/relative, or rename it. Selecting several links → edit them all at once. Properties' "Link
+    target:" row (src/dialogs.cpp) could have an Edit button that opens it.
+  - Changing a link's target is failure-atomic: a new link made under a part name and renamed over the old one
+    (never delete-then-create), as the rest of Kestrel's writes; undoable like a rename. A new link claims its name
+    without replacing anything (made under a part name, RENAME_NOREPLACE). Everything is checked again at the final
+    OK (a name taken or a target gone meanwhile is shown, not overwritten).
+  - The window is a free window (show_free), and its two browsers reuse the file chooser's widgets rather than
+    copying them.
+  - Hard links: show the link count and, maybe, the other names of the same file on that drive (a search; slow on
+    big drives, so a job).
+  - Decide which of the current menu entries stay (the quick ones like Create Symbolic Link Here and Send Link to
+    Desktop are one-click; maybe keep those and replace Create Symbolic Link In… and the shortcut ones with the
+    window), keeping menus::defaults() and test_prefs in step, and update docs/context-menus.md.
 
 ### Images, video and audio
 
