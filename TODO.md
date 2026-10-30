@@ -58,9 +58,36 @@ into.
     password is already saved), or keep the dialog but skip it when the keyring has the password? Update
     docs/context-menus.md / the docs if what double-click does changes.
 
+- [ ] **Folder size jobs disappear from the Jobs window.** A "Counting the size of …" job shows in the Jobs window
+  while it runs, then vanishes instead of staying under the finished jobs. Rule: no job that has appeared in the Jobs
+  window should ever disappear from it (until Clear Finished).
+  - Likely: the first count when Properties opens is queued quiet (`queue_job(…, quiet = !fresh)` in
+    `PropertiesDialog::start_size`, src/dialogs.cpp), and a quiet job is never `TaskBoard::add`ed (src/fileops.cpp
+    `queue_job`), so nothing records it in `TaskBoard::finished` when it ends; it was only visible through the queue.
+  - Check every other quiet `queue_job` / `run_job` caller for the same thing, and that a job whose window
+    (Properties) is closed while it runs still ends up in the finished list.
+
 ## New features
 
 ### Jobs
+
+- [ ] **Every job as verbose as possible in the Jobs window, without slowing the job down.** Each kind of job should
+  report what it's doing (the current item, counts and sizes so far, its steps, a log of what was done, skipped or
+  failed) as fully as it can, through the existing progress/log reporting, throttled so the extra detail costs the
+  job no measurable speed (check bulk copies and tape writes against the benchmark). Start with the jobs that
+  report little or nothing now (e.g. folder size counts: only the folder's name).
+
+- [ ] **Save every job's log to Kestrel's cache folder (opt-in).** A setting, off by default, that writes each
+  finished job's log (title, outcome, times, steps and the full log the Jobs window shows) to a file in Kestrel's
+  cache folder, so logs outlive Clear Finished and quitting Kestrel. Off unless the user turns it on.
+  - The setting goes in src/prefs.cpp (and so Preferences); written with util `write_atomic()` or a part renamed
+    into place, never half a file under a real name.
+  - Decide: one file per job or one per day, and whether old logs are pruned (by age or total size).
+  - A BleachBit option for it in kes-setup's `bleachbit_cleaner` (a "Job logs" option of its own, separate from the
+    cache one, so clearing the cache can keep the logs or the other way round), with the dry-run expectations in
+    tests/test_installer.sh. The existing Cache option deletes all of `$XDG_CACHE_HOME/kestrel-explorer`
+    (walk.all), so it would take the logs too: either keep them in a subfolder the Cache option skips (it would then
+    list its subfolders instead), or say in its description that it includes the job logs.
 
 ### Archives
 
