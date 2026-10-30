@@ -89,6 +89,43 @@ into.
     (walk.all), so it would take the logs too: either keep them in a subfolder the Cache option skips (it would then
     list its subfolders instead), or say in its description that it includes the job logs.
 
+- [ ] **Faster copies: let the kernel clone or copy the file.** Kestrel's copy reads and writes every byte itself
+  (the read/write loop in `copy_file_at`, src/fileops.cpp), never using the kernel's own copy calls.
+  - Clone first (`ioctl(FICLONE)`): on Btrfs, XFS, bcachefs and ZFS 2.2 or later a copy on the same drive is then
+    instant and takes no extra space until one side changes.
+  - Else `copy_file_range()`: SMB3 and NFS 4.2 servers copy the file themselves (server-side copy), so the data
+    doesn't cross the network twice; elsewhere it's an in-kernel copy, with no trip through Kestrel's buffers.
+  - Fall back to the current loop when neither works (EXDEV, EOPNOTSUPP, EINVAL…), and keep it for tapes and their
+    buffer (src/tapebuf.cpp).
+  - Still failure-atomic: clone or copy into the part file, then rename it into place as now. Progress, pause and
+    cancel have to keep working: `copy_file_range` in chunks; a clone is one call (no progress needed).
+  - GNOME Files (GLib) already does both: add a same-drive copy on Btrfs/XFS and a copy on an SMB share to the
+    benchmark (bench/), before and after, in docs/performance.md.
+  - A test for each path (clone, copy_file_range, the fallback) that fails part-way, as the other write paths have.
+
+- [ ] **Keep extended attributes and ACLs when copying (opt-in).** A copy now keeps only the file's times and permissions
+  (`futimens` / `fchmod` in src/fileops.cpp), so it silently drops its extended attributes: the address a browser
+  saved a download from (`user.xdg.origin.url`), tags other apps keep (`user.xdg.tags`, KDE's), ACLs
+  (`system.posix_acl_*`), security labels, and attributes backup tools rely on.
+  - Copy them onto the part file before the rename (`flistxattr` / `fgetxattr` / `fsetxattr`), for folders too, and
+    in the admin helper's copy.
+  - Off by default: a setting the user can turn on (src/prefs.cpp, so Preferences → Files). While it's on, where the
+    destination can't hold them (FAT, exFAT, some FUSE mounts, a tape), the copy goes on and its log says which
+    were left out, once per job rather than per file.
+  - Skip what the user can't set (`security.*`, `trusted.*` without root) quietly.
+  - A test that copies a file with a `user.` attribute (and an ACL where the test's file system allows) and checks
+    it arrived.
+
+- [ ] **Verify after copy (opt-in).** An option, off by default, to read each copied file back once it's written and
+  compare its checksum with the source's, as TeraCopy does; mismatches are listed in the job's log and its summary.
+  - Set per job in the Jobs window (and a default in Preferences → Files, off); most useful for tapes, where
+    checking really matters.
+  - Hash the source while copying (no second read of it), then read the copy back; on a tape, after the whole job,
+    in the order the files lie on it, so the drive doesn't wind back and forth.
+  - Maybe: write a `SHA256SUMS` (or the chosen algorithms, as Create Checksum File… does) beside the copy, so it can
+    be checked again later with Verify Checksums.
+  - Decide what a mismatch does: report only, or offer to copy that file again.
+
 ### Archives
 
 ### Drives, the sidebar and the Overview
@@ -140,7 +177,34 @@ into.
     archive through 7-Zip; keep that as Open as Archive and add Mount).
   - Add the menu entries to docs/context-menus.md.
 
+- [ ] **Disk usage map: what's using this space?** A window showing what fills a folder or a drive as a treemap or
+  a sunburst (decide which, or offer both), like Baobab or Filelight: each folder a block or ring sized by what it
+  holds, its biggest files and subfolders inside it; click one to go into it, back to go up, hover for its size and
+  share.
+  - Opened from a drive's Overview card ("What's using this space?", beside its usage bar), the sidebar's drives,
+    and right-click a folder → Disk Usage….
+  - Counting is a job (the queue, its turn on the drive, progress, Pause / Stop) that stays on the drive, as Find
+    Duplicates does. It reuses the folder sizes Properties remembers where they're still current, shows them at
+    once with when they were counted, and saves what it counts for Properties in turn; Recalculate counts again.
+  - From the map: open or show an item in its folder, Move to Trash (Undo as usual), Properties.
+  - Not on tapes and floppies unless asked (counting walks the whole drive).
+  - Add the menu entries to docs/context-menus.md.
+
 ### Views and search
+
+- [ ] **Quick Look for every kind of file.** Space opens the image viewer for images, but Properties for anything
+  else (`MainWindow::quick_view`, src/opening.cpp). Give other files a preview window too, opened and closed with
+  Space, with arrow keys to step through the folder's files:
+  - Text and code: with line numbers (maybe syntax colours); large files read only in part.
+  - PDFs: the first pages, through poppler (a new optional dependency: the .deb's Suggests, kes-setup's
+    OPTIONAL_PACKAGES and docs/dependencies.md).
+  - Audio and video: play, pause and seek (Qt Multimedia, or ffmpeg already used for thumbnails). This also covers
+    the struck viewer idea of playing short videos in place.
+  - Archives: their contents, reusing Open as Archive's listing (src/archivewin.cpp).
+  - Fonts: a sample of the font.
+  - Anything else: what Properties' General tab shows, as now.
+  - A free window (show_free); never reads files on a tape or floppy without the drive's previews allowed, as with
+    thumbnails.
 
 ### File tools
 
@@ -246,5 +310,22 @@ into.
     shows up before users find it.
   - Also on a schedule (e.g. weekly), not only on pushes: tools change when the distro updates them, not when
     Kestrel does.
+
+- [ ] **Check the file-safety guarantees, path by path.** Go through every write path (copy, move within and between
+  drives, duplicate, paste, extract, Extract All, compress, decompressing a single file, convert, Wipe Metadata,
+  rotate / image edits, checksum files, links, the admin helper's operations, tapes and floppies) and verify each of
+  these, with a test that fails when it's broken:
+  1. **No clobber:** a file that appears at the destination after a copy or extraction starts is never silently
+     overwritten (another program saving there meanwhile).
+  2. **Replace only when chosen:** explicitly choosing Replace is the only reason an existing destination gets
+     replaced (not Merge, Skip, Keep Both, a retry, an admin retry or a default).
+  3. **Cancellation:** cancelling never leaves a destination looking like a successfully completed file (no
+     half-written file under a real name; the tape exception deletes its file).
+  4. **Partial failures:** a failed copy or extraction (disk full, RLIMIT_FSIZE, a read error, the tool failing)
+     leaves a predictable, recoverable state: what finished is whole, the rest absent, the job's log says which.
+  5. **Folder merging:** an existing folder's contents survive errors and cancellation during a merge.
+  6. **Undo:** Undo never acts on a file another application has replaced since the original operation (a different
+     inode, size or time than what was recorded): it leaves that file alone and says so.
+  - Note what's found that doesn't hold, fix it, and add the checks to tests/CHANGELOG.md.
 
 ## Done
