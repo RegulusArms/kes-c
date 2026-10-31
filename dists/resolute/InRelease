@@ -1,0 +1,38 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: resolute
+Date: Fri, 30 Oct 2026 02:43:42 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer releases for Ubuntu 26.04 (resolute) and systems based on it
+MD5Sum:
+ edb0fc5e16df77b44806ffa8b81711d4 1355 main/binary-amd64/Packages
+ d1fe61729b5302bcb993800262e7ffcb 780 main/binary-amd64/Packages.gz
+ 70e889dd36404929b84cf6e8d5d38f44 176 main/binary-amd64/Release
+SHA1:
+ e8f7e382bf9fdb3943035cb2137506183d344efc 1355 main/binary-amd64/Packages
+ 5ed153b94ebb28fe6a44f283427d874040ed8b54 780 main/binary-amd64/Packages.gz
+ 391d89a61aac246a5d8a944594ac177e20c16c44 176 main/binary-amd64/Release
+SHA256:
+ fb97510b9cbe667dbbc2c6ff7f84db78ca91ed8684a7654f7b9205e7a260558f 1355 main/binary-amd64/Packages
+ 4fd72df4d64ff3a99fd7a30bd783889dcde86a9fc30c900cb26607187a2dda11 780 main/binary-amd64/Packages.gz
+ 2917b92cc3279a9a54b22c2a8dde20edd828b2c66a22f544a5478ba616f2e9a5 176 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEQPAla0OYKoWytqRpkl2syCFqQh8FAmrkBF4ACgkQkl2syCFq
+Qh8orQ//aDO9vNLEBt9IqDWA4jfbDVpP1lCv/0lJdaf/yz+mvLyYa89dzhwyFVIL
+p1+jnQDNVAph3BeiVPCh1iJ6RLZhwgPMcRubMLO/Mr+RgQGI3pXJ6v44uxvH8SRN
+KYeJDdOubiTflN7/lu/OXtxCeI71Yqft/NmS+xHz0i3OUhSLINNY03r5UabmUIbj
+k0gdY+XEaVTk1vLj7iK7bBvEXV/+Pwlew3XgnxtXrNMe7FYN9i5hn6+lTbgJqYmB
+m9TDsMA+grnItFDjlk/pmgVVWclDn3JQuRjEc6Ikl7p/M71xasyi+hkvgGZ8MM8x
+f218TjpmKX1StfoMF7Y/H+MAzfsQeZehwwYIfTkVY+6ngODiJ9nFb8CT3wfE3+E7
+ZGTdz+TmeFm2CBJruGgLbXcwm+3quOTzVPh9LSDJC1hww5F4DYemDAEIwEbkzmuC
+K2BMGR+O5oLXqXFLH1h2eROZ5HGfdeUxdFRV1/lNkaL7rowvy0utK3r5iwYblcSQ
+tXvAmc2SAuK5UF0EtgH0d8hwNFTSuyLyhPS6J3qYwYwhrPa88PJpMIiHoM3rFwNi
+tSxLLIGCrphPmfU9wcWy7BvX3apNBXhfGnhILTct+VkxvNTV5C/D26b1/4/6Oy6o
+6GFWFtNULVeEziaDCwEyJ7joud8zJQs4qKk310sQ41UylXlRG5w=
+=gjtJ
+-----END PGP SIGNATURE-----

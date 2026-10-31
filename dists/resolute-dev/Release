@@ -1,0 +1,19 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: resolute-dev
+Date: Sat, 31 Oct 2026 20:08:15 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer development builds for Ubuntu 26.04 (resolute) and systems based on it
+MD5Sum:
+ 4243ca668d829df6219fde3530373d32 1387 main/binary-amd64/Packages
+ c7ff76a99904312d8cef565b2069af3c 791 main/binary-amd64/Packages.gz
+ dee6fdeb119ed61fd460ac18ca3e7b7c 186 main/binary-amd64/Release
+SHA1:
+ 7d8738bc01b6a29d1174937ca472159d9e2ae57d 1387 main/binary-amd64/Packages
+ 547b44a7fdaaddc8068e246b72b8ac45dcdd6e54 791 main/binary-amd64/Packages.gz
+ a0b433af5e5db54a8b399d05c0a01d4b52112909 186 main/binary-amd64/Release
+SHA256:
+ 8f219799589bb54b1291a7b34612b16f5caa7293ce9a60a31d1e35c9d70457a5 1387 main/binary-amd64/Packages
+ 66496a4964581b122ad105dfa4b65271008f3c6eb19628689ff5695a244c6947 791 main/binary-amd64/Packages.gz
+ 74ddfacb43c333592305f34de6801f19660e3b25f2ac1b64a1cf3a7be374753e 186 main/binary-amd64/Release
