@@ -75,6 +75,32 @@ into.
   translations/update.sh, and find out why the `ui` / `i18n` tests didn't catch them (a check that does, in
   tests/CHANGELOG.md).
 
+- [ ] **Files whose names aren't valid UTF-8 can't be deleted (or copied, moved…): "No such file or directory".**
+  Seen deleting a trashed folder from an old DOS-era archive holding a file named `…:\xb3SUBJECT` (a Latin-1/CP437
+  byte): Delete Permanently stops at that file with `[Errno 2] No such file or directory`, and everything above it
+  stays (its folders aren't empty).
+  - Why: names go through QString, `enc()`/`dec()` (src/util.cpp) being `QFile::encodeName`/`decodeName`. Under a
+    UTF-8 locale the stray byte becomes U+FFFD and encodes back as different bytes, so `names_in` → `stat_at` in
+    `Ops::remove_at` (src/fileops.cpp) asks for a name that isn't there.
+  - Likely everywhere a name read from a folder is used again: copy, move, delete, rename, listing, thumbnails,
+    the admin helper. Needs names that keep their bytes (e.g. listing as QByteArray and carrying the raw name to the
+    *at() calls, or a lossless decode such as Python's surrogateescape), plus a test with such a name in a tree.
+
+- [ ] **A failed Delete Permanently in the trash still deletes the item's .trashinfo.** `delete_now`'s done callback
+  (src/actions.cpp) unlinks the `.trashinfo` of every item it was given, whether or not that item was actually
+  deleted. After a failure (the bug above) the item stays in `files/` with no record: the Trash shows its location
+  as "(unknown)" and Restore can't put it back. Only remove the record of an item that's gone (`!lexists(p)`).
+
+- [ ] **Deleting a trashed item that has no .trashinfo crashes Kestrel.** Delete Permanently on such an item (e.g.
+  left by the bug above) aborts: `terminate called after throwing an instance of 'OSError'` … `No such file or
+  directory: '…/Trash/info/<name>.trashinfo'`.
+  - Why: the same callback calls `::unlink(enc(info_path).constData())`, meant as libc's, but src/actions.cpp
+    doesn't include `<unistd.h>` and has `using namespace util`, so `::unlink` resolves to `util::unlink(const
+    QString &)`, which throws on ENOENT; the throw is in a main-thread callback with no catch.
+  - Fix: include `<unistd.h>` (or call util::unlink in a try / check first), and look for other `::` calls in files
+    with `using namespace util` that may resolve to the throwing util versions the same way. Test: delete a trashed
+    item whose `.trashinfo` is missing.
+
 ## New features
 
 ### Jobs
