@@ -6,6 +6,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.2
+
+Changed:
+- `archives`: the check that an archive window with encrypted files asks for the password once now waits for the
+  first extraction's job to finish, not just for its file to appear. The window learns the password when the job ends,
+  so on a slow runner the second extraction could start first and ask again (CI's test-noble failed this way).
+
 ## 0.3.3-alpha.1
 
 Added:

@@ -989,8 +989,14 @@ int main(int argc, char **argv)
     QString pick2 = join(look, "picked2");
     makedirs(pick2, true);
     select({"inner/"});
+    w->statusBar()->clearMessage();
     fw->extract_selected(pick2);
-    Asked first = drive({{"one"}}, [&]() { return exists(join(pick2, "inner/a.txt")) ? QString("done") : QString(); });
+    // done when the job has finished (its "Extracted" message), not when its file appears: the window learns the
+    // password only then, and a second extraction started before that would ask again
+    Asked first = drive({{"one"}}, [&]() {
+        return exists(join(pick2, "inner/a.txt")) && w->statusBar()->currentMessage().startsWith("Extracted")
+                   ? QString("done") : QString();
+    });
     select({"top.txt"});
     fw->extract_selected(pick2);
     Asked second = drive({}, [&]() { return exists(join(pick2, "top.txt")) ? QString("done") : QString(); });

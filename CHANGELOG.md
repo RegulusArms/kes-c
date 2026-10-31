@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.1
+## 0.3.3-alpha.2
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha2).
+
+## 0.3.3-alpha.1 (2026-10-31)
 
 - **Files whose names aren't valid UTF-8 can be deleted, copied, moved and restored from the trash.** A name from an old archive or another
   system with a stray byte in it (Latin-1, DOS) was listed but then "No such file or directory" to everything done to
