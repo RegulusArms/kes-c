@@ -6,7 +6,7 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.3-alpha.1
 
-- **Files whose names aren't valid UTF-8 can be deleted, copied and moved.** A name from an old archive or another
+- **Files whose names aren't valid UTF-8 can be deleted, copied, moved and restored from the trash.** A name from an old archive or another
   system with a stray byte in it (Latin-1, DOS) was listed but then "No such file or directory" to everything done to
   it, so a folder holding one couldn't be deleted, even from the trash. Kestrel now keeps such names byte for byte,
   and a file shown with � in a folder is found too (unless two names in that folder read the same way).

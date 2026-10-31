@@ -785,8 +785,12 @@ void write_text(const QString &p, const QByteArray &data, bool exclusive)
 
 QByteArray read_file(const QString &p, bool *ok)
 {
-    QFile f(p);
-    if (!f.open(QIODevice::ReadOnly)) {
+    // opened by enc(): QFile(p) encodes the name its own way, which can't reach a name that isn't UTF-8
+    int fd = ::open(enc(p).constData(), O_RDONLY | O_CLOEXEC);
+    QFile f;
+    if (fd < 0 || !f.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        if (fd >= 0)
+            ::close(fd);
         if (ok)
             *ok = false;
         return QByteArray();
