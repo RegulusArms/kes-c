@@ -18,7 +18,12 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
+#include <unistd.h>
+// (the C library's unlink, rename, rmdir, chmod, realpath… declared wherever util's are: a file with `using namespace
+// util` that calls ::unlink(…) without them gets util::unlink, which throws, where a failure was meant to be ignored)
 
 typedef struct _GAppInfo GAppInfo;
 typedef struct _GIcon GIcon;
@@ -92,7 +97,10 @@ void prefer_system_environment();
 
 // ---------------------------------------------------------------- paths (os.path semantics)
 
-QByteArray enc(const QString &path);    // file-system encoding of a path
+// A path's bytes and back, losslessly: a name that isn't valid UTF-8 keeps each stray byte as a lone surrogate
+// (U+DC80–U+DCFF, Python's surrogateescape). enc() also finds a name Qt decoded with U+FFFD (QFileSystemModel's),
+// when exactly one entry of its folder matches it.
+QByteArray enc(const QString &path);
 QString dec(const char *path);
 QString dirname(const QString &p);
 QString basename(const QString &p);

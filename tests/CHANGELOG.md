@@ -6,6 +6,20 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.1
+
+Added:
+- `fileops`: names that aren't valid UTF-8 survive `dec()`/`enc()` (stray bytes, an encoded surrogate, and a
+  character whose UTF-16 low surrogate falls in the range kept for stray bytes), and a folder holding such names is
+  copied byte for byte and deleted whole; a path as Qt lists it (U+FFFD) reaches its file only when one name matches.
+  Guards against Qt's lossy decoding, which made such a folder impossible to delete, even from the trash.
+- `fileops`: in the trash, Delete Permanently deletes such a folder and its record; a trashed file with such a name
+  keeps its original place; a Delete Permanently cancelled part-way keeps the record of what's left; deleting an item
+  with no record doesn't crash; Empty Trash deletes each record after its item (a stray one as a job of its own).
+  Covers the record being deleted after a failed delete, and the crash on the missing record that followed.
+- `fileops`: undoing New Folder with Selection keeps the folder when something else is in it (it crashed: the
+  "only if empty" rmdir threw).
+
 ## 0.3.3-alpha.0
 
 Added:

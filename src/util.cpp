@@ -157,8 +157,87 @@ QSettings &settings()
 
 // ---------------------------------------------------------------- paths
 
-QByteArray enc(const QString &path) { return QFile::encodeName(path); }
-QString dec(const char *path) { return QFile::decodeName(path); }
+// Qt's QFile::encodeName/decodeName turn a byte that isn't UTF-8 into U+FFFD, which can't be turned back: such a file
+// (an old archive's Latin-1 name, say) was listed but then "No such file or directory" to everything done to it.
+static bool escaped_byte(const QString &s, qsizetype i)   // a lone U+DC80–U+DCFF: one byte dec() couldn't decode
+{
+    char16_t u = s[i].unicode();
+    return u >= 0xDC80 && u <= 0xDCFF && !(i > 0 && QChar::isHighSurrogate(s[i - 1].unicode()));
+}
+
+static QByteArray enc_bytes(const QString &path)
+{
+    QByteArray out;
+    qsizetype from = 0;
+    for (qsizetype i = 0; i < path.size(); ++i) {
+        if (escaped_byte(path, i)) {
+            out += QStringView(path).sliced(from, i - from).toUtf8();
+            out += char(path[i].unicode() - 0xDC00);
+            from = i + 1;
+        }
+    }
+    return from ? out + QStringView(path).sliced(from).toUtf8() : path.toUtf8();
+}
+
+// A path from Qt (QFileSystemModel lists names with QFile::decodeName): each name holding U+FFFD that isn't there as
+// written is looked for among its folder's entries, by Qt's decoding. Only a single match counts (two names that
+// differ only in their undecodable bytes look the same: neither is guessed); otherwise the path is left as it was.
+static QByteArray find_lossy(const QString &path, const QByteArray &plain)
+{
+    struct stat st;
+    if (::lstat(plain.constData(), &st) == 0 || errno != ENOENT)
+        return plain;
+    QByteArray out;
+    const QStringList parts = path.split('/');
+    for (qsizetype i = 0; i < parts.size(); ++i) {
+        QByteArray name = enc_bytes(parts[i]);
+        if (i > 0)
+            out += '/';
+        if (parts[i].contains(QChar(0xFFFD)) && ::lstat((out + name).constData(), &st) != 0) {
+            DIR *d = ::opendir(out.isEmpty() ? "." : out.constData());
+            if (!d)
+                return plain;
+            QByteArray found;
+            int matches = 0;
+            while (struct dirent *e = ::readdir(d))
+                if (QString::fromUtf8(e->d_name) == parts[i] && ++matches == 1)
+                    found = e->d_name;
+            ::closedir(d);
+            if (matches != 1)
+                return plain;
+            name = found;
+        }
+        out += name;
+    }
+    return out;
+}
+
+QByteArray enc(const QString &path)
+{
+    QByteArray out = enc_bytes(path);
+    return path.contains(QChar(0xFFFD)) ? find_lossy(path, out) : out;
+}
+
+QString dec(const char *path)
+{
+    QByteArrayView b(path);
+    if (b.isValidUtf8())
+        return QString::fromUtf8(b);
+    QString out;
+    out.reserve(b.size());
+    for (qsizetype i = 0; i < b.size();) {
+        uchar c = uchar(b[i]);
+        qsizetype n = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+        if (n && i + n <= b.size() && b.sliced(i, n).isValidUtf8()) {
+            out += QString::fromUtf8(b.sliced(i, n));
+            i += n;
+        } else {
+            out += QChar(char16_t(0xDC00 + c));
+            ++i;
+        }
+    }
+    return out;
+}
 
 QString dirname(const QString &p)
 {
@@ -819,7 +898,7 @@ QString uri_to_path(const QString &uri)
         if (cut >= 0)
             rest = rest.left(cut);
     }
-    return QString::fromUtf8(QByteArray::fromPercentEncoding(rest.toUtf8()));
+    return dec(QByteArray::fromPercentEncoding(rest.toUtf8()).constData());   // a name's bytes: as listed
 }
 
 QString md5(const QString &s)
@@ -1865,7 +1944,7 @@ QString trash_original_path(const QString &trashed)
     for (const QByteArray &line : text.split('\n')) {
         if (!line.startsWith("Path="))
             continue;
-        QString orig = QString::fromUtf8(QByteArray::fromPercentEncoding(line.mid(5).trimmed()));
+        QString orig = dec(QByteArray::fromPercentEncoding(line.mid(5).trimmed()).constData());   // raw bytes, as listed
         if (orig.startsWith('/'))
             return orig;
         QString root = trash_root(trashed);

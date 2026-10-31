@@ -505,9 +505,9 @@ void MainWindow::delete_now(const QStringList &paths)
 {
     QPointer<MainWindow> self(this);
     auto done = [self, paths]() {
-        for (const QString &p : paths) {
+        for (const QString &p : paths) {   // the trash's record of each one deleted; one that failed keeps it (Restore)
             QString info_path = trash_info_path(p);
-            if (!info_path.isEmpty())
+            if (!info_path.isEmpty() && !lexists(p))
                 ::unlink(enc(info_path).constData());
         }
         if (self)
@@ -651,10 +651,20 @@ void MainWindow::empty_trash()
             if (b != QMessageBox::Yes)
                 return;
             QList<fileops::Job> jobs;
-            for (const QString &p : fileops::trash_contents())
+            QStringList items;   // in files/: each one's record in info/ goes after it, if it went
+            for (const QString &p : fileops::trash_contents()) {
+                if (basename(dirname(p)) == "info" && p.endsWith(".trashinfo") &&
+                    lexists(join(join(dirname(dirname(p)), "files"), basename(p).chopped(10))))
+                    continue;
+                if (in_trash(p))
+                    items << p;
                 jobs << fileops::Job{"delete", p, QString()};
+            }
             QPointer<MainWindow> self(this);
-            fileops::start_ops(this, jobs, tx("Emptying trash"), [self]() {
+            fileops::start_ops(this, jobs, tx("Emptying trash"), [self, items]() {
+                for (const QString &p : items)   // one that couldn't be deleted keeps its record (Restore)
+                    if (!lexists(p))
+                        ::unlink(enc(trash_info_path(p)).constData());
                 if (self)
                     self->sidebar->refresh();
             });

@@ -19,6 +19,7 @@
 #include <QPushButton>
 #include <QStatusBar>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <gio/gdesktopappinfo.h>
 #include <signal.h>
@@ -445,6 +446,142 @@ int main(int argc, char **argv)
     undo::record_paths("trash", "Move to Trash", {P("t/gone.txt")});
     check(undo_and_wait(w, [&]() { return exists(P("t/gone.txt")); }) && !exists(trashed),
           "undo Move to Trash: puts it back");
+
+    // ---- names that aren't valid UTF-8 (an old archive's Latin-1 or DOS names): kept byte for byte. Qt's own
+    // decoding made them U+FFFD, so a folder holding one couldn't be deleted ("No such file or directory")
+    {
+        auto raw_make = [](const QByteArray &path) {
+            int fd = ::open(path.constData(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+            ::write(fd, "r", 1);
+            ::close(fd);
+        };
+        auto raw_names = [](const QString &dir) {   // the folder's names as bytes, sorted
+            QList<QByteArray> out;
+            if (DIR *d = ::opendir(enc(dir).constData())) {
+                while (struct dirent *e = ::readdir(d))
+                    if (strcmp(e->d_name, ".") && strcmp(e->d_name, ".."))
+                        out << QByteArray(e->d_name);
+                ::closedir(d);
+            }
+            std::sort(out.begin(), out.end());
+            return out;
+        };
+        // a Latin-1 byte, a lone continuation byte, an encoded surrogate (invalid), valid UTF-8, and U+1F080, whose
+        // UTF-16 low surrogate (U+DC80) is in the range kept for stray bytes: it must stay a character
+        QList<QByteArray> samples = {"a\xb3" "b", "\xff", "x\xed\xb2\x80y", "caf\xc3\xa9", "\xf0\x9f\x82\x80", "\xb3\xf0\x9f\x82\x80"};
+        bool round = true;
+        for (const QByteArray &s : samples)
+            round = round && enc(dec(s.constData())) == s;
+        check(round && dec("caf\xc3\xa9") == QString::fromUtf8("caf\xc3\xa9") &&
+                  dec("\xf0\x9f\x82\x80") == QString::fromUtf8("\xf0\x9f\x82\x80"),
+              "a name's bytes survive dec() and enc() whether or not they're valid UTF-8; valid ones decode as UTF-8");
+
+        QString bbs = P("bbs");
+        makedirs(join(bbs, "sub"), true);
+        raw_make(enc(bbs) + "/3261.ufo:\xb3SUBJECT");
+        raw_make(enc(bbs) + "/sub/caf\xe9.txt");
+        make(join(bbs, "plain.txt"));
+        QList<QByteArray> before = raw_names(bbs), before_sub = raw_names(join(bbs, "sub"));
+        check(run_ops(w, {{"copy", bbs, P("bbs-copy")}}) && boxes.isEmpty() && raw_names(P("bbs-copy")) == before &&
+                  raw_names(P("bbs-copy/sub")) == before_sub,
+              "a folder holding names that aren't UTF-8 is copied with those names byte for byte");
+        check(run_ops(w, {{"delete", P("bbs-copy"), QString()}}) && boxes.isEmpty() && !lexists(P("bbs-copy")),
+              "...and deleted whole");
+
+        // a name as Qt lists it (QFileSystemModel: U+FFFD for the stray byte) still reaches the file, when only one
+        // entry of its folder reads that way; with two, neither is guessed
+        QString lossy = QFile::decodeName(enc(bbs) + "/3261.ufo:\xb3SUBJECT");
+        raw_make(enc(bbs) + "/twin\xb3");
+        raw_make(enc(bbs) + "/twin\xb4");
+        QString twin = QFile::decodeName(enc(bbs) + "/twin\xb3");
+        check(lossy.contains(QChar(0xFFFD)) && lexists(lossy) && !lexists(twin),
+              "a path with U+FFFD for a stray byte finds its file when exactly one name in the folder matches it");
+        check(run_ops(w, {{"delete", lossy, QString()}}) && raw_names(bbs).size() == before.size() + 1 &&
+                  !raw_names(bbs).contains("3261.ufo:\xb3SUBJECT"),
+              "...so deleting it from a folder view deletes that file, and only it");
+        boxes.clear();
+
+        // in the trash: Delete Permanently, from its question box
+        auto delete_permanently = [&](const QStringList &paths, bool cancel) {
+            closer.stop();
+            boxes.clear();
+            w->delete_paths(paths);
+            QMessageBox *box = nullptr;
+            wait_for([&]() { return (box = shown_window<QMessageBox>()) != nullptr; });
+            bool clicked = false;
+            for (QAbstractButton *b : box ? box->buttons() : QList<QAbstractButton *>())
+                if (box->buttonRole(b) == QMessageBox::DestructiveRole) {
+                    b->click();
+                    clicked = true;
+                }
+            if (cancel)
+                for (Task *t : TaskBoard::instance()->mine())
+                    if (t->title == "Deleting")
+                        t->cancel();
+            closer.start(100);
+            spin(300);
+            wait_for([]() { return TaskBoard::instance()->mine().isEmpty(); }, 20000);
+            spin(300);
+            return clicked;
+        };
+        QString info_dir = join(TRASH_DIR(), "info");
+        util::trash(bbs);
+        QString tb = join(TRASH_DIR(), "files/bbs");
+        check(delete_permanently({tb}, false) && !lexists(tb) && !lexists(join(info_dir, "bbs.trashinfo")) &&
+                  boxes.isEmpty(),
+              "Delete Permanently in the trash deletes a folder holding names that aren't UTF-8, and its record");
+
+        QByteArray odd = enc(P("t")) + "/notes\xb3.txt";
+        raw_make(odd);
+        util::trash(dec(odd.constData()));
+        QString todd = dec((enc(TRASH_DIR()) + "/files/notes\xb3.txt").constData());
+        check(lexists(todd) && trash_original_path(todd) == dec(odd.constData()),
+              "a trashed file whose name isn't UTF-8 knows its original place, byte for byte (Restore)");
+        check(delete_permanently({todd}, false) && !lexists(todd) && raw_names(info_dir).isEmpty(),
+              "...and Delete Permanently deletes it and its record");
+
+        // a delete that doesn't finish keeps the record of what's left, so it can still be restored
+        for (int i = 0; i < 3000; ++i)
+            make(P(QString("many/f%1").arg(i)));
+        util::trash(P("many"));
+        QString tmany = join(TRASH_DIR(), "files/many");
+        check(delete_permanently({tmany}, true) && lexists(tmany) && exists(join(info_dir, "many.trashinfo")) &&
+                  trash_original_path(tmany) == P("many"),
+              "a Delete Permanently in the trash that stops part-way keeps the record of the item left (Restore)");
+
+        // an item with no record (left by such a failure before): Delete Permanently deleted it, then crashed on the
+        // missing record (::unlink there was util::unlink, which throws)
+        util::unlink(join(info_dir, "many.trashinfo"));
+        check(delete_permanently({tmany}, false) && !lexists(tmany),
+              "Delete Permanently on a trashed item that has no record deletes it (no crash)");
+
+        // Empty Trash: each record goes after its item, as a job only when it's a stray (no item)
+        make(P("t/e1.txt"));
+        make(P("t/e2/in.txt"));
+        util::trash(P("t/e1.txt"));
+        util::trash(P("t/e2"));
+        write_text(join(info_dir, "ghost.trashinfo"), "[Trash Info]\nPath=/nowhere/ghost\n");
+        closer.stop();
+        w->empty_trash();
+        QMessageBox *ask_box = nullptr;
+        wait_for([&]() { return (ask_box = shown_window<QMessageBox>()) != nullptr; });
+        if (ask_box && ask_box->button(QMessageBox::Yes))
+            ask_box->button(QMessageBox::Yes)->click();
+        closer.start(100);
+        bool emptied = wait_for([&]() {
+            return raw_names(join(TRASH_DIR(), "files")).isEmpty() && raw_names(info_dir).isEmpty();
+        }, 20000);
+        spin(300);
+        FinishedTask last;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == "Emptying trash")
+                last = f;
+        check(emptied && last.log.contains("ghost.trashinfo") && !last.log.contains("e1.txt.trashinfo") &&
+                  !last.log.contains("e2.trashinfo"),
+              "Empty Trash deletes every item and record; an item's record goes after it (kept if the item can't be "
+              "deleted), a stray record as a job of its own");
+        boxes.clear();
+    }
 
     // ---- undo
     make(P("u/file.txt"), "u");
@@ -1597,6 +1734,14 @@ int main(int argc, char **argv)
         check(partway && isdir(join(nf, "sub")) && isfile(join(nf, "sub/in.txt")) && !lexists(join(part, "sub")) &&
                   isdir(part),
               "a move failing part-way keeps everything: what moved stays in the new folder, the rest where it was");
+
+        // Undo removes the folder it made only once it's empty: with something else put in it meanwhile, both stay
+        // (::rmdir there was util::rmdir, which threw on a folder that isn't empty: a crash)
+        make(P("mi/box/item.txt"), "i");
+        make(P("mi/box/other.txt"), "o");
+        undo::record("move_into", "New Folder with Selection", {{P("mi/box"), QString()}, {P("mi/item.txt"), P("mi/box/item.txt")}});
+        check(undo_and_wait(w, [&]() { return isfile(P("mi/item.txt")); }) && isfile(P("mi/box/other.txt")),
+              "undoing New Folder with Selection keeps the folder when something else is in it now (no crash)");
     }
     finish();
 }

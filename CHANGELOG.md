@@ -4,7 +4,19 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.0
+## 0.3.3-alpha.1
+
+- **Files whose names aren't valid UTF-8 can be deleted, copied and moved.** A name from an old archive or another
+  system with a stray byte in it (Latin-1, DOS) was listed but then "No such file or directory" to everything done to
+  it, so a folder holding one couldn't be deleted, even from the trash. Kestrel now keeps such names byte for byte,
+  and a file shown with � in a folder is found too (unless two names in that folder read the same way).
+- **A Delete Permanently in the trash that fails or is cancelled keeps the item's record**, so it can still be
+  restored to where it came from; the record used to be deleted anyway, leaving the item's location "(unknown)".
+  Empty Trash likewise deletes each item's record only after the item.
+- **Fixed crashes:** Delete Permanently on a trashed item with no record (as such a failure left behind), and undoing
+  New Folder with Selection when something else had been put in the new folder meanwhile.
+
+## 0.3.3-alpha.0 (2026-10-31)
 
 - **Kestrel in ten more languages:** Chinese (Simplified), French, German, Italian, Japanese, Korean, Portuguese
   (Brazil and Portugal), Russian and Spanish. It uses the desktop's language, and English where it has no

@@ -9,7 +9,7 @@
 [![Languages](https://img.shields.io/badge/languages-11-8A2BE2)](docs/translations.md)
 [![License: MIT](https://img.shields.io/github/license/RegulusArms/kes-c)](LICENSE)
 
-**Version 0.3.3-alpha.0.** This is an early alpha release, so expect rough edges. 
+**Version 0.3.3-alpha.1.** This is an early alpha release, so expect rough edges. 
 
 > **Why do Linux users still need five separate utilities and a terminal to do normal filesystem work?**
 
