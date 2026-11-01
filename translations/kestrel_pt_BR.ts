@@ -242,7 +242,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1042"/>
+        <location filename="../src/fileops.cpp" line="+1058"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 de %2 — %3</translation>
@@ -1110,7 +1110,7 @@ Desative em pastas grandes ou lentas para acelerar.</translation>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+159"/>
+        <location line="+168"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>Exibir</translation>
@@ -1154,7 +1154,7 @@ Desative em pastas grandes ou lentas para acelerar.</translation>
     </message>
     <message>
         <location line="-557"/>
-        <location filename="../src/prefs.cpp" line="-128"/>
+        <location filename="../src/prefs.cpp" line="-137"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
@@ -1853,7 +1853,7 @@ Desative em pastas grandes ou lentas para acelerar.</translation>
         <location filename="../src/archivewin.cpp" line="-176"/>
         <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+114"/>
+        <location filename="../src/prefs.cpp" line="+123"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2259,8 +2259,8 @@ Elas serão geradas novamente conforme você navega.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-142"/>
-        <location line="+164"/>
+        <location filename="../src/prefs.cpp" line="-151"/>
+        <location line="+173"/>
         <source>Show hidden files</source>
         <translation>Mostrar arquivos ocultos</translation>
     </message>
@@ -2341,7 +2341,7 @@ Elas serão geradas novamente conforme você navega.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-108"/>
+        <location filename="../src/prefs.cpp" line="-117"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2496,7 +2496,7 @@ Elas serão geradas novamente conforme você navega.</translation>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+663"/>
+        <location filename="../src/fileops.cpp" line="+747"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -3206,7 +3206,7 @@ Elas podem continuar sem nenhuma janela do Kestrel: a janela Tarefas as mostra, 
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source>Keep both (rename)</source>
         <translation>Manter ambos (renomear)</translation>
     </message>
@@ -4689,9 +4689,9 @@ Excluir e sincronizar?</numerusform>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-153"/>
+        <location filename="../src/prefs.cpp" line="-162"/>
         <location line="+2"/>
-        <location line="+163"/>
+        <location line="+172"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4797,7 +4797,7 @@ Excluir e sincronizar?</numerusform>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-86"/>
+        <location filename="../src/prefs.cpp" line="-95"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -6156,7 +6156,7 @@ Real: %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6606,7 +6606,7 @@ Isto não pode ser desfeito.</numerusform>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1540"/>
+        <location filename="../src/fileops.cpp" line="-1637"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln linha não mantida …</numerusform>
@@ -6719,7 +6719,7 @@ Isto não pode ser desfeito.</numerusform>
         <translation>Excluir %1</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+24"/>
         <source>Counting…</source>
         <translation>Contando…</translation>
     </message>
@@ -6750,14 +6750,14 @@ Isto não pode ser desfeito.</numerusform>
         <translation>  cancelado</translation>
     </message>
     <message>
-        <location line="-801"/>
-        <location line="+842"/>
+        <location line="-803"/>
+        <location line="+854"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-834"/>
+        <location line="-846"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6786,8 +6786,32 @@ Isto não pode ser desfeito.</numerusform>
         <source>Finished in %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <location line="+767"/>
+        <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) read and written by Kestrel</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+796"/>
+        <location line="+37"/>
         <source>waiting for the buffer</source>
         <translation>aguardando o buffer</translation>
     </message>
@@ -6797,7 +6821,7 @@ Isto não pode ser desfeito.</numerusform>
         <translation>  %1  fita %2 · origem %3 · buffer %4 de %5 (%6%) · %7 de %8 gravados</translation>
     </message>
     <message>
-        <location line="+67"/>
+        <location line="+66"/>
         <source>While this job runs, GNOME&apos;s low-disk-space check skips this tape: it asks the drive for its free space once a minute, and each time the tape stops streaming.</source>
         <translation>Enquanto esta tarefa roda, a verificação de pouco espaço em disco do GNOME pula esta fita: ela pergunta à unidade o espaço livre uma vez por minuto, e a cada vez a fita para de gravar em fluxo contínuo.</translation>
     </message>
@@ -6863,7 +6887,7 @@ Isto não pode ser desfeito.</numerusform>
         <translation>Não há espaço suficiente na fita para “%1”: precisa de %2, a fita tem %3 livres</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location line="+54"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>A origem lê a %1/s, mais devagar que a velocidade mínima de fluxo contínuo da fita: a fita grava em rajadas a partir do buffer, parando entre elas. Copiar de uma unidade mais rápida, ou criar antes um arquivo compactado num disco rápido, a manteria em fluxo contínuo.</translation>
     </message>
@@ -6873,7 +6897,7 @@ Isto não pode ser desfeito.</numerusform>
         <translation>  %1 de “%2” já tinham sido gravados na fita: o LTFS mantém esse espaço ocupado até a fita ser reformatada.</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+83"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>“%1” apareceu em %2 enquanto isto era feito; ele foi mantido como está, e nada foi colocado no lugar dele</translation>
     </message>
@@ -7067,7 +7091,7 @@ Isto não pode ser desfeito.</numerusform>
 %1</translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+15"/>
         <source>The folder it was moving into, “%1”, isn&apos;t there any more: it was moved or deleted while this job waited. Nothing was moved.</source>
         <translation>A pasta de destino, “%1”, não está mais lá: foi movida ou excluída enquanto esta tarefa aguardava. Nada foi movido.</translation>
     </message>
@@ -7087,7 +7111,7 @@ Isto não pode ser desfeito.</numerusform>
         <translation>A pasta de destino, “%1”, não está mais lá: foi movida ou excluída antes de esta tarefa começar. Nada foi copiado.</translation>
     </message>
     <message numerus="yes">
-        <location line="+7"/>
+        <location line="+8"/>
         <source>%Ln item(s) failed.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -7591,7 +7615,7 @@ substituídos. Uma mesclagem não pode ser desfeita.</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-18"/>
+        <location filename="../src/prefs.cpp" line="-27"/>
         <source>Algorithms</source>
         <translation>Algoritmos</translation>
     </message>
@@ -8165,7 +8189,7 @@ substituídos. Uma mesclagem não pode ser desfeita.</translation>
         <translation>Aguardando a vez (a unidade está em uso)…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-801"/>
+        <location filename="../src/fileops.cpp" line="-803"/>
         <source>Waiting</source>
         <translation>Aguardando</translation>
     </message>
@@ -8206,7 +8230,7 @@ substituídos. Uma mesclagem não pode ser desfeita.</translation>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
-        <location line="+1"/>
+        <location line="+10"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>Tarefas</translation>
@@ -8238,7 +8262,7 @@ substituídos. Uma mesclagem não pode ser desfeita.</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-1"/>
+        <location filename="../src/prefs.cpp" line="-10"/>
         <source>Start new jobs paused</source>
         <translation>Iniciar novas tarefas pausadas</translation>
     </message>
@@ -9087,7 +9111,7 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+38"/>
+        <location filename="../src/prefs.cpp" line="+47"/>
         <source>Format</source>
         <translation>Formato</translation>
     </message>
@@ -9836,7 +9860,7 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-101"/>
+        <location filename="../src/prefs.cpp" line="-110"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -9968,6 +9992,7 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
         <location line="+3"/>
         <location line="+3"/>
         <location line="+1"/>
+        <location line="+9"/>
         <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10535,7 +10560,7 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
         <translation>Nenhum arquivo recente</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-214"/>
+        <location filename="../src/prefs.cpp" line="-223"/>
         <source>Grid</source>
         <translation>Grade</translation>
     </message>
@@ -10635,47 +10660,47 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
     </message>
     <message>
         <location line="+2"/>
-        <location line="+166"/>
+        <location line="+175"/>
         <source>Icon size in the grid</source>
         <translation>Tamanho dos ícones na grade</translation>
     </message>
     <message>
-        <location line="-166"/>
+        <location line="-175"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>o controle de zoom, Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+165"/>
+        <location line="+174"/>
         <source>Icon size in the list</source>
         <translation>Tamanho dos ícones na lista</translation>
     </message>
     <message>
-        <location line="-163"/>
+        <location line="-172"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → Exibir → Mostrar arquivos ocultos (Ctrl+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+164"/>
+        <location line="+173"/>
         <source>Show the sidebar</source>
         <translation>Mostrar o painel lateral</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → Exibir → Painel lateral (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+109"/>
+        <location line="+118"/>
         <source>Show the info panel</source>
         <translation>Mostrar o painel de informações</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → Exibir → Painel de informações (F3)</translation>
     </message>
@@ -11152,6 +11177,21 @@ Para todas as janelas do Kestrel (também em Preferências → Imagens e vídeos
     </message>
     <message>
         <location line="+2"/>
+        <source>Copying</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the server copies the file itself, so it doesn&apos;t cross the network twice; elsewhere the system copies it without passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always go through Kestrel&apos;s buffer or dd.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>Save each finished job&apos;s log</source>
         <translation type="unfinished"></translation>
     </message>

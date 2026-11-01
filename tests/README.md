@@ -27,7 +27,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 | Test | Checks | Covers |
 |---|---|---|
-| [`fileops`](#fileops) | 137 | File operations |
+| [`fileops`](#fileops) | 145 | File operations |
 | [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
 | [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
@@ -63,6 +63,10 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **Cancel:** a copy cancelled part-way leaves no half-copied files.
 - **Without RENAME_NOREPLACE or hard links** (as on an LTFS tape; `KESTREL_TEST_NO_LINK`): a copy to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name.
 - **A folder copied to a new name** has that name from the start and fills in file by file. Cancelled or failing part-way, it keeps the files finished so far, whole, with the original's permissions; Ctrl+Z puts it in the trash.
+- **How a file is copied** (Preferences → Files → Copying), each way whole and logged, and each failing part-way keeping the file it would have replaced, with no part file:
+  - setting off: Kestrel's own loop (a file size limit part-way);
+  - on, no clone (`KESTREL_TEST_NO_CLONE`): copy_file_range (a file size limit, a read error after its first 4 MB piece via `KESTREL_TEST_COPY_FAIL_AT`, a cancel between pieces);
+  - a clone, where the test's drive can make one (Btrfs, XFS, ZFS 2.2+), with an error once it's in; skipped elsewhere (ext4 and overlayfs can't).
 - **Replacing a file** keeps the old one until the new one is complete:
   - cancelling part-way, or a write that fails part-way, leaves it as it was and no temporary file;
   - a symlink in the way is replaced rather than written through;

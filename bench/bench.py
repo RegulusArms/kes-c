@@ -114,8 +114,14 @@ OTHERS = {
 }
 APPS = ("kestrel",) + tuple(OTHERS)
 # measured the same way for every app
+# Copies within one drive that can clone (Btrfs, XFS) and within one SMB share (server-side copy): measured only where
+# the folder to copy in is given (bench/fs.sh makes them in a container). Kestrel is timed with Preferences → Files →
+# Copying on (the system's copy: "s") and off (its own read/write loop, as before it had the setting: "loop_s").
+FS_TESTS = {"copy_btrfs": ("KESTREL_BENCH_BTRFS", "Within one Btrfs drive (a clone)"),
+            "copy_xfs": ("KESTREL_BENCH_XFS", "Within one XFS drive (a clone)"),
+            "copy_smb": ("KESTREL_BENCH_SMB", "Within one SMB share (the server copies it)")}
 COMMON = ("startup", "open_gallery", "videos", "pdfs", "open_list", "navigate", "scroll_end", "live", "responsive", "copy",
-          "move_xdev", "trash", "windows", "idle")
+          "move_xdev", "trash", "windows", "idle") + tuple(FS_TESTS)
 # Kestrel only: its "open folders as tabs" setting, and features the other file managers have no equivalent of
 KESTREL_ONLY = ("windows_tabs", "bulk_thumbs", "mosaics", "search", "metadata")
 FOLDER_TESTS = ("open_gallery", "videos", "pdfs")   # "open a folder": timed by the thumbnails it makes
@@ -721,12 +727,12 @@ def ui_transfer(app, src, dst_parent, move):
     return n, t0
 
 
-def measure_copy_other(app):
-    src = f"{DATA}/copysrc"
+def measure_copy_other(app, src=None, dst_parent=None):
+    src = src or f"{DATA}/copysrc"
     want = tree_size(src)
-    dst_parent = os.path.join(home(), "copydst")
+    dst_parent = dst_parent or os.path.join(home(), "copydst")
     os.makedirs(dst_parent)
-    dst = os.path.join(dst_parent, "copysrc")
+    dst = os.path.join(dst_parent, os.path.basename(src))
     n = None
     try:
         if OTHERS[app]["ops"] is None:   # Copy, then Paste in the destination
@@ -745,6 +751,33 @@ def measure_copy_other(app):
             n.close()
         shutil.rmtree(dst_parent, ignore_errors=True)
         shutil.rmtree(os.path.join(home(), "copy"), ignore_errors=True)
+
+
+def measure_copy_within(app, test):
+    """The copy test's files copied within one folder on another file system (FS_TESTS), source and copy both there
+    ("s"), then its 5 × 50 MB alone ("big_s": the small files are all under the size the system's copy is used for).
+    The sources are put there once (not timed); each run's copies are deleted after it."""
+    base = os.environ[FS_TESTS[test][0]]
+    src, big = os.path.join(base, "copysrc"), os.path.join(base, "copybig")
+    if not os.path.isdir(src) or tree_size(src) != tree_size(f"{DATA}/copysrc"):
+        shutil.rmtree(src, ignore_errors=True)
+        shutil.copytree(f"{DATA}/copysrc", src, symlinks=True)
+    if not os.path.isdir(big):
+        os.makedirs(big)
+        for k in range(5):
+            shutil.copy(f"{DATA}/copysrc/big{k}.bin", big)
+    subprocess.run(["sync"])
+    if app in OTHERS:
+        if OTHERS[app]["ops"] is None:   # copied through its window: from the home folder only
+            return {"s": None}
+        r = measure_copy_other(app, src, os.path.join(base, f"copydst-{app}"))
+        r["big_s"] = measure_copy_other(app, big, os.path.join(base, f"copydst-{app}"))["s"]
+        return r
+    runs = {(mode, what): harness(app, "copy_at", base, mode, what)
+            for mode in ("loop", "kernel") for what in ("copysrc", "copybig")}   # loop: as before the setting
+    return {"s": runs["kernel", "copysrc"]["s"], "loop_s": runs["loop", "copysrc"]["s"],
+            "big_s": runs["kernel", "copybig"]["s"], "big_loop_s": runs["loop", "copybig"]["s"],
+            "rss_mb": max(r["rss_mb"] for r in runs.values())}
 
 
 def measure_move_xdev(app):
@@ -925,11 +958,11 @@ def measure_idle(app):
         stop(p)
 
 
-def harness(app, test, arg=None):
+def harness(app, test, *args):
     """A measurement inside the app (kestrel_cpp)."""
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
     cmd = [os.path.join(HERE, BUILD, "kestrel_cpp"), test, DATA]
-    out = subprocess.run(cmd + ([arg] if arg else []), env=env, capture_output=True, text=True, timeout=900)
+    out = subprocess.run(cmd + [a for a in args if a], env=env, capture_output=True, text=True, timeout=900)
     line = next((ln for ln in out.stdout.splitlines() if ln.startswith("{")), None)
     if line is None:
         raise RuntimeError(f"{app} {test} failed:\n{out.stderr[-2000:]}")
@@ -970,6 +1003,8 @@ def measure(app, test):
             return measure_responsive(app)
         if test == "copy" and app in OTHERS:
             return measure_copy_other(app)
+        if test in FS_TESTS:
+            return measure_copy_within(app, test)
         if test == "move_xdev":
             return measure_move_xdev(app)
         if test == "trash":
@@ -1195,6 +1230,15 @@ def tables(res, other):
                # a folder when it opens it)
                "ready_at_end": [OTHERS[a]["label"] if a in OTHERS else "Kestrel" for a in apps
                                 if med(a, SCROLL_TEST) is not None and med(a, SCROLL_TEST) < 0.05]}
+    # copies within one drive or share (FS_TESTS), where measured: Kestrel before and with the system's copy
+    fs = [t for t in FS_TESTS if med("kestrel", t) is not None or med(other, t) is not None]
+    summary["fs_table"] = ([f"| Copy 20,000 small files + 5 × 50 MB | Kestrel, its own copy (before) | "
+                            f"Kestrel, the system's copy (now) | {OTHERS[other]['label']} |", "|---|---|---|---|"] +
+                           [f"| {FS_TESTS[t][1]} | {secs(med('kestrel', t, 'loop_s'))} | {secs(med('kestrel', t))} | "
+                            f"{secs(med(other, t))} |" for t in fs] +
+                           [f"| …its 5 × 50 MB alone, {FS_TESTS[t][1][0].lower()}{FS_TESTS[t][1][1:]} | "
+                            f"{secs(med('kestrel', t, 'big_loop_s'))} | {secs(med('kestrel', t, 'big_s'))} | "
+                            f"{secs(med(other, t, 'big_s'))} |" for t in fs]) if fs else []
     # idle CPU far above Kestrel's: worth a word of caution (Nemo kept a fifth of a core busy in the Mint VM)
     busy, calm = med(other, "idle", "cpu_ms"), med("kestrel", "idle", "cpu_ms")
     summary["busy_idle"] = busy / (IDLE_SECONDS * 10) if busy and busy > 1000 and busy > 10 * (calm or 0) else None
@@ -1235,6 +1279,12 @@ def machine(other):
 
 
 def section(t1, t2, summary, runs, other):
+    fs_block = "" if not summary["fs_table"] else (
+        "\n**Copying with the system's help:** the same files copied within one Btrfs drive, one XFS drive (loop images "
+        "on a RAM disk) and one SMB share (Samba on the same machine, mounted with the kernel's SMB client), source and "
+        "copy both there, made by bench/fs.sh in a container. Kestrel is timed with Preferences → Files → Copying off "
+        "(it reads and writes every byte itself, as before that setting) and on (a clone on Btrfs and XFS, the server's "
+        "own copy on SMB).\n\n" + "\n".join(summary["fs_table"]) + "\n")
     cpu, threads, version, distro = machine(other)
     label = OTHERS[other]["label"]
     heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if PLATFORM else "")
@@ -1353,7 +1403,7 @@ Both apps are measured in the same way:
 - **CPU while idle:** the CPU time all the app's processes use in {IDLE_SECONDS} s with a folder open and nothing happening. It's counted in 10 ms steps.
 
 {chr(10).join(t1)}
-
+{fs_block}
 Kestrel compared with {label}:
 {summary['vs']}
 
@@ -1413,6 +1463,9 @@ def report(res, args):
         t1, t2, summary = tables(res, other)
         print()
         print("\n".join(t1))
+        if summary["fs_table"]:
+            print()
+            print("\n".join(summary["fs_table"]))
         if others:
             sections.append(section(t1, t2, summary, runs, other))
     print()
@@ -1476,6 +1529,8 @@ def main():
                     continue
                 if test == "videos" and not os.path.isdir(f"{DATA}/videos"):
                     continue
+                if test in FS_TESTS and not os.environ.get(FS_TESTS[test][0]):
+                    continue   # (its folder not given: what an earlier run measured is kept)
                 n = runs_for(test, args.runs)
                 res[(app, test)] = []
                 for i in range(n):

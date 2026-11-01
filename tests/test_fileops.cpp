@@ -22,7 +22,9 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <gio/gdesktopappinfo.h>
+#include <linux/fs.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <utime.h>
@@ -210,6 +212,107 @@ int main(int argc, char **argv)
         QDir(join(TRASH_DIR(), "info")).removeRecursively();
         makedirs(join(TRASH_DIR(), "info"), true);
         ::chmod(enc(P("big")).constData(), 0755);
+    }
+
+    // -- how a file is copied (Preferences → Files → Copying): a clone where the drive can share data between files,
+    // else the kernel's copy_file_range, else (or with the setting off) Kestrel's own read/write loop. Each one
+    // failing part-way keeps the file it would have replaced and leaves no part file
+    {
+        makedirs(P("how"), true);
+        QByteArray data(6 * 1024 * 1024, 'k');   // more than one 4 MB piece
+        data[5 * 1024 * 1024] = 'Z';
+        make(P("how/src.bin"), data);
+        auto leftovers = []() {
+            QStringList out;
+            for (const QString &n : listdir(P("how")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        auto copy_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        auto copied_whole = [&](const QString &how) {
+            ::unlink(enc(P("how/out.bin")).constData());
+            bool ok = run_ops(w, {{"copy", P("how/src.bin"), P("how/out.bin")}});
+            return ok && read_file(P("how/out.bin")) == data && copy_log().contains(how) && leftovers().isEmpty();
+        };
+        auto fails_part_way = [&](const std::function<void()> &arm, const std::function<void()> &disarm) {
+            make(P("how/keep.txt"), "precious");
+            arm();
+            run_ops(w, {{"copy", P("how/src.bin"), P("how/keep.txt"), true}});
+            disarm();
+            return text_of(P("how/keep.txt")) == "precious" && leftovers().isEmpty();
+        };
+        struct rlimit old_lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        sighandler_t old_handler = nullptr;
+        auto limit = [&]() {   // writes past 1 MB fail (EFBIG)
+            struct rlimit lim = old_lim;
+            lim.rlim_cur = 1 << 20;
+            old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+        };
+        auto unlimit = [&]() {
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+        };
+
+        // Kestrel's loop: the setting off
+        prefs::set("copy_kernel", false);
+        check(copied_whole("1 file read and written by Kestrel"),
+              "with the system's copy off, Kestrel reads and writes the file itself, and the copy is whole");
+        check(fails_part_way(limit, unlimit),
+              "...that copy failing part-way (a write error) keeps the file it would have replaced, with no part file");
+
+        // copy_file_range: the setting on (the default), no clone
+        prefs::set("copy_kernel", true);
+        qputenv("KESTREL_TEST_NO_CLONE", "1");
+        check(copied_whole("1 file copied by the system"),
+              "with it on, where the drive can't clone, the system copies the file (copy_file_range), whole");
+        check(fails_part_way(limit, unlimit),
+              "...that copy failing part-way (a write error) keeps the file it would have replaced, with no part file");
+        check(fails_part_way([]() { qputenv("KESTREL_TEST_COPY_FAIL_AT", QByteArray::number(4 * 1024 * 1024)); },
+                             []() { qunsetenv("KESTREL_TEST_COPY_FAIL_AT"); }),
+              "...and failing after its first piece (a read error) does too");
+        {
+            make(P("how/keep.txt"), "precious");
+            make(P("how/long.bin"), "long");
+            ::truncate(enc(P("how/long.bin")).constData(), qint64(1) << 30);   // 1 GB (sparse): reports come part-way
+            Task *ct = fileops::start_ops(w, {{"copy", P("how/long.bin"), P("how/keep.txt"), true}}, "Test");
+            QObject::connect(ct, &Task::progress, ct, [ct](double, const QString &text) {
+                if (text.endsWith("long.bin"))   // part-way, on the copying thread
+                    ct->cancel();
+            }, Qt::DirectConnection);
+            QPointer<Task> ctp(ct);
+            wait_for([&]() { return !ctp; }, 20000);
+            check(text_of(P("how/keep.txt")) == "precious" && leftovers().isEmpty(),
+                  "...and cancelled between its pieces, it keeps the file it would have replaced");
+            ::unlink(enc(P("how/long.bin")).constData());
+        }
+        qunsetenv("KESTREL_TEST_NO_CLONE");
+
+        // a clone, where this drive can make one (Btrfs, XFS, ZFS 2.2+; not the ext4 or overlay of most test runs)
+        bool can_clone = false;
+        {
+            make(P("how/probe-a"), "probe");
+            int a = ::open(enc(P("how/probe-a")).constData(), O_RDONLY | O_CLOEXEC);
+            int b = ::open(enc(P("how/probe-b")).constData(), O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+            can_clone = a >= 0 && b >= 0 && ::ioctl(b, FICLONE, a) == 0;
+            ::close(a);
+            ::close(b);
+            ::unlink(enc(P("how/probe-a")).constData());
+            ::unlink(enc(P("how/probe-b")).constData());
+        }
+        if (can_clone) {
+            check(copied_whole("1 file cloned"), "on a drive that can, a copy on the same drive is a clone, whole");
+            check(fails_part_way([]() { qputenv("KESTREL_TEST_COPY_FAIL_AT", "0"); },
+                                 []() { qunsetenv("KESTREL_TEST_COPY_FAIL_AT"); }),
+                  "...a clone followed by an error keeps the file it would have replaced, with no part file");
+        } else {
+            skip("copying by a clone (this drive can't share data between files: Btrfs, XFS or ZFS 2.2+ can)");
+        }
     }
 
     // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink

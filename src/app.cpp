@@ -1765,8 +1765,8 @@ void apply_settings(const QStringList &keys)
             g_thumbs->set_mode(v.toString());
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
-        } else if (key == "jobs_save_logs") {
-            // read as each job ends (joblogs::save)
+        } else if (key == "jobs_save_logs" || key == "copy_kernel") {
+            // read as each job ends (joblogs::save), or as a copy starts (start_ops)
         } else {
             prefs_wide = true;   // thumbnails, previews, undo, developer tools…: apply_preferences
         }

@@ -34,6 +34,9 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include <sys/statfs.h>
 #include <sys/statvfs.h>
 
 #include <cerrno>
@@ -887,6 +890,8 @@ public:
     QList<Job> denied;      // jobs that failed for lack of permission, to retry as administrator
     QList<Job> completed;   // jobs that succeeded (for undo)
     QStringList partial;    // new folders a copy left part-way (cancelled, or an error inside): undone like a copy
+    bool kernel_copy = true;   // files cloned or copied by the kernel where it can (Preferences → Files → Copying)
+    int cloned = 0, by_kernel = 0, by_kestrel = 0;   // how each file was copied, for the log
     QList<Job> touched;     // jobs that changed something (done, or begun): a tape among them gets its index written
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
 
@@ -936,6 +941,7 @@ public:
             task->step = index;
             dd_now = j.dd;
             task->log(step_text(j));
+            dest_drive(j);
             // a copy that replaces something can't be undone: the old item is gone, and the copy is all that's left
             bool replacing = j.op == "copy" && lexists(j.dst);
             bool claim = !j.replace && !j.op.startsWith("merge");   // a merge always goes into an existing folder
@@ -989,6 +995,16 @@ public:
         qint64 ms = stats::now_ms() - started;
         if (!by_count && done > 0 && ms > 0)
             stats::sample("copy speed (MB/s)", done / 1e6 / (ms / 1000.0));
+        if (cloned || by_kernel || by_kestrel) {
+            QStringList how;
+            if (cloned)
+                how << txn("%Ln file(s) cloned (the copy shares the original's space until one of them changes)", cloned);
+            if (by_kernel)
+                how << txn("%Ln file(s) copied by the system (on a network share, by the server itself)", by_kernel);
+            if (by_kestrel)
+                how << txn("%Ln file(s) read and written by Kestrel", by_kestrel);
+            task->log(how.join("; "));
+        }
         return errors;
     }
 
@@ -1039,10 +1055,9 @@ private:
     {
         if (!task->due())   // (shown ~12 times a second: the text isn't made for every chunk of a big file)
             return;
+        QString rate = by_count ? QString() : task->speed(done);   // (before the name: it stays last)
         QString text = by_count ? tx("%1 of %2 — %3").arg(group_digits(done), group_digits(total), name)
-                                : tx("%1 of %2 — %3").arg(human_size(done), human_size(total), name);
-        if (QString rate = by_count ? QString() : task->speed(done); !rate.isEmpty())
-            text += " · " + rate;
+                                : tx("%1 of %2 — %3").arg(human_size(done), human_size(total) + (rate.isEmpty() ? QString() : " · " + rate), name);
         if (buffer)
             text += " · " + buffer->status();
         task->report(double(done), double(total), text);
@@ -1496,10 +1511,20 @@ private:
                 copy_with_dd(in.fd, out.fd, src, dst, qint64(now.st_size), written);
                 report_progress(name);
             }
+            // the kernel's own copy first, where allowed (never onto a tape: the buffer and dd are for it): a clone,
+            // else copy_file_range; what's left (all of it where neither works) by the loop below
+            bool whole = false;
+            if (!to_tape && kernel_copy && dest_dev && qint64(now.st_size) >= dest_min) {
+                whole = kernel_copy_file(in.fd, out.fd, qint64(now.st_size), name, src, dst, written,
+                                         qMakePair(quint64(now.st_dev), dest_dev));
+                task->check();   // (a clone is one call: a cancel meanwhile still keeps what was there)
+            }
+            if (!to_tape)
+                ++(!whole ? by_kestrel : last_cloned ? cloned : by_kernel);
             // from the tape buffer when it has it (read ahead by its thread), else straight from the file
-            bool buffered = !dd_now && to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
-            std::unique_ptr<char[]> buf(buffered || (to_tape && dd_now) ? nullptr : new char[CHUNK]);
-            for (; !(to_tape && dd_now);) {
+            bool buffered = !whole && !dd_now && to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
+            std::unique_ptr<char[]> buf(whole || buffered || (to_tape && dd_now) ? nullptr : new char[CHUNK]);
+            for (; !whole && !(to_tape && dd_now);) {
                 task->check();   // a cancel, or a pause (within one chunk; the part file just stays open)
                 const char *data = buf.get();
                 ssize_t n;
@@ -1557,6 +1582,86 @@ private:
                                   "tape is reformatted.")
                               .arg(human_size(written), name));
             throw;
+        }
+    }
+
+    bool last_cloned = false;   // the file kernel_copy_file finished was cloned
+    // between these drives (source, destination), a clone / copy_file_range was found not to work: not asked again in
+    // this job (on an SMB share a failed clone is a trip to the server for each file)
+    QSet<QPair<quint64, quint64>> no_clone, no_range;
+    // The drive the job being run writes to (its destination's folder), found once for all its files: a stat of
+    // each file there would be a trip to the server on a network share. 0: unknown (the kernel's copy isn't tried).
+    quint64 dest_dev = 0;
+    // Files under this size are read and written by Kestrel: there one read and one write are as quick as the
+    // kernel's copy (SMB) or quicker (XFS clones a 4–32 KB file 30% slower); Btrfs clones even small ones faster.
+    // (Measured in bench/fs.sh's container: Btrfs and XFS on loop images, Samba through the kernel's SMB client.)
+    qint64 dest_min = 64 * 1024;
+
+    void dest_drive(const Job &j)
+    {
+        dest_dev = 0;
+        if (!kernel_copy || j.op == "delete")
+            return;
+        struct stat st;
+        struct statfs sf;
+        QByteArray dir = enc(dirname(j.dst));
+        if (::stat(dir.constData(), &st) != 0 || ::statfs(dir.constData(), &sf) != 0)
+            return;
+        dest_dev = quint64(st.st_dev);
+        dest_min = sf.f_type == 0x9123683E /* BTRFS_SUPER_MAGIC */ ? 0 : 64 * 1024;
+    }
+
+    // Copy in → out (an empty part file) by the kernel: a clone (FICLONE: Btrfs, XFS, bcachefs, ZFS 2.2+ on one drive;
+    // instant, sharing the space until one side changes), else copy_file_range in CHUNK pieces (in-kernel; on an SMB3
+    // or NFS 4.2 share the server copies it itself), with progress, pause and cancel between pieces. True when it
+    // copied all of it; false when it couldn't (EXDEV, EOPNOTSUPP, EINVAL…: not on these file systems), having copied
+    // `written` bytes so far, so the read/write loop goes on from there (both files' offsets are where it stopped).
+    // An error that isn't "not supported here" (a full disk, EFBIG, EIO) is thrown, as the loop would.
+    bool kernel_copy_file(int in, int out, qint64 size, const QString &name, const QString &src, const QString &dst,
+                          qint64 &written, const QPair<quint64, quint64> &drives)
+    {
+        last_cloned = false;
+        // (tests: KESTREL_TEST_NO_CLONE skips the clone, KESTREL_TEST_COPY_FAIL_AT=n fails after n bytes)
+        bool test_no_clone = qEnvironmentVariableIntValue("KESTREL_TEST_NO_CLONE") == 1;
+        qint64 test_fail_at = qEnvironmentVariableIsSet("KESTREL_TEST_COPY_FAIL_AT")
+                                  ? qEnvironmentVariable("KESTREL_TEST_COPY_FAIL_AT").toLongLong()
+                                  : -1;
+        if (!test_no_clone && !no_clone.contains(drives) && ::ioctl(out, FICLONE, in) == 0) {
+            last_cloned = true;
+            written = size;
+            done += size;
+            report_progress(name);
+            if (test_fail_at >= 0)   // (tests: an error once it's in, as a failing disk would give)
+                throw_errno(dst, EIO);
+            return true;
+        }
+        auto unsupported = [](int e) {
+            return e == EXDEV || e == EOPNOTSUPP || e == ENOSYS || e == EINVAL || e == EBADF || e == ETXTBSY ||
+                   e == EPERM;
+        };
+        if (!test_no_clone && !no_clone.contains(drives) && unsupported(errno))
+            no_clone << drives;
+        if (no_range.contains(drives))
+            return false;
+        for (;;) {
+            task->check();   // a cancel, or a pause (between pieces)
+            ssize_t n = ::copy_file_range(in, nullptr, out, nullptr, size_t(CHUNK), 0);
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n < 0 && unsupported(errno)) {
+                if (written == 0)
+                    no_range << drives;
+                return false;   // the loop goes on from here
+            }
+            if (n < 0)
+                throw_errno(errno == EFBIG || errno == ENOSPC || errno == EDQUOT ? dst : src);
+            if (n == 0)   // the end; or, before any byte of a file that has some, a file system that copies nothing
+                return written > 0 || size == 0;   // this way (procfs and the like): the loop reads it
+            written += n;
+            done += n;
+            if (test_fail_at >= 0 && written >= test_fail_at)   // (tests: an error part-way)
+                throw_errno(dst, EIO);
+            report_progress(name);
         }
     }
 
@@ -1851,7 +1956,8 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
         if (on_done)
             on_done();
     };
-    auto work = [ops, jobs](Task *task) {
+    bool kernel = prefs::get("copy_kernel").toBool();   // (read here: prefs belong to the UI thread)
+    auto work = [ops, jobs, kernel](Task *task) {
         // checked when its turn comes: one clear failure, not one "No such file or directory" for each item
         QStringList gone = missing_destinations(jobs);
         if (!gone.isEmpty()) {
@@ -1868,6 +1974,7 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
                             .arg(gone.first()));
         }
         *ops = std::make_unique<Ops>(task, jobs);
+        (*ops)->kernel_copy = kernel;
         QStringList errors = (*ops)->run();
         if (!errors.isEmpty())   // (Task::run then says how it ended, and how long it took)
             task->log(txn("%Ln item(s) failed.", errors.size()));

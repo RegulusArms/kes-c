@@ -53,20 +53,6 @@ into.
 
 ### Jobs
 
-- [ ] **Faster copies: let the kernel clone or copy the file.** Kestrel's copy reads and writes every byte itself
-  (the read/write loop in `copy_file_at`, src/fileops.cpp), never using the kernel's own copy calls.
-  - Clone first (`ioctl(FICLONE)`): on Btrfs, XFS, bcachefs and ZFS 2.2 or later a copy on the same drive is then
-    instant and takes no extra space until one side changes.
-  - Else `copy_file_range()`: SMB3 and NFS 4.2 servers copy the file themselves (server-side copy), so the data
-    doesn't cross the network twice; elsewhere it's an in-kernel copy, with no trip through Kestrel's buffers.
-  - Fall back to the current loop when neither works (EXDEV, EOPNOTSUPP, EINVAL…), and keep it for tapes and their
-    buffer (src/tapebuf.cpp).
-  - Still failure-atomic: clone or copy into the part file, then rename it into place as now. Progress, pause and
-    cancel have to keep working: `copy_file_range` in chunks; a clone is one call (no progress needed).
-  - GNOME Files (GLib) already does both: add a same-drive copy on Btrfs/XFS and a copy on an SMB share to the
-    benchmark (bench/), before and after, in docs/performance.md.
-  - A test for each path (clone, copy_file_range, the fallback) that fails part-way, as the other write paths have.
-
 - [ ] **Keep extended attributes and ACLs when copying (opt-in).** A copy now keeps only the file's times and permissions
   (`futimens` / `fchmod` in src/fileops.cpp), so it silently drops its extended attributes: the address a browser
   saved a download from (`user.xdg.origin.url`), tags other apps keep (`user.xdg.tags`, KDE's), ACLs
@@ -318,6 +304,21 @@ into.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done
+
+- [x] **Faster copies: let the kernel clone or copy the file.** Kestrel's copy reads and writes every byte itself
+  (the read/write loop in `copy_file_at`, src/fileops.cpp), never using the kernel's own copy calls.
+  - Clone first (`ioctl(FICLONE)`): on Btrfs, XFS, bcachefs and ZFS 2.2 or later a copy on the same drive is then
+    instant and takes no extra space until one side changes.
+  - Else `copy_file_range()`: SMB3 and NFS 4.2 servers copy the file themselves (server-side copy), so the data
+    doesn't cross the network twice; elsewhere it's an in-kernel copy, with no trip through Kestrel's buffers.
+  - Fall back to the current loop when neither works (EXDEV, EOPNOTSUPP, EINVAL…), and keep it for tapes and their
+    buffer (src/tapebuf.cpp).
+  - Still failure-atomic: clone or copy into the part file, then rename it into place as now. Progress, pause and
+    cancel have to keep working: `copy_file_range` in chunks; a clone is one call (no progress needed).
+  - GNOME Files (GLib) already does both: add a same-drive copy on Btrfs/XFS and a copy on an SMB share to the
+    benchmark (bench/), before and after, in docs/performance.md.
+  - A test for each path (clone, copy_file_range, the fallback) that fails part-way, as the other write paths have.
+  Done in 0.3.3-alpha.4, as a setting (Preferences → Files → Copying, `copy_kernel`, on by default): clone, then copy_file_range in 4 MB pieces, then the loop; files under 64 KB (not on Btrfs) and tapes use the loop; a clone or copy_file_range found unsupported between two drives isn't tried again in that job. Benchmark: bench/fs.sh (Btrfs, XFS, SMB in a privileged container), results in docs/performance.md. The admin helper's copy (retry as administrator) still uses its own loop.
 
 - [x] **Every job as verbose as possible in the Jobs window, without slowing the job down.** Each kind of job should
   report what it's doing (the current item, counts and sizes so far, its steps, a log of what was done, skipped or

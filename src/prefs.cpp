@@ -151,6 +151,15 @@ static QList<Pref> build()
         .choices = {{TX_NOOP("By drive (jobs on different drives side by side)"), "drive"}, {TX_NOOP("One at a time"), "one"},
                     {TX_NOOP("All at once (every job starts as it's queued, even on a drive in use)"), "all"}};
     add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_start_paused", TX_NOOP("Start new jobs paused"), BOOL, false, TX_NOOP("the Jobs window (Ctrl+Shift+J)"));
+    add(TX_NOOP("Files"), TX_NOOP("Copying"), "copy_kernel",
+        TX_NOOP("Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)"),
+        BOOL, true, QString(),
+        TX_NOOP("On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same "
+        "drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the "
+        "server copies the file itself, so it doesn't cross the network twice; elsewhere the system copies it without "
+        "passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or "
+        "quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always "
+        "go through Kestrel's buffer or dd."));
     add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_save_logs", TX_NOOP("Save each finished job's log"), BOOL, false, QString(),
         TX_NOOP("Each job's log, with its steps, when it ran and how it ended, is saved as a file in "
         "~/.cache/kestrel-explorer/job-logs (a folder for each day), so it's kept after Clear Finished and after Kestrel "

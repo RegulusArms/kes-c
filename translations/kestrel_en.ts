@@ -818,6 +818,27 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
+        <translation>
+            <numerusform>%Ln file cloned (the copy shares the original&apos;s space until one of them changes)</numerusform>
+            <numerusform>%Ln files cloned (each copy shares the original&apos;s space until one of them changes)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
+        <translation>
+            <numerusform>%Ln file copied by the system (on a network share, by the server itself)</numerusform>
+            <numerusform>%Ln files copied by the system (on a network share, by the server itself)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) read and written by Kestrel</source>
+        <translation>
+            <numerusform>%Ln file read and written by Kestrel</numerusform>
+            <numerusform>%Ln files read and written by Kestrel</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>%Ln item(s) couldn&apos;t be copied because you don&apos;t have permission:
 
 %1%2</source>

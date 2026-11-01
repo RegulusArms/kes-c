@@ -237,7 +237,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1042"/>
+        <location filename="../src/fileops.cpp" line="+1058"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 / %2 — %3</translation>
@@ -1077,7 +1077,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+159"/>
+        <location line="+168"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>表示</translation>
@@ -1121,7 +1121,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-557"/>
-        <location filename="../src/prefs.cpp" line="-128"/>
+        <location filename="../src/prefs.cpp" line="-137"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
@@ -1815,7 +1815,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/archivewin.cpp" line="-176"/>
         <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+114"/>
+        <location filename="../src/prefs.cpp" line="+123"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2220,8 +2220,8 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-142"/>
-        <location line="+164"/>
+        <location filename="../src/prefs.cpp" line="-151"/>
+        <location line="+173"/>
         <source>Show hidden files</source>
         <translation>隠しファイルを表示</translation>
     </message>
@@ -2302,7 +2302,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-108"/>
+        <location filename="../src/prefs.cpp" line="-117"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2457,7 +2457,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+663"/>
+        <location filename="../src/fileops.cpp" line="+747"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -3165,7 +3165,7 @@ Kestrel のウィンドウがなくても続行できます。ジョブウィン
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source>Keep both (rename)</source>
         <translation>両方残す (名前を変更)</translation>
     </message>
@@ -4603,9 +4603,9 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-153"/>
+        <location filename="../src/prefs.cpp" line="-162"/>
         <location line="+2"/>
-        <location line="+163"/>
+        <location line="+172"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4708,7 +4708,7 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-86"/>
+        <location filename="../src/prefs.cpp" line="-95"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -6044,7 +6044,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6475,7 +6475,7 @@ This can&apos;t be undone.</source>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1540"/>
+        <location filename="../src/fileops.cpp" line="-1637"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln 行を省略 …</numerusform>
@@ -6585,7 +6585,7 @@ This can&apos;t be undone.</source>
         <translation>削除 %1</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+24"/>
         <source>Counting…</source>
         <translation>数えています…</translation>
     </message>
@@ -6616,14 +6616,14 @@ This can&apos;t be undone.</source>
         <translation>  キャンセル</translation>
     </message>
     <message>
-        <location line="-801"/>
-        <location line="+842"/>
+        <location line="-803"/>
+        <location line="+854"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/秒</translation>
     </message>
     <message>
-        <location line="-834"/>
+        <location line="-846"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6652,8 +6652,29 @@ This can&apos;t be undone.</source>
         <source>Finished in %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <location line="+767"/>
+        <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) read and written by Kestrel</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+796"/>
+        <location line="+37"/>
         <source>waiting for the buffer</source>
         <translation>バッファーを待機中</translation>
     </message>
@@ -6663,7 +6684,7 @@ This can&apos;t be undone.</source>
         <translation>  %1  テープ %2 · 読み込み元 %3 · バッファー %4 / %5 (%6%) · %8 中 %7 書き込み済み</translation>
     </message>
     <message>
-        <location line="+67"/>
+        <location line="+66"/>
         <source>While this job runs, GNOME&apos;s low-disk-space check skips this tape: it asks the drive for its free space once a minute, and each time the tape stops streaming.</source>
         <translation>このジョブの実行中は、GNOME のディスク容量不足チェックがこのテープを対象外にします: このチェックは 1 分ごとにドライブに空き容量を問い合わせ、そのたびにテープのストリーミングが止まるためです。</translation>
     </message>
@@ -6729,7 +6750,7 @@ This can&apos;t be undone.</source>
         <translation>テープに「%1」を書き込む容量が足りません: %2 必要ですが、残りは %3 です</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location line="+54"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>読み込み元の速度は %1/秒で、テープの最低ストリーミング速度より遅いため、テープはバッファーから断続的に書き込み、その間は停止します。より速いドライブからコピーするか、先に高速なディスク上でアーカイブを作ると、ストリーミングを維持できます。</translation>
     </message>
@@ -6739,7 +6760,7 @@ This can&apos;t be undone.</source>
         <translation>  「%2」のうち %1 はすでにテープに書き込まれていました: LTFS はテープを再フォーマットするまでその領域を使用済みのままにします。</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+83"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>処理中に「%1」が %2 に現れました。そのまま残し、代わりのものは置いていません</translation>
     </message>
@@ -6910,7 +6931,7 @@ This can&apos;t be undone.</source>
 %1</translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+15"/>
         <source>The folder it was moving into, “%1”, isn&apos;t there any more: it was moved or deleted while this job waited. Nothing was moved.</source>
         <translation>移動先のフォルダー「%1」がもうありません: このジョブの待機中に移動または削除されました。何も移動していません。</translation>
     </message>
@@ -6930,7 +6951,7 @@ This can&apos;t be undone.</source>
         <translation>コピー先のフォルダー「%1」がもうありません: このジョブの開始前に移動または削除されました。何もコピーしていません。</translation>
     </message>
     <message numerus="yes">
-        <location line="+7"/>
+        <location line="+8"/>
         <source>%Ln item(s) failed.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -7416,7 +7437,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-18"/>
+        <location filename="../src/prefs.cpp" line="-27"/>
         <source>Algorithms</source>
         <translation>アルゴリズム</translation>
     </message>
@@ -7982,7 +8003,7 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>順番待ち (ドライブが使用中)…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-801"/>
+        <location filename="../src/fileops.cpp" line="-803"/>
         <source>Waiting</source>
         <translation>待機中</translation>
     </message>
@@ -8023,7 +8044,7 @@ replaced. A merge can&apos;t be undone.</source>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
-        <location line="+1"/>
+        <location line="+10"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>ジョブ</translation>
@@ -8055,7 +8076,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-1"/>
+        <location filename="../src/prefs.cpp" line="-10"/>
         <source>Start new jobs paused</source>
         <translation>新しいジョブを一時停止状態で開始</translation>
     </message>
@@ -8902,7 +8923,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+38"/>
+        <location filename="../src/prefs.cpp" line="+47"/>
         <source>Format</source>
         <translation>形式</translation>
     </message>
@@ -9651,7 +9672,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-101"/>
+        <location filename="../src/prefs.cpp" line="-110"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -9783,6 +9804,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+3"/>
         <location line="+3"/>
         <location line="+1"/>
+        <location line="+9"/>
         <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10349,7 +10371,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>最近使ったファイルはありません</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-214"/>
+        <location filename="../src/prefs.cpp" line="-223"/>
         <source>Grid</source>
         <translation>グリッド</translation>
     </message>
@@ -10449,47 +10471,47 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+166"/>
+        <location line="+175"/>
         <source>Icon size in the grid</source>
         <translation>グリッドのアイコンサイズ</translation>
     </message>
     <message>
-        <location line="-166"/>
+        <location line="-175"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>ズームスライダー、Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+165"/>
+        <location line="+174"/>
         <source>Icon size in the list</source>
         <translation>リストのアイコンサイズ</translation>
     </message>
     <message>
-        <location line="-163"/>
+        <location line="-172"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → 表示 → 隠しファイルを表示 (Ctrl+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+164"/>
+        <location line="+173"/>
         <source>Show the sidebar</source>
         <translation>サイドバーを表示</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → 表示 → サイドバー (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+109"/>
+        <location line="+118"/>
         <source>Show the info panel</source>
         <translation>情報パネルを表示</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → 表示 → 情報パネル (F3)</translation>
     </message>
@@ -10966,6 +10988,21 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
+        <source>Copying</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the server copies the file itself, so it doesn&apos;t cross the network twice; elsewhere the system copies it without passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always go through Kestrel&apos;s buffer or dd.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>Save each finished job&apos;s log</source>
         <translation type="unfinished"></translation>
     </message>

@@ -242,7 +242,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1042"/>
+        <location filename="../src/fileops.cpp" line="+1058"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 di %2 — %3</translation>
@@ -1110,7 +1110,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+159"/>
+        <location line="+168"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>Visualizza</translation>
@@ -1154,7 +1154,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="-557"/>
-        <location filename="../src/prefs.cpp" line="-128"/>
+        <location filename="../src/prefs.cpp" line="-137"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
@@ -1853,7 +1853,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location filename="../src/archivewin.cpp" line="-176"/>
         <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+114"/>
+        <location filename="../src/prefs.cpp" line="+123"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2259,8 +2259,8 @@ Verranno rigenerate durante la navigazione.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-142"/>
-        <location line="+164"/>
+        <location filename="../src/prefs.cpp" line="-151"/>
+        <location line="+173"/>
         <source>Show hidden files</source>
         <translation>Mostra file nascosti</translation>
     </message>
@@ -2341,7 +2341,7 @@ Verranno rigenerate durante la navigazione.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-108"/>
+        <location filename="../src/prefs.cpp" line="-117"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2496,7 +2496,7 @@ Verranno rigenerate durante la navigazione.</translation>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+663"/>
+        <location filename="../src/fileops.cpp" line="+747"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -3206,7 +3206,7 @@ Possono proseguire senza alcuna finestra di Kestrel: la finestra Operazioni le m
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source>Keep both (rename)</source>
         <translation>Mantieni entrambi (rinomina)</translation>
     </message>
@@ -4689,9 +4689,9 @@ Eliminarli e sincronizzare?</numerusform>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-153"/>
+        <location filename="../src/prefs.cpp" line="-162"/>
         <location line="+2"/>
-        <location line="+163"/>
+        <location line="+172"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4797,7 +4797,7 @@ Eliminarli e sincronizzare?</numerusform>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-86"/>
+        <location filename="../src/prefs.cpp" line="-95"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -6156,7 +6156,7 @@ Effettivo: %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+101"/>
+        <location filename="../src/prefs.cpp" line="+110"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6606,7 +6606,7 @@ L&apos;operazione non può essere annullata.</numerusform>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1540"/>
+        <location filename="../src/fileops.cpp" line="-1637"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln riga non mantenuta …</numerusform>
@@ -6719,7 +6719,7 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>Elimina %1</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+24"/>
         <source>Counting…</source>
         <translation>Conteggio…</translation>
     </message>
@@ -6750,14 +6750,14 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>  annullato</translation>
     </message>
     <message>
-        <location line="-801"/>
-        <location line="+842"/>
+        <location line="-803"/>
+        <location line="+854"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-834"/>
+        <location line="-846"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6786,8 +6786,32 @@ L&apos;operazione non può essere annullata.</numerusform>
         <source>Finished in %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <location line="+767"/>
+        <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) read and written by Kestrel</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+796"/>
+        <location line="+37"/>
         <source>waiting for the buffer</source>
         <translation>in attesa del buffer</translation>
     </message>
@@ -6797,7 +6821,7 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>  %1  nastro %2 · origine %3 · buffer %4 di %5 (%6%) · %7 di %8 scritti</translation>
     </message>
     <message>
-        <location line="+67"/>
+        <location line="+66"/>
         <source>While this job runs, GNOME&apos;s low-disk-space check skips this tape: it asks the drive for its free space once a minute, and each time the tape stops streaming.</source>
         <translation>Mentre questa operazione è in corso, il controllo di GNOME sullo spazio su disco esaurito salta questo nastro: chiede all&apos;unità lo spazio libero una volta al minuto, e ogni volta il nastro smette di scorrere in continuo.</translation>
     </message>
@@ -6863,7 +6887,7 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>Spazio insufficiente sul nastro per “%1”: servono %2, il nastro ha ancora %3</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location line="+54"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>L&apos;origine legge a %1/s, più lentamente della velocità minima di scorrimento del nastro: il nastro scrive a raffiche dal buffer, fermandosi in mezzo. Copiare da un&apos;unità più veloce, o creare prima un archivio su un disco veloce, lo farebbe scorrere in continuo.</translation>
     </message>
@@ -6873,7 +6897,7 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>  %1 di “%2” erano già stati scritti sul nastro: LTFS mantiene occupato quello spazio finché il nastro non viene riformattato.</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+83"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>“%1” è comparso in %2 durante l&apos;operazione; è stato lasciato com&apos;è e non è stato messo nulla al suo posto</translation>
     </message>
@@ -7067,7 +7091,7 @@ L&apos;operazione non può essere annullata.</numerusform>
 %1</translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+15"/>
         <source>The folder it was moving into, “%1”, isn&apos;t there any more: it was moved or deleted while this job waited. Nothing was moved.</source>
         <translation>La cartella di destinazione, “%1”, non c&apos;è più: è stata spostata o eliminata mentre questa operazione attendeva. Non è stato spostato nulla.</translation>
     </message>
@@ -7087,7 +7111,7 @@ L&apos;operazione non può essere annullata.</numerusform>
         <translation>La cartella di destinazione, “%1”, non c&apos;è più: è stata spostata o eliminata prima che questa operazione iniziasse. Non è stato copiato nulla.</translation>
     </message>
     <message numerus="yes">
-        <location line="+7"/>
+        <location line="+8"/>
         <source>%Ln item(s) failed.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -7591,7 +7615,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-18"/>
+        <location filename="../src/prefs.cpp" line="-27"/>
         <source>Algorithms</source>
         <translation>Algoritmi</translation>
     </message>
@@ -8165,7 +8189,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
         <translation>In attesa del suo turno (l&apos;unità è in uso)…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-801"/>
+        <location filename="../src/fileops.cpp" line="-803"/>
         <source>Waiting</source>
         <translation>In attesa</translation>
     </message>
@@ -8206,7 +8230,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
-        <location line="+1"/>
+        <location line="+10"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>Operazioni</translation>
@@ -8238,7 +8262,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-1"/>
+        <location filename="../src/prefs.cpp" line="-10"/>
         <source>Start new jobs paused</source>
         <translation>Avvia le nuove operazioni in pausa</translation>
     </message>
@@ -9087,7 +9111,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+38"/>
+        <location filename="../src/prefs.cpp" line="+47"/>
         <source>Format</source>
         <translation>Formato</translation>
     </message>
@@ -9836,7 +9860,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-101"/>
+        <location filename="../src/prefs.cpp" line="-110"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -9968,6 +9992,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <location line="+3"/>
         <location line="+3"/>
         <location line="+1"/>
+        <location line="+9"/>
         <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10535,7 +10560,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Nessun file recente</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-214"/>
+        <location filename="../src/prefs.cpp" line="-223"/>
         <source>Grid</source>
         <translation>Griglia</translation>
     </message>
@@ -10635,47 +10660,47 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+2"/>
-        <location line="+166"/>
+        <location line="+175"/>
         <source>Icon size in the grid</source>
         <translation>Dimensione icone nella griglia</translation>
     </message>
     <message>
-        <location line="-166"/>
+        <location line="-175"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>il cursore dello zoom, Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+165"/>
+        <location line="+174"/>
         <source>Icon size in the list</source>
         <translation>Dimensione icone nell&apos;elenco</translation>
     </message>
     <message>
-        <location line="-163"/>
+        <location line="-172"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → Visualizza → Mostra file nascosti (Ctrl+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+164"/>
+        <location line="+173"/>
         <source>Show the sidebar</source>
         <translation>Mostra la barra laterale</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → Visualizza → Barra laterale (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+109"/>
+        <location line="+118"/>
         <source>Show the info panel</source>
         <translation>Mostra il pannello informazioni</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-173"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → Visualizza → Pannello informazioni (F3)</translation>
     </message>
@@ -11152,6 +11177,21 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+2"/>
+        <source>Copying</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the server copies the file itself, so it doesn&apos;t cross the network twice; elsewhere the system copies it without passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always go through Kestrel&apos;s buffer or dd.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>Save each finished job&apos;s log</source>
         <translation type="unfinished"></translation>
     </message>

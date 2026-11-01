@@ -21,6 +21,13 @@ What changed in each version of Kestrel Explorer, newest first.
   item a job is on, and copies, checksums and duplicate searches show their speed. A job whose log has been quiet
   for 15 seconds gets a line with the time and how far it is, and every log now ends with how the job ended and how
   long it took. Progress texts are made only when they're shown, so copies are no slower for it.
+- **Copies let the system do the work** (Preferences → Files → Copying, on by default). On a drive that can share
+  data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later) a copy on the same drive is now a clone: instant,
+  taking no extra space until one of them changes. On an SMB3 or NFS 4.2 share the server copies the file itself,
+  so it no longer crosses the network twice; elsewhere the kernel copies it without passing it through Kestrel.
+  Where neither works, and always onto tapes and for files under 64 KB (except on Btrfs), Kestrel reads and writes
+  the file itself as before (also with the setting off). Copies stay failure-atomic (written under a hidden name, renamed into place when whole), with
+  progress, pause and cancel; the job's log says how many files were cloned, copied by the system or by Kestrel.
 - **Job logs can be kept** (Preferences → Files → Jobs → Save each finished job's log, off by default): each
   finished job's log is saved in `~/.cache/kestrel-explorer/job-logs`, a folder for each day and a file for each
   job, so it outlives Clear Finished and quitting Kestrel. Logs older than 90 days are deleted, and the oldest days

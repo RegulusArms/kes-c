@@ -27,6 +27,13 @@ Added:
 - `installer`: the BleachBit cleaner's new Job logs option: the dry run lists the saved logs, the Cache option alone
   keeps them and the Job logs option alone deletes only them, and a clean leaves their empty folder.
 
+- `fileops`: how a file is copied (the new Preferences → Files → Copying): Kestrel's own loop (setting off), the
+  kernel's copy_file_range and a clone each copy a file whole and say so in the job's log, and each failing part-way
+  (a file size limit; a read error after the first piece or once a clone is in; a cancel between pieces) keeps the
+  file it would have replaced and leaves no part file. The clone checks run only where the test's drive can clone
+  (Btrfs, XFS, ZFS 2.2+), and are skipped on CI's ext4 and overlayfs. New test hooks in the copy:
+  `KESTREL_TEST_NO_CLONE`, `KESTREL_TEST_COPY_FAIL_AT`.
+
 Changed:
 - `jobs`: a finished copy's log is checked to end with how long it took ("Finished in 2 s", which every job's log now
   ends with) instead of the copy's own "Finished.".

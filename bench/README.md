@@ -25,6 +25,15 @@ bench/kubuntu.sh --report              # rebuild bench/results-kubuntu.md from t
 
 This runs the same benchmark in a Docker container of Kubuntu 26.04: Ubuntu 26.04's image with the parts of Kubuntu's desktop Dolphin uses (KIO and its thumbnailers for images, videos and PDFs, `ktrash6`, Plasma's Qt integration and Breeze), built from `bench/kubuntu/Dockerfile` as `kes-bench-kubuntu`. It needs only Docker on the machine. The desktop is set to KDE's (`XDG_CURRENT_DESKTOP=KDE`, `KDE_FULL_SESSION`), so both apps load Plasma's integration as on Kubuntu. The source is copied into the container without its build folders, and Kestrel is built there. The data and the throwaway homes are on a RAM disk in the container (`/tmp`), and the move between drives goes to its `/dev/shm`, so the data is made again each run (about a minute and a half). It measures Kestrel and Dolphin unless `--apps` names others. The results are copied out to `bench/results-kubuntu.json` and `bench/results-kubuntu.md`, whose section is "Kestrel vs Dolphin on Kubuntu", beside the Dolphin section of a run on Ubuntu. Each run leaves a stopped container named `kes-bench-kubuntu-<time>`.
 
+## Copying on Btrfs, XFS and SMB
+
+```bash
+bench/fs.sh                 # build the image the first time, run the three copy tests, write bench/results-fs.md
+bench/fs.sh --runs 5        # takes run.sh's options (--only, --apps, --report…)
+```
+
+Kestrel lets the system copy files (Preferences → Files → Copying): a clone where the drive can share data between files, the server's own copy on a network share. These copies are measured in a privileged Docker container, built from `bench/fs/Dockerfile` as `kes-bench-fs` (Ubuntu 26.04 with GNOME Files, the Btrfs and XFS tools, Samba and the kernel SMB client's mount helper). In its RAM disk it makes a 4 GB Btrfs and a 4 GB XFS file system on loop images, and a Samba share mounted with the kernel's SMB client (SMB 3.1.1, to the same machine); all of it goes with the container. It then runs `run.sh` with `KESTREL_BENCH_BTRFS`, `KESTREL_BENCH_XFS` and `KESTREL_BENCH_SMB` naming them, which turns on three tests (`copy_btrfs`, `copy_xfs`, `copy_smb`): the copy test's 20,000 small files and 250 MB copied within the one folder, source and copy both there, then its 5 × 50 MB alone (the sources are put there once, not timed). Kestrel is timed with the setting off (its own read/write loop, as before the setting) and on; GNOME Files through its D-Bus service, as in the copy test. An app driven through its window (Dolphin, PCManFM, Krusader) isn't timed there. The three tests run in any `run.sh` given those variables (a folder on a Btrfs, XFS or ZFS drive, or a mounted SMB or NFS share), and are skipped otherwise. The results go to `bench/results-fs.json` and `bench/results-fs.md`, whose table is the "Copying with the system's help" part of docs/performance.md.
+
 ## Requirements
 
 - `xvfb` and `xdotool` (`sudo apt install xvfb xdotool`);
@@ -106,6 +115,7 @@ Each one prints its time and peak memory. GNOME Files has no equivalent of these
 |---|---|
 | `run.sh` | Entry point |
 | `kubuntu.sh`, `kubuntu/Dockerfile` | The run on Kubuntu, in a container |
+| `fs.sh`, `fs/Dockerfile` | The copies on Btrfs, XFS and SMB, in a privileged container |
 | `bench.py` | Builds what's needed, runs every measurement in the sandbox, prints the tables, writes `results.md` |
 | `make_data.py` | Generates the test data |
 | `kestrel_cpp.cpp`, `CMakeLists.txt` | In-process measurements (built from `src/` into `bench/build/`) |

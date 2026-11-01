@@ -120,6 +120,39 @@ These are measured inside the app, because GNOME Files has no equivalent ("Gener
 | Read EXIF / image-generation prompts for 400 images | 0.040 s |
 | Peak memory (background jobs) | 41–47 MB |
 
+## Copying on Btrfs, XFS and SMB
+
+Kestrel lets the system copy files (Preferences → Files → Copying, on by default): a clone where the drive can share
+data between files, the server's own copy on a network share, and otherwise the kernel's in-kernel copy, for files of
+64 KB and more (and every file on Btrfs). GNOME Files (GLib) does the same. Measured with `bench/fs.sh` in a privileged
+container on the same machine (Ubuntu 26.04's image, GNOME Files 50): a 4 GB Btrfs and a 4 GB XFS file system on loop
+images in a RAM disk, and a Samba share on the same machine mounted with the kernel's SMB client (SMB 3.1.1). The copy
+test's files were copied within one folder there, source and copy both on it; then its 5 × 50 MB alone. Kestrel is
+timed with the setting off (it reads and writes every byte itself, as before the setting) and on. Medians of 3 runs.
+
+| Copy 20,000 small files + 5 × 50 MB | Kestrel, its own copy (before) | Kestrel, the system's copy (now) | GNOME Files |
+|---|---|---|---|
+| Within one Btrfs drive (a clone) | 2.34 s | 1.80 s | 2.69 s |
+| Within one XFS drive (a clone) | 1.61 s | 1.60 s | 3.45 s |
+| Within one SMB share (the server copies it) | 62.69 s | 61.58 s | 108.34 s |
+| …its 5 × 50 MB alone, within one Btrfs drive (a clone) | 0.34 s | 0.006 s | 0.22 s |
+| …its 5 × 50 MB alone, within one XFS drive (a clone) | 0.086 s | 0.046 s | 0.26 s |
+| …its 5 × 50 MB alone, within one SMB share (the server copies it) | 0.45 s | 0.24 s | 0.38 s |
+
+**What it shows:**
+- **Big files:** a clone on Btrfs is instant (the 250 MB in 6 ms, taking no extra space) and halves the time on XFS;
+  on the SMB share the server's own copy halves it too, and that's with the server on the same machine: over a real
+  network the data no longer crosses it twice, so the gain is larger.
+- **Small files:** the 20,000 files of 1–4 KB are under 64 KB, so Kestrel reads and writes them itself either way
+  (except on Btrfs, which clones even small files faster: most of its 0.5 s gain). Cloning a 4–32 KB file on XFS
+  is about 30% slower than one read and one write, and on SMB a small file costs the same either way; measured file
+  by file (4 KB to 50 MB) before choosing 64 KB. On the SMB share each small file is a few trips to the server, which
+  is most of the minute; the difference between the two Kestrel columns there is within the spread of its runs.
+- **Limits:** loop images in a RAM disk and a share on the same machine, so no disk or network speed counts. The
+  Btrfs and XFS rows were measured before a last change (the destination's drive found once per item copied instead
+  of once per file: a stat of each new file, which costs nothing measurable locally but a trip to the server on a
+  share); the SMB rows after it.
+
 ## Performance: Kestrel vs Nemo
 
 Kestrel Explorer is compared here with Nemo, the file manager it replaces.
