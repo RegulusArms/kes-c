@@ -2,8 +2,11 @@
 // with ripgrep or grep: matching lines, case, regular expressions), and opening a result at its matching line.
 #include "common.h"
 
+#include "dialogs.h"
 #include "drives.h"
+#include "undo.h"
 
+#include <QLabel>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -304,6 +307,43 @@ int main(int argc, char **argv)
     bool at_line = wait_for([&]() { return read_file(args) == "+2\n" + join(s, "notes.txt").toUtf8() + "\n"; }, 5000);
     check(at_line,
           "a result opens at its matching line in an editor that takes one (" + QString::fromUtf8(read_file(args)).trimmed() + ")");
+
+    // ---- the results follow their files: one trashed goes (and the count with it), Undo brings it back, a rename
+    // renames it, one deleted by another program goes too
+    {
+        QString f = home_path("follow");
+        makedirs(join(f, "sub"), true);
+        for (const QString &n : {"a.txt", "b.txt", "c.txt", "sub/d.txt"})
+            write_text(join(f, n), "x");
+        p->set_search_filter(SearchFilter());
+        p->set_search_options(true, false);
+        p->set_path(f);
+        QStringList all = search(p, f, "txt");
+        auto shows = [&](const QStringList &want) {
+            return wait_for([&]() { return results(p, f) == want; }, 5000);
+        };
+        w->trash_paths({join(f, "a.txt")});
+        bool gone = shows({"b.txt", "c.txt", "sub/d.txt"});
+        w->update_status();
+        QString count;
+        for (QLabel *l : w->statusBar()->findChildren<QLabel *>())
+            if (l->text().endsWith(" items") || l->text().endsWith(" item"))
+                count = l->text();
+        check(all == QStringList({"a.txt", "b.txt", "c.txt", "sub/d.txt"}) && gone && count == "3 items",
+              "a result moved to the trash leaves the results, and the count says so (" + results(p, f).join(", ") +
+                  " | " + count + ")");
+        undo::undo(w);
+        check(shows({"a.txt", "b.txt", "c.txt", "sub/d.txt"}),
+              "...Undo puts it back in the results (" + results(p, f).join(", ") + ")");
+        if (dialogs::do_rename(join(f, "b.txt"), "bee.txt").error.isEmpty())   // (as Rename does it)
+            undo::record("rename", "Rename", {qMakePair(join(f, "b.txt"), join(f, "bee.txt"))});
+        check(shows({"a.txt", "bee.txt", "c.txt", "sub/d.txt"}),
+              "a result renamed is renamed in the results (" + results(p, f).join(", ") + ")");
+        ::unlink(enc(join(f, "sub/d.txt")).constData());
+        check(shows({"a.txt", "bee.txt", "c.txt"}),
+              "a result deleted by another program leaves the results (" + results(p, f).join(", ") + ")");
+        p->set_path(s);
+    }
 
     finish();
 }

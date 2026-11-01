@@ -6,6 +6,23 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.3
+
+Added:
+- `slow`: an ordinary drive kept busy by another program (every stat on it waiting 1.5 s) doesn't hold the window
+  when a folder there is opened or refreshed (the Info Panel open), an item's right-click menu is built, or a file's path is opened (its
+  folder shown with it selected once the drive answers); a folder there that isn't there is said to be missing once
+  it answers. Guards the freeze until GNOME's "not responding" dialog.
+- `search`: the results follow their files: a result moved to the trash leaves them and the count, Undo brings it back,
+  a rename renames it, and one deleted by another program leaves them too.
+- `jobs`: a quiet queued job (Properties' first size count) stays among the finished jobs once it ends, also when
+  Properties was closed while it waited, and is never in the status bar. Such jobs used to vanish from the Jobs window.
+
+Changed:
+- `i18n`: the untranslated-text check reads every row of a tree, also those inside others, and every menu kind in
+  Preferences → Menus, not just the first 50 top-level rows of the first one. It missed View Image's "for images" and
+  "Rotate 180°" (inside the Rotate submenu, and in menus not shown first).
+
 ## 0.3.3-alpha.2
 
 Changed:

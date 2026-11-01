@@ -90,6 +90,9 @@ QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool off
 // (a quick test each), and only when none opens it is it asked for.
 void extract_here(MainWindow *win, const QString &path);
 void extract_dialog(MainWindow *win, const QString &path);
+// Double-clicking an archive: an encrypted one with a password saved for it is extracted as Extract Here does it,
+// any other gets the Extract dialog (extract_dialog)
+void open_archive(MainWindow *win, const QString &path);
 // The archives among paths, each split set (x.part1.rar … x.part3.rar) once, by its first part; in their order
 QStringList archives_of(const QStringList &paths);
 // Extract All Here / Extract All To…: each archive as Extract Here / Extract To… would, one after another in one job,

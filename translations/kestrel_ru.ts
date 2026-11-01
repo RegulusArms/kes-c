@@ -43,7 +43,7 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="+124"/>
+        <location filename="../src/app.cpp" line="+140"/>
         <location filename="../src/menus.cpp" line="+27"/>
         <source>Paste Into Folder</source>
         <translation>Вставить в папку</translation>
@@ -85,8 +85,8 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="-704"/>
-        <location line="+710"/>
+        <location filename="../src/app.cpp" line="-720"/>
+        <location line="+726"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Duplicate</source>
         <translation>Дублировать</translation>
@@ -247,15 +247,15 @@
         <location line="+89"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+992"/>
+        <location filename="../src/fileops.cpp" line="+1014"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 из %2 — %3</translation>
     </message>
     <message>
         <location line="-153"/>
-        <location filename="../src/app.cpp" line="-709"/>
-        <location line="+924"/>
+        <location filename="../src/app.cpp" line="-725"/>
+        <location line="+940"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+108"/>
         <location filename="../src/opening.cpp" line="+249"/>
@@ -342,8 +342,8 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-923"/>
-        <location line="+629"/>
+        <location filename="../src/app.cpp" line="-939"/>
+        <location line="+645"/>
         <source>Delete Permanently</source>
         <translation>Удалить навсегда</translation>
     </message>
@@ -502,25 +502,25 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+5"/>
-        <location line="+59"/>
-        <location filename="../src/app.cpp" line="-18"/>
+        <location line="+69"/>
+        <location filename="../src/app.cpp" line="-34"/>
         <location filename="../src/menus.cpp" line="-98"/>
-        <location filename="../src/widgets.cpp" line="+1708"/>
+        <location filename="../src/widgets.cpp" line="+1800"/>
         <source>Empty Trash</source>
         <translation>Очистить корзину</translation>
     </message>
     <message>
-        <location line="-59"/>
+        <location line="-69"/>
         <source>Permanently delete all items in the trash?</source>
         <translation>Удалить навсегда все объекты в корзине?</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+15"/>
         <source>Emptying trash</source>
         <translation>Очистка корзины</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+12"/>
         <source>BleachBit overwrites them and then deletes them, so they can&apos;t be recovered, not even from the trash. On SSDs and some file systems, overwriting can&apos;t guarantee that every old copy of the data is gone.</source>
         <translation>BleachBit перезаписывает их, а затем удаляет, поэтому их нельзя восстановить, даже из корзины. На SSD и некоторых файловых системах перезапись не гарантирует, что все старые копии данных исчезли.</translation>
     </message>
@@ -577,7 +577,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message numerus="yes">
         <location line="+18"/>
-        <location filename="../src/archive_ui.cpp" line="+833"/>
+        <location filename="../src/archive_ui.cpp" line="+835"/>
         <location filename="../src/jobswin.cpp" line="+546"/>
         <source>… and %Ln more</source>
         <translation>
@@ -720,7 +720,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/archivewin.cpp" line="+335"/>
         <location filename="../src/dupes.cpp" line="+353"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1326"/>
+        <location filename="../src/widgets.cpp" line="-1418"/>
         <source>Name</source>
         <translation>Имя</translation>
     </message>
@@ -729,11 +729,11 @@ sudo apt install pkexec</translation>
         <location filename="../src/archivewin.cpp" line="+0"/>
         <location filename="../src/compare.cpp" line="+786"/>
         <location filename="../src/dupes.cpp" line="+0"/>
-        <location filename="../src/pane.cpp" line="+812"/>
+        <location filename="../src/pane.cpp" line="+887"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1772"/>
+        <location line="+1864"/>
         <location line="+39"/>
         <source>Size</source>
         <translation>Размер</translation>
@@ -755,8 +755,8 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1812"/>
-        <location line="+1775"/>
+        <location filename="../src/widgets.cpp" line="-1904"/>
+        <location line="+1867"/>
         <location line="+39"/>
         <source>Modified</source>
         <translation>Изменён</translation>
@@ -936,7 +936,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+37"/>
         <location filename="../src/hashcheck.cpp" line="+305"/>
-        <location filename="../src/widgets.cpp" line="-2131"/>
+        <location filename="../src/widgets.cpp" line="-2223"/>
         <source>File</source>
         <translation>Файл</translation>
     </message>
@@ -996,22 +996,22 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1295"/>
+        <location line="+1311"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>Отменить</translation>
     </message>
     <message>
-        <location line="-1291"/>
-        <location line="+710"/>
+        <location line="-1307"/>
+        <location line="+726"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
         <translation>Вырезать</translation>
     </message>
     <message>
-        <location line="-709"/>
-        <location line="+710"/>
+        <location line="-725"/>
+        <location line="+726"/>
         <location filename="../src/compare.cpp" line="-154"/>
         <location line="+281"/>
         <location filename="../src/dialogs.cpp" line="-1101"/>
@@ -1019,12 +1019,12 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+2154"/>
+        <location filename="../src/widgets.cpp" line="+2246"/>
         <source>Copy</source>
         <translation>Копировать</translation>
     </message>
     <message>
-        <location line="-708"/>
+        <location line="-724"/>
         <location line="+588"/>
         <location filename="../src/menus.cpp" line="-24"/>
         <source>Paste as Link</source>
@@ -1045,13 +1045,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+714"/>
+        <location line="+730"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Rename…</source>
         <translation>Переименовать…</translation>
     </message>
     <message>
-        <location line="-710"/>
+        <location line="-726"/>
         <location filename="../src/menus.cpp" line="-36"/>
         <location filename="../src/viewer.cpp" line="+1413"/>
         <source>Copy Path</source>
@@ -1060,7 +1060,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+9"/>
         <location line="+608"/>
-        <location line="+16"/>
+        <location line="+32"/>
         <location line="+307"/>
         <location line="+237"/>
         <location filename="../src/menus.cpp" line="+2"/>
@@ -1071,7 +1071,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>Свойства</translation>
     </message>
     <message>
-        <location line="-1159"/>
+        <location line="-1175"/>
         <location filename="../src/menus.cpp" line="-180"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1137,13 +1137,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1153"/>
+        <location line="+1169"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>Во весь экран</translation>
     </message>
     <message>
-        <location line="-1145"/>
+        <location line="-1161"/>
         <source>Reload</source>
         <translation>Обновить</translation>
     </message>
@@ -1181,7 +1181,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+1"/>
         <location filename="../src/dupes.cpp" line="-27"/>
-        <location filename="../src/pane.cpp" line="-431"/>
+        <location filename="../src/pane.cpp" line="-500"/>
         <location filename="../src/prefs.cpp" line="+49"/>
         <location line="+1"/>
         <source>Search</source>
@@ -1234,12 +1234,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1136"/>
+        <location line="+1152"/>
         <source>Keyboard Shortcuts</source>
         <translation>Комбинации клавиш</translation>
     </message>
     <message>
-        <location line="-1135"/>
+        <location line="-1151"/>
         <source>About</source>
         <translation>О программе</translation>
     </message>
@@ -1260,13 +1260,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+498"/>
+        <location line="+514"/>
         <location filename="../src/menus.cpp" line="+38"/>
         <source>Open in New Window</source>
         <translation>Открыть в новом окне</translation>
     </message>
     <message>
-        <location line="-462"/>
+        <location line="-478"/>
         <source>%1 free</source>
         <translation>Свободно: %1</translation>
     </message>
@@ -1569,7 +1569,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+20"/>
-        <location line="+315"/>
+        <location line="+331"/>
         <location filename="../src/menus.cpp" line="+37"/>
         <location line="+98"/>
         <location filename="../src/overview.cpp" line="-11"/>
@@ -1578,7 +1578,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>Открыть в терминале</translation>
     </message>
     <message>
-        <location line="-313"/>
+        <location line="-329"/>
         <location filename="../src/menus.cpp" line="-98"/>
         <source>Bookmark This Folder</source>
         <translation>Добавить эту папку в закладки</translation>
@@ -1591,7 +1591,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>Очистить корзину с помощью BleachBit…</translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+35"/>
         <location line="+295"/>
         <location filename="../src/menus.cpp" line="+98"/>
         <source>Shred with BleachBit…</source>
@@ -1955,6 +1955,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
+        <location filename="../src/menus.cpp" line="+0"/>
         <source>Rotate 180°</source>
         <translation>Повернуть на 180°</translation>
     </message>
@@ -2498,13 +2499,13 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+48"/>
-        <location filename="../src/undo.cpp" line="+137"/>
+        <location filename="../src/undo.cpp" line="+144"/>
         <source>Undo %1</source>
         <translation>Отменить: %1</translation>
     </message>
     <message>
         <location filename="../src/archive.cpp" line="+95"/>
-        <location filename="../src/archive_ui.cpp" line="-859"/>
+        <location filename="../src/archive_ui.cpp" line="-861"/>
         <source>Store</source>
         <translation>Без сжатия</translation>
     </message>
@@ -2657,7 +2658,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="-836"/>
-        <location filename="../src/archive_ui.cpp" line="+1001"/>
+        <location filename="../src/archive_ui.cpp" line="+1021"/>
         <source>Compressing %1</source>
         <translation>Сжатие %1</translation>
     </message>
@@ -2699,7 +2700,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+200"/>
-        <location filename="../src/archive_ui.cpp" line="-634"/>
+        <location filename="../src/archive_ui.cpp" line="-652"/>
         <location line="+2"/>
         <location line="+7"/>
         <location line="+248"/>
@@ -2747,7 +2748,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <translation>%1 сообщил о проблеме (код выхода %2)</translation>
     </message>
     <message>
-        <location filename="../src/archive_ui.cpp" line="-1312"/>
+        <location filename="../src/archive_ui.cpp" line="-1314"/>
         <source>%1 only accepts the password on its command line, so other users on this computer could see it in the process list while the job runs.</source>
         <translation>%1 принимает пароль только в командной строке, поэтому другие пользователи этого компьютера могут увидеть его в списке процессов, пока выполняется задание.</translation>
     </message>
@@ -2795,14 +2796,14 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+17"/>
         <location line="+4"/>
         <location line="+36"/>
-        <location line="+26"/>
+        <location line="+28"/>
         <location line="+296"/>
         <location filename="../src/convert.cpp" line="+640"/>
         <source>Extract</source>
         <translation>Извлечь</translation>
     </message>
     <message>
-        <location line="-947"/>
+        <location line="-949"/>
         <location line="+163"/>
         <location line="+255"/>
         <location line="+4"/>
@@ -2816,12 +2817,12 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="-436"/>
-        <location line="+1334"/>
+        <location line="+1354"/>
         <source>Archive</source>
         <translation>Архив</translation>
     </message>
     <message>
-        <location line="-1328"/>
+        <location line="-1348"/>
         <source>Archive name:</source>
         <translation>Имя архива:</translation>
     </message>
@@ -2943,7 +2944,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message numerus="yes">
         <location line="+7"/>
-        <location filename="../src/util.cpp" line="+835"/>
+        <location filename="../src/util.cpp" line="+918"/>
         <source>%Ln byte(s)</source>
         <translation>
             <numerusform>%Ln байт</numerusform>
@@ -2958,7 +2959,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/pane.cpp" line="+443"/>
+        <location filename="../src/pane.cpp" line="+512"/>
         <source>KB</source>
         <translation>КБ</translation>
     </message>
@@ -3120,12 +3121,12 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     <message>
         <location line="+43"/>
         <location line="+73"/>
-        <location line="+451"/>
+        <location line="+453"/>
         <source>Extract All</source>
         <translation>Извлечь все</translation>
     </message>
     <message>
-        <location line="-516"/>
+        <location line="-518"/>
         <source>%1 archives</source>
         <translation>Архивов: %1</translation>
     </message>
@@ -3259,7 +3260,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+41"/>
-        <location line="+321"/>
+        <location line="+323"/>
         <source>Kestrel needs another program to open “%1”.
 
 Install it with:  sudo apt install %2</source>
@@ -3268,8 +3269,8 @@ Install it with:  sudo apt install %2</source>
 Установите её командой:  sudo apt install %2</translation>
     </message>
     <message>
-        <location line="-307"/>
-        <location line="+224"/>
+        <location line="-308"/>
+        <location line="+225"/>
         <location line="+245"/>
         <source>Opening %1</source>
         <translation>Открытие %1</translation>
@@ -3516,7 +3517,7 @@ Install it with:  sudo apt install %2</source>
         </translation>
     </message>
     <message>
-        <location line="+65"/>
+        <location line="+83"/>
         <source>Measuring…</source>
         <translation>Измерение…</translation>
     </message>
@@ -3817,7 +3818,7 @@ Install it with:  sudo apt install </source>
         <location line="+19"/>
         <location filename="../src/dupes.cpp" line="-202"/>
         <location filename="../src/viewer.cpp" line="-453"/>
-        <location filename="../src/widgets.cpp" line="-955"/>
+        <location filename="../src/widgets.cpp" line="-1047"/>
         <source>Folder</source>
         <translation>Папка</translation>
     </message>
@@ -5933,7 +5934,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/pane.cpp" line="-422"/>
+        <location filename="../src/pane.cpp" line="-491"/>
         <source>Regular expression</source>
         <translation>Регулярное выражение</translation>
     </message>
@@ -6362,7 +6363,7 @@ This can&apos;t be undone.</source>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1490"/>
+        <location filename="../src/fileops.cpp" line="-1512"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… не сохранена %Ln строка …</numerusform>
@@ -6386,7 +6387,7 @@ This can&apos;t be undone.</source>
         <translation>Ошибка: %1</translation>
     </message>
     <message>
-        <location line="+400"/>
+        <location line="+416"/>
         <location line="+22"/>
         <location line="+11"/>
         <source>%1: %2</source>
@@ -6448,7 +6449,7 @@ This can&apos;t be undone.</source>
         <translation>Отменить «%1»</translation>
     </message>
     <message>
-        <location line="+142"/>
+        <location line="+148"/>
         <source>%1 changed while it was being worked on</source>
         <translation>%1 изменился во время обработки</translation>
     </message>
@@ -7062,7 +7063,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/pane.cpp" line="+416"/>
+        <location filename="../src/pane.cpp" line="+485"/>
         <source>Today</source>
         <translation>Сегодня</translation>
     </message>
@@ -8634,7 +8635,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>для видео, с UWP</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="-45"/>
+        <location line="+49"/>
         <location line="+4"/>
         <location line="+17"/>
         <source>for images</source>
@@ -8737,7 +8739,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+1647"/>
+        <location filename="../src/widgets.cpp" line="+1739"/>
         <source>Move Up</source>
         <translation>Переместить вверх</translation>
     </message>
@@ -9483,7 +9485,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1323"/>
+        <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Location</source>
         <translation>Место</translation>
     </message>
@@ -9564,7 +9566,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+4"/>
         <location line="+1"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+845"/>
+        <location filename="../src/widgets.cpp" line="+937"/>
         <source>Overview</source>
         <translation>Обзор</translation>
     </message>
@@ -9945,7 +9947,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>Убрать из мест сохранения</translation>
     </message>
     <message>
-        <location filename="../src/pane.cpp" line="-152"/>
+        <location filename="../src/pane.cpp" line="-221"/>
         <source>Search… (supports * and ? wildcards)</source>
         <translation>Поиск… (поддерживаются шаблоны * и ?)</translation>
     </message>
@@ -10007,12 +10009,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+8"/>
         <location line="+4"/>
-        <location line="+507"/>
+        <location line="+576"/>
         <source>Filters</source>
         <translation>Фильтры</translation>
     </message>
     <message>
-        <location line="-508"/>
+        <location line="-577"/>
         <source>Find by type, size and date too (also with an empty name)</source>
         <translation>Искать также по типу, размеру и дате (в том числе с пустым именем)</translation>
     </message>
@@ -10023,12 +10025,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+39"/>
-        <location line="+935"/>
+        <location line="+1094"/>
         <source>Folder is empty</source>
         <translation>Папка пуста</translation>
     </message>
     <message>
-        <location line="-827"/>
+        <location line="-917"/>
         <source>Columns</source>
         <translation>Столбцы</translation>
     </message>
@@ -10171,7 +10173,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>Фильтры •</translation>
     </message>
     <message>
-        <location line="+115"/>
+        <location line="-437"/>
         <source>Not found</source>
         <translation>Не найдено</translation>
     </message>
@@ -10181,7 +10183,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>«%1» не существует.</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+2"/>
         <source>Permission denied</source>
         <translation>Доступ запрещён</translation>
     </message>
@@ -10191,12 +10193,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>У вас нет прав на открытие «%1».</translation>
     </message>
     <message>
-        <location line="+77"/>
+        <location line="+631"/>
         <source>(unknown)</source>
         <translation>(неизвестно)</translation>
     </message>
     <message>
-        <location line="+268"/>
+        <location line="+358"/>
         <source>Trash is empty</source>
         <translation>Корзина пуста</translation>
     </message>
@@ -10222,7 +10224,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>Содержимое файлов не ищется на ленте или дискете: пришлось бы читать каждый файл</translation>
     </message>
     <message>
-        <location line="+363"/>
+        <location line="+365"/>
         <location filename="../src/widgets.cpp" line="-179"/>
         <location line="+190"/>
         <source>Trash</source>
@@ -12048,7 +12050,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>Это нельзя отменить: заменённое потеряно.</translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+25"/>
         <location line="+20"/>
         <source>Some items couldn&apos;t be put back:
 
@@ -12069,7 +12071,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
     </message>
     <message>
         <location line="+2"/>
-        <location line="+54"/>
+        <location line="+55"/>
         <source>%1: something new is already at %2</source>
         <translation>%1: в %2 уже есть что-то новое</translation>
     </message>
@@ -12616,12 +12618,12 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>Отменить	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1696"/>
+        <location filename="../src/widgets.cpp" line="-1788"/>
         <source>Match</source>
         <translation>Совпадение</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+36"/>
         <source>%1: %2</source>
         <comment>a line number and the line</comment>
         <translation>%1: %2</translation>
@@ -12632,7 +12634,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>Строка %1: %2</translation>
     </message>
     <message>
-        <location line="+601"/>
+        <location line="+680"/>
         <source>Type a location (Ctrl+L)</source>
         <translation>Ввести адрес (Ctrl+L)</translation>
     </message>

@@ -4,7 +4,25 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.2
+## 0.3.3-alpha.3
+
+- **Kestrel no longer freezes when another program keeps a drive busy.** Opening a folder on such a drive, refreshing
+  it, or right-clicking an item there could hold the window until GNOME offered to force-quit it: each of these asked
+  the drive about the folder or every item in it, and a busy drive answers each question late. The right-click menu,
+  refresh and search results now use what the folder view already knows, the Info Panel reads its item in the
+  background (as it already did on tapes), and opening a folder waits at most a moment
+  before going ahead (a file named instead of a folder, or a folder that isn't there, is dealt with when the drive
+  answers).
+- **Search results follow their files.** A result you delete, move to the trash or another program deletes leaves the
+  results (and the count) at once; Undo brings a trashed one back, and a renamed or moved one is shown under its new
+  name. They used to stay listed as if nothing had happened.
+- **Double-clicking an encrypted archive whose password is saved in the keyring extracts it**, as Extract Here does,
+  instead of opening the Extract dialog to ask for what Kestrel already knows. Other archives still open the dialog.
+- **Folder size counts stay in the Jobs window** once they finish, like every other job; the count Properties starts
+  by itself used to vanish when it ended, also when Properties had been closed meanwhile.
+- **Two right-click menu texts are translated in Preferences → Menus:** View Image's "for images" and "Rotate 180°".
+
+## 0.3.3-alpha.2 (2026-10-31)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha2).
 

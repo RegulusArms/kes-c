@@ -22,6 +22,8 @@ class Signals : public QObject {
     Q_OBJECT
 Q_SIGNALS:
     void changed();
+    // items Kestrel moved or renamed (old, new): recorded here, or put back by an undo (search results follow them)
+    void moved(const QList<QPair<QString, QString>> &items);
 };
 Signals *signals_();
 

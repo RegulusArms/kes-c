@@ -13,6 +13,7 @@
 #include "places.h"
 #include "thumbs.h"
 #include "stats.h"
+#include "undo.h"
 #include "util.h"
 #include "archivewin.h"
 #include "widgets.h"
@@ -50,6 +51,11 @@
 #include <QWheelEvent>
 
 #include <unistd.h>
+
+#include <condition_variable>
+#include <mutex>
+#include <optional>
+#include <thread>
 
 using namespace util;
 
@@ -485,6 +491,26 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(grouper, &QAbstractItemModel::modelReset, this, &Pane::span_headers, Qt::QueuedConnection);
     connect(places::signals_(), &places::Signals::starred_changed, this, &Pane::starred_changed);
     connect(places::signals_(), &places::Signals::sorts_changed, this, &Pane::apply_folder_sort);
+    results_timer = new QTimer(this);
+    results_timer->setSingleShot(true);
+    results_timer->setInterval(300);
+    connect(results_timer, &QTimer::timeout, this, &Pane::run_results_check);
+    connect(undo::signals_(), &undo::Signals::moved, this, [this](const QList<QPair<QString, QString>> &items) {
+        if (!in_search)
+            return;
+        for (const auto &[from, to] : items)
+            search_model->moved(from, to);
+        check_results();
+    });
+    connect(undo::signals_(), &undo::Signals::changed, this, [this]() { check_results(); });
+    connect(TaskBoard::instance(), &TaskBoard::changed, this, [this]() {
+        if (TaskBoard::instance()->finished.size() != finished_seen)   // a job has ended (or Clear Finished)
+            check_results();
+    });
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState st) {
+        if (st == Qt::ApplicationActive)
+            check_results();
+    });
     attach(proxy);
     set_view_mode(win->view_value("view_mode", "grid").toString());
     if (win->chooser) {   // a new tab in a chooser window
@@ -492,6 +518,55 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
         overview->set_save_places(win->chooser->saving());
     }
     set_path(start);
+}
+
+// What `p` is, asked on a thread and waited for briefly: a drive another program keeps busy can take seconds to answer
+// even a stat, with the window frozen meanwhile. Busy if it hasn't answered in time: the answer is then dealt with when
+// it comes (late_look), if the pane is still showing p.
+Pane::Look Pane::look(const QString &p)
+{
+    struct Answer {
+        std::mutex lock;
+        std::condition_variable cv;
+        std::optional<Look> what;
+        bool waited_out = false;
+    };
+    auto a = std::make_shared<Answer>();
+    QPointer<Pane> self(this);
+    std::thread([a, p, self]() {
+        Look what = isfile(p) ? Look::File : !isdir(p) ? Look::Missing : !util::access(p, R_OK | X_OK) ? Look::Denied : Look::Dir;
+        std::lock_guard<std::mutex> g(a->lock);
+        a->what = what;
+        a->cv.notify_all();
+        if (a->waited_out)
+            QMetaObject::invokeMethod(qApp, [self, p, what]() {
+                if (self)
+                    self->late_look(p, what);
+            });
+    }).detach();
+    std::unique_lock<std::mutex> g(a->lock);
+    if (a->cv.wait_for(g, std::chrono::milliseconds(LOOK_MS), [&a]() { return a->what.has_value(); }))
+        return *a->what;
+    a->waited_out = true;
+    return Look::Busy;
+}
+
+void Pane::late_look(const QString &p, Look what)
+{
+    if (path != p)   // gone elsewhere meanwhile
+        return;
+    if (what == Look::File)
+        set_path(dirname(p), false, p);   // (it was a file: its folder, with it selected)
+    else if (what == Look::Missing || what == Look::Denied)
+        tell_cannot_open(p, what);
+}
+
+void Pane::tell_cannot_open(const QString &p, Look what)
+{
+    if (what == Look::Missing)
+        warn(this, tx("Not found"), tx("“%1” does not exist.").arg(p));
+    else
+        warn(this, tx("Permission denied"), tx("You don't have permission to open “%1”.").arg(p));
 }
 
 void Pane::set_type_filter(const QStringList &globs)
@@ -1034,18 +1109,14 @@ bool Pane::set_path(const QString &target, bool record, const QString &select_in
     }
     QString p = abspath(expanduser(target));
     // on a tape or floppy, these checks wait on the drive: it's taken as a folder, and the folder model (which reads it
-    // on its own thread) shows what's there, or nothing
-    bool slow = drives::slow_kind(p) != drives::Slow::None;
-    if (!slow && isfile(p)) {
+    // on its own thread) shows what's there, or nothing. Likewise on a drive that doesn't answer at once (another
+    // program keeping it busy): what the checks find when it does is dealt with then.
+    Look what = drives::slow_kind(p) != drives::Slow::None ? Look::Busy : look(p);
+    if (what == Look::File) {
         select = p;
         p = dirname(p);
-    }
-    if (!slow && !isdir(p)) {
-        warn(this, tx("Not found"), tx("“%1” does not exist.").arg(p));
-        return false;
-    }
-    if (!slow && !util::access(p, R_OK | X_OK)) {
-        warn(this, tx("Permission denied"), tx("You don't have permission to open “%1”.").arg(p));
+    } else if (what == Look::Missing || what == Look::Denied) {
+        tell_cannot_open(p, what);
         return false;
     }
     QString prev = path;
@@ -1094,8 +1165,11 @@ void Pane::show_trash()
         this, "",
         [place]() {
             QVariantList items;
-            for (const auto &[p, o] : place.isEmpty() ? trashed_items() : places::items(place))
-                items << QVariant(QStringList{p, o});
+            for (const auto &[p, o] : place.isEmpty() ? trashed_items() : places::items(place)) {
+                // (stat'ed here, not where they're shown: a busy drive would keep the window waiting)
+                if (QVariantList f = SearchModel::stat_of(p); !f.isEmpty())
+                    items << QVariant(QVariantList{p, o, f});
+            }
             return QVariant(items);
         },
         [this, gen](const QVariant &items) { fill_trash(items, gen); }, true);
@@ -1116,13 +1190,15 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
     QString text = search_bar->isVisible() ? search_edit->text().trimmed().toLower() : QString();
     QStringList paths;
     QHash<QString, QString> locations;
+    QVariantMap stats;
     for (const QVariant &v : items_v.toList()) {
-        QStringList po = v.toStringList();
-        QString p = po.value(0), o = po.value(1);
+        QVariantList po = v.toList();
+        QString p = po.value(0).toString(), o = po.value(1).toString();
         if (!text.isEmpty() && !basename(p).toLower().contains(text))
             continue;
         paths << p;
         locations.insert(p, o.isEmpty() ? tx("(unknown)") : dirname(o));
+        stats.insert(p, po.value(2));
     }
     if (!in_search) {
         in_search = true;
@@ -1131,7 +1207,7 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
     }
     QStringList sel = selected_paths();
     search_model->clear_results();
-    add_trash_rows(paths, locations, gen, sel);
+    add_trash_rows(paths, locations, stats, gen, sel);
     if (!trash_watch) {
         trash_watch = new QFileSystemWatcher(this);
         connect(trash_watch, &QFileSystemWatcher::directoryChanged, this, &Pane::trash_changed);
@@ -1146,15 +1222,17 @@ void Pane::fill_trash(const QVariant &items_v, int gen)
         trash_watch->addPaths(fresh);
 }
 
-void Pane::add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel)
+void Pane::add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, const QVariantMap &stats, int gen,
+                          const QStringList &sel)
 {
     // in chunks, so a trash with tens of thousands of items doesn't block the window
     if (gen != trash_gen || !is_listing())
         return;
-    search_model->add_paths(paths.mid(0, 1000), locations);
+    search_model->add_paths(paths.mid(0, 1000), locations, {}, stats);
+    watch_results(paths.mid(0, 1000));
     if (paths.size() > 1000) {
         QStringList rest = paths.mid(1000);
-        QTimer::singleShot(0, this, [this, rest, locations, gen, sel]() { add_trash_rows(rest, locations, gen, sel); });
+        QTimer::singleShot(0, this, [this, rest, locations, stats, gen, sel]() { add_trash_rows(rest, locations, stats, gen, sel); });
         return;
     }
     if (!sel.isEmpty()) {
@@ -1180,6 +1258,90 @@ void Pane::trash_changed()
                 show_trash();
         });
     }
+}
+
+void Pane::watch_results(const QStringList &paths)
+{
+    if (!results_watch) {
+        results_watch = new QFileSystemWatcher(this);
+        connect(results_watch, &QFileSystemWatcher::directoryChanged, this, [this](const QString &d) { check_results(d); });
+    }
+    if (results_watched_gen != search_model->generation) {   // a new search: its own folders
+        results_watched_gen = search_model->generation;
+        if (!results_watch->directories().isEmpty())
+            results_watch->removePaths(results_watch->directories());
+    }
+    // up to 1000 folders (inotify watches are limited); results beyond them are checked when a job ends or Kestrel
+    // comes back to the front
+    QStringList watched = results_watch->directories(), fresh;
+    for (const QString &p : paths) {
+        QString d = dirname(p);
+        if (watched.size() + fresh.size() >= 1000)
+            break;
+        if (!watched.contains(d) && !fresh.contains(d))
+            fresh << d;
+    }
+    if (!fresh.isEmpty())
+        results_watch->addPaths(fresh);
+}
+
+void Pane::check_results(const QString &dir)
+{
+    if (!in_search)
+        return;
+    results_changed << dir;
+    if (!results_checking)
+        results_timer->start();
+}
+
+void Pane::run_results_check()
+{
+    if (!in_search || results_changed.isEmpty())
+        return;
+    finished_seen = TaskBoard::instance()->finished.size();
+    QSet<QString> dirs = results_changed;
+    results_changed.clear();
+    QStringList paths;
+    for (const QString &p : search_model->known_paths())
+        if (dirs.contains(QString()) || dirs.contains(dirname(p)))
+            paths << p;
+    if (paths.isEmpty())
+        return;
+    results_checking = true;
+    int gen = search_model->generation;
+    // on a thread: a busy or slow drive mustn't stop the window
+    fileops::run_task(
+        this, "",
+        [paths]() {
+            QVariantMap found;
+            for (const QString &p : paths) {
+                struct stat st;
+                if (QVariantList f = SearchModel::stat_of(p); !f.isEmpty())
+                    found.insert(p, f);
+                else if (!lstat_(p, st) && (errno == ENOENT || errno == ENOTDIR))   // gone, not unreadable for a moment
+                    found.insert(p, QVariantList());
+            }
+            return QVariant(found);
+        },
+        [this, gen](const QVariant &res) {
+            results_checking = false;
+            if (in_search && gen == search_model->generation) {
+                QHash<QString, QVariantList> found;
+                QVariantMap m = res.toMap();
+                for (auto it = m.begin(); it != m.end(); ++it)
+                    found.insert(it.key(), it.value().toList());
+                int before = search_model->rowCount();
+                search_model->update(found);
+                if (search_model->rowCount() != before) {
+                    update_empty();
+                    if (win->pane() == this)
+                        win->update_status();
+                }
+            }
+            if (!results_changed.isEmpty())
+                results_timer->start();
+        },
+        true);
 }
 
 void Pane::dir_loaded(const QString &p)
@@ -1354,9 +1516,12 @@ void Pane::refresh()
         show_trash();
         return;
     }
-    for (const QString &p : all_paths())
-        if (isdir(p))
+    for (const QString &p : all_paths()) {   // (what's a folder as the view knows it: asking would wait on a busy drive)
+        QModelIndex i = source_index_for(p);
+        QVariant st = i.data(StatRole);
+        if (st.isValid() ? st.toList().value(0).toBool() : bool(i.data(KindRole).toInt() & KIND_DIR))
             thumbs->invalidate(p);
+    }
     QStringList sel = selected_paths();
     FSModel *old = model;
     model = make_model();
@@ -1521,10 +1686,12 @@ void Pane::do_search()
         search_model->clear_results();
         auto *t = new SearchThread(path, text, win->show_hidden, nullptr, contents, search_sub->isChecked(),
                                    filtering ? filter : SearchFilter(), how);
-        connect(t, &SearchThread::found, this, [this, t](const QStringList &paths, const QVariantMap &matches) {
+        connect(t, &SearchThread::found, this,
+                [this, t](const QStringList &paths, const QVariantMap &matches, const QVariantMap &stats) {
             if (t != search_thread)
                 return;   // a search that was replaced
-            search_model->add_paths(paths, {}, matches);
+            search_model->add_paths(paths, {}, matches, stats);
+            watch_results(paths);
             try_select();
             update_empty();
         });

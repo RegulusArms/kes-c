@@ -73,6 +73,13 @@ void record(const QString &kind, const QString &label, const QList<QPair<QString
 {
     if (items.isEmpty() && kind != "none")
         return;
+    if (kind == "move" || kind == "move_into" || kind == "rename") {
+        QList<QPair<QString, QString>> done;
+        for (const auto &it : items)
+            if (!it.second.isEmpty())   // (move_into's folder)
+                done << it;
+        Q_EMIT signals_()->moved(done);
+    }
     if (shared() && !atc::radio()->request("UndoPush", to_json(Op{kind, label, items})).isNull())
         return;   // the tower tells every window (undo_changed)
     stack << Op{kind, label, items};
@@ -141,8 +148,19 @@ void undo(MainWindow *win, std::function<void()> after)
             after();
         return;
     }
+    // the items that went back where they were (old, new as moved now)
+    auto tell_moved = [op]() {
+        QList<QPair<QString, QString>> back;
+        for (const auto &[from, to] : op.items)
+            if (!to.isEmpty() && lexists(from) && !lexists(to))
+                back << qMakePair(to, from);
+        if (!back.isEmpty())
+            Q_EMIT signals_()->moved(back);
+    };
     QPointer<MainWindow> w(win);
-    auto done = [w, title, op, after](const QVariant &res) {
+    auto done = [w, title, op, after, tell_moved](const QVariant &res) {
+        if (op.kind == "rename")
+            tell_moved();
         if (after)
             after();
         if (!w)
@@ -177,7 +195,8 @@ void undo(MainWindow *win, std::function<void()> after)
                 ::rmdir(enc(made).constData());
         };
         if (!jobs.isEmpty()) {
-            fileops::start_ops(win, jobs, title, [done, remove_made]() {
+            fileops::start_ops(win, jobs, title, [done, remove_made, tell_moved]() {
+                tell_moved();
                 remove_made();
                 done(QStringList());
             });

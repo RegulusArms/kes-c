@@ -293,6 +293,49 @@ int main(int argc, char **argv)
           "the Overview shows the tape, by its volume name, as a tape");
 
 
+    // ---- an ordinary drive another program keeps busy (every stat on it waits): the window doesn't wait for it when
+    // a folder there is opened or refreshed, or an item's right-click menu is built; what it couldn't check at once
+    // (a file named instead of a folder, a folder that isn't there) is dealt with when the drive answers
+    {
+        QString disk = home_path("busy-disk");
+        makedirs(join(disk, "sub"), true);
+        for (int i = 0; i < 40; ++i)
+            write_text(join(disk, QString("f%1.txt").arg(i)), "x");
+        w->pane()->set_path(HOME());
+        spin(300);
+        util::set_test_busy(disk, 1500);
+        qint64 opening = longest_pause([&]() { w->pane()->set_path(disk); }, 300);
+        util::set_test_busy(QString(), 0);
+        wait_for([&]() { return w->pane()->all_paths().size() == 41; });
+        util::set_test_busy(disk, 1500);
+        qint64 refreshing = longest_pause([&]() { w->pane()->refresh(); }, 300);
+        util::set_test_busy(QString(), 0);
+        wait_for([&]() { return w->pane()->all_paths().size() == 41; });
+        w->pane()->select_paths({join(disk, "f1.txt")});
+        spin(300);
+        util::set_test_busy(disk, 1500);
+        qint64 menu = longest_pause([&]() { delete w->build_menu(w->pane(), {join(disk, "f1.txt")}); }, 300);
+        qint64 to_file = longest_pause([&]() { w->pane()->set_path(join(disk, "sub/../f2.txt")); }, 300);
+        util::set_test_busy(QString(), 0);
+        bool file_selected = wait_for([&]() {
+            return w->pane()->path == disk && w->pane()->selected_paths() == QStringList{join(disk, "f2.txt")};
+        }, 5000);
+        check(opening < 1000 && refreshing < 1000 && menu < 1000 && to_file < 1000 && file_selected,
+              QString("a drive kept busy by another program doesn't hold the window: opening a folder there (%1 ms), "
+                      "refreshing it (%2 ms), an item's right-click menu (%3 ms), opening a file's path (%4 ms), which "
+                      "shows its folder with it selected once the drive answers")
+                  .arg(opening).arg(refreshing).arg(menu).arg(to_file));
+        util::set_test_busy(disk, 1500);
+        w->pane()->set_path(join(disk, "missing"));
+        util::set_test_busy(QString(), 0);
+        QMessageBox *box = nullptr;
+        bool told = wait_for([&]() { return (box = shown_window<QMessageBox>()) && box->text().contains("does not exist"); }, 5000);
+        check(told, "...and a folder there that isn't there is said to be missing, once the drive answers");
+        if (box)
+            box->close();
+        w->pane()->set_path(HOME());
+    }
+
     // ---- while the tape is busy seeking (every stat on it waits, as LTFS's do), the window asks it nothing: selecting
     // files there (the status bar, the info panel) and opening a checksum file, which is then read in the background
     {

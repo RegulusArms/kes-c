@@ -41,40 +41,6 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
-- [ ] **Kestrel freezes when a drive is busy with another program.** When another program loads a drive heavily
-  and Kestrel does something on that drive, its window stops responding until GNOME's "not responding" (force quit)
-  dialog appears. Kestrel's own jobs on that drive don't cause it.
-  - Likely: something on the GUI thread waits on the drive (a stat, listing, free-space check, thumbnail or metadata
-    read, file watcher), which is fast normally but blocks for seconds when the drive's queue is full.
-  - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
-    updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
-
-- [ ] **Double-clicking an encrypted archive whose password is in the keyring opens the Extract dialog.**
-  Right-click → Extract Here on the same archive (a RAR in the case seen) just extracts it, finding the password in
-  the keyring without asking, as expected; double-clicking it opens the Extract… dialog (with its Password field)
-  instead.
-  - Why: activating any archive calls `archive_ui::extract_dialog` (src/opening.cpp), which probes the archive and
-    always shows `ExtractDialog`; Extract Here calls `extract_here` → `extract_all` with `here_options()`, whose
-    password search tries the keyring before asking (src/archive_ui.cpp).
-  - To decide: should double-click do what Extract Here does (for every archive, or only an encrypted one whose
-    password is already saved), or keep the dialog but skip it when the keyring has the password? Update
-    docs/context-menus.md / the docs if what double-click does changes.
-
-- [ ] **Folder size jobs disappear from the Jobs window.** A "Counting the size of …" job shows in the Jobs window
-  while it runs, then vanishes instead of staying under the finished jobs. Rule: no job that has appeared in the Jobs
-  window should ever disappear from it (until Clear Finished).
-  - Likely: the first count when Properties opens is queued quiet (`queue_job(…, quiet = !fresh)` in
-    `PropertiesDialog::start_size`, src/dialogs.cpp), and a quiet job is never `TaskBoard::add`ed (src/fileops.cpp
-    `queue_job`), so nothing records it in `TaskBoard::finished` when it ends; it was only visible through the queue.
-  - Check every other quiet `queue_job` / `run_job` caller for the same thing, and that a job whose window
-    (Properties) is closed while it runs still ends up in the finished list.
-
-- [ ] **Two right-click menu texts aren't translated.** In the menu layouts (src/menus.cpp `defaults()`), View
-  Image's note "for images" (around line 156) and "Rotate 180°" in the Rotate submenu (around line 212) are plain
-  literals, not `tx()`, so Preferences → Menus shows them in English in every language. Wrap them in `tx()`, run
-  translations/update.sh, and find out why the `ui` / `i18n` tests didn't catch them (a check that does, in
-  tests/CHANGELOG.md).
-
 - [ ] **A folder whose own name isn't valid UTF-8 shows empty, and admin jobs lose such names.** Since
   0.3.3-alpha.1 Kestrel's own file code keeps such names byte for byte, but two places still go through text:
   - The folder view is Qt's QFileSystemModel, which decodes names lossily (U+FFFD) and opens folders by its own
@@ -82,15 +48,6 @@ into.
     ordinary folder work (`enc()` finds them). Fixing it means a model that lists through `dec()`.
   - The admin session (src/admin.cpp → kes-admin-helper) sends paths as JSON text, where a stray byte's lone
     surrogate doesn't survive: Retry as Administrator on such a name fails. Send the bytes (e.g. base64) instead.
-
-- [ ] **Deleted items stay in the search results.** Search, then delete (or trash) some or all of the results: they
-  go, but their rows stay in the results as if they were still there. They should disappear from the results as soon
-  as they're deleted.
-  - The results are their own list (SearchModel, src/widgets.h), not the folder view, so they don't follow changes
-    on disk: rows are only ever added, or all cleared for a new search. It needs a way to drop rows (and, for a
-    rename or a move, update them), called when a job deletes, trashes, renames or moves a result, and ideally also
-    when another program deletes one (a watcher on the results' folders, or a check when the window comes back).
-  - Undo (bringing a trashed result back) should put its row back, and the result count shown should stay right.
 
 ## New features
 
@@ -392,6 +349,54 @@ into.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done
+
+- [x] **Kestrel freezes when a drive is busy with another program.** When another program loads a drive heavily
+  and Kestrel does something on that drive, its window stops responding until GNOME's "not responding" (force quit)
+  dialog appears. Kestrel's own jobs on that drive don't cause it.
+  Fixed in 0.3.3-alpha.3: with every stat on an ordinary folder made to wait (the tests' busy drive), the window waited in `Pane::set_path` (an isfile and isdir of the folder opened), `Pane::refresh` (an isdir of every item, for the folder previews) and `build_menu` / Send To (isdir/isfile/islink of the selection). The menu and refresh now use what the view knows (`selected_known`, KindRole), `set_path` waits at most 300 ms for its checks (on a thread; what they find later is dealt with then), and search results and the trash/Starred/Recent lists are stat'ed on their threads. The Info Panel (which stat'ed, listed and read the metadata of what it shows on the UI thread, except on tapes) now reads it on its worker for every drive. Anything inside Qt (QFileSystemModel's own stats of a new path) isn't covered: if it happens again, `eu-stack -p` on the frozen kes.
+  - Likely: something on the GUI thread waits on the drive (a stat, listing, free-space check, thumbnail or metadata
+    read, file watcher), which is fast normally but blocks for seconds when the drive's queue is full.
+  - To find out: which action triggers it (opening the folder, refreshing, selecting a file, the sidebar or Overview
+    updating), and where the GUI thread is stuck (`gdb -p` / `eu-stack -p` on the frozen kes).
+
+- [x] **Double-clicking an encrypted archive whose password is in the keyring opens the Extract dialog.**
+  Right-click → Extract Here on the same archive (a RAR in the case seen) just extracts it, finding the password in
+  the keyring without asking, as expected; double-clicking it opens the Extract… dialog (with its Password field)
+  instead.
+  Fixed in 0.3.3-alpha.3: double-click (`archive_ui::open_archive`) extracts an encrypted archive with a password saved for it as Extract Here does; any other archive still gets the dialog.
+  - Why: activating any archive calls `archive_ui::extract_dialog` (src/opening.cpp), which probes the archive and
+    always shows `ExtractDialog`; Extract Here calls `extract_here` → `extract_all` with `here_options()`, whose
+    password search tries the keyring before asking (src/archive_ui.cpp).
+  - To decide: should double-click do what Extract Here does (for every archive, or only an encrypted one whose
+    password is already saved), or keep the dialog but skip it when the keyring has the password? Update
+    docs/context-menus.md / the docs if what double-click does changes.
+
+- [x] **Folder size jobs disappear from the Jobs window.** A "Counting the size of …" job shows in the Jobs window
+  while it runs, then vanishes instead of staying under the finished jobs. Rule: no job that has appeared in the Jobs
+  window should ever disappear from it (until Clear Finished).
+  Fixed in 0.3.3-alpha.3: `queue_job` records a quiet job (`TaskBoard::record`), so it's kept among the finished ones without showing in the status bars; every quiet queued job had the same problem (the fix covers them all). A job whose window has no task panel is added to the board too.
+  - Likely: the first count when Properties opens is queued quiet (`queue_job(…, quiet = !fresh)` in
+    `PropertiesDialog::start_size`, src/dialogs.cpp), and a quiet job is never `TaskBoard::add`ed (src/fileops.cpp
+    `queue_job`), so nothing records it in `TaskBoard::finished` when it ends; it was only visible through the queue.
+  - Check every other quiet `queue_job` / `run_job` caller for the same thing, and that a job whose window
+    (Properties) is closed while it runs still ends up in the finished list.
+
+- [x] **Two right-click menu texts aren't translated.** In the menu layouts (src/menus.cpp `defaults()`), View
+  Image's note "for images" (around line 156) and "Rotate 180°" in the Rotate submenu (around line 212) are plain
+  literals, not `tx()`, so Preferences → Menus shows them in English in every language. Wrap them in `tx()`, run
+  translations/update.sh, and find out why the `ui` / `i18n` tests didn't catch them (a check that does, in
+  tests/CHANGELOG.md).
+  Fixed in 0.3.3-alpha.3. The `i18n` test missed them because it read only a tree's first 50 top-level rows (Rotate 180° is inside a submenu) and only the first menu kind in Preferences → Menus; it now reads every row of every kind.
+
+- [x] **Deleted items stay in the search results.** Search, then delete (or trash) some or all of the results: they
+  go, but their rows stay in the results as if they were still there. They should disappear from the results as soon
+  as they're deleted.
+  Fixed in 0.3.3-alpha.3: SearchModel drops a row whose file has gone (kept aside, so it comes back with Undo or a restore) and follows renames and moves Kestrel makes (`undo::Signals::moved`). Checked on a thread when a results folder changes (a watcher on up to 1000 of them), a job ends, or Kestrel comes back to the front.
+  - The results are their own list (SearchModel, src/widgets.h), not the folder view, so they don't follow changes
+    on disk: rows are only ever added, or all cleared for a new search. It needs a way to drop rows (and, for a
+    rename or a move, update them), called when a job deletes, trashes, renames or moves a result, and ideally also
+    when another program deletes one (a watcher on the results' folders, or a check when the window comes back).
+  - Undo (bringing a trashed result back) should put its row back, and the result count shown should stay right.
 
 - [x] **Files whose names aren't valid UTF-8 can't be deleted (or copied, moved…): "No such file or directory".**
   Fixed in 0.3.3-alpha.1: `enc()`/`dec()` keep stray bytes as lone surrogates (U+DC80–U+DCFF), and `enc()` finds a name Qt decoded with U+FFFD when one entry of its folder matches.

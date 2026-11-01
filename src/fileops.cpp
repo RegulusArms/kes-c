@@ -249,17 +249,33 @@ void TaskBoard::add(Task *task)
     });
     connect(task, &QThread::finished, this, [this, task]() {
         local.removeAll(task);
-        QString log = task->log_text();
-        QString state = task->was_cancelled ? "cancelled"
-                        : task->failed      ? "failed"
-                        : task->had_errors || log.contains("  failed: ") ? "done with errors"   // (the admin helper's lines)
-                                                     : "done";
-        finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
-                                 task->admin, task->id};
-        publish_finished();
-        schedule(0);
-        Q_EMIT changed();
+        on_ended(task);
     });
+    schedule(0);
+    Q_EMIT changed();
+}
+
+void TaskBoard::record(Task *task)
+{
+    if (!recorded.contains(task)) {
+        recorded << task;
+        connect(task, &QThread::finished, this, [this, task]() {
+            recorded.remove(task);
+            on_ended(task);
+        });
+    }
+}
+
+void TaskBoard::on_ended(Task *task)
+{
+    QString log = task->log_text();
+    QString state = task->was_cancelled ? "cancelled"
+                    : task->failed      ? "failed"
+                    : task->had_errors || log.contains("  failed: ") ? "done with errors"   // (the admin helper's lines)
+                                                 : "done";
+    finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
+                             task->admin, task->id};
+    publish_finished();
     schedule(0);
     Q_EMIT changed();
 }
@@ -683,6 +699,8 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, 
         tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
+        else
+            TaskBoard::instance()->add(t);
     }
     QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
     t->start();
@@ -703,6 +721,10 @@ Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths,
         tell_errors(t, parent, title);
         if (TaskPanel *panel = panel_for(parent))
             panel->add(t);
+        else
+            TaskBoard::instance()->add(t);
+    } else {
+        TaskBoard::instance()->record(t);   // the Jobs window lists it while it's queued: it stays once it ends
     }
     QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
     jobs::Queue::instance()->submit(t);

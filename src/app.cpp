@@ -1274,8 +1274,24 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         return m;
     }
 
+    // what each item is, as the view already knows it (a stat here would wait on a drive another program keeps busy,
+    // with the window frozen); asked only for what it doesn't know
+    QHash<QString, int> kinds;
+    for (const Pane::Known &k : p->selected_known())
+        if (k.kind >= 0)
+            kinds.insert(k.path, k.kind);
+    auto kind_of = [&kinds](const QString &x) {
+        auto it = kinds.constFind(x);
+        if (it != kinds.constEnd())
+            return *it;
+        int k = (isdir(x) ? KIND_DIR : 0) | (islink(x) ? KIND_LINK : 0);
+        kinds.insert(x, k);
+        return k;
+    };
+    auto dir_ = [&kind_of](const QString &x) { return bool(kind_of(x) & KIND_DIR); };
+    auto link_ = [&kind_of](const QString &x) { return bool(kind_of(x) & KIND_LINK); };
     QString single = paths.size() == 1 ? paths.first() : QString();
-    bool is_dir = !single.isEmpty() && isdir(single);
+    bool is_dir = !single.isEmpty() && dir_(single);
     // only a selection all in the trash gets the trash's menu; a mixed one (a search, Recent, Starred) gets the
     // usual menu, whose Move to Trash trashes the rest and asks before deleting what's already in the trash
     if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return in_trash(x); })) {
@@ -1291,13 +1307,13 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 
     // which right-click menu this is (Preferences → Menus): a split set selected whole is several items
     QStringList arcs = std::all_of(paths.begin(), paths.end(),
-                                   [](const QString &x) { return archive::can_extract(x) && !isdir(x); })
+                                   [&dir_](const QString &x) { return archive::can_extract(x) && !dir_(x); })
                            ? archive_ui::archives_of(paths)
                            : QStringList();
     menus::Kind kind = paths.size() > 1 ? menus::SEVERAL : is_dir ? menus::FOLDER : arcs.size() == 1 ? menus::ARCHIVE
                                                                                                      : menus::FILE;
     T(m->addAction(icon({"document-open"}), tx("Open"), this, [this, p, paths]() { open_paths(p, paths); }), "open");
-    bool all_dirs = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); });
+    bool all_dirs = std::all_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); });
     if (is_dir || all_dirs) {
         T(m->addAction(icon({"tab-new"}), tx("Open in New Tab"), this, [this, paths]() {
             for (const QString &x : paths)
@@ -1400,7 +1416,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(lm->addAction(tx("Create Relative Symbolic Link Here"), this, [this, paths, here]() { make_links(paths, here, "rel"); }),
           "link_rel_here");
     }
-    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
+    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [&kind_of](const QString &x) { return kind_of(x) == 0; }))
         T(lm->addAction(tx("Create Hard Link Here"), this, [this, paths, here]() { make_links(paths, here, "hard"); }),
           "link_hard_here");
     T(lm->addAction(tx("Create Symbolic Link In…"), this, [this, paths]() { make_links(paths, QString(), "sym"); }), "link_sym_in");
@@ -1415,7 +1431,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(lm->addAction(tx("Send Shortcut (.desktop) to Desktop"), this,
                     [this, paths, desktop]() { make_links(paths, desktop, "desktop"); }),
       "desktop_shortcut_desktop");
-    if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); })) {
+    if (std::any_of(paths.begin(), paths.end(), [&link_](const QString &x) { return link_(x); })) {
         lm->addSeparator();
         T(lm->addAction(tx("Open Link Target Location"), this, [this, paths]() { reveal(realpath(paths.first())); }),
           "link_target");
@@ -1473,7 +1489,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(m->addAction(icon({"security-high", "document-properties"}), tx("Create Checksum File…"), this,
                    [this, paths]() { hashcheck::create_dialog(this, paths); }),
       "checksum_create");
-    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); }))
+    if (std::all_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); }))
         T(m->addAction(icon({"edit-find", "edit-copy"}), tx("Find Duplicates…"), this,
                        [this, paths]() { dupes::open_window(this, paths); }),
           "find_duplicates");
@@ -1506,7 +1522,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(im->addAction(tx("Copy Image to Clipboard"), this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
           "image_copy");
     }
-    auto all = [&paths](bool (*f)(const QString &)) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
+    auto all = [&paths](const std::function<bool(const QString &)> &f) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
     if (paths.size() == 2 && all(&is_image))
         T(m->addAction(icon({"view-dual", "image-x-generic"}), tx("Compare in Viewer"), this, [this, p, paths]() { compare_in_viewer(p, paths); }),
           "compare_images");
@@ -1531,7 +1547,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, paths]() { convert::extract_audio_dialog(this, paths); }),
           "extract_audio");
     }
-    if (ffmpeg && (all(&convert::is_audio) || all([](const QString &x) { return isdir(x); })))
+    if (ffmpeg && (all(&convert::is_audio) || all([&dir_](const QString &x) { return dir_(x); })))
         T(m->addAction(icon({"audio-x-generic"}), tx("Convert Audio…"), this, [this, paths]() { convert::audio_dialog(this, paths); }),
           "convert_audio");
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return metadata::can_wipe(x); })) {
@@ -1547,7 +1563,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     }
     QStringList folders;
     for (const QString &x : paths)
-        if (isdir(x))
+        if (dir_(x))
             folders << x;
     if (!folders.isEmpty() && folders.size() == paths.size()) {
         int n = int(m->actions().size());
@@ -1558,7 +1574,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     }
     if (is_dir && thumbs->covers.contains(single))
         T(m->addAction(tx("Reset Folder Cover"), this, [this, single]() { thumbs->set_cover(single, QString()); }), "reset_cover");
-    group("send_to", [&]() { sharing::add_send_to_menu(m, paths); });
+    group("send_to", [&]() { sharing::add_send_to_menu(m, paths, dir_); });
     if (is_dir && sharing::can_share())
         T(m->addAction(icon({"folder-remote", "network-workgroup"}), tx("Network Sharing…"), this,
                        [this, single]() { sharing::share_dialog(this, single); }),
@@ -1582,7 +1598,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
           "shred");
     m->addSeparator();
     // shortcuts into Properties: its size counted afresh, its Metadata tab
-    if (all_dirs && std::none_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); }))
+    if (all_dirs && std::none_of(paths.begin(), paths.end(), [&link_](const QString &x) { return link_(x); }))
         T(m->addAction(icon({"drive-harddisk", "document-properties"}), tx("Calculate Folder Size"), this, [this, paths]() {
             if (PropertiesDialog *d = properties(paths))
                 d->calculate_size();

@@ -125,7 +125,7 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     QStringList images, videos, fetch, others;
     for (const QString &f : files) {
         if (archive::opens_as_archive(f))
-            archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
+            archive_ui::open_archive(this, f);   // Kestrel's own extraction, not the system's archive app
         else if (signature::is_signature_name(f))   // Verify Signature (a key or an encrypted file opens as usual)
             signature::open_window(this, f, [self = QPointer<MainWindow>(this), f]() {
                 if (self && !self->open_file(f))

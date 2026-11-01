@@ -5,6 +5,7 @@
 
 #include "drives.h"
 #include "jobswin.h"
+#include "menus.h"
 #include "overview.h"
 #include "prefswin.h"
 
@@ -25,6 +26,7 @@
 #include <QToolButton>
 #include <QTranslator>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
 
 #include <grp.h>
@@ -121,9 +123,10 @@ static void texts_of(QWidget *top, QStringList &out)
         } else if (auto *tree = qobject_cast<QTreeWidget *>(w)) {
             for (int c = 0; c < tree->columnCount(); ++c)
                 out << tree->headerItem()->text(c);
-            for (int i = 0; i < std::min(tree->topLevelItemCount(), 50); ++i)
+            int n = 0;   // every row, also those inside others (Preferences → Menus' submenus)
+            for (QTreeWidgetItemIterator it(tree); *it && n < 2000; ++it, ++n)
                 for (int c = 0; c < tree->columnCount(); ++c)
-                    out << tree->topLevelItem(i)->text(c);
+                    out << (*it)->text(c);
         }
     }
 }
@@ -274,6 +277,11 @@ int main(int argc, char **argv)
             pd->tabs->setCurrentIndex(i);
             spin(50);
             texts_of(pd, shown);
+        }
+        for (int i = 0; i < pd->menu_editor->kind_box->count(); ++i) {   // Menus: each kind's layout, not just the first
+            pd->menu_editor->kind_box->setCurrentIndex(i);
+            spin(20);
+            texts_of(pd->menu_editor, shown);
         }
         pd->close();
     }

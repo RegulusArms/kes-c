@@ -129,13 +129,26 @@ class SearchModel : public QStandardItemModel {
     Q_OBJECT
 public:
     explicit SearchModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
+    ~SearchModel() override;
     // add result rows; `locations` optionally maps a path to the text for its Location column; `matches` a path to
     // its matching lines ("12:text", content search), shown in the Match column (the first) and its tooltip (all)
+    // a file's [st_mode, mtime, size, is a link] (following links), or [] if it isn't there: on a thread (stats, update)
+    static QVariantList stat_of(const QString &p);
+    // `stats`: path → stat_of(path), as stat'ed where they were found (else stat'ed here; one missing: gone)
     void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {},
-                   const QVariantMap &matches = {});
+                   const QVariantMap &matches = {}, const QVariantMap &stats = {});
     void clear_results();
+    // Following the files: their paths, shown or gone (to be checked on a thread, as update() takes it); update(path →
+    // stat_of(path)) drops a row whose file has gone (kept aside: it comes back if
+    // the file does, as Undo brings back a trashed one) and refreshes its size and time; moved() follows a rename or a
+    // move by Kestrel
+    QStringList known_paths() const;
+    void update(const QHash<QString, QVariantList> &found);
+    void moved(const QString &from, const QString &to);
+    int generation = 0;   // bumps with every clear_results (a check from before is stale)
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<QString, QStandardItem *> rows;
+    QHash<QString, QList<QStandardItem *>> gone;   // rows whose file has gone, taken out of the model
     int thumb_size = 128;
     bool folder_previews = true;
 
@@ -156,12 +169,13 @@ public:
     QString error;    // why it found nothing it should have (a bad regular expression, …)
 
 Q_SIGNALS:
-    void found(const QStringList &paths, const QVariantMap &matches = {});
+    void found(const QStringList &paths, const QVariantMap &matches, const QVariantMap &stats);   // (stats: add_paths)
 
 protected:
     void run() override;
 
 private:
+    void send(const QStringList &batch, const QVariantMap &matches = {});
     bool match(const QString &name) const;
     bool keep(const QString &path) const;   // the filter
     int run_contents();   // the files found with the index; -1 if it couldn't be asked
@@ -412,9 +426,9 @@ private:
     void refresh();
     void add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai);
     ThumbnailManager *thumbs;
-    int gen = 0;   // a slow drive's details, read on a worker, are for the path shown when they were asked
-    // a slow drive's item, as the worker read it (nothing on a tape or floppy is asked from the window's thread: a busy
-    // tape answers only when it gets there)
+    int gen = 0;   // the details, read on a worker, are for the path shown when they were asked
+    // the item, as the worker read it (nothing is asked from the window's thread: a busy drive, or a tape seeking,
+    // answers only when it gets there)
     bool cached = false, cached_dir = false;
     qint64 cached_mtime = 0, cached_size = 0;
     QLabel *preview;

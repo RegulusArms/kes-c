@@ -153,7 +153,7 @@ QList<Entry> defaults(Kind k)
     if (folder)
         l << item("open_in_editor", tx("Open in (a code editor)"), tx("when one is installed")) << item("open_with", tx("Open With ▸"));
     if (file || several)
-        l << item("view_image", several ? tx("View Images") : tx("View Image"), "for images");
+        l << item("view_image", several ? tx("View Images") : tx("View Image"), tx("for images"));
     l << item("show_in_folder", tx("Show in Folder"), tx("in search results"))
       << item("collapse_group", tx("Collapse This Group"), tx("when grouped by date"));
     if (file || arc)
@@ -209,7 +209,7 @@ QList<Entry> defaults(Kind k)
         QString images = several ? tx("when all are images") : tx("for images");
         QString videos = several ? tx("when all are videos, with ffmpeg installed") : tx("for videos, with ffmpeg installed");
         l << submenu("rotate", tx(builtin_title("rotate")),
-                     {item("rotate_cw", tx("Rotate 90° Clockwise")), item("rotate_180", "Rotate 180°"),
+                     {item("rotate_cw", tx("Rotate 90° Clockwise")), item("rotate_180", tx("Rotate 180°")),
                       item("rotate_ccw", tx("Rotate 90° Counter-clockwise")), sep(), item("flip_horizontal", tx("Flip Horizontally")),
                       item("flip_vertical", tx("Flip Vertically"))},
                      images)

@@ -22,7 +22,8 @@ void add_scripts_menu(QMenu *menu, const QStringList &paths, const QString &cur_
 // Run a Nautilus script the way GNOME Files does: in the current folder, with the selected files as arguments and
 // NAUTILUS_SCRIPT_* variables.
 bool run_script(const QString &script, const QStringList &paths, const QString &cur_dir);
-void add_send_to_menu(QMenu *menu, const QStringList &paths);   // Send To → Email / Bluetooth, for files
+// Send To → Email / Bluetooth, for files; is_dir: what's a folder, as the caller knows it (else asked)
+void add_send_to_menu(QMenu *menu, const QStringList &paths, const std::function<bool(const QString &)> &is_dir = nullptr);
 bool can_share();
 void share_dialog(QWidget *parent, const QString &folder);      // like GNOME Files' Sharing Options
 

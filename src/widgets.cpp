@@ -383,23 +383,40 @@ SearchModel::SearchModel(ThumbnailManager *thumbs, QObject *parent) : QStandardI
     connect(thumbs, &ThumbnailManager::updated, this, &SearchModel::thumb_ready);
 }
 
-void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QString> &locations, const QVariantMap &matches)
+QVariantList SearchModel::stat_of(const QString &p)
+{
+    struct stat st, lst;
+    if (!stat_(p, st))
+        return {};
+    return {uint(st.st_mode), qint64(st.st_mtime), qint64(st.st_size), lstat_(p, lst) && S_ISLNK(lst.st_mode)};
+}
+
+// a row's stat-based parts (f: stat_of's): what it is, its size and time
+static void set_stat(const QList<QStandardItem *> &row, const QVariantList &f)
+{
+    bool is_dir = S_ISDIR(mode_t(f.value(0).toUInt()));
+    qint64 mtime = f.value(1).toLongLong(), size = f.value(2).toLongLong();
+    row[0]->setData(QVariantList{is_dir, mtime, size}, StatRole);
+    row[0]->setData((is_dir ? KIND_DIR : 0) | (f.value(3).toBool() ? KIND_LINK : 0), KindRole);
+    row[2]->setText(is_dir ? QString() : human_size(size));
+    row[2]->setData(size, Qt::UserRole);
+    row[3]->setText(i18n::date_time(QDateTime::fromSecsSinceEpoch(mtime)));
+}
+
+void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QString> &locations, const QVariantMap &matches,
+                            const QVariantMap &stats)
 {
     for (const QString &p : paths) {
-        struct stat st;
-        if (!stat_(p, st))
-            continue;
-        bool is_dir = S_ISDIR(st.st_mode);
+        QVariantList f = stats.isEmpty() ? stat_of(p) : stats.value(p).toList();
+        if (f.size() != 4)
+            continue;   // (gone already)
         auto *name = new QStandardItem(basename(p));
         name->setData(p, PathRole);
-        name->setData(QVariantList{is_dir, qint64(st.st_mtime), qint64(st.st_size)}, StatRole);
-        name->setData((is_dir ? KIND_DIR : 0) | (islink(p) ? KIND_LINK : 0), KindRole);
         name->setToolTip(p);
         name->setEditable(false);
         auto *loc = new QStandardItem(locations.isEmpty() ? dirname(p) : locations.value(p, dirname(p)));
-        auto *size = new QStandardItem(is_dir ? QString() : human_size(qint64(st.st_size)));
-        size->setData(qint64(st.st_size), Qt::UserRole);
-        auto *mod = new QStandardItem(i18n::date_time(QDateTime::fromSecsSinceEpoch(st.st_mtime)));
+        auto *size = new QStandardItem;
+        auto *mod = new QStandardItem;
         QStringList lines = matches.value(p).toStringList();   // "12:the line"
         QString first = lines.value(0);
         auto *match = new QStandardItem(first.isEmpty() ? QString() : tx("%1: %2", "a line number and the line").arg(first.section(':', 0, 0), first.section(':', 1).trimmed()));
@@ -413,15 +430,78 @@ void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QStri
         }
         for (QStandardItem *it : {loc, size, mod, match})
             it->setEditable(false);
+        set_stat({name, loc, size, mod, match}, f);
         appendRow({name, loc, size, mod, match});
         rows.insert(p, name);
     }
+}
+
+SearchModel::~SearchModel()
+{
+    for (const QList<QStandardItem *> &row : std::as_const(gone))
+        qDeleteAll(row);
 }
 
 void SearchModel::clear_results()
 {
     removeRows(0, rowCount());
     rows.clear();
+    for (const QList<QStandardItem *> &row : std::as_const(gone))
+        qDeleteAll(row);
+    gone.clear();
+    generation += 1;
+}
+
+QStringList SearchModel::known_paths() const { return rows.keys() + gone.keys(); }
+
+void SearchModel::update(const QHash<QString, QVariantList> &found)
+{
+    for (auto it = found.begin(); it != found.end(); ++it) {
+        const QString &p = it.key();
+        QVariantList f = it.value();   // [] if it's gone, else stat_of's
+        if (f.isEmpty()) {
+            if (QStandardItem *item = rows.take(p))
+                gone.insert(p, takeRow(item->row()));   // kept: it may come back (Undo, a restore)
+            continue;
+        }
+        if (gone.contains(p)) {
+            QList<QStandardItem *> row = gone.take(p);
+            set_stat(row, f);
+            appendRow(row);
+            rows.insert(p, row[0]);
+        } else if (QStandardItem *item = rows.value(p)) {
+            QVariantList had = item->data(StatRole).toList();
+            if (had.value(1) != f.value(1) || had.value(2) != f.value(2) || had.value(0).toBool() != S_ISDIR(mode_t(f.value(0).toUInt()))) {
+                QList<QStandardItem *> row;
+                for (int c = 0; c < columnCount(); ++c)
+                    row << this->item(item->row(), c);
+                set_stat(row, f);
+            }
+        }
+    }
+}
+
+void SearchModel::moved(const QString &from, const QString &to)
+{
+    if (from == to || rows.contains(to) || gone.contains(to))
+        return;
+    QList<QStandardItem *> row;
+    if (QStandardItem *item = rows.take(from)) {
+        for (int c = 0; c < columnCount(); ++c)
+            row << this->item(item->row(), c);
+        rows.insert(to, item);
+    } else if (gone.contains(from)) {
+        row = gone.take(from);   // (its folder's change was noticed first: it's put back under its new name)
+        appendRow(row);
+        rows.insert(to, row[0]);
+    } else {
+        return;
+    }
+    row[0]->setText(basename(to));
+    row[0]->setData(to, PathRole);
+    row[0]->setToolTip(row[0]->toolTip().replace(0, from.size(), to));
+    if (row[1]->text() == dirname(from))   // (a trash or Recent listing's own Location stays)
+        row[1]->setText(dirname(to));
 }
 
 QVariant SearchModel::data(const QModelIndex &index, int role) const
@@ -458,6 +538,15 @@ SearchThread::SearchThread(const QString &root, const QString &query, bool hidde
       recursive(recursive), filter(filter), how(how), today(QDate::currentDate())
 {
     wildcard = query.contains('*') || query.contains('?') || query.contains('[');
+}
+
+void SearchThread::send(const QStringList &batch, const QVariantMap &matches)
+{
+    QVariantMap stats;   // stat here, not where they're shown: a busy drive would keep the window waiting
+    for (const QString &p : batch)
+        if (QVariantList f = SearchModel::stat_of(p); !f.isEmpty())
+            stats.insert(p, f);
+    Q_EMIT found(batch, matches, stats);
 }
 
 bool SearchThread::match(const QString &name) const
@@ -511,12 +600,12 @@ int SearchThread::run_contents()
         batch << p;
         n += 1;
         if (batch.size() >= 50) {
-            Q_EMIT found(batch);
+            send(batch);
             batch.clear();
         }
     }
     if (!batch.isEmpty())
-        Q_EMIT found(batch);
+        send(batch);
     return n;
 }
 
@@ -617,7 +706,7 @@ void SearchThread::run_read()
             lines << rest.section(':', 0, 0) + ":" + rest.section(':', 1).trimmed().left(200);
         }
         if (!batch.isEmpty() && (batch.size() >= 50 || since.elapsed() > 200)) {
-            Q_EMIT found(batch, matches);
+            send(batch, matches);
             batch.clear();
             matches.clear();
             since.restart();
@@ -629,7 +718,7 @@ void SearchThread::run_read()
     }
     finish_file();
     if (!batch.isEmpty())
-        Q_EMIT found(batch, matches);
+        send(batch, matches);
     p->wait();
     QString err = QString::fromUtf8(p->read_all_err()).trimmed();
     if (p->returncode >= 2 && files == 0 && !err.isEmpty())   // 1: nothing found; 2: an error (a bad pattern…)
@@ -682,7 +771,7 @@ void SearchThread::run()
         if (!recursive)   // the folder's own items (its subfolders listed, not gone into)
             dirs.clear();
         if (batch.size() >= 50) {
-            Q_EMIT found(batch);
+            send(batch);
             batch.clear();
         }
         return count < 10000;
@@ -690,7 +779,7 @@ void SearchThread::run()
     if (stop)
         return;
     if (!batch.isEmpty())
-        Q_EMIT found(batch);
+        send(batch);
 }
 
 // ---------------------------------------------------------------- grid delegate
@@ -2034,19 +2123,12 @@ void InfoPanel::show_path(const QString &p)
 
 void InfoPanel::set_preview()
 {
-    bool slow = !path.isEmpty() && drives::slow_kind(path) != drives::Slow::None;
-    if (path.isEmpty() || (slow ? !cached : !exists(path))) {
+    if (path.isEmpty() || !cached) {   // (what the worker read, refresh)
         preview->clear();
         return;
     }
-    bool is_dir;
-    qint64 mtime, fsize;
-    if (slow) {   // what the worker read (refresh)
-        is_dir = cached_dir, mtime = cached_mtime, fsize = cached_size;
-    } else {
-        QFileInfo fi(path);
-        is_dir = fi.isDir(), mtime = fi.lastModified().toSecsSinceEpoch(), fsize = fi.size();
-    }
+    bool is_dir = cached_dir;
+    qint64 mtime = cached_mtime, fsize = cached_size;
     int size = std::max(160, std::min(viewport()->width() - 24, 512));
     QPixmap pm;
     if (is_dir)
@@ -2082,18 +2164,25 @@ void InfoPanel::refresh()
 {
     clear();
     cached = false;
-    // a tape or floppy: everything is read on a worker, even whether the item exists (a tape seeking for another read
-    // answers nothing until it gets there), and an image's details only if the user allowed previews for that drive
+    // everything is read on a worker, even whether the item exists: a drive another program keeps busy, or a tape
+    // seeking for another read, answers nothing until it gets there, and the window mustn't wait. On a tape or floppy,
+    // an image's details only if the user allowed previews for that drive.
     drives::Slow slow = path.isEmpty() ? drives::Slow::None : drives::slow_kind(path);
     ++gen;
-    if (slow != drives::Slow::None) {
+    if (path.isEmpty()) {
+        title->setText("");
+        preview->clear();
+        return;
+    }
+    {
         int my = gen;
         QString p = path;
         QString t = basename(rstrip(path, '/'));
         title->setText(t.isEmpty() ? path : t);
         preview->clear();
-        row(tx("Details"), slow == drives::Slow::Tape ? tx("reading from the tape…") : tx("reading from the floppy disk…"));
-        bool details = is_image(path) && drives::previews_allowed(path);
+        if (slow != drives::Slow::None)
+            row(tx("Details"), slow == drives::Slow::Tape ? tx("reading from the tape…") : tx("reading from the floppy disk…"));
+        bool details = is_image(path) && (slow == drives::Slow::None || drives::previews_allowed(path));
         QPointer<InfoPanel> self(this);
         fileops::run_task(
             this, "",
@@ -2157,7 +2246,7 @@ void InfoPanel::refresh()
                 self->row(tx("Modified"), i18n::date_time(QDateTime::fromSecsSinceEpoch(self->cached_mtime)));
                 if (r.contains("link"))
                     self->row(tx("Link to"), r.value("link").toString());
-                if (is_image(self->path) && !details)
+                if (is_image(self->path) && !details && slow != drives::Slow::None)
                     self->row(tx("Details"), slow == drives::Slow::Tape
                                                  ? tx("not read from this tape (right-click the drive: Show Previews on This Drive)")
                                                  : tx("not read from this floppy disk (right-click the drive: Show Previews on This Drive)"));
@@ -2169,39 +2258,7 @@ void InfoPanel::refresh()
                 self->add_details(basic, ai);
             },
             true);
-        return;
     }
-    if (path.isEmpty() || !lexists(path)) {
-        title->setText("");
-        preview->clear();
-        return;
-    }
-    QString t = basename(rstrip(path, '/'));
-    title->setText(t.isEmpty() ? path : t);
-    set_preview();
-    struct stat st;
-    if (!stat_(path, st))
-        lstat_(path, st);
-    if (isdir(path)) {
-        try {
-            int n = listdir(path).size();
-            row(tx("Contents"), txn("%Ln item(s)", n));
-        } catch (const OSError &) {
-            row(tx("Contents"), tx("unreadable"));
-        }
-    } else {
-        row(tx("Size"), human_size(qint64(st.st_size)));
-        row(tx("Type"), mime_for(path, 0).comment());
-    }
-    row(tx("Modified"), i18n::date_time(QDateTime::fromSecsSinceEpoch(st.st_mtime)));
-    if (islink(path)) {
-        try {
-            row(tx("Link to"), util::readlink(path));
-        } catch (const OSError &) {
-        }
-    }
-    if (is_image(path))
-        add_details(metadata::basic_info(path), metadata::ai_info(path));
 }
 
 void InfoPanel::add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai)

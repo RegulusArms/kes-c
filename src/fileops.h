@@ -138,6 +138,8 @@ class TaskBoard : public QObject {
 public:
     static TaskBoard *instance();
     void add(Task *task);
+    // A quiet job the Jobs window still lists (a queued one): kept in `finished` when it ends, but not in the status bars
+    void record(Task *task);
     QList<TaskInfo> others(const QList<Task *> &mine) const;   // all but `mine`: our other windows', then other Kestrels'
     QList<TaskInfo> all() const { return others({}); }        // every job running or waiting: ours, then the others'
     void cancel(const TaskInfo &task);   // another Kestrel's task: asks it to cancel
@@ -163,6 +165,8 @@ private:
     void publish();
     void on_heard(const QJsonObject &msg);
     QList<Task *> local;
+    QSet<Task *> recorded;                   // quiet ones (record)
+    void on_ended(Task *task);
     QMap<QString, QList<TaskInfo>> remote;   // flight -> its tasks
     QHash<QString, JobDetail> details;       // "flight/task" -> what it answered
     QSet<QString> left;                      // flights that have closed (their finished jobs are kept)

@@ -30,7 +30,7 @@ These entries are on the file, folder, archive and several-items menus. The sect
 
 | Entry | What it does | Shows |
 |---|---|---|
-| **Open** | Opens the item(s): folders in this tab, files in their default app (or the app chosen in Preferences for images and videos) | Always |
+| **Open** | Opens the item(s): folders in this tab, files in their default app (or the app chosen in Preferences for images and videos); an archive gets Kestrel's Extract dialog, or is extracted as **Extract Here** does when it's encrypted and its password is saved in the keyring | Always |
 | **Show in Folder** | Goes to the folder the item is in and selects it | In search results |
 | **Collapse This Group** | Collapses the date group the item is in | When the folder is grouped by date |
 | **Cut** / **Copy** | Puts the item(s) on the clipboard to paste elsewhere (also into GNOME Files and other apps) | Always |

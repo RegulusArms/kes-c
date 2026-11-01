@@ -1,6 +1,7 @@
 // The job queue (jobs.h): one queue for every Kestrel, by drive or one at a time; pausing, cancelling, starting now and
 // reordering jobs; their steps and logs; the Jobs window; and the tower's part (lanes across Kestrels, the Tower window).
 #include "common.h"
+#include "dialogs.h"
 
 #include "drives.h"
 #include "jobs.h"
@@ -248,6 +249,39 @@ int main(int argc, char **argv)
               done.last().log.contains("Copy s2.txt → ") && done.last().log.contains("done") &&
               done.last().log.contains("Finished."),
           "a finished job is kept with its log: each step, how it went, and the end");
+
+    // a quiet job (Properties' first size count) is listed while it's queued, so it stays among the finished ones too,
+    // also when its window was closed while it waited; it's never in the status bar
+    {
+        makedirs(home_path("counted/sub"), true);
+        write_text(home_path("counted/sub/f.bin"), QByteArray(321, 'c'));
+        auto held = std::make_shared<std::atomic<bool>>(true);
+        QPointer<Task> hold = holder(w, "Holding for the count", home_path("counted"), held);
+        auto *pd = new PropertiesDialog(w, {home_path("counted")});
+        QString title = "Counting the size of “counted”";
+        auto queued = [&]() {
+            for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+                if (j.title == title)
+                    return j.local;
+            return (Task *)nullptr;
+        };
+        bool listed = wait_for([&]() { return queued() != nullptr; });
+        Task *count = queued();
+        bool in_bar = count && TaskBoard::instance()->mine().contains(count);
+        delete pd;
+        *held = false;
+        auto kept = [&]() {
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == title)
+                    return f.state;
+            return QString();
+        };
+        bool ended = wait_for([&]() { return !kept().isEmpty(); });
+        check(listed && !in_bar && ended && kept() == "done",
+              "a quiet queued job (Properties' size count) stays in the Jobs window once it ends, also after its window "
+              "closed; not in the status bar (" + kept() + ")");
+        wait_for([&]() { return !hold; });
+    }
 
     // ---- a paste queued behind another job: its title and log say what it is (what started it, in which window,
     // from where to where, what it waited for); its destination moved meanwhile, it fails once, clearly
