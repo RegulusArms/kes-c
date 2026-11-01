@@ -83,6 +83,15 @@ into.
   - The admin session (src/admin.cpp → kes-admin-helper) sends paths as JSON text, where a stray byte's lone
     surrogate doesn't survive: Retry as Administrator on such a name fails. Send the bytes (e.g. base64) instead.
 
+- [ ] **Deleted items stay in the search results.** Search, then delete (or trash) some or all of the results: they
+  go, but their rows stay in the results as if they were still there. They should disappear from the results as soon
+  as they're deleted.
+  - The results are their own list (SearchModel, src/widgets.h), not the folder view, so they don't follow changes
+    on disk: rows are only ever added, or all cleared for a new search. It needs a way to drop rows (and, for a
+    rename or a move, update them), called when a job deletes, trashes, renames or moves a result, and ideally also
+    when another program deletes one (a watcher on the results' folders, or a check when the window comes back).
+  - Undo (bringing a trashed result back) should put its row back, and the result count shown should stay right.
+
 ## New features
 
 ### Jobs
@@ -262,6 +271,19 @@ into.
   - Decide which of the current menu entries stay (the quick ones like Create Symbolic Link Here and Send Link to
     Desktop are one-click; maybe keep those and replace Create Symbolic Link In… and the shortcut ones with the
     window), keeping menus::defaults() and test_prefs in step, and update docs/context-menus.md.
+
+- [ ] **Sync To… remembers past syncs and fills itself in.** Once a folder has been synced, Sync To… on that folder
+  again (from either end: the source or the destination) opens with the other folder and the choices used last time
+  (delete what's not in the source, rsync or Kestrel's copy) already filled in, so only Preview → Sync Now is left.
+  - Today a pair is only kept if you press Save Pair… and give it a name, and the window doesn't look at the saved
+    pairs when it opens: it starts with just the folder you right-clicked.
+  - Remember each sync that ran (or the last few per folder) automatically, without naming it; the saved pairs
+    stay as they are. Several past partners for one folder → fill in the latest, the others a click away.
+  - Opened from the destination end: fill it in the right way round (that folder as To:, the source as From:), not
+    swapped, so a sync can't be run backwards by accident.
+  - A remembered folder that's gone (deleted, drive not mounted) isn't filled in silently: say so.
+  - It's a new list of paths kept in the config folder: add it to kes-setup's BleachBit cleaner, and to prefs.cpp's
+    STATE list if it's kept that way.
 
 ### Images, video and audio
 
