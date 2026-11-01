@@ -2,6 +2,7 @@
 
 #include "admin.h"
 #include "drives.h"
+#include "joblogs.h"
 #include "jobs.h"
 #include "prefs.h"
 #include "atc.h"
@@ -124,6 +125,7 @@ void Task::ended(pid_t pid)
 
 void Task::log(const QString &line)
 {
+    last_log = monotonic_ms();
     QMutexLocker l(&mtx);
     if (head.size() < 300) {
         head << line;
@@ -168,14 +170,32 @@ QString Task::log_text() const
     return out.join('\n');
 }
 
+static const qint64 REPORT_MS = 80;   // at most ~12 updates a second, so thousands of tiny files can't flood the UI thread
+qint64 Task::beat_ms = 15000;
+
+bool Task::due() const { return monotonic_ms() - last >= REPORT_MS; }
+
+QString Task::speed(qint64 bytes) const
+{
+    qint64 ms = elapsed_ms();
+    if (ms < 2000 || bytes <= 0)
+        return QString();
+    return tx("%1/s").arg(human_size(qint64(double(bytes) * 1000.0 / double(ms))));
+}
+
 void Task::report(double done, double total, const QString &t, bool force)
 {
-    // at most ~12 updates a second, so thousands of tiny files can't flood the UI thread
     qint64 now = monotonic_ms();
-    if (now - last < 80 && !force)
+    if (now - last < REPORT_MS && !force)
         return;
     last = now;
     Q_EMIT progress(total > 0 ? std::min(done / total, 1.0) : -1.0, t);
+    if (!t.isEmpty() && started_ms && now - last_log >= beat_ms && now - last_beat >= beat_ms) {
+        last_beat = now;
+        QString when = i18n::time_secs(QTime::currentTime());
+        log(total > 0 ? tx("%1  %2% · %3").arg(when, i18n::number(qint64(std::min(done / total, 1.0) * 100)), t)
+                      : tx("%1  %2").arg(when, t));
+    }
 }
 
 void Task::run()
@@ -198,11 +218,16 @@ void Task::run()
     } catch (const std::exception &e) {
         failed = true;
         log(tx("Error: %1").arg(QString::fromStdString(e.what())));
+        log(tx("Failed after %1").arg(fileops::wait_text(elapsed_ms())));
         proc::set_watcher(nullptr);
         running_task = nullptr;
         Q_EMIT error(QString::fromStdString(e.what()));
         return;
     }
+    // how it ended, last in its log (a job that stops at a cancel without throwing says so with was_cancelled)
+    log(was_cancelled || cancelled ? tx("Stopped after %1").arg(fileops::wait_text(elapsed_ms()))
+        : had_errors               ? tx("Finished, with errors, in %1").arg(fileops::wait_text(elapsed_ms()))
+                                   : tx("Finished in %1").arg(fileops::wait_text(elapsed_ms())));
     proc::set_watcher(nullptr);
     running_task = nullptr;
     Q_EMIT result(res);
@@ -275,6 +300,7 @@ void TaskBoard::on_ended(Task *task)
                                                  : "done";
     finished << FinishedTask{task->title, state, log, task->steps, task->elapsed_ms(), QDateTime::currentDateTime(),
                              task->admin, task->id};
+    joblogs::save(finished.last());   // (when Preferences say so)
     publish_finished();
     schedule(0);
     Q_EMIT changed();
@@ -1011,8 +1037,12 @@ private:
 
     void report_progress(const QString &name)
     {
+        if (!task->due())   // (shown ~12 times a second: the text isn't made for every chunk of a big file)
+            return;
         QString text = by_count ? tx("%1 of %2 — %3").arg(group_digits(done), group_digits(total), name)
                                 : tx("%1 of %2 — %3").arg(human_size(done), human_size(total), name);
+        if (QString rate = by_count ? QString() : task->speed(done); !rate.isEmpty())
+            text += " · " + rate;
         if (buffer)
             text += " · " + buffer->status();
         task->report(double(done), double(total), text);
@@ -1708,6 +1738,15 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
         paths);
 }
 
+QString state_label(const QString &state)
+{
+    static const QHash<QString, const char *> labels = {
+        {"waiting", TX_NOOP("Waiting")}, {"running", TX_NOOP("Running")}, {"paused", TX_NOOP("Paused")},
+        {"done", TX_NOOP("Done")},       {"done with errors", TX_NOOP("Done, with errors")},
+        {"failed", TX_NOOP("Failed")},   {"cancelled", TX_NOOP("Cancelled")}};
+    return labels.contains(state) ? tx(labels.value(state)) : state;
+}
+
 QString wait_text(qint64 ms)
 {
     qint64 s = (ms + 500) / 1000;
@@ -1830,7 +1869,8 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
         }
         *ops = std::make_unique<Ops>(task, jobs);
         QStringList errors = (*ops)->run();
-        task->log(errors.isEmpty() ? tx("Finished.") : txn("Finished, with %Ln error(s).", errors.size()));
+        if (!errors.isEmpty())   // (Task::run then says how it ended, and how long it took)
+            task->log(txn("%Ln item(s) failed.", errors.size()));
         return QVariant(errors);
     };
     // the drives it reads and writes (its lanes in the job queue); a move within one drive is a rename: no lane
@@ -2216,7 +2256,12 @@ Task *shred(QWidget *parent, const QStringList &paths, const QString &title,
             p->kill_group();
             throw;
         }
-        return still_there(paths);
+        QStringList left = still_there(paths);
+        for (const QString &x : paths)
+            task->log(left.contains(x) ? tx("Still there (not shredded): %1").arg(x) : tx("Shredded: %1").arg(x));
+        if (!left.isEmpty())
+            task->had_errors = true;
+        return left;
     };
     return queue_job(parent, title, paths, fn, [on_done](const QVariant &r) {
         if (r.isValid() && on_done)
@@ -2347,14 +2392,18 @@ QString age_text(qint64 measured, qint64 now)
 
 }  // namespace dirsizes
 
-DirStats dir_stats(const QString &path, std::function<bool()> cancel)
+DirStats dir_stats(const QString &path, std::function<bool()> cancel,
+                   std::function<void(const DirStats &, const QString &)> progress)
 {
     DirStats s;
     QStringList stack{path};
+    int seen = 0;
     while (!stack.isEmpty()) {
         if (cancel && cancel())
             break;
         QString d = stack.takeLast();
+        if (progress && ++seen % 64 == 0)
+            progress(s, d);
         DIR *dir = ::opendir(enc(d).constData());
         if (!dir)
             continue;

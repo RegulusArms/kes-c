@@ -17,6 +17,19 @@ Added:
   off the map and can be undone; the sizes remembered make a map at once; on a tape it counts only when asked; a
   drive's Overview card has the button that opens it (a phone's hasn't). Covers the new Disk Usage window.
 - `ui`: the folder menu's new Disk Usage… entry is in the list of the window's actions (`ui_actions.txt`).
+- `jobs`: every job's log says more. A size count's log says what it counted and found (it had only the folder's
+  name); Move to Trash logs each item; a job that only reports progress gets it in its log now and then while the log
+  is quiet (not every report); a stopped job's log ends with when it was stopped.
+- `jobs`: saving finished jobs' logs: off by default, nothing saved; on, a file for each job in a folder for the day,
+  with its title (a slash in it doesn't make a folder), outcome, times, steps and log; a write that fails part-way
+  (a file size limit) leaves nothing under the log's name and no part file; pruning deletes days older than 90, then
+  the oldest days while they take too much, never today's or anything that isn't a day's folder.
+- `installer`: the BleachBit cleaner's new Job logs option: the dry run lists the saved logs, the Cache option alone
+  keeps them and the Job logs option alone deletes only them, and a clean leaves their empty folder.
+
+Changed:
+- `jobs`: a finished copy's log is checked to end with how long it took ("Finished in 2 s", which every job's log now
+  ends with) instead of the copy's own "Finished.".
 
 ## 0.3.3-alpha.3
 

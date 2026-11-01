@@ -1512,7 +1512,8 @@ void RecursiveBuilder::emit_progress(bool force)
         QString name = basename(rstrip(root, '/'));
         task->report(d, s ? 0 : t,
                      QString("%1 — %2 of %3%4").arg(name.isEmpty() ? root : name, group_digits(d), group_digits(t),
-                                                    s ? QString("+, scanning…") : QString()));
+                                                    s ? QString("+, scanning…") : QString()) +
+                         (c.isEmpty() ? QString() : " — " + basename(c)));
     }
 }
 
@@ -1524,6 +1525,7 @@ void RecursiveBuilder::one(char kind, const QString &path)
         stop = true;
     if (stop)   // skipped: not counted as done
         return;
+    enum { MADE_FILE, MADE_FOLDER, NONE, BIG, GONE } how = GONE;
     {
         struct stat st;
         if (stat_(path, st)) {
@@ -1532,17 +1534,27 @@ void RecursiveBuilder::one(char kind, const QString &path)
                 o.cover = covers.value(path);
                 o.color = colors.value(path, opts.color);
                 thumbs::folder_thumb(path, st.st_mtime, size, o, fresh);
+                how = MADE_FOLDER;
             } else if (st.st_size <= max_bytes || is_video(path)) {
-                thumbs::file_thumb(path, st.st_mtime, size, fresh);
+                bool made = !thumbs::file_thumb(path, st.st_mtime, size, fresh).isNull();
                 if (size != 128)   // mosaic tiles use the small size
                     thumbs::file_thumb(path, st.st_mtime, 128, fresh);
+                how = made ? MADE_FILE : NONE;
+            } else {
+                how = BIG;
             }
         }
     }
+    if (task && how == NONE)   // (thread-safe: a line in its log)
+        task->log(tx("No preview could be made of %1").arg(path));
     {
         QMutexLocker g(&lock);
         done += 1;
         current = path;
+        files_made += how == MADE_FILE;
+        folders_made += how == MADE_FOLDER;
+        no_preview += how == NONE;
+        too_big += how == BIG;
     }
     emit_progress();
 }
@@ -1572,6 +1584,8 @@ bool RecursiveBuilder::run(Task *job)
         task = nullptr;
         return false;
     }
+    if (task)
+        task->log(tx("Looking through %1").arg(root));
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
         if (task && task->cancelled)
             stop = true;
@@ -1605,6 +1619,14 @@ bool RecursiveBuilder::run(Task *job)
         workers_pool.clear();
     workers_pool.waitForDone();
     emit_progress(true);
+    if (task) {
+        QStringList parts{txn("%Ln file preview(s) made", files_made), txn("%Ln folder preview(s) made", folders_made)};
+        if (no_preview)
+            parts << txn("%Ln file(s) with no preview", no_preview);
+        if (too_big)
+            parts << txn("%Ln file(s) too big for a preview (Preferences → Images & Videos)", too_big);
+        task->log(tx("%1 of %2 done: %3").arg(group_digits(done), group_digits(total), parts.join(", ")));
+    }
     task = nullptr;
     return stop;
 }

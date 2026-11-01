@@ -274,6 +274,7 @@ private:
     QSet<QString> no_previews;
     QMutex lock;
     int done = 0, total = 0;
+    int files_made = 0, folders_made = 0, no_preview = 0, too_big = 0;   // for its log
     bool scanning = true;
     QString current;
     qint64 last_emit = 0;

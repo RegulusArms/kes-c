@@ -133,7 +133,22 @@ static void diff_dir(const QString &left, const QString &right, const QString &r
 QList<Item> diff(const QString &left, const QString &right, bool deep, Task *task)
 {
     QList<Item> out;
+    if (task)
+        task->log((deep ? tx("Comparing %1 with %2, reading the files of the same size and date")
+                        : tx("Comparing %1 with %2 by size and date"))
+                      .arg(left, right));
     diff_dir(left, right, QString(), deep, task, out);
+    if (task) {   // each difference, in the log
+        QString l = basename(rstrip(left, '/')), r = basename(rstrip(right, '/'));
+        int differ = 0;
+        for (const Item &it : out)
+            if (it.kind != SAME) {
+                ++differ;
+                task->log(tx("  %1: %2").arg(it.rel, kind_text(it.kind, l, r)));
+            }
+        task->log(tx("%1, %2 the same")
+                      .arg(txn("%Ln difference(s)", differ), group_digits(qint64(out.size()) - differ)));
+    }
     return out;
 }
 

@@ -455,8 +455,11 @@ void MainWindow::trash_paths(const QStringList &selected, std::function<void(con
             try {
                 util::trash(paths[i]);
                 *trashed << paths[i];
+                task->log(tx("Moved to the trash: %1").arg(paths[i]));
             } catch (const OSError &e) {
                 failed << QVariant(QStringList{paths[i], e.message()});
+                task->log(tx("Failed: %1: %2").arg(paths[i], e.message()));
+                task->had_errors = true;
             }
         }
         return task->cancelled ? QVariant() : QVariant(failed);
@@ -622,6 +625,8 @@ void MainWindow::restore(const QStringList &paths)
             QString orig = trash_original_path(p);
             if (orig.isEmpty()) {
                 errors << tx("%1: original location unknown").arg(basename(p));
+                task->log(tx("Skipped: %1: its original location is unknown").arg(p));
+                task->had_errors = true;
                 continue;
             }
             QString dest = !lexists(orig) ? orig : unique_path(dirname(orig), basename(orig), "num");
@@ -631,8 +636,12 @@ void MainWindow::restore(const QStringList &paths)
                 util::move(p, dest);
                 if (!info_path.isEmpty() && exists(info_path))
                     util::unlink(info_path);
+                task->log(dest == orig ? tx("Restored: %1").arg(dest)
+                                       : tx("Restored: %1 (as %2: its name was taken)").arg(orig, basename(dest)));
             } catch (const OSError &e) {
                 errors << basename(p) + ": " + e.message();
+                task->log(tx("Failed: %1: %2").arg(orig, e.message()));
+                task->had_errors = true;
             }
         }
         return errors;

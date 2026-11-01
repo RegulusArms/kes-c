@@ -151,6 +151,10 @@ static QList<Pref> build()
         .choices = {{TX_NOOP("By drive (jobs on different drives side by side)"), "drive"}, {TX_NOOP("One at a time"), "one"},
                     {TX_NOOP("All at once (every job starts as it's queued, even on a drive in use)"), "all"}};
     add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_start_paused", TX_NOOP("Start new jobs paused"), BOOL, false, TX_NOOP("the Jobs window (Ctrl+Shift+J)"));
+    add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_save_logs", TX_NOOP("Save each finished job's log"), BOOL, false, QString(),
+        TX_NOOP("Each job's log, with its steps, when it ran and how it ended, is saved as a file in "
+        "~/.cache/kestrel-explorer/job-logs (a folder for each day), so it's kept after Clear Finished and after Kestrel "
+        "quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB."));
 
     const QString dupes = TX_NOOP("Find Duplicates");
     const QString in_dupes = TX_NOOP("the Find Duplicates window (a folder's menu → Find Duplicates…)");

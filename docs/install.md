@@ -93,10 +93,11 @@ It also makes Kestrel the app for `trash:///` (the dock's Trash icon, `gio open 
 
 The installer does all of this (everything but the PATH) by running `kes-setup`, which you can also run on its own: `kes-setup --default`, `kes-setup --dock`, and `kes-setup --undo` to put back what they changed. It sets things up for the `kes` next to it, or the one given with `--kes PATH`.
 
-**Cleaning up with BleachBit:** `kes-setup --bleachbit` adds Kestrel Explorer to [BleachBit](https://www.bleachbit.org) (as `~/.config/bleachbit/cleaners/kestrel-explorer.xml`), with six options:
-- **Cache:** folder preview mosaics, the video clips played in the file view, copies of phone videos made to play them, and exiftool's tag lists.
+**Cleaning up with BleachBit:** `kes-setup --bleachbit` adds Kestrel Explorer to [BleachBit](https://www.bleachbit.org) (as `~/.config/bleachbit/cleaners/kestrel-explorer.xml`), with eight options:
+- **Cache:** folder preview mosaics, the video clips played in the file view, copies of phone videos made to play them, the folder sizes Properties remembers, and exiftool's tag lists. Not the saved job logs:
+- **Job logs:** the finished jobs' logs Kestrel saved (only when Preferences → Files → Jobs → **Save each finished job's log** is on), in `~/.cache/kestrel-explorer/job-logs`. An option of its own, so cleaning the cache can keep them, or the other way round.
 - **History:** the servers you connected to recently, and the folder the last Open or Save dialog was left in. These are taken out of Kestrel's settings, and every other setting stays.
-- **Starred items**, **Pinned items**, **Save locations** and **Folder covers, colours and sorts:** the lists of starred files and folders, of pinned ones, of the folders kept for other apps' Save windows, and of folders given a cover, a colour, no image previews or a sort of their own. You chose these, so BleachBit warns before cleaning them.
+- **Starred items**, **Pinned items**, **Save locations**, **Saved sync pairs** and **Folder covers, colours and sorts:** the lists of starred files and folders, of pinned ones, of the folders kept for other apps' Save windows, of the folder pairs saved in Sync Folders, and of folders given a cover, a colour, no image previews or a sort of their own. You chose these, so BleachBit warns before cleaning them.
 
 The thumbnails Kestrel shares with GNOME Files and the desktop's Recent files are cleaned by BleachBit's own Thumbnails and Recent documents options, and undo history is never written to disk. BleachBit won't clean while Kestrel is open. The first time BleachBit's window opens after `kes-setup --bleachbit` (and after a newer Kestrel's `kes-setup --bleachbit` changes the cleaner), it shows a "Security warning" that the cleaner definitions are new or have changed: BleachBit asks that for every cleaner you add, and remembers your OK. `kes-setup --undo` removes the cleaner again.
 

@@ -254,7 +254,14 @@ static void check(QWidget *parent, const QString &sig, std::function<void(const 
         paths << signed_file(sig);
     fileops::queue_job(
         parent, tx("Checking the signature %1").arg(basename(sig)), paths,
-        [sig](Task *) { return QVariant(to_map(verify(sig))); },
+        [sig](Task *t) {
+            t->log(tx("Checking %1 with gpg").arg(sig));
+            Result r = verify(sig);
+            t->log(headline(r));
+            if (!r.output.trimmed().isEmpty())
+                t->log(r.output.trimmed());
+            return QVariant(to_map(r));
+        },
         [done](const QVariant &res) {
             if (res.isValid())
                 done(from_map(res.toMap()));

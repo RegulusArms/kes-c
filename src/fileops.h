@@ -75,8 +75,15 @@ public:
     void log_output(const QByteArray &chunk);   // a program's output, as it comes
     QString log_text() const;
     static Task *current();   // the job running on this thread, if any
-    // at most ~12 a second; `now`: always (a state the user must see at once, such as waiting for a tape to wind)
+    // at most ~12 a second; `now`: always (a state the user must see at once, such as waiting for a tape to wind).
+    // While its log has had nothing new for 15 seconds, the text goes into it too (with the time and the percentage),
+    // so every job's log shows how it went, also one that logs nothing of its own.
     void report(double done, double total = 0, const QString &text = QString(), bool now = false);
+    static qint64 beat_ms;   // how long the log is quiet before the progress text goes in (15 s; tests shorten it)
+    // A report now would be shown: a job checks this before making a costly progress text for each file or chunk
+    bool due() const;
+    // "12.3 MB/s": bytes done since it started, for its progress text (empty in its first 2 seconds)
+    QString speed(qint64 bytes) const;
 
 Q_SIGNALS:
     void progress(double fraction, const QString &text);   // fraction 0..1 or -1 for busy
@@ -91,7 +98,8 @@ protected:
 
 private:
     Fn fn;
-    qint64 last = 0;
+    std::atomic<qint64> last{0};
+    std::atomic<qint64> last_log{0}, last_beat{0};   // when it last logged a line, and a progress line of its own
     std::atomic<bool> pause_flag{false};
     mutable QMutex mtx;          // the log and the programs
     QWaitCondition resumed;
@@ -220,6 +228,9 @@ namespace fileops {
 
 using Done = std::function<void(const QVariant &)>;
 
+// A job's state as shown: "waiting", "running", "paused", "done", "done with errors", "failed", "cancelled"
+QString state_label(const QString &state);
+
 // Run fn(task) on a thread, shown in the status bar unless quiet. on_done(result) runs on the UI thread (also
 // after a cancel, with an invalid QVariant) while `parent` exists. Errors are shown in a message box unless quiet.
 Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done = nullptr, bool cancellable = true,
@@ -289,8 +300,10 @@ QString make_link(const QVariantMap &plan);   // as the current user; raises OSE
 struct DirStats {
     qint64 size = 0, files = 0, dirs = 0;
 };
-// (total bytes, file count, dir count) recursively, not following symlinks
-DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr);
+// (total bytes, file count, dir count) recursively, not following symlinks. progress(so far, the folder it's in): now
+// and then (every 64 folders)
+DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr,
+                   std::function<void(const DirStats &, const QString &)> progress = nullptr);
 
 // Folder sizes worked out before (Properties), so they show at once: ~/.cache/kestrel-explorer/folder-sizes.json,
 // keyed by path and checked against the folder's device and inode (another folder later under the same name isn't

@@ -221,6 +221,7 @@ void undo(MainWindow *win, std::function<void()> after)
                 } else {
                     try {
                         util::rename(new_path, old_path);
+                        task->log(tx("Renamed back: %1 → %2").arg(new_path, basename(old_path)));
                     } catch (const OSError &e) {
                         errors << basename(new_path) + ": " + e.message();
                     }
@@ -247,6 +248,7 @@ void undo(MainWindow *win, std::function<void()> after)
                     util::move(trashed, orig);
                     if (!info.isEmpty() && exists(info))
                         util::unlink(info);
+                    task->log(tx("Put back: %1").arg(orig));
                 } catch (const OSError &e) {
                     errors << basename(orig) + ": " + e.message();
                 }
@@ -260,11 +262,16 @@ void undo(MainWindow *win, std::function<void()> after)
                     continue;
                 try {
                     util::trash(p);
+                    task->log(tx("Moved to the trash: %1").arg(p));
                 } catch (const OSError &e) {
                     errors << basename(p) + ": " + e.message();
                 }
             }
         }
+        for (const QString &e : std::as_const(errors))
+            task->log(tx("Couldn't undo: %1").arg(e));
+        if (!errors.isEmpty())
+            task->had_errors = true;
         return errors;
     };
     fileops::run_job(win, title, work, done);

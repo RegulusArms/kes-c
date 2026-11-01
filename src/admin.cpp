@@ -318,12 +318,14 @@ void start_session(QWidget *parent)
     QPointer<QWidget> p(parent);
     fileops::run_job(
         parent, tx("Starting admin session"),
-        [](Task *) -> QVariant {
+        [](Task *task) -> QVariant {
             try {
                 session().start();
             } catch (const AdminError &e) {
+                task->log(tx("Not started: %1").arg(e.message()));
                 return e.message();
             }
+            task->log(tx("The admin session is open: administrator actions run in it until it's ended"));
             return QString();
         },
         [p](const QVariant &err) {
@@ -358,6 +360,10 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
             } catch (const AdminError &e) {
                 errors = QStringList{e.message()};
             }
+            for (const QString &e : std::as_const(errors))
+                task->log(tx("Failed: %1").arg(e));
+            if (!errors.isEmpty())
+                task->had_errors = true;
             return QVariantMap{{"errors", errors}};
         };
         auto done = [p, title, on_done](const QVariant &res) {

@@ -14,6 +14,18 @@ What changed in each version of Kestrel Explorer, newest first.
   Counting is a job with progress, Pause and Stop that waits for its turn on the drive and stays on that drive. The
   folder sizes Properties remembers show at once while it counts, and what it counts is remembered for Properties
   in turn. On a tape or a floppy it counts only when you ask.
+- **Every job tells the Jobs window more about what it's doing.** Jobs that said little or nothing now log each
+  item: what Move to Trash, Restore and Undo moved (and what they couldn't), what a folder size count found, the
+  files a checksum job hashed or couldn't read, each verified file's result, the duplicates kept and linked, what a
+  compare found different, the previews made and the files that got none, a signature's result. Progress shows the
+  item a job is on, and copies, checksums and duplicate searches show their speed. A job whose log has been quiet
+  for 15 seconds gets a line with the time and how far it is, and every log now ends with how the job ended and how
+  long it took. Progress texts are made only when they're shown, so copies are no slower for it.
+- **Job logs can be kept** (Preferences → Files → Jobs → Save each finished job's log, off by default): each
+  finished job's log is saved in `~/.cache/kestrel-explorer/job-logs`, a folder for each day and a file for each
+  job, so it outlives Clear Finished and quitting Kestrel. Logs older than 90 days are deleted, and the oldest days
+  while they take more than 100 MB. `kes-setup --bleachbit` gives BleachBit a separate **Job logs** option for them
+  (its Cache option now keeps them); run it again to update the cleaner.
 
 ## 0.3.3-alpha.3 (2026-11-01)
 

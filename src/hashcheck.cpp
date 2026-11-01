@@ -271,21 +271,31 @@ QString hash_file(const QString &path, const QString &algo, const std::function<
 
 Result verify(const Entry &e, Task *task)
 {
-    if (!lexists(e.path))
+    if (!lexists(e.path)) {
+        if (task)
+            task->log(tx("Missing: %1").arg(e.path));
         return {"missing", {}, {}};
+    }
     try {
         QString actual = hash_file(
             e.path, e.algo,
             [task, &e](qint64 done, qint64 size) {
-                if (task)
-                    task->report(done, size, "Verifying " + e.name);
+                if (task && task->due())
+                    task->report(done, size, tx("Verifying %1 · %2 of %3 · %4")
+                                                 .arg(e.name, human_size(done), human_size(size), task->speed(done)));
             },
             [task]() {
                 if (task)
                     task->check();
             });
-        return {actual == e.expected ? "ok" : "failed", actual, {}};
+        bool ok = actual == e.expected;
+        if (task)
+            task->log(ok ? tx("OK: %1 (%2 %3)").arg(e.path, e.algo, actual)
+                         : tx("Doesn't match: %1\n  expected %2 %3\n  found    %2 %4").arg(e.path, e.algo, e.expected, actual));
+        return {ok ? "ok" : "failed", actual, {}};
     } catch (const OSError &err) {
+        if (task)
+            task->log(tx("Couldn't be read: %1: %2").arg(e.path, QString::fromLocal8Bit(strerror(err.code))));
         return {"error", {}, QString::fromLocal8Bit(strerror(err.code))};
     }
 }
@@ -615,6 +625,9 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
         sizes << (stat_(f, st) ? qint64(st.st_size) : 0);
         total += sizes.last();
     }
+    if (task)
+        task->log(tx("%1 (%2) to hash with %3")
+                      .arg(txn("%Ln file(s)", files.size()), human_size(total), algos.join(", ").toUpper()));
     QList<QPair<QString, QStringList>> hashed;   // relative name, hashes in algos' order
     for (int i = 0; i < files.size(); i++) {
         QString name = relpath(files[i], dir);
@@ -622,21 +635,34 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
             QStringList h = hash_files(
                 files[i], algos,
                 [&](qint64 done, qint64) {
-                    if (task)
-                        task->report(before + done, std::max<qint64>(total, 1), tx("Hashing %1").arg(basename(files[i])));
+                    if (task && task->due())
+                        task->report(before + done, std::max<qint64>(total, 1),
+                                     tx("Hashing %1 (%2 of %3) · %4")
+                                         .arg(basename(files[i]), group_digits(i + 1), group_digits(files.size()),
+                                              task->speed(before + done)));
                 },
                 check);
             hashed << qMakePair(name, h);
+            if (task)
+                task->log(tx("  %1").arg(name));
         } catch (const OSError &e) {
             if (errors)
                 *errors << name + ": " + QString::fromLocal8Bit(strerror(e.code));
+            if (task) {
+                task->log(tx("Couldn't be read, left out: %1: %2").arg(name, QString::fromLocal8Bit(strerror(e.code))));
+                task->had_errors = true;
+            }
         }
         before += sizes[i];
     }
     if (hashed.isEmpty())
         throw Error(tx("None of the files could be read."));
     check();
-    return write_checksums(dir, stem, hashed, algos, one_file);
+    QStringList written = write_checksums(dir, stem, hashed, algos, one_file);
+    if (task)
+        for (const QString &w : written)
+            task->log(tx("Wrote %1").arg(w));
+    return written;
 }
 
 QStringList write_checksums(const QString &dir, const QString &stem, const QList<QPair<QString, QStringList>> &hashed,

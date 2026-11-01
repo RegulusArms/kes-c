@@ -33,7 +33,7 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+647"/>
+        <location filename="../src/app.cpp" line="+651"/>
         <location line="+587"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
@@ -222,7 +222,7 @@
         <location line="+44"/>
         <location line="+9"/>
         <location line="+2"/>
-        <location filename="../src/dialogs.cpp" line="+1191"/>
+        <location filename="../src/dialogs.cpp" line="+1209"/>
         <location line="+3"/>
         <location line="+7"/>
         <location line="+130"/>
@@ -239,19 +239,25 @@
     </message>
     <message>
         <location line="+32"/>
-        <location line="+91"/>
+        <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1014"/>
+        <location filename="../src/fileops.cpp" line="+1042"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 von %2 – %3</translation>
     </message>
     <message>
-        <location line="-155"/>
+        <location line="-165"/>
+        <location filename="../src/undo.cpp" line="+265"/>
+        <source>Moved to the trash: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <location filename="../src/app.cpp" line="-725"/>
         <location line="+943"/>
-        <location filename="../src/diskusage.cpp" line="+1003"/>
+        <location filename="../src/diskusage.cpp" line="+1013"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+109"/>
         <location filename="../src/opening.cpp" line="+249"/>
@@ -337,7 +343,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+505"/>
+        <location filename="../src/app.cpp" line="+507"/>
         <source>Delete</source>
         <translation>Löschen</translation>
     </message>
@@ -352,13 +358,15 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Bereinigt: %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-90"/>
+        <location line="+93"/>
+        <location line="+88"/>
         <location filename="../src/convert.cpp" line="+11"/>
         <source>Failed: %1: %2</source>
         <translation>Fehlgeschlagen: %1: %2</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="-78"/>
         <location line="+11"/>
         <location line="+31"/>
         <source>Wipe Metadata</source>
@@ -467,8 +475,23 @@ Es wird keine Sicherung angelegt, dies kann also nicht rückgängig gemacht werd
         <translation>%1: ursprünglicher Ort unbekannt</translation>
     </message>
     <message>
-        <location line="+20"/>
-        <location filename="../src/app.cpp" line="-506"/>
+        <location line="+1"/>
+        <source>Skipped: %1: its original location is unknown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Restored: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Restored: %1 (as %2: its name was taken)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <location filename="../src/app.cpp" line="-508"/>
         <source>Restore</source>
         <translation>Wiederherstellen</translation>
     </message>
@@ -554,7 +577,7 @@ Es wird keine Sicherung angelegt, dies kann also nicht rückgängig gemacht werd
     <message numerus="yes">
         <location line="+18"/>
         <location filename="../src/archive_ui.cpp" line="+835"/>
-        <location filename="../src/jobswin.cpp" line="+546"/>
+        <location filename="../src/jobswin.cpp" line="+537"/>
         <source>… and %Ln more</source>
         <translation>
             <numerusform>… und %Ln weiteres</numerusform>
@@ -645,12 +668,12 @@ Endet nach %Ln Minuten ohne Administratoraktionen oder wenn Kestrel beendet wird
     </message>
     <message>
         <location line="+14"/>
-        <location line="+17"/>
+        <location line="+19"/>
         <source>Admin Session</source>
         <translation>Administratorsitzung</translation>
     </message>
     <message>
-        <location line="-16"/>
+        <location line="-18"/>
         <source>Administrator actions need pkexec. Install it with:
 
 sudo apt install pkexec</source>
@@ -664,12 +687,28 @@ sudo apt install pkexec</translation>
         <translation>Administratorsitzung wird gestartet</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+5"/>
+        <source>Not started: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>The admin session is open: administrator actions run in it until it&apos;s ended</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Install pkexec to retry as administrator.</source>
         <translation>Installieren Sie pkexec, um es als Administrator erneut zu versuchen.</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+20"/>
+        <location filename="../src/drives.cpp" line="+532"/>
+        <source>Failed: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
         <source>%1 (as administrator)</source>
         <translation>%1 (als Administrator)</translation>
     </message>
@@ -687,10 +726,10 @@ sudo apt install pkexec</translation>
         <translation>Als Administrator erneut versuchen</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1189"/>
+        <location filename="../src/app.cpp" line="-1193"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
-        <location filename="../src/diskusage.cpp" line="-250"/>
-        <location filename="../src/dupes.cpp" line="+353"/>
+        <location filename="../src/diskusage.cpp" line="-260"/>
+        <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -699,7 +738,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+0"/>
         <location filename="../src/archivewin.cpp" line="+0"/>
-        <location filename="../src/compare.cpp" line="+786"/>
+        <location filename="../src/compare.cpp" line="+801"/>
         <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/dupes.cpp" line="+0"/>
         <location filename="../src/pane.cpp" line="+889"/>
@@ -753,25 +792,25 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+92"/>
-        <location line="+290"/>
+        <location line="+294"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
         <translation>Zurück</translation>
     </message>
     <message>
-        <location line="-289"/>
-        <location line="+290"/>
+        <location line="-293"/>
+        <location line="+294"/>
         <source>Forward</source>
         <translation>Vor</translation>
     </message>
     <message>
-        <location line="-289"/>
-        <location line="+290"/>
+        <location line="-293"/>
+        <location line="+294"/>
         <source>Parent Folder</source>
         <translation>Übergeordneter Ordner</translation>
     </message>
     <message>
-        <location line="-289"/>
+        <location line="-293"/>
         <source>Homepage (Alt+Home)</source>
         <translation>Startseite (Alt+Pos1)</translation>
     </message>
@@ -863,20 +902,20 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+4"/>
-        <location line="+744"/>
+        <location line="+748"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>Alle Gruppen einklappen</translation>
     </message>
     <message>
-        <location line="-740"/>
-        <location line="+745"/>
+        <location line="-744"/>
+        <location line="+749"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>Alle Gruppen ausklappen</translation>
     </message>
     <message>
-        <location line="-739"/>
+        <location line="-743"/>
         <source>Set as Default</source>
         <translation>Als Standard festlegen</translation>
     </message>
@@ -890,8 +929,29 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <source>Folders without a sort of their own now use this one</source>
         <translation>Ordner ohne eigene Sortierung verwenden jetzt diese</translation>
     </message>
+    <message>
+        <location line="+14"/>
+        <source>Looking for the folders below %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+30"/>
+        <location line="+8"/>
+        <source>%Ln folder(s) found — %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+4"/>
+        <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+8"/>
         <source>Sort applied to %Ln subfolder(s)</source>
         <translation>
             <numerusform>Sortierung auf %Ln Unterordner angewendet</numerusform>
@@ -905,7 +965,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+37"/>
-        <location filename="../src/hashcheck.cpp" line="+305"/>
+        <location filename="../src/hashcheck.cpp" line="+315"/>
         <location filename="../src/widgets.cpp" line="-2182"/>
         <source>File</source>
         <translation>Datei</translation>
@@ -966,14 +1026,14 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1314"/>
+        <location line="+1316"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>Rückgängig</translation>
     </message>
     <message>
-        <location line="-1310"/>
+        <location line="-1312"/>
         <location line="+726"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
@@ -984,7 +1044,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location line="+726"/>
         <location filename="../src/compare.cpp" line="-154"/>
         <location line="+281"/>
-        <location filename="../src/dialogs.cpp" line="-1101"/>
+        <location filename="../src/dialogs.cpp" line="-1119"/>
         <location filename="../src/jobswin.cpp" line="-280"/>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
@@ -1032,8 +1092,8 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location line="+608"/>
         <location line="+32"/>
         <location line="+310"/>
-        <location line="+237"/>
-        <location filename="../src/diskusage.cpp" line="+315"/>
+        <location line="+239"/>
+        <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
         <location line="+103"/>
@@ -1042,7 +1102,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>Eigenschaften</translation>
     </message>
     <message>
-        <location line="-1178"/>
+        <location line="-1180"/>
         <location filename="../src/menus.cpp" line="-181"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1050,7 +1110,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+155"/>
+        <location line="+159"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>Ansicht</translation>
@@ -1094,7 +1154,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="-557"/>
-        <location filename="../src/prefs.cpp" line="-124"/>
+        <location filename="../src/prefs.cpp" line="-128"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
@@ -1108,13 +1168,13 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1172"/>
+        <location line="+1174"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>Vollbild</translation>
     </message>
     <message>
-        <location line="-1164"/>
+        <location line="-1166"/>
         <source>Reload</source>
         <translation>Neu laden</translation>
     </message>
@@ -1205,12 +1265,12 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1155"/>
+        <location line="+1157"/>
         <source>Keyboard Shortcuts</source>
         <translation>Tastenkürzel</translation>
     </message>
     <message>
-        <location line="-1154"/>
+        <location line="-1156"/>
         <source>About</source>
         <translation>Über</translation>
     </message>
@@ -1479,7 +1539,9 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message numerus="yes">
         <location line="+34"/>
-        <location filename="../src/archivewin.cpp" line="+104"/>
+        <location filename="../src/archivewin.cpp" line="+105"/>
+        <location filename="../src/dialogs.cpp" line="+534"/>
+        <location filename="../src/diskusage.cpp" line="-139"/>
         <source>%Ln folder(s)</source>
         <translation>
             <numerusform>%Ln Ordner</numerusform>
@@ -1565,12 +1627,12 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="-284"/>
-        <location line="+522"/>
+        <location line="+524"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
-        <location filename="../src/diskusage.cpp" line="-22"/>
+        <location filename="../src/diskusage.cpp" line="+117"/>
         <location filename="../src/menus.cpp" line="-94"/>
         <location filename="../src/opening.cpp" line="-176"/>
         <location line="+55"/>
@@ -1588,7 +1650,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>Öffnen</translation>
     </message>
     <message>
-        <location line="-519"/>
+        <location line="-521"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-184"/>
         <location line="+42"/>
@@ -1629,7 +1691,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     <message>
         <location line="+7"/>
         <location line="+9"/>
-        <location filename="../src/dialogs.cpp" line="+1120"/>
+        <location filename="../src/dialogs.cpp" line="+604"/>
         <location line="+66"/>
         <location filename="../src/sharing.cpp" line="+81"/>
         <source>Open With</source>
@@ -1780,18 +1842,18 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/archivewin.cpp" line="-300"/>
-        <location line="+177"/>
+        <location filename="../src/archivewin.cpp" line="-301"/>
+        <location line="+178"/>
         <location filename="../src/menus.cpp" line="+4"/>
         <source>Extract Here</source>
         <translation>Hier entpacken</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/archivewin.cpp" line="-175"/>
-        <location line="+176"/>
+        <location filename="../src/archivewin.cpp" line="-176"/>
+        <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+114"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -1890,7 +1952,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+8"/>
-        <location filename="../src/dialogs.cpp" line="-912"/>
+        <location filename="../src/dialogs.cpp" line="-930"/>
         <location filename="../src/menus.cpp" line="-134"/>
         <source>Image</source>
         <translation>Bild</translation>
@@ -2062,7 +2124,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>UWP ist nicht erreichbar. Ist sein Editorfenster noch offen?</translation>
     </message>
     <message>
-        <location line="+140"/>
+        <location line="+142"/>
         <source>Folder preview cache cleared</source>
         <translation>Cache der Ordnervorschauen geleert</translation>
     </message>
@@ -2197,8 +2259,8 @@ Sie werden beim Durchsuchen neu erzeugt.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-138"/>
-        <location line="+160"/>
+        <location filename="../src/prefs.cpp" line="-142"/>
+        <location line="+164"/>
         <source>Show hidden files</source>
         <translation>Versteckte Dateien anzeigen</translation>
     </message>
@@ -2279,7 +2341,7 @@ Sie werden beim Durchsuchen neu erzeugt.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-104"/>
+        <location filename="../src/prefs.cpp" line="-108"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2434,8 +2496,8 @@ Sie werden beim Durchsuchen neu erzeugt.</translation>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+661"/>
-        <location filename="../src/hashcheck.cpp" line="+517"/>
+        <location filename="../src/fileops.cpp" line="+663"/>
+        <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
             <numerusform>… und %Ln weiteres</numerusform>
@@ -2472,7 +2534,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="+48"/>
-        <location filename="../src/undo.cpp" line="+144"/>
+        <location filename="../src/undo.cpp" line="-121"/>
         <source>Undo %1</source>
         <translation>%1 rückgängig machen</translation>
     </message>
@@ -2689,7 +2751,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     <message>
         <location line="+59"/>
         <location filename="../src/archivewin.cpp" line="-258"/>
-        <location filename="../src/hashcheck.cpp" line="-323"/>
+        <location filename="../src/hashcheck.cpp" line="-339"/>
         <location filename="../src/opening.cpp" line="-118"/>
         <source>Reading %1</source>
         <translation>%1 wird gelesen</translation>
@@ -2802,18 +2864,18 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     <message>
         <location line="+2"/>
         <location line="+487"/>
-        <location filename="../src/dialogs.cpp" line="+579"/>
+        <location filename="../src/dialogs.cpp" line="+597"/>
         <location line="+450"/>
-        <location filename="../src/hashcheck.cpp" line="+210"/>
+        <location filename="../src/hashcheck.cpp" line="+226"/>
         <location filename="../src/prefswin.cpp" line="+206"/>
         <source>Browse…</source>
         <translation>Durchsuchen …</translation>
     </message>
     <message>
         <location line="-482"/>
-        <location filename="../src/dialogs.cpp" line="-1127"/>
+        <location filename="../src/dialogs.cpp" line="-1145"/>
         <location line="+38"/>
-        <location line="+1098"/>
+        <location line="+1116"/>
         <source>Location:</source>
         <translation>Ort:</translation>
     </message>
@@ -3144,7 +3206,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+97"/>
+        <location filename="../src/prefs.cpp" line="+101"/>
         <source>Keep both (rename)</source>
         <translation>Beide behalten (umbenennen)</translation>
     </message>
@@ -3499,7 +3561,7 @@ Installieren mit:  sudo apt install %2</translation>
         <translation>Komprimieren nach „%1“</translation>
     </message>
     <message>
-        <location filename="../src/archivewin.cpp" line="-352"/>
+        <location filename="../src/archivewin.cpp" line="-353"/>
         <source>Encrypted: extracting it needs the archive&apos;s password</source>
         <translation>Verschlüsselt: Zum Entpacken wird das Passwort des Archivs benötigt</translation>
     </message>
@@ -3565,6 +3627,14 @@ Installieren mit:  sudo apt install %2</translation>
     </message>
     <message numerus="yes">
         <location line="+7"/>
+        <source>%Ln item(s) listed in %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
         <source>Reading %1 — sorting %Ln item(s)</source>
         <translation>
             <numerusform>%1 wird gelesen – %Ln Element wird sortiert</numerusform>
@@ -3593,8 +3663,12 @@ Installieren mit:  sudo apt install %2</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
-        <location filename="../src/diskusage.cpp" line="-415"/>
+        <location filename="../src/dialogs.cpp" line="-949"/>
+        <location line="+27"/>
+        <location filename="../src/diskusage.cpp" line="-425"/>
+        <location line="+298"/>
         <location filename="../src/dupes.cpp" line="+229"/>
+        <location filename="../src/hashcheck.cpp" line="-212"/>
         <source>%Ln file(s)</source>
         <translation>
             <numerusform>%Ln Datei</numerusform>
@@ -3659,9 +3733,9 @@ Installieren mit:  sudo apt install </translation>
         <location line="-147"/>
         <location filename="../src/compare.cpp" line="-145"/>
         <location filename="../src/convert.cpp" line="+3"/>
-        <location filename="../src/dialogs.cpp" line="-1140"/>
-        <location line="+1139"/>
-        <location filename="../src/hashcheck.cpp" line="-110"/>
+        <location filename="../src/dialogs.cpp" line="-236"/>
+        <location line="+1157"/>
+        <location filename="../src/hashcheck.cpp" line="+102"/>
         <location filename="../src/menus.cpp" line="+338"/>
         <source>Name:</source>
         <translation>Name:</translation>
@@ -3711,7 +3785,7 @@ Installieren mit:  sudo apt install </translation>
         <translation>Der Ordner „%1“ existiert nicht.</translation>
     </message>
     <message>
-        <location filename="../src/compare.cpp" line="-718"/>
+        <location filename="../src/compare.cpp" line="-733"/>
         <location line="+2"/>
         <source>Can&apos;t read %1</source>
         <translation>%1 kann nicht gelesen werden</translation>
@@ -3722,7 +3796,36 @@ Installieren mit:  sudo apt install </translation>
         <translation>%1 wird verglichen</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+24"/>
+        <source>Comparing %1 with %2, reading the files of the same size and date</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Comparing %1 with %2 by size and date</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <location filename="../src/diskusage.cpp" line="+6"/>
+        <source>  %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1, %2 the same</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln difference(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+9"/>
         <location line="+296"/>
         <source>The same</source>
         <translation>Gleich</translation>
@@ -3828,9 +3931,9 @@ Installieren mit:  sudo apt install </translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/diskusage.cpp" line="+145"/>
+        <location filename="../src/diskusage.cpp" line="-159"/>
         <location filename="../src/dupes.cpp" line="-26"/>
-        <location filename="../src/hashcheck.cpp" line="-379"/>
+        <location filename="../src/hashcheck.cpp" line="-395"/>
         <location filename="../src/jobswin.cpp" line="-107"/>
         <location line="+35"/>
         <source>Stop</source>
@@ -3975,7 +4078,7 @@ Installieren mit:  sudo apt install </translation>
         <location line="-342"/>
         <location line="+354"/>
         <location filename="../src/dialogs.cpp" line="-411"/>
-        <location filename="../src/diskusage.cpp" line="+176"/>
+        <location filename="../src/diskusage.cpp" line="+186"/>
         <location filename="../src/dupes.cpp" line="+147"/>
         <source>Stopped.</source>
         <translation>Gestoppt.</translation>
@@ -4537,7 +4640,7 @@ Löschen und synchronisieren?</numerusform>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/dialogs.cpp" line="-419"/>
+        <location filename="../src/dialogs.cpp" line="-437"/>
         <source>Size:</source>
         <translation>Größe:</translation>
     </message>
@@ -4586,9 +4689,9 @@ Löschen und synchronisieren?</numerusform>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-149"/>
+        <location filename="../src/prefs.cpp" line="-153"/>
         <location line="+2"/>
-        <location line="+159"/>
+        <location line="+163"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4694,7 +4797,7 @@ Löschen und synchronisieren?</numerusform>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-82"/>
+        <location filename="../src/prefs.cpp" line="-86"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -5153,12 +5256,12 @@ Löschen und synchronisieren?</numerusform>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+855"/>
+        <location line="+873"/>
         <source>Loading tags…</source>
         <translation>Tags werden geladen …</translation>
     </message>
     <message>
-        <location line="-846"/>
+        <location line="-864"/>
         <location line="+4"/>
         <source>Tag:</source>
         <translation>Tag:</translation>
@@ -5170,12 +5273,12 @@ Löschen und synchronisieren?</numerusform>
     </message>
     <message>
         <location line="+22"/>
-        <location line="+620"/>
+        <location line="+638"/>
         <source>Tag</source>
         <translation>Tag</translation>
     </message>
     <message>
-        <location line="-620"/>
+        <location line="-638"/>
         <source>What it&apos;s for</source>
         <translation>Wofür es ist</translation>
     </message>
@@ -5265,19 +5368,19 @@ Akzeptiert: %3</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+809"/>
+        <location line="+827"/>
         <location line="+7"/>
         <source>Permissions</source>
         <translation>Berechtigungen</translation>
     </message>
     <message>
-        <location line="-811"/>
-        <location line="+496"/>
+        <location line="-829"/>
+        <location line="+514"/>
         <source>Metadata</source>
         <translation>Metadaten</translation>
     </message>
     <message>
-        <location line="-495"/>
+        <location line="-513"/>
         <location filename="../src/prefs.cpp" line="+104"/>
         <location line="+2"/>
         <source>Checksums</source>
@@ -5432,7 +5535,7 @@ Akzeptiert: %3</translation>
     </message>
     <message>
         <location line="+27"/>
-        <location filename="../src/diskusage.cpp" line="-192"/>
+        <location filename="../src/diskusage.cpp" line="-202"/>
         <location line="+150"/>
         <source>Recalculate</source>
         <translation>Neu berechnen</translation>
@@ -5448,7 +5551,17 @@ Akzeptiert: %3</translation>
         <translation>Teilweise gespeichert</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+8"/>
+        <source>Counting %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>  %1 in %2 and %3, remembered for next time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>Not calculated (stopped)</source>
         <translation>Nicht berechnet (gestoppt)</translation>
     </message>
@@ -5466,7 +5579,12 @@ Akzeptiert: %3</translation>
         </translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+4"/>
+        <source>Remembered: %1: %2 in %3 (%4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+23"/>
         <source>%1 (%2 bytes)
 %3 files, %4 folders</source>
         <translation>%1 (%2 Byte)
@@ -5749,7 +5867,7 @@ Dies kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+15"/>
         <location filename="../src/hashcheck.cpp" line="+50"/>
-        <location filename="../src/signature.cpp" line="+356"/>
+        <location filename="../src/signature.cpp" line="+363"/>
         <source>Checking…</source>
         <translation>Wird geprüft …</translation>
     </message>
@@ -5971,12 +6089,17 @@ Tatsächlich: %2</translation>
         <translation>„%1“ ist kein vorhandener Ordner. Trotzdem speichern?</translation>
     </message>
     <message>
-        <location filename="../src/drives.cpp" line="+528"/>
+        <location filename="../src/drives.cpp" line="-4"/>
         <source>Writing the tape&apos;s index</source>
         <translation>Index des Bandes wird geschrieben</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
+        <source>The index of the tape in %1 is written</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
         <source>Write Tape Index</source>
         <translation>Bandindex schreiben</translation>
     </message>
@@ -5985,13 +6108,8 @@ Tatsächlich: %2</translation>
         <source>The tape&apos;s index couldn&apos;t be written: %1</source>
         <translation>Der Index des Bandes konnte nicht geschrieben werden: %1</translation>
     </message>
-    <message>
-        <location filename="../src/dupes.cpp" line="-281"/>
-        <source>Looking through the files: %1 found</source>
-        <translation>Dateien werden durchsucht: %1 gefunden</translation>
-    </message>
     <message numerus="yes">
-        <location line="+45"/>
+        <location filename="../src/dupes.cpp" line="-240"/>
         <source>Comparing the beginnings of %Ln file(s)</source>
         <translation>
             <numerusform>Die Anfänge von %Ln Datei werden verglichen</numerusform>
@@ -5999,12 +6117,7 @@ Tatsächlich: %2</translation>
         </translation>
     </message>
     <message>
-        <location line="+33"/>
-        <source>Comparing the files of the same size: %1</source>
-        <translation>Dateien gleicher Größe werden verglichen: %1</translation>
-    </message>
-    <message>
-        <location line="+93"/>
+        <location line="+130"/>
         <source>%1: the copy kept (%2) changed since the search</source>
         <translation>%1: Die behaltene Kopie (%2) hat sich seit der Suche geändert</translation>
     </message>
@@ -6043,7 +6156,7 @@ Tatsächlich: %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+97"/>
+        <location filename="../src/prefs.cpp" line="+101"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6075,6 +6188,7 @@ Tatsächlich: %2</translation>
         <translation>Harte Verknüpfungen auf eine Datei sind diese Datei, keine Kopien davon: Sie belegen keinen zusätzlichen Platz</translation>
     </message>
     <message numerus="yes">
+        <location filename="../src/dialogs.cpp" line="-967"/>
         <location filename="../src/diskusage.cpp" line="-776"/>
         <source>%1 in %Ln file(s) so far — %2</source>
         <translation type="unfinished">
@@ -6083,7 +6197,7 @@ Tatsächlich: %2</translation>
         </translation>
     </message>
     <message>
-        <location line="+321"/>
+        <location filename="../src/diskusage.cpp" line="+321"/>
         <source>%1, as Properties remembers</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6194,8 +6308,31 @@ Tatsächlich: %2</translation>
         <source>Counting what fills “%1”</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+2"/>
+        <source>Counting %1 (not other drives mounted in it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1 in %2 and %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Couldn&apos;t be read, counted as empty: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+25"/>
+        <location line="+9"/>
+        <source>%Ln folder size(s) remembered for Properties</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+19"/>
         <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -6284,13 +6421,66 @@ Tatsächlich: %2</translation>
         <translation>Jede nicht behaltene Datei wird zu einer harten Verknüpfung auf die behaltene: dieselbe Datei unter beiden Namen, die ihren Platz nur einmal belegt. Nur auf demselben Laufwerk.</translation>
     </message>
     <message>
-        <location filename="../src/diskusage.cpp" line="-175"/>
+        <location filename="../src/diskusage.cpp" line="-185"/>
         <location filename="../src/dupes.cpp" line="+42"/>
         <source>Waiting for the drive…</source>
         <translation>Warten auf das Laufwerk …</translation>
     </message>
     <message>
-        <location filename="../src/dupes.cpp" line="+7"/>
+        <location filename="../src/dupes.cpp" line="-402"/>
+        <source>Couldn&apos;t be read, left out: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Looking through the files: %1 found — %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location filename="../src/thumbs.cpp" line="+1537"/>
+        <source>Looking through %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+36"/>
+        <source>%Ln file(s) found</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+28"/>
+        <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Comparing the files of the same size: %1 · %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+24"/>
+        <source>%Ln group(s) of identical files; %1 can be freed</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+281"/>
         <source>Finding duplicates in %1</source>
         <translation>Duplikate in %1 werden gesucht</translation>
     </message>
@@ -6359,12 +6549,12 @@ Tatsächlich: %2</translation>
     </message>
     <message>
         <location line="+32"/>
-        <location line="+26"/>
+        <location line="+35"/>
         <source>Replace with Hard Links</source>
         <translation>Durch harte Verknüpfungen ersetzen</translation>
     </message>
     <message numerus="yes">
-        <location line="-25"/>
+        <location line="-34"/>
         <source>Replace %Ln file(s) with hard links to the copy kept in each group?
 
 Each then is the same file as the one kept, under its own name: one date, one set of permissions, and a change to it shows under every name. Files on another drive than the one kept are left as they are.%1
@@ -6394,14 +6584,29 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Duplikate werden durch harte Verknüpfungen ersetzt</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+8"/>
+        <source>Kept: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>  replaced with a hard link to it: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>  left as it is: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>%1 file(s) were left as they are:
 %2</source>
         <translation>%1 Datei(en) wurden belassen, wie sie sind:
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1512"/>
+        <location filename="../src/fileops.cpp" line="-1540"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln Zeile nicht behalten …</numerusform>
@@ -6409,7 +6614,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+44"/>
         <source>Waited %1</source>
         <translation>%1 gewartet</translation>
     </message>
@@ -6424,7 +6629,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Fehler: %1</translation>
     </message>
     <message>
-        <location line="+416"/>
+        <location line="+422"/>
         <location line="+22"/>
         <location line="+11"/>
         <source>%1: %2</source>
@@ -6545,13 +6750,44 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>  abgebrochen</translation>
     </message>
     <message>
-        <location line="+41"/>
+        <location line="-801"/>
+        <location line="+842"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-4"/>
+        <location line="-834"/>
+        <source>%1  %2% · %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1  %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Failed after %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Stopped after %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Finished, with errors, in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Finished in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+796"/>
         <source>waiting for the buffer</source>
         <translation>warten auf den Puffer</translation>
     </message>
@@ -6561,7 +6797,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>  %1  Band %2 · Quelle %3 · Puffer %4 von %5 (%6%) · %7 von %8 geschrieben</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+67"/>
         <source>While this job runs, GNOME&apos;s low-disk-space check skips this tape: it asks the drive for its free space once a minute, and each time the tape stops streaming.</source>
         <translation>Während dieser Auftrag läuft, überspringt GNOMEs Prüfung auf wenig Speicherplatz dieses Band: Sie fragt das Laufwerk einmal pro Minute nach freiem Platz, und jedes Mal hört das Band auf zu streamen.</translation>
     </message>
@@ -6745,7 +6981,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+48"/>
+        <location line="+57"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1 s</translation>
@@ -6850,17 +7086,12 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <source>The folder it was copying into, “%1”, isn&apos;t there any more: it was moved or deleted before this job began. Nothing was copied.</source>
         <translation>Der Zielordner „%1“ ist nicht mehr da: Er wurde verschoben oder gelöscht, bevor dieser Auftrag begann. Nichts wurde kopiert.</translation>
     </message>
-    <message>
-        <location line="+6"/>
-        <source>Finished.</source>
-        <translation>Fertig.</translation>
-    </message>
     <message numerus="yes">
-        <location line="+0"/>
-        <source>Finished, with %Ln error(s).</source>
-        <translation>
-            <numerusform>Fertig, mit %Ln Fehler.</numerusform>
-            <numerusform>Fertig, mit %Ln Fehlern.</numerusform>
+        <location line="+7"/>
+        <source>%Ln item(s) failed.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -6985,7 +7216,17 @@ Trotzdem kopieren?</translation>
         <translation>%1 von %2 geschreddert</translation>
     </message>
     <message>
-        <location line="+125"/>
+        <location line="+8"/>
+        <source>Still there (not shredded): %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Shredded: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+122"/>
         <source>Calculated just now</source>
         <translation>Gerade eben berechnet</translation>
     </message>
@@ -7030,7 +7271,7 @@ Trotzdem kopieren?</translation>
         </translation>
     </message>
     <message>
-        <location line="+125"/>
+        <location line="+129"/>
         <source>Could not copy %1 from the device: %2</source>
         <translation>%1 konnte nicht vom Gerät kopiert werden: %2</translation>
     </message>
@@ -7136,12 +7377,39 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <translation>Eingeklappte Gruppe</translation>
     </message>
     <message>
-        <location filename="../src/hashcheck.cpp" line="-195"/>
+        <location filename="../src/hashcheck.cpp" line="-205"/>
         <source>Checksum files (%1);;All files (*)</source>
         <translation>Prüfsummendateien (%1);;Alle Dateien (*)</translation>
     </message>
     <message>
-        <location line="+174"/>
+        <location line="+152"/>
+        <source>Missing: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Verifying %1 · %2 of %3 · %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>OK: %1 (%2 %3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Doesn&apos;t match: %1
+  expected %2 %3
+  found    %2 %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Couldn&apos;t be read: %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>Verify Checksums — %1</source>
         <translation>Prüfsummen prüfen – %1</translation>
     </message>
@@ -7267,17 +7535,37 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <translation>Es gibt keine Dateien, für die Prüfsummen erstellt werden könnten.</translation>
     </message>
     <message>
-        <location line="+16"/>
-        <source>Hashing %1</source>
-        <translation>%1 wird gehasht</translation>
+        <location line="+9"/>
+        <source>%1 (%2) to hash with %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+11"/>
+        <source>Hashing %1 (%2 of %3) · %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>  %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Couldn&apos;t be read, left out: %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>None of the files could be read.</source>
         <translation>Keine der Dateien konnte gelesen werden.</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+5"/>
+        <source>Wrote %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+30"/>
         <location line="+114"/>
         <location line="+41"/>
         <source>Create Checksum File</source>
@@ -7303,7 +7591,7 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-14"/>
+        <location filename="../src/prefs.cpp" line="-18"/>
         <source>Algorithms</source>
         <translation>Algorithmen</translation>
     </message>
@@ -7782,7 +8070,7 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <translation>%1 (%2): %3. Sichern Sie jetzt seine Dateien.</translation>
     </message>
     <message>
-        <location filename="../src/i18n.cpp" line="+70"/>
+        <location filename="../src/i18n.cpp" line="+72"/>
         <source>MMMM yyyy</source>
         <extracomment>The format of a month and its year (QDate&apos;s: MMMM the month&apos;s name, yyyy the year)</extracomment>
         <translation>MMMM yyyy</translation>
@@ -7877,13 +8165,13 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <translation>Wartet, bis es an der Reihe ist (sein Laufwerk ist belegt) …</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-109"/>
+        <location filename="../src/fileops.cpp" line="-801"/>
         <source>Waiting</source>
         <translation>Wartet</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/thumbs.cpp" line="+1300"/>
+        <location filename="../src/thumbs.cpp" line="-237"/>
         <source>Running</source>
         <translation>Läuft</translation>
     </message>
@@ -7914,10 +8202,11 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <translation>Abgebrochen</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location filename="../src/jobswin.cpp" line="-80"/>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
+        <location line="+1"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>Aufträge</translation>
@@ -7949,7 +8238,7 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+0"/>
+        <location filename="../src/prefs.cpp" line="-1"/>
         <source>Start new jobs paused</source>
         <translation>Neue Aufträge pausiert starten</translation>
     </message>
@@ -8798,7 +9087,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+34"/>
+        <location filename="../src/prefs.cpp" line="+38"/>
         <source>Format</source>
         <translation>Format</translation>
     </message>
@@ -9547,7 +9836,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-97"/>
+        <location filename="../src/prefs.cpp" line="-101"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -9678,7 +9967,8 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+2"/>
         <location line="+3"/>
         <location line="+3"/>
-        <location line="+4"/>
+        <location line="+1"/>
+        <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10245,7 +10535,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <translation>Keine zuletzt verwendeten Dateien</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-210"/>
+        <location filename="../src/prefs.cpp" line="-214"/>
         <source>Grid</source>
         <translation>Raster</translation>
     </message>
@@ -10345,47 +10635,47 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+2"/>
-        <location line="+162"/>
+        <location line="+166"/>
         <source>Icon size in the grid</source>
         <translation>Symbolgröße im Raster</translation>
     </message>
     <message>
-        <location line="-162"/>
+        <location line="-166"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>der Zoom-Schieberegler, Strg++ / Strg+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+161"/>
+        <location line="+165"/>
         <source>Icon size in the list</source>
         <translation>Symbolgröße in der Liste</translation>
     </message>
     <message>
-        <location line="-159"/>
+        <location line="-163"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → Ansicht → Versteckte Dateien anzeigen (Strg+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+160"/>
+        <location line="+164"/>
         <source>Show the sidebar</source>
         <translation>Die Seitenleiste anzeigen</translation>
     </message>
     <message>
-        <location line="-160"/>
+        <location line="-164"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → Ansicht → Seitenleiste (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+105"/>
+        <location line="+109"/>
         <source>Show the info panel</source>
         <translation>Den Infobereich anzeigen</translation>
     </message>
     <message>
-        <location line="-160"/>
+        <location line="-164"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → Ansicht → Infobereich (F3)</translation>
     </message>
@@ -10861,7 +11151,17 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <translation>Alle auf einmal (jeder Auftrag startet, sobald er eingereiht ist, auch auf einem belegten Laufwerk)</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+2"/>
+        <source>Save each finished job&apos;s log</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Each job&apos;s log, with its steps, when it ran and how it ended, is saved as a file in ~/.cache/kestrel-explorer/job-logs (a folder for each day), so it&apos;s kept after Clear Finished and after Kestrel quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Find Duplicates</source>
         <translation>Duplikate finden</translation>
     </message>
@@ -11493,7 +11793,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <translation>Der Ordner ist freigegeben. Damit andere darin Dateien anlegen können, muss er auch für andere beschreibbar sein (Eigenschaften → Berechtigungen).</translation>
     </message>
     <message>
-        <location filename="../src/signature.cpp" line="-238"/>
+        <location filename="../src/signature.cpp" line="-245"/>
         <source>gpg isn&apos;t installed (the gnupg package).</source>
         <translation>gpg ist nicht installiert (das Paket gnupg).</translation>
     </message>
@@ -11625,7 +11925,12 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <translation>Signatur %1 wird geprüft</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+2"/>
+        <source>Checking %1 with gpg</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+36"/>
         <source>Verify Signature — %1</source>
         <translation>Signatur prüfen – %1</translation>
     </message>
@@ -11814,6 +12119,48 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <location line="+1"/>
         <source>Lowered (folder left)</source>
         <translation>Herabgestuft (Ordner verlassen)</translation>
+    </message>
+    <message>
+        <location line="+199"/>
+        <source>No preview could be made of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+74"/>
+        <source>%Ln file preview(s) made</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>%Ln folder preview(s) made</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) with no preview</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1 of %2 done: %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/towerwin.cpp" line="-103"/>
@@ -12059,12 +12406,12 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
     </message>
     <message>
         <location line="+2"/>
-        <location line="+55"/>
+        <location line="+56"/>
         <source>%1: something new is already at %2</source>
         <translation>%1: In %2 ist bereits etwas Neues</translation>
     </message>
     <message>
-        <location line="-23"/>
+        <location line="-24"/>
         <source>%1: no longer exists</source>
         <translation>%1: existiert nicht mehr</translation>
     </message>
@@ -12074,9 +12421,24 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <translation>%1: Dieser Name ist wieder vergeben</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+4"/>
+        <source>Renamed back: %1 → %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>%1: not in the trash any more</source>
         <translation>%1: nicht mehr im Papierkorb</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Put back: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Couldn&apos;t undo: %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/util.cpp" line="-2"/>
@@ -12784,6 +13146,29 @@ Nicht verbunden: zum Verbinden klicken</translation>
         <location line="+1"/>
         <source>not read from this floppy disk (right-click the drive: Show Previews on This Drive)</source>
         <translation>nicht von dieser Diskette gelesen (Rechtsklick auf das Laufwerk: Vorschauen auf diesem Laufwerk anzeigen)</translation>
+    </message>
+    <message>
+        <location filename="../src/joblogs.cpp" line="+26"/>
+        <source>%1 · started %2 · ended %3 · took %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>as administrator</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+3"/>
+        <source>%Ln step(s):</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Log:</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

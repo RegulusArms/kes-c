@@ -4,6 +4,20 @@
 <context>
     <name>Kestrel</name>
     <message numerus="yes">
+        <source>%Ln folder(s) found — %1</source>
+        <translation>
+            <numerusform>%Ln folder found — %1</numerusform>
+            <numerusform>%Ln folders found — %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
+        <translation>
+            <numerusform>%Ln folder found: it gets this folder&apos;s sort once the job ends</numerusform>
+            <numerusform>%Ln folders found: each gets this folder&apos;s sort once the job ends</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Sort applied to %Ln subfolder(s)</source>
         <translation>
             <numerusform>Sort applied to %Ln subfolder</numerusform>
@@ -333,6 +347,13 @@ Ends after %Ln minutes without admin actions, or when Kestrel quits.</numerusfor
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln item(s) listed in %1</source>
+        <translation>
+            <numerusform>%Ln item listed in %1</numerusform>
+            <numerusform>%Ln items listed in %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Reading %1 — sorting %Ln item(s)</source>
         <translation>
             <numerusform>Reading %1 — sorting %Ln item</numerusform>
@@ -372,6 +393,13 @@ Ends after %Ln minutes without admin actions, or when Kestrel quits.</numerusfor
         <translation>
             <numerusform>%Ln of these files already exists in this folder. Do you want to replace it?</numerusform>
             <numerusform>%Ln of these files already exist in this folder. Do you want to replace them?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln difference(s)</source>
+        <translation>
+            <numerusform>%Ln difference</numerusform>
+            <numerusform>%Ln differences</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -666,10 +694,38 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln file(s) found</source>
+        <translation>
+            <numerusform>%Ln file found</numerusform>
+            <numerusform>%Ln files found</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
+        <translation>
+            <numerusform>%Ln file of a size another has too: its beginning is compared</numerusform>
+            <numerusform>%Ln files of a size another has too: their beginnings are compared</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Comparing the beginnings of %Ln file(s)</source>
         <translation>
             <numerusform>Comparing the beginnings of %Ln file</numerusform>
             <numerusform>Comparing the beginnings of %Ln files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
+        <translation>
+            <numerusform>%Ln file begins like another of the same size: read whole (%1)</numerusform>
+            <numerusform>%Ln files begin like another of the same size: read whole (%1)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln group(s) of identical files; %1 can be freed</source>
+        <translation>
+            <numerusform>%Ln group of identical files; %1 can be freed</numerusform>
+            <numerusform>%Ln groups of identical files; %1 can be freed</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -867,10 +923,10 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>Finished, with %Ln error(s).</source>
+        <source>%Ln item(s) failed.</source>
         <translation>
-            <numerusform>Finished, with %Ln error.</numerusform>
-            <numerusform>Finished, with %Ln errors.</numerusform>
+            <numerusform>%Ln item failed.</numerusform>
+            <numerusform>%Ln items failed.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -1104,10 +1160,52 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln folder size(s) remembered for Properties</source>
+        <translation>
+            <numerusform>%Ln folder size remembered for Properties</numerusform>
+            <numerusform>%Ln folder sizes remembered for Properties</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
         <translation>
             <numerusform>%Ln folder couldn&apos;t be read and counts as empty: %1</numerusform>
             <numerusform>%Ln folders couldn&apos;t be read and count as empty, such as %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln step(s):</source>
+        <translation>
+            <numerusform>%Ln step:</numerusform>
+            <numerusform>%Ln steps:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file preview(s) made</source>
+        <translation>
+            <numerusform>%Ln file preview made</numerusform>
+            <numerusform>%Ln file previews made</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder preview(s) made</source>
+        <translation>
+            <numerusform>%Ln folder preview made</numerusform>
+            <numerusform>%Ln folder previews made</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) with no preview</source>
+        <translation>
+            <numerusform>%Ln file with no preview</numerusform>
+            <numerusform>%Ln files with no preview</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
+        <translation>
+            <numerusform>%Ln file too big for a preview (Preferences → Images &amp; Videos)</numerusform>
+            <numerusform>%Ln files too big for a preview (Preferences → Images &amp; Videos)</numerusform>
         </translation>
     </message>
 </context>

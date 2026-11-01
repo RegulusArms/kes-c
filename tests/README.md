@@ -39,7 +39,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`pinned`](#pinned) | 31 | Pinned items and folder sorts |
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
-| [`jobs`](#jobs) | 47 | The job queue, the Jobs window and the Tower window |
+| [`jobs`](#jobs) | 58 | The job queue, the Jobs window and the Tower window |
 | [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
 | [`admin_helper`](#admin_helper) | 47 | The admin helper, the part that runs as root |
@@ -51,7 +51,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 59 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 9 | Translations |
-| [`installer`](#installer) | 64 | `install.sh` and `kes-setup` |
+| [`installer`](#installer) | 65 | `install.sh` and `kes-setup` |
 
 ### fileops
 
@@ -406,7 +406,9 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a cancelled waiting job ends without running;
   - Start Now; moving a job up; Start New Jobs Paused.
 - **Pausing:** a copy (its part file stops growing, then it finishes) and a program a job runs (stopped, continued, ended on cancel).
-- **Steps and log:** a copy's steps, and its log kept after it ends.
+- **Steps and log:** a copy's steps, and its log kept after it ends, ending with how long it took.
+- **What jobs log:** a size count's what it counted and found; Move to Trash each item; a job that only reports gets its progress in its log while the log is quiet, now and then; a stopped one ends with when it stopped.
+- **Saving logs** (off by default): nothing saved while off; on, a file per job in the day's folder with its title, outcome, times, steps and log; a write failing part-way leaves nothing under the name and no part file; pruning by age, then by size (never today's, never other files).
 - **The Jobs window** opens from the job panel and lists running, waiting and finished jobs; Delete cancels the selected job (not the main window's Move to Trash).
 - **Through the tower:**
   - another Kestrel's job holds a lane ours waits for (one queue); a Kestrel that leaves frees its lanes;
@@ -728,7 +730,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - only the user can change it (also run under umask 000: BleachBit ignores a world-writable cleaner), with no part file left, and it says BleachBit will ask once whether to trust it;
   - well-formed, following BleachBit's CleanerML schema (needs `xmllint`);
   - only naming Kestrel's cache, its lists, the three history keys (with the image viewer's recent folders) and the save locations in its settings;
-  - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
+  - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; the Cache option alone keeps the saved job logs and the Job logs option alone deletes only them; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
   - `--undo` removes the cleaner and leaves the user's own.
 - **`kes-setup --install-optional`** (stub `dpkg`, `apt-cache` and `sudo`) asks apt to install exactly the optional packages that are missing and available, names the unavailable ones, and installs nothing when they're all there.
 

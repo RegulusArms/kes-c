@@ -69,15 +69,6 @@ QString clock_text(qint64 ms)
                      : QString("%1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'));
 }
 
-QString state_label(const QString &state)
-{
-    static const QHash<QString, const char *> labels = {
-        {"waiting", TX_NOOP("Waiting")}, {"running", TX_NOOP("Running")}, {"paused", TX_NOOP("Paused")},
-        {"done", TX_NOOP("Done")},       {"done with errors", TX_NOOP("Done, with errors")},
-        {"failed", TX_NOOP("Failed")},   {"cancelled", TX_NOOP("Cancelled")}};
-    return labels.contains(state) ? tx(labels.value(state)) : state;
-}
-
 }  // namespace
 
 static QPointer<JobsWindow> the_window;
@@ -457,7 +448,7 @@ void JobsWindow::refresh()
         QString where = r.local || r.finished ? QString() : tx("  (another Kestrel)");
         it->setText(0, (r.admin ? "🛡 " : "") + r.title + where);
         it->setToolTip(0, r.title + (r.text.isEmpty() ? QString() : "\n" + r.text));
-        it->setText(1, state_label(r.state));
+        it->setText(1, fileops::state_label(r.state));
         bool active = r.state == "running" || r.state == "paused";
         it->setData(2, FractionRole, active ? QVariant(r.fraction) : QVariant());
         it->setText(2, r.state == "waiting" ? QString("…") : QString());
@@ -513,7 +504,7 @@ void JobsWindow::show_details()
     for (const jobs::Job &j : jobs::Queue::instance()->jobs())
         if (j.flight + "/" + j.id == r->key)
             drives = j.drives;
-    QString text = "<b>" + r->title.toHtmlEscaped() + "</b> — " + state_label(r->state);
+    QString text = "<b>" + r->title.toHtmlEscaped() + "</b> — " + fileops::state_label(r->state);
     if (!r->text.isEmpty())
         text += "<br>" + r->text.toHtmlEscaped();
     if (!drives.isEmpty())

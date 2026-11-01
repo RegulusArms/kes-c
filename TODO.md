@@ -53,24 +53,6 @@ into.
 
 ### Jobs
 
-- [ ] **Every job as verbose as possible in the Jobs window, without slowing the job down.** Each kind of job should
-  report what it's doing (the current item, counts and sizes so far, its steps, a log of what was done, skipped or
-  failed) as fully as it can, through the existing progress/log reporting, throttled so the extra detail costs the
-  job no measurable speed (check bulk copies and tape writes against the benchmark). Start with the jobs that
-  report little or nothing now (e.g. folder size counts: only the folder's name).
-
-- [ ] **Save every job's log to Kestrel's cache folder (opt-in).** A setting, off by default, that writes each
-  finished job's log (title, outcome, times, steps and the full log the Jobs window shows) to a file in Kestrel's
-  cache folder, so logs outlive Clear Finished and quitting Kestrel. Off unless the user turns it on.
-  - The setting goes in src/prefs.cpp (and so Preferences); written with util `write_atomic()` or a part renamed
-    into place, never half a file under a real name.
-  - Decide: one file per job or one per day, and whether old logs are pruned (by age or total size).
-  - A BleachBit option for it in kes-setup's `bleachbit_cleaner` (a "Job logs" option of its own, separate from the
-    cache one, so clearing the cache can keep the logs or the other way round), with the dry-run expectations in
-    tests/test_installer.sh. The existing Cache option deletes all of `$XDG_CACHE_HOME/kestrel-explorer`
-    (walk.all), so it would take the logs too: either keep them in a subfolder the Cache option skips (it would then
-    list its subfolders instead), or say in its description that it includes the job logs.
-
 - [ ] **Faster copies: let the kernel clone or copy the file.** Kestrel's copy reads and writes every byte itself
   (the read/write loop in `copy_file_at`, src/fileops.cpp), never using the kernel's own copy calls.
   - Clone first (`ioctl(FICLONE)`): on Btrfs, XFS, bcachefs and ZFS 2.2 or later a copy on the same drive is then
@@ -336,6 +318,26 @@ into.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done
+
+- [x] **Every job as verbose as possible in the Jobs window, without slowing the job down.** Each kind of job should
+  report what it's doing (the current item, counts and sizes so far, its steps, a log of what was done, skipped or
+  failed) as fully as it can, through the existing progress/log reporting, throttled so the extra detail costs the
+  job no measurable speed (check bulk copies and tape writes against the benchmark). Start with the jobs that
+  report little or nothing now (e.g. folder size counts: only the folder's name).
+  Done in 0.3.3-alpha.4: the quiet jobs log each item (trash, restore, undo, size counts, checksums, duplicates, compare, previews, signature, archive listing, admin), copies/checksums/duplicates show their speed, a quiet log gets the progress every 15 s, and every log ends with how it ended and how long it took. Progress texts are built only when due: the benchmark's copy went from 1.14 s to 1.02 s (median of 5). Tape writes not measured (no tape here); their only change is the same throttled progress text.
+
+- [x] **Save every job's log to Kestrel's cache folder (opt-in).** A setting, off by default, that writes each
+  finished job's log (title, outcome, times, steps and the full log the Jobs window shows) to a file in Kestrel's
+  cache folder, so logs outlive Clear Finished and quitting Kestrel. Off unless the user turns it on.
+  - The setting goes in src/prefs.cpp (and so Preferences); written with util `write_atomic()` or a part renamed
+    into place, never half a file under a real name.
+  - Decide: one file per job or one per day, and whether old logs are pruned (by age or total size).
+  - A BleachBit option for it in kes-setup's `bleachbit_cleaner` (a "Job logs" option of its own, separate from the
+    cache one, so clearing the cache can keep the logs or the other way round), with the dry-run expectations in
+    tests/test_installer.sh. The existing Cache option deletes all of `$XDG_CACHE_HOME/kestrel-explorer`
+    (walk.all), so it would take the logs too: either keep them in a subfolder the Cache option skips (it would then
+    list its subfolders instead), or say in its description that it includes the job logs.
+  Done in 0.3.3-alpha.4 (src/joblogs.cpp): a file per job in job-logs/<day>/, written as a part renamed into place; kept 90 days and 100 MB (oldest days first, never today's). BleachBit: Cache skips job-logs (nwholeregex), a Job logs option empties it.
 
 - [x] **Disk usage map: what's using this space?** A window showing what fills a folder or a drive as a treemap or
   a sunburst (decide which, or offer both), like Baobab or Filelight: each folder a block or ring sized by what it

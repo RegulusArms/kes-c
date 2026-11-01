@@ -4,8 +4,10 @@
 #include "dialogs.h"
 
 #include "drives.h"
+#include "joblogs.h"
 #include "jobs.h"
 #include "jobswin.h"
+#include "prefs.h"
 #include "towerwin.h"
 #include "windiag.h"
 
@@ -18,8 +20,11 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QTreeWidget>
 
+#include <csignal>
+#include <sys/resource.h>
 #include <thread>
 
 using namespace test;
@@ -247,8 +252,8 @@ int main(int argc, char **argv)
     const QList<FinishedTask> &done = TaskBoard::instance()->finished;
     check(!done.isEmpty() && done.last().title == "Three files" && done.last().state == "done" &&
               done.last().log.contains("Copy s2.txt → ") && done.last().log.contains("done") &&
-              done.last().log.contains("Finished."),
-          "a finished job is kept with its log: each step, how it went, and the end");
+              QRegularExpression("\nFinished in \\d+ s$").match(done.last().log).hasMatch(),
+          "a finished job is kept with its log: each step, how it went, and the end (how long it took, last)");
 
     // a quiet job (Properties' first size count) is listed while it's queued, so it stays among the finished ones too,
     // also when its window was closed while it waited; it's never in the status bar
@@ -281,6 +286,132 @@ int main(int argc, char **argv)
               "a quiet queued job (Properties' size count) stays in the Jobs window once it ends, also after its window "
               "closed; not in the status bar (" + kept() + ")");
         wait_for([&]() { return !hold; });
+    }
+
+    // ---- every job's log: what it did, item by item, and how it ended; a quiet one gets its progress now and then
+    {
+        auto log_of = [](const QString &title) {
+            QString out;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                if (f.title == title)
+                    out = f.log;
+            return out;
+        };
+        QString count_log = log_of("Counting the size of “counted”");
+        check(count_log.contains("Counting " + home_path("counted")) &&
+                  count_log.contains(" in 1 file and 1 folder, remembered for next time") &&
+                  QRegularExpression("\nFinished in \\d+ s$").match(count_log).hasMatch(),
+              "a size count's log says what it counted and what it found (it used to have only the folder's name)");
+
+        write_text(home_path("to-trash.txt"), "t");
+        makedirs(join(TRASH_DIR(), "files"), true);
+        makedirs(join(TRASH_DIR(), "info"), true);
+        int before = int(TaskBoard::instance()->finished.size());
+        w->trash_paths({home_path("to-trash.txt")});
+        wait_for([&]() { return TaskBoard::instance()->finished.size() > before; }, 10000);
+        check(log_of("Moving to trash").contains("Moved to the trash: " + home_path("to-trash.txt")),
+              "Move to Trash logs each item it moved");
+
+        Task::beat_ms = 300;   // (15 s in Kestrel)
+        QPointer<Task> quiet = fileops::run_job(w, "Reports only", [](Task *t) {
+            for (int i = 0; i < 12; ++i) {
+                t->check();
+                t->report(i, 12, QString("working on item %1").arg(i));
+                QThread::msleep(100);
+            }
+            return QVariant(true);
+        });
+        wait_for([&]() { return !quiet; }, 10000);
+        Task::beat_ms = 15000;
+        QString beats = log_of("Reports only");
+        check(QRegularExpression("\\d+% · working on item \\d+").match(beats).hasMatch() &&
+                  beats.count("working on item") >= 2 && beats.count("working on item") <= 6,
+              "a job that logs nothing of its own gets its progress in its log while the log is quiet, now and then "
+              "(not every report): " + QString::number(beats.count("working on item")) + " lines");
+
+        QPointer<Task> stopped = fileops::run_job(w, "Stopped here", [](Task *t) {
+            for (;;) {
+                t->check();
+                QThread::msleep(20);
+            }
+            return QVariant();
+        });
+        spin(200);
+        if (stopped)
+            stopped->cancel();
+        wait_for([&]() { return !stopped; }, 5000);
+        check(QRegularExpression("\nStopped after \\d+ s$").match(log_of("Stopped here")).hasMatch(),
+              "a stopped job's log ends with when it was stopped");
+    }
+
+    // ---- saving finished jobs' logs (Preferences → Files → Jobs, off by default)
+    {
+        QString logs = joblogs::folder(), today = join(logs, QDate::currentDate().toString("yyyy-MM-dd"));
+        auto saved_with = [&](const QString &needle) {
+            QStringList out;
+            if (isdir(today))
+                for (const QString &n : listdir(today))
+                    if (n.contains(needle))
+                        out << join(today, n);
+            return out;
+        };
+        auto run_logged = [&](const QString &title, int lines) {
+            QPointer<Task> t = fileops::queue_job(
+                w, title, {},
+                [lines](Task *task) {
+                    for (int i = 0; i < lines; ++i)
+                        task->log(QString("line %1 ").arg(i) + QString(200, 'x'));
+                    return QVariant(true);
+                },
+                nullptr, true, {"first step", "second step"});
+            wait_for([&]() { return !t; }, 10000);
+            joblogs::wait();
+        };
+        check(prefs::get("jobs_save_logs").toBool() == false, "jobs' logs aren't saved unless asked (the setting is off)");
+        run_logged("Not saved", 1);
+        check(saved_with("Not saved").isEmpty(), "...a job's log isn't saved while it's off");
+
+        prefs::set("jobs_save_logs", true);
+        run_logged("Saved a/b job", 3);
+        QStringList files = saved_with("Saved a_b job");
+        QString text = files.size() == 1 ? QString::fromUtf8(read_file(files.first())) : QString();
+        check(files.size() == 1 && files.first().endsWith(".log") && text.startsWith("Saved a/b job\nDone · started ") &&
+                  text.contains("\n  first step\n  second step\n") && text.contains("\nLog:\nline 0 xx") &&
+                  text.contains("\nline 2 xx") && QRegularExpression("\nFinished in \\d+ s\n$").match(text).hasMatch(),
+              "...on, each finished job's log is saved in a file of its own, in a folder for the day: its title (a slash "
+              "in it not making a folder), how it ended, when it ran, its steps and its log");
+
+        // a write that fails part-way (a file size limit) leaves no file under its name and no part file
+        struct rlimit old_lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        struct rlimit lim = old_lim;
+        lim.rlim_cur = 4096;   // the log is over 20 KB
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        run_logged("Too big to save", 100);
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QStringList parts;
+        for (const QString &n : listdir(today))
+            if (n.endsWith(".part"))
+                parts << n;
+        check(saved_with("Too big to save").isEmpty() && parts.isEmpty(),
+              "...a log whose writing fails part-way leaves nothing under its name and no part file");
+
+        // pruning: days older than 90 go, then the oldest while they take more than the most allowed (never today)
+        QString old_day = join(logs, "2020-01-01"), yesterday = join(logs, QDate::currentDate().addDays(-1).toString("yyyy-MM-dd"));
+        makedirs(old_day, true);
+        makedirs(yesterday, true);
+        write_text(join(old_day, "a.log"), "old");
+        write_text(join(yesterday, "b.log"), QByteArray(5000, 'y'));
+        write_text(join(logs, "notes.txt"), "not a day");
+        joblogs::prune(logs, 90, 1000000, QDate::currentDate());
+        bool by_age = !exists(old_day) && exists(join(yesterday, "b.log"));
+        joblogs::prune(logs, 90, 1000, QDate::currentDate());
+        check(by_age && !exists(yesterday) && !saved_with("Saved a_b job").isEmpty() && exists(join(logs, "notes.txt")),
+              "...old logs are deleted: days older than 90, then the oldest days while they take too much (not today's, "
+              "nor anything that isn't a day's folder)");
+        prefs::set("jobs_save_logs", false);
     }
 
     // ---- a paste queued behind another job: its title and log say what it is (what started it, in which window,

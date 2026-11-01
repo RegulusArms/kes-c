@@ -78,7 +78,7 @@ struct Counter {
 
     void report(const QString &where)
     {
-        if (!task)
+        if (!task || !task->due())
             return;
         QString text = txn("%1 in %Ln file(s) so far — %2", seen).arg(human_size(bytes), where);
         if (expected > 0)
@@ -872,11 +872,21 @@ void DiskUsageWindow::recount()
     task = fileops::queue_job(
         parent, tx("Counting what fills “%1”").arg(name), {r},
         [r, expected, counted, keep, unreadable](Task *t) {
+            t->log(tx("Counting %1 (not other drives mounted in it)").arg(r));
             Tree tr = count(r, t, expected, unreadable.get());
+            t->log(tx("%1 in %2 and %3")
+                       .arg(human_size(tr->size), txn("%Ln file(s)", tr->files), txn("%Ln folder(s)", tr->dirs)));
+            for (const QString &u : std::as_const(*unreadable))
+                t->log(tx("Couldn't be read, counted as empty: %1").arg(u));
+            int shown = 0;
+            for (const auto &k : tr->kids)
+                if (!k->rest && shown++ < 10)
+                    t->log(tx("  %1: %2").arg(k->name, human_size(k->size)));
             struct stat st;
             quint64 dev = lstat_(r, st) ? quint64(st.st_dev) : 0;
             for (const auto &[path, n] : worth_remembering(*tr))
                 *keep << fileops::dirsizes::Counted{path, dev, n->ino, fileops::DirStats{n->size, n->files, n->dirs}};
+            t->log(txn("%Ln folder size(s) remembered for Properties", keep->size()));
             *counted = tr;
             return QVariant(true);
         },

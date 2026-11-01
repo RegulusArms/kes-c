@@ -388,6 +388,7 @@ void ArchiveWindow::load()
             try {
                 got->entries = archive::list(task, path, pw);
                 got->password = pw;
+                task->log(txn("%Ln item(s) listed in %1", got->entries.size()).arg(path));
                 task->report(0, 0, txn("Reading %1 — sorting %Ln item(s)", got->entries.size()).arg(basename(path)), true);
                 got->build();
                 return QVariantMap{{"ok", true}};

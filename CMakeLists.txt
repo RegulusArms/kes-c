@@ -45,6 +45,7 @@ add_executable(kes
     src/groups.cpp
     src/drives.cpp
     src/jobs.cpp
+    src/joblogs.cpp
     src/keyring.cpp
     src/archivewin.cpp
     src/prefs.cpp

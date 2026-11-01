@@ -31,7 +31,7 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+647"/>
+        <location filename="../src/app.cpp" line="+651"/>
         <location line="+587"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
@@ -217,7 +217,7 @@
         <location line="+44"/>
         <location line="+9"/>
         <location line="+2"/>
-        <location filename="../src/dialogs.cpp" line="+1191"/>
+        <location filename="../src/dialogs.cpp" line="+1209"/>
         <location line="+3"/>
         <location line="+7"/>
         <location line="+130"/>
@@ -234,19 +234,25 @@
     </message>
     <message>
         <location line="+32"/>
-        <location line="+91"/>
+        <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1014"/>
+        <location filename="../src/fileops.cpp" line="+1042"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 / %2 — %3</translation>
     </message>
     <message>
-        <location line="-155"/>
+        <location line="-165"/>
+        <location filename="../src/undo.cpp" line="+265"/>
+        <source>Moved to the trash: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <location filename="../src/app.cpp" line="-725"/>
         <location line="+943"/>
-        <location filename="../src/diskusage.cpp" line="+1003"/>
+        <location filename="../src/diskusage.cpp" line="+1013"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+109"/>
         <location filename="../src/opening.cpp" line="+249"/>
@@ -324,7 +330,7 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+505"/>
+        <location filename="../src/app.cpp" line="+507"/>
         <source>Delete</source>
         <translation>삭제</translation>
     </message>
@@ -339,13 +345,15 @@ This cannot be undone.</source>
         <translation>지움: %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-90"/>
+        <location line="+93"/>
+        <location line="+88"/>
         <location filename="../src/convert.cpp" line="+11"/>
         <source>Failed: %1: %2</source>
         <translation>실패: %1: %2</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="-78"/>
         <location line="+11"/>
         <location line="+31"/>
         <source>Wipe Metadata</source>
@@ -443,8 +451,23 @@ No backup is kept, so this can&apos;t be undone.</source>
         <translation>%1: 원래 위치를 알 수 없음</translation>
     </message>
     <message>
-        <location line="+20"/>
-        <location filename="../src/app.cpp" line="-506"/>
+        <location line="+1"/>
+        <source>Skipped: %1: its original location is unknown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Restored: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Restored: %1 (as %2: its name was taken)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <location filename="../src/app.cpp" line="-508"/>
         <source>Restore</source>
         <translation>복원</translation>
     </message>
@@ -529,7 +552,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     <message numerus="yes">
         <location line="+18"/>
         <location filename="../src/archive_ui.cpp" line="+835"/>
-        <location filename="../src/jobswin.cpp" line="+546"/>
+        <location filename="../src/jobswin.cpp" line="+537"/>
         <source>… and %Ln more</source>
         <translation>
             <numerusform>… 외 %Ln개</numerusform>
@@ -616,12 +639,12 @@ Ends after %Ln minute(s) without admin actions, or when Kestrel quits.</source>
     </message>
     <message>
         <location line="+14"/>
-        <location line="+17"/>
+        <location line="+19"/>
         <source>Admin Session</source>
         <translation>관리자 세션</translation>
     </message>
     <message>
-        <location line="-16"/>
+        <location line="-18"/>
         <source>Administrator actions need pkexec. Install it with:
 
 sudo apt install pkexec</source>
@@ -635,12 +658,28 @@ sudo apt install pkexec</translation>
         <translation>관리자 세션 시작 중</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+5"/>
+        <source>Not started: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>The admin session is open: administrator actions run in it until it&apos;s ended</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Install pkexec to retry as administrator.</source>
         <translation>관리자로 다시 시도하려면 pkexec를 설치하세요.</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+20"/>
+        <location filename="../src/drives.cpp" line="+532"/>
+        <source>Failed: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
         <source>%1 (as administrator)</source>
         <translation>%1 (관리자 권한)</translation>
     </message>
@@ -657,10 +696,10 @@ sudo apt install pkexec</translation>
         <translation>관리자로 다시 시도</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1189"/>
+        <location filename="../src/app.cpp" line="-1193"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
-        <location filename="../src/diskusage.cpp" line="-250"/>
-        <location filename="../src/dupes.cpp" line="+353"/>
+        <location filename="../src/diskusage.cpp" line="-260"/>
+        <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -669,7 +708,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+0"/>
         <location filename="../src/archivewin.cpp" line="+0"/>
-        <location filename="../src/compare.cpp" line="+786"/>
+        <location filename="../src/compare.cpp" line="+801"/>
         <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/dupes.cpp" line="+0"/>
         <location filename="../src/pane.cpp" line="+889"/>
@@ -723,25 +762,25 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+92"/>
-        <location line="+290"/>
+        <location line="+294"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
         <translation>뒤로</translation>
     </message>
     <message>
-        <location line="-289"/>
-        <location line="+290"/>
+        <location line="-293"/>
+        <location line="+294"/>
         <source>Forward</source>
         <translation>앞으로</translation>
     </message>
     <message>
-        <location line="-289"/>
-        <location line="+290"/>
+        <location line="-293"/>
+        <location line="+294"/>
         <source>Parent Folder</source>
         <translation>상위 폴더</translation>
     </message>
     <message>
-        <location line="-289"/>
+        <location line="-293"/>
         <source>Homepage (Alt+Home)</source>
         <translation>홈페이지 (Alt+Home)</translation>
     </message>
@@ -833,20 +872,20 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+744"/>
+        <location line="+748"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>모든 그룹 접기</translation>
     </message>
     <message>
-        <location line="-740"/>
-        <location line="+745"/>
+        <location line="-744"/>
+        <location line="+749"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>모든 그룹 펼치기</translation>
     </message>
     <message>
-        <location line="-739"/>
+        <location line="-743"/>
         <source>Set as Default</source>
         <translation>기본값으로 설정</translation>
     </message>
@@ -860,8 +899,27 @@ Turn off in large or slow folders to speed things up.</source>
         <source>Folders without a sort of their own now use this one</source>
         <translation>자체 정렬이 없는 폴더는 이제 이 정렬을 사용합니다</translation>
     </message>
+    <message>
+        <location line="+14"/>
+        <source>Looking for the folders below %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+30"/>
+        <location line="+8"/>
+        <source>%Ln folder(s) found — %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+4"/>
+        <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+8"/>
         <source>Sort applied to %Ln subfolder(s)</source>
         <translation>
             <numerusform>하위 폴더 %Ln개에 정렬을 적용했습니다</numerusform>
@@ -874,7 +932,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+37"/>
-        <location filename="../src/hashcheck.cpp" line="+305"/>
+        <location filename="../src/hashcheck.cpp" line="+315"/>
         <location filename="../src/widgets.cpp" line="-2182"/>
         <source>File</source>
         <translation>파일</translation>
@@ -935,14 +993,14 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1314"/>
+        <location line="+1316"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>실행 취소</translation>
     </message>
     <message>
-        <location line="-1310"/>
+        <location line="-1312"/>
         <location line="+726"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
@@ -953,7 +1011,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+726"/>
         <location filename="../src/compare.cpp" line="-154"/>
         <location line="+281"/>
-        <location filename="../src/dialogs.cpp" line="-1101"/>
+        <location filename="../src/dialogs.cpp" line="-1119"/>
         <location filename="../src/jobswin.cpp" line="-280"/>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
@@ -1001,8 +1059,8 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+608"/>
         <location line="+32"/>
         <location line="+310"/>
-        <location line="+237"/>
-        <location filename="../src/diskusage.cpp" line="+315"/>
+        <location line="+239"/>
+        <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
         <location line="+103"/>
@@ -1011,7 +1069,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>속성</translation>
     </message>
     <message>
-        <location line="-1178"/>
+        <location line="-1180"/>
         <location filename="../src/menus.cpp" line="-181"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1019,7 +1077,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+155"/>
+        <location line="+159"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>보기</translation>
@@ -1063,7 +1121,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-557"/>
-        <location filename="../src/prefs.cpp" line="-124"/>
+        <location filename="../src/prefs.cpp" line="-128"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
@@ -1077,13 +1135,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1172"/>
+        <location line="+1174"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>전체 화면</translation>
     </message>
     <message>
-        <location line="-1164"/>
+        <location line="-1166"/>
         <source>Reload</source>
         <translation>새로 고침</translation>
     </message>
@@ -1174,12 +1232,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1155"/>
+        <location line="+1157"/>
         <source>Keyboard Shortcuts</source>
         <translation>키보드 단축키</translation>
     </message>
     <message>
-        <location line="-1154"/>
+        <location line="-1156"/>
         <source>About</source>
         <translation>정보</translation>
     </message>
@@ -1447,7 +1505,9 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message numerus="yes">
         <location line="+34"/>
-        <location filename="../src/archivewin.cpp" line="+104"/>
+        <location filename="../src/archivewin.cpp" line="+105"/>
+        <location filename="../src/dialogs.cpp" line="+534"/>
+        <location filename="../src/diskusage.cpp" line="-139"/>
         <source>%Ln folder(s)</source>
         <translation>
             <numerusform>폴더 %Ln개</numerusform>
@@ -1530,12 +1590,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-284"/>
-        <location line="+522"/>
+        <location line="+524"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
-        <location filename="../src/diskusage.cpp" line="-22"/>
+        <location filename="../src/diskusage.cpp" line="+117"/>
         <location filename="../src/menus.cpp" line="-94"/>
         <location filename="../src/opening.cpp" line="-176"/>
         <location line="+55"/>
@@ -1553,7 +1613,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>열기</translation>
     </message>
     <message>
-        <location line="-519"/>
+        <location line="-521"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-184"/>
         <location line="+42"/>
@@ -1594,7 +1654,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+7"/>
         <location line="+9"/>
-        <location filename="../src/dialogs.cpp" line="+1120"/>
+        <location filename="../src/dialogs.cpp" line="+604"/>
         <location line="+66"/>
         <location filename="../src/sharing.cpp" line="+81"/>
         <source>Open With</source>
@@ -1744,18 +1804,18 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/archivewin.cpp" line="-300"/>
-        <location line="+177"/>
+        <location filename="../src/archivewin.cpp" line="-301"/>
+        <location line="+178"/>
         <location filename="../src/menus.cpp" line="+4"/>
         <source>Extract Here</source>
         <translation>여기에 압축 풀기</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/archivewin.cpp" line="-175"/>
-        <location line="+176"/>
+        <location filename="../src/archivewin.cpp" line="-176"/>
+        <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+114"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -1854,7 +1914,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+8"/>
-        <location filename="../src/dialogs.cpp" line="-912"/>
+        <location filename="../src/dialogs.cpp" line="-930"/>
         <location filename="../src/menus.cpp" line="-134"/>
         <source>Image</source>
         <translation>이미지</translation>
@@ -2026,7 +2086,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>UWP에 연결할 수 없습니다. 편집기 창이 아직 열려 있습니까?</translation>
     </message>
     <message>
-        <location line="+140"/>
+        <location line="+142"/>
         <source>Folder preview cache cleared</source>
         <translation>폴더 미리 보기 캐시를 지웠습니다</translation>
     </message>
@@ -2160,8 +2220,8 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-138"/>
-        <location line="+160"/>
+        <location filename="../src/prefs.cpp" line="-142"/>
+        <location line="+164"/>
         <source>Show hidden files</source>
         <translation>숨긴 파일 표시</translation>
     </message>
@@ -2242,7 +2302,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-104"/>
+        <location filename="../src/prefs.cpp" line="-108"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2397,8 +2457,8 @@ They will be regenerated as you browse.</source>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+661"/>
-        <location filename="../src/hashcheck.cpp" line="+517"/>
+        <location filename="../src/fileops.cpp" line="+663"/>
+        <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
             <numerusform>…외 %Ln개</numerusform>
@@ -2434,7 +2494,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="+48"/>
-        <location filename="../src/undo.cpp" line="+144"/>
+        <location filename="../src/undo.cpp" line="-121"/>
         <source>Undo %1</source>
         <translation>%1 실행 취소</translation>
     </message>
@@ -2651,7 +2711,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     <message>
         <location line="+59"/>
         <location filename="../src/archivewin.cpp" line="-258"/>
-        <location filename="../src/hashcheck.cpp" line="-323"/>
+        <location filename="../src/hashcheck.cpp" line="-339"/>
         <location filename="../src/opening.cpp" line="-118"/>
         <source>Reading %1</source>
         <translation>%1 읽는 중</translation>
@@ -2764,18 +2824,18 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     <message>
         <location line="+2"/>
         <location line="+487"/>
-        <location filename="../src/dialogs.cpp" line="+579"/>
+        <location filename="../src/dialogs.cpp" line="+597"/>
         <location line="+450"/>
-        <location filename="../src/hashcheck.cpp" line="+210"/>
+        <location filename="../src/hashcheck.cpp" line="+226"/>
         <location filename="../src/prefswin.cpp" line="+206"/>
         <source>Browse…</source>
         <translation>찾아보기…</translation>
     </message>
     <message>
         <location line="-482"/>
-        <location filename="../src/dialogs.cpp" line="-1127"/>
+        <location filename="../src/dialogs.cpp" line="-1145"/>
         <location line="+38"/>
-        <location line="+1098"/>
+        <location line="+1116"/>
         <source>Location:</source>
         <translation>위치:</translation>
     </message>
@@ -3105,7 +3165,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+97"/>
+        <location filename="../src/prefs.cpp" line="+101"/>
         <source>Keep both (rename)</source>
         <translation>둘 다 유지 (이름 바꾸기)</translation>
     </message>
@@ -3444,7 +3504,7 @@ Install it with:  sudo apt install %2</source>
         <translation>“%1”(으)로 압축</translation>
     </message>
     <message>
-        <location filename="../src/archivewin.cpp" line="-352"/>
+        <location filename="../src/archivewin.cpp" line="-353"/>
         <source>Encrypted: extracting it needs the archive&apos;s password</source>
         <translation>암호화됨: 압축을 풀려면 압축 파일의 암호가 필요합니다</translation>
     </message>
@@ -3510,6 +3570,13 @@ Install it with:  sudo apt install %2</source>
     </message>
     <message numerus="yes">
         <location line="+7"/>
+        <source>%Ln item(s) listed in %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
         <source>Reading %1 — sorting %Ln item(s)</source>
         <translation>
             <numerusform>%1 읽는 중 — 항목 %Ln개 정렬 중</numerusform>
@@ -3537,8 +3604,12 @@ Install it with:  sudo apt install %2</source>
     </message>
     <message numerus="yes">
         <location line="+1"/>
-        <location filename="../src/diskusage.cpp" line="-415"/>
+        <location filename="../src/dialogs.cpp" line="-949"/>
+        <location line="+27"/>
+        <location filename="../src/diskusage.cpp" line="-425"/>
+        <location line="+298"/>
         <location filename="../src/dupes.cpp" line="+229"/>
+        <location filename="../src/hashcheck.cpp" line="-212"/>
         <source>%Ln file(s)</source>
         <translation>
             <numerusform>파일 %Ln개</numerusform>
@@ -3601,9 +3672,9 @@ Install it with:  sudo apt install </source>
         <location line="-147"/>
         <location filename="../src/compare.cpp" line="-145"/>
         <location filename="../src/convert.cpp" line="+3"/>
-        <location filename="../src/dialogs.cpp" line="-1140"/>
-        <location line="+1139"/>
-        <location filename="../src/hashcheck.cpp" line="-110"/>
+        <location filename="../src/dialogs.cpp" line="-236"/>
+        <location line="+1157"/>
+        <location filename="../src/hashcheck.cpp" line="+102"/>
         <location filename="../src/menus.cpp" line="+338"/>
         <source>Name:</source>
         <translation>이름:</translation>
@@ -3650,7 +3721,7 @@ Install it with:  sudo apt install </source>
         <translation>“%1” 폴더가 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/compare.cpp" line="-718"/>
+        <location filename="../src/compare.cpp" line="-733"/>
         <location line="+2"/>
         <source>Can&apos;t read %1</source>
         <translation>%1을(를) 읽을 수 없습니다</translation>
@@ -3661,7 +3732,35 @@ Install it with:  sudo apt install </source>
         <translation>%1 비교 중</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+24"/>
+        <source>Comparing %1 with %2, reading the files of the same size and date</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Comparing %1 with %2 by size and date</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <location filename="../src/diskusage.cpp" line="+6"/>
+        <source>  %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1, %2 the same</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln difference(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+9"/>
         <location line="+296"/>
         <source>The same</source>
         <translation>같음</translation>
@@ -3767,9 +3866,9 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/diskusage.cpp" line="+145"/>
+        <location filename="../src/diskusage.cpp" line="-159"/>
         <location filename="../src/dupes.cpp" line="-26"/>
-        <location filename="../src/hashcheck.cpp" line="-379"/>
+        <location filename="../src/hashcheck.cpp" line="-395"/>
         <location filename="../src/jobswin.cpp" line="-107"/>
         <location line="+35"/>
         <source>Stop</source>
@@ -3914,7 +4013,7 @@ Install it with:  sudo apt install </source>
         <location line="-342"/>
         <location line="+354"/>
         <location filename="../src/dialogs.cpp" line="-411"/>
-        <location filename="../src/diskusage.cpp" line="+176"/>
+        <location filename="../src/diskusage.cpp" line="+186"/>
         <location filename="../src/dupes.cpp" line="+147"/>
         <source>Stopped.</source>
         <translation>중지됨.</translation>
@@ -4455,7 +4554,7 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/dialogs.cpp" line="-419"/>
+        <location filename="../src/dialogs.cpp" line="-437"/>
         <source>Size:</source>
         <translation>크기:</translation>
     </message>
@@ -4504,9 +4603,9 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-149"/>
+        <location filename="../src/prefs.cpp" line="-153"/>
         <location line="+2"/>
-        <location line="+159"/>
+        <location line="+163"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4609,7 +4708,7 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-82"/>
+        <location filename="../src/prefs.cpp" line="-86"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -5057,12 +5156,12 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+855"/>
+        <location line="+873"/>
         <source>Loading tags…</source>
         <translation>태그 불러오는 중…</translation>
     </message>
     <message>
-        <location line="-846"/>
+        <location line="-864"/>
         <location line="+4"/>
         <source>Tag:</source>
         <translation>태그:</translation>
@@ -5074,12 +5173,12 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+22"/>
-        <location line="+620"/>
+        <location line="+638"/>
         <source>Tag</source>
         <translation>태그</translation>
     </message>
     <message>
-        <location line="-620"/>
+        <location line="-638"/>
         <source>What it&apos;s for</source>
         <translation>용도</translation>
     </message>
@@ -5168,19 +5267,19 @@ Accepts: %3</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+809"/>
+        <location line="+827"/>
         <location line="+7"/>
         <source>Permissions</source>
         <translation>권한</translation>
     </message>
     <message>
-        <location line="-811"/>
-        <location line="+496"/>
+        <location line="-829"/>
+        <location line="+514"/>
         <source>Metadata</source>
         <translation>메타데이터</translation>
     </message>
     <message>
-        <location line="-495"/>
+        <location line="-513"/>
         <location filename="../src/prefs.cpp" line="+104"/>
         <location line="+2"/>
         <source>Checksums</source>
@@ -5334,7 +5433,7 @@ Accepts: %3</source>
     </message>
     <message>
         <location line="+27"/>
-        <location filename="../src/diskusage.cpp" line="-192"/>
+        <location filename="../src/diskusage.cpp" line="-202"/>
         <location line="+150"/>
         <source>Recalculate</source>
         <translation>다시 계산</translation>
@@ -5350,7 +5449,17 @@ Accepts: %3</source>
         <translation>일부 기억됨</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+8"/>
+        <source>Counting %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>  %1 in %2 and %3, remembered for next time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>Not calculated (stopped)</source>
         <translation>계산 안 됨 (중지됨)</translation>
     </message>
@@ -5367,7 +5476,12 @@ Accepts: %3</source>
         </translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+4"/>
+        <source>Remembered: %1: %2 in %3 (%4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+23"/>
         <source>%1 (%2 bytes)
 %3 files, %4 folders</source>
         <translation>%1 (%2바이트)
@@ -5645,7 +5759,7 @@ This can&apos;t be undone.</source>
     <message>
         <location line="+15"/>
         <location filename="../src/hashcheck.cpp" line="+50"/>
-        <location filename="../src/signature.cpp" line="+356"/>
+        <location filename="../src/signature.cpp" line="+363"/>
         <source>Checking…</source>
         <translation>확인 중…</translation>
     </message>
@@ -5865,12 +5979,17 @@ Actual: %2</source>
         <translation>“%1”은(는) 있는 폴더가 아닙니다. 그래도 저장하시겠습니까?</translation>
     </message>
     <message>
-        <location filename="../src/drives.cpp" line="+528"/>
+        <location filename="../src/drives.cpp" line="-4"/>
         <source>Writing the tape&apos;s index</source>
         <translation>테이프 색인 기록 중</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
+        <source>The index of the tape in %1 is written</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
         <source>Write Tape Index</source>
         <translation>테이프 색인 기록</translation>
     </message>
@@ -5879,25 +5998,15 @@ Actual: %2</source>
         <source>The tape&apos;s index couldn&apos;t be written: %1</source>
         <translation>테이프 색인을 기록할 수 없습니다: %1</translation>
     </message>
-    <message>
-        <location filename="../src/dupes.cpp" line="-281"/>
-        <source>Looking through the files: %1 found</source>
-        <translation>파일 살펴보는 중: %1개 찾음</translation>
-    </message>
     <message numerus="yes">
-        <location line="+45"/>
+        <location filename="../src/dupes.cpp" line="-240"/>
         <source>Comparing the beginnings of %Ln file(s)</source>
         <translation>
             <numerusform>파일 %Ln개의 앞부분 비교 중</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+33"/>
-        <source>Comparing the files of the same size: %1</source>
-        <translation>크기가 같은 파일 비교 중: %1</translation>
-    </message>
-    <message>
-        <location line="+93"/>
+        <location line="+130"/>
         <source>%1: the copy kept (%2) changed since the search</source>
         <translation>%1: 유지할 사본(%2)이 검색 후 바뀌었습니다</translation>
     </message>
@@ -5935,7 +6044,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+97"/>
+        <location filename="../src/prefs.cpp" line="+101"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -5967,6 +6076,7 @@ Actual: %2</source>
         <translation>파일에 대한 하드 링크는 그 파일 자체이지 사본이 아닙니다: 공간을 더 차지하지 않습니다</translation>
     </message>
     <message numerus="yes">
+        <location filename="../src/dialogs.cpp" line="-967"/>
         <location filename="../src/diskusage.cpp" line="-776"/>
         <source>%1 in %Ln file(s) so far — %2</source>
         <translation type="unfinished">
@@ -5974,7 +6084,7 @@ Actual: %2</source>
         </translation>
     </message>
     <message>
-        <location line="+321"/>
+        <location filename="../src/diskusage.cpp" line="+321"/>
         <source>%1, as Properties remembers</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6084,8 +6194,30 @@ Actual: %2</source>
         <source>Counting what fills “%1”</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+2"/>
+        <source>Counting %1 (not other drives mounted in it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1 in %2 and %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Couldn&apos;t be read, counted as empty: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+25"/>
+        <location line="+9"/>
+        <source>%Ln folder size(s) remembered for Properties</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+19"/>
         <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -6173,13 +6305,62 @@ Actual: %2</source>
         <translation>유지하지 않는 각 파일이 유지하는 파일에 대한 하드 링크가 됩니다: 두 이름으로 같은 파일이 되며 공간은 한 번만 차지합니다. 같은 드라이브에서만.</translation>
     </message>
     <message>
-        <location filename="../src/diskusage.cpp" line="-175"/>
+        <location filename="../src/diskusage.cpp" line="-185"/>
         <location filename="../src/dupes.cpp" line="+42"/>
         <source>Waiting for the drive…</source>
         <translation>드라이브를 기다리는 중…</translation>
     </message>
     <message>
-        <location filename="../src/dupes.cpp" line="+7"/>
+        <location filename="../src/dupes.cpp" line="-402"/>
+        <source>Couldn&apos;t be read, left out: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Looking through the files: %1 found — %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location filename="../src/thumbs.cpp" line="+1537"/>
+        <source>Looking through %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+36"/>
+        <source>%Ln file(s) found</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+28"/>
+        <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Comparing the files of the same size: %1 · %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+24"/>
+        <source>%Ln group(s) of identical files; %1 can be freed</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+281"/>
         <source>Finding duplicates in %1</source>
         <translation>%1에서 중복 찾는 중</translation>
     </message>
@@ -6242,12 +6423,12 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+32"/>
-        <location line="+26"/>
+        <location line="+35"/>
         <source>Replace with Hard Links</source>
         <translation>하드 링크로 바꾸기</translation>
     </message>
     <message numerus="yes">
-        <location line="-25"/>
+        <location line="-34"/>
         <source>Replace %Ln file(s) with hard links to the copy kept in each group?
 
 Each then is the same file as the one kept, under its own name: one date, one set of permissions, and a change to it shows under every name. Files on another drive than the one kept are left as they are.%1
@@ -6272,21 +6453,36 @@ This can&apos;t be undone.</source>
         <translation>중복을 하드 링크로 바꾸는 중</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+8"/>
+        <source>Kept: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>  replaced with a hard link to it: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>  left as it is: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>%1 file(s) were left as they are:
 %2</source>
         <translation>파일 %1개는 그대로 두었습니다:
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1512"/>
+        <location filename="../src/fileops.cpp" line="-1540"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln줄 생략 …</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+44"/>
         <source>Waited %1</source>
         <translation>%1 기다림</translation>
     </message>
@@ -6301,7 +6497,7 @@ This can&apos;t be undone.</source>
         <translation>오류: %1</translation>
     </message>
     <message>
-        <location line="+416"/>
+        <location line="+422"/>
         <location line="+22"/>
         <location line="+11"/>
         <source>%1: %2</source>
@@ -6420,13 +6616,44 @@ This can&apos;t be undone.</source>
         <translation>  취소됨</translation>
     </message>
     <message>
-        <location line="+41"/>
+        <location line="-801"/>
+        <location line="+842"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-4"/>
+        <location line="-834"/>
+        <source>%1  %2% · %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1  %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Failed after %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Stopped after %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Finished, with errors, in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Finished in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+796"/>
         <source>waiting for the buffer</source>
         <translation>버퍼 기다리는 중</translation>
     </message>
@@ -6436,7 +6663,7 @@ This can&apos;t be undone.</source>
         <translation>  %1  테이프 %2 · 원본 %3 · 버퍼 %4 / %5 (%6%) · %8 중 %7 기록됨</translation>
     </message>
     <message>
-        <location line="+63"/>
+        <location line="+67"/>
         <source>While this job runs, GNOME&apos;s low-disk-space check skips this tape: it asks the drive for its free space once a minute, and each time the tape stops streaming.</source>
         <translation>이 작업이 실행되는 동안 GNOME의 디스크 공간 부족 검사는 이 테이프를 건너뜁니다: 이 검사는 1분마다 드라이브에 남은 공간을 묻고, 그때마다 테이프의 스트리밍이 멈추기 때문입니다.</translation>
     </message>
@@ -6599,7 +6826,7 @@ This can&apos;t be undone.</source>
         </translation>
     </message>
     <message>
-        <location line="+48"/>
+        <location line="+57"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1초</translation>
@@ -6702,16 +6929,11 @@ This can&apos;t be undone.</source>
         <source>The folder it was copying into, “%1”, isn&apos;t there any more: it was moved or deleted before this job began. Nothing was copied.</source>
         <translation>복사할 대상 폴더 “%1”이(가) 더 이상 없습니다: 이 작업이 시작되기 전에 이동되거나 삭제되었습니다. 아무것도 복사하지 않았습니다.</translation>
     </message>
-    <message>
-        <location line="+6"/>
-        <source>Finished.</source>
-        <translation>끝났습니다.</translation>
-    </message>
     <message numerus="yes">
-        <location line="+0"/>
-        <source>Finished, with %Ln error(s).</source>
-        <translation>
-            <numerusform>끝났습니다 (오류 %Ln개).</numerusform>
+        <location line="+7"/>
+        <source>%Ln item(s) failed.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -6832,7 +7054,17 @@ Copy them anyway?</source>
         <translation>%2 중 %1 파쇄함</translation>
     </message>
     <message>
-        <location line="+125"/>
+        <location line="+8"/>
+        <source>Still there (not shredded): %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Shredded: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+122"/>
         <source>Calculated just now</source>
         <translation>방금 계산함</translation>
     </message>
@@ -6872,7 +7104,7 @@ Copy them anyway?</source>
         </translation>
     </message>
     <message>
-        <location line="+125"/>
+        <location line="+129"/>
         <source>Could not copy %1 from the device: %2</source>
         <translation>장치에서 %1을(를) 복사할 수 없습니다: %2</translation>
     </message>
@@ -6978,12 +7210,39 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>접힌 그룹</translation>
     </message>
     <message>
-        <location filename="../src/hashcheck.cpp" line="-195"/>
+        <location filename="../src/hashcheck.cpp" line="-205"/>
         <source>Checksum files (%1);;All files (*)</source>
         <translation>체크섬 파일 (%1);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location line="+174"/>
+        <location line="+152"/>
+        <source>Missing: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Verifying %1 · %2 of %3 · %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>OK: %1 (%2 %3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Doesn&apos;t match: %1
+  expected %2 %3
+  found    %2 %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Couldn&apos;t be read: %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>Verify Checksums — %1</source>
         <translation>체크섬 확인 — %1</translation>
     </message>
@@ -7102,17 +7361,37 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>체크섬을 만들 파일이 없습니다.</translation>
     </message>
     <message>
-        <location line="+16"/>
-        <source>Hashing %1</source>
-        <translation>%1 해시 계산 중</translation>
+        <location line="+9"/>
+        <source>%1 (%2) to hash with %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+11"/>
+        <source>Hashing %1 (%2 of %3) · %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>  %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Couldn&apos;t be read, left out: %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>None of the files could be read.</source>
         <translation>어떤 파일도 읽을 수 없습니다.</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+5"/>
+        <source>Wrote %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+30"/>
         <location line="+114"/>
         <location line="+41"/>
         <source>Create Checksum File</source>
@@ -7137,7 +7416,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-14"/>
+        <location filename="../src/prefs.cpp" line="-18"/>
         <source>Algorithms</source>
         <translation>알고리즘</translation>
     </message>
@@ -7608,7 +7887,7 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>%1 (%2): %3. 지금 파일을 백업하세요.</translation>
     </message>
     <message>
-        <location filename="../src/i18n.cpp" line="+70"/>
+        <location filename="../src/i18n.cpp" line="+72"/>
         <source>MMMM yyyy</source>
         <extracomment>The format of a month and its year (QDate&apos;s: MMMM the month&apos;s name, yyyy the year)</extracomment>
         <translation>yyyy년 M월</translation>
@@ -7703,13 +7982,13 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>차례를 기다리는 중 (드라이브 사용 중)…</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-109"/>
+        <location filename="../src/fileops.cpp" line="-801"/>
         <source>Waiting</source>
         <translation>대기 중</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/thumbs.cpp" line="+1300"/>
+        <location filename="../src/thumbs.cpp" line="-237"/>
         <source>Running</source>
         <translation>실행 중</translation>
     </message>
@@ -7740,10 +8019,11 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>취소됨</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location filename="../src/jobswin.cpp" line="-80"/>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
+        <location line="+1"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>작업</translation>
@@ -7775,7 +8055,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+0"/>
+        <location filename="../src/prefs.cpp" line="-1"/>
         <source>Start new jobs paused</source>
         <translation>새 작업을 일시 중지 상태로 시작</translation>
     </message>
@@ -8622,7 +8902,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+34"/>
+        <location filename="../src/prefs.cpp" line="+38"/>
         <source>Format</source>
         <translation>형식</translation>
     </message>
@@ -9371,7 +9651,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-97"/>
+        <location filename="../src/prefs.cpp" line="-101"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -9502,7 +9782,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+2"/>
         <location line="+3"/>
         <location line="+3"/>
-        <location line="+4"/>
+        <location line="+1"/>
+        <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10068,7 +10349,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>최근 파일 없음</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-210"/>
+        <location filename="../src/prefs.cpp" line="-214"/>
         <source>Grid</source>
         <translation>격자</translation>
     </message>
@@ -10168,47 +10449,47 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+162"/>
+        <location line="+166"/>
         <source>Icon size in the grid</source>
         <translation>격자의 아이콘 크기</translation>
     </message>
     <message>
-        <location line="-162"/>
+        <location line="-166"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>확대/축소 슬라이더, Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+161"/>
+        <location line="+165"/>
         <source>Icon size in the list</source>
         <translation>목록의 아이콘 크기</translation>
     </message>
     <message>
-        <location line="-159"/>
+        <location line="-163"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → 보기 → 숨긴 파일 표시 (Ctrl+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+160"/>
+        <location line="+164"/>
         <source>Show the sidebar</source>
         <translation>사이드바 표시</translation>
     </message>
     <message>
-        <location line="-160"/>
+        <location line="-164"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → 보기 → 사이드바 (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+105"/>
+        <location line="+109"/>
         <source>Show the info panel</source>
         <translation>정보 패널 표시</translation>
     </message>
     <message>
-        <location line="-160"/>
+        <location line="-164"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → 보기 → 정보 패널 (F3)</translation>
     </message>
@@ -10684,7 +10965,17 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>모두 한꺼번에 (사용 중인 드라이브에서도 대기열에 들어오는 즉시 시작)</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+2"/>
+        <source>Save each finished job&apos;s log</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Each job&apos;s log, with its steps, when it ran and how it ended, is saved as a file in ~/.cache/kestrel-explorer/job-logs (a folder for each day), so it&apos;s kept after Clear Finished and after Kestrel quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Find Duplicates</source>
         <translation>중복 찾기</translation>
     </message>
@@ -11316,7 +11607,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>폴더를 공유했습니다. 다른 사람이 여기에 파일을 만들려면 다른 사람에게도 쓰기 권한이 있어야 합니다(속성 → 권한).</translation>
     </message>
     <message>
-        <location filename="../src/signature.cpp" line="-238"/>
+        <location filename="../src/signature.cpp" line="-245"/>
         <source>gpg isn&apos;t installed (the gnupg package).</source>
         <translation>gpg가 설치되어 있지 않습니다 (gnupg 패키지).</translation>
     </message>
@@ -11448,7 +11739,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>서명 %1 확인 중</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+2"/>
+        <source>Checking %1 with gpg</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+36"/>
         <source>Verify Signature — %1</source>
         <translation>서명 확인 — %1</translation>
     </message>
@@ -11636,6 +11932,44 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <location line="+1"/>
         <source>Lowered (folder left)</source>
         <translation>우선순위 낮춤 (폴더를 떠남)</translation>
+    </message>
+    <message>
+        <location line="+199"/>
+        <source>No preview could be made of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+74"/>
+        <source>%Ln file preview(s) made</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>%Ln folder preview(s) made</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) with no preview</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1 of %2 done: %3</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/towerwin.cpp" line="-103"/>
@@ -11878,12 +12212,12 @@ This connects to the internet: the keyserver sees which key is asked for. Having
     </message>
     <message>
         <location line="+2"/>
-        <location line="+55"/>
+        <location line="+56"/>
         <source>%1: something new is already at %2</source>
         <translation>%1: %2에 이미 새것이 있음</translation>
     </message>
     <message>
-        <location line="-23"/>
+        <location line="-24"/>
         <source>%1: no longer exists</source>
         <translation>%1: 더 이상 없음</translation>
     </message>
@@ -11893,9 +12227,24 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>%1: 그 이름이 다시 쓰이고 있음</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+4"/>
+        <source>Renamed back: %1 → %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>%1: not in the trash any more</source>
         <translation>%1: 더 이상 휴지통에 없음</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Put back: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Couldn&apos;t undo: %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/util.cpp" line="-2"/>
@@ -12603,6 +12952,28 @@ Not connected: click to connect</source>
         <location line="+1"/>
         <source>not read from this floppy disk (right-click the drive: Show Previews on This Drive)</source>
         <translation>이 플로피 디스크에서 읽지 않음 (드라이브를 오른쪽 클릭: 이 드라이브에서 미리 보기 표시)</translation>
+    </message>
+    <message>
+        <location filename="../src/joblogs.cpp" line="+26"/>
+        <source>%1 · started %2 · ended %3 · took %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>as administrator</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+3"/>
+        <source>%Ln step(s):</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Log:</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

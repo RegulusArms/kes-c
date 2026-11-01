@@ -545,15 +545,19 @@ void MainWindow::sort_subfolders(Pane *p)
                             p->grouping(), p->grouping_by()};
     auto work = [root](Task *task) -> QVariant {
         QStringList found;
+        task->log(tx("Looking for the folders below %1").arg(root));
         walk(
             root,
             [&](const QString &dir, QStringList &dirs, QStringList &) {
                 task->check();
                 for (const QString &d : dirs)
                     found << join(dir, d);
+                if (task->due())
+                    task->report(0, 0, txn("%Ln folder(s) found — %1", found.size()).arg(dir));
                 return true;
             },
             true, true);
+        task->log(txn("%Ln folder(s) found: each gets this folder's sort once the job ends", found.size()));
         return found;
     };
     auto done = [this, root, sort](const QVariant &v) {
@@ -1761,6 +1765,8 @@ void apply_settings(const QStringList &keys)
             g_thumbs->set_mode(v.toString());
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
+        } else if (key == "jobs_save_logs") {
+            // read as each job ends (joblogs::save)
         } else {
             prefs_wide = true;   // thumbnails, previews, undo, developer tools…: apply_preferences
         }
