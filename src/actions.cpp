@@ -435,7 +435,7 @@ void MainWindow::rename_to(const QString &src, const QString &nw)
     }
 }
 
-void MainWindow::trash_paths(const QStringList &selected)
+void MainWindow::trash_paths(const QStringList &selected, std::function<void(const QStringList &)> after)
 {
     // what's already in the trash can only be deleted permanently (delete_paths asks first); the rest goes to the
     // trash. A selection can hold both (a search, Recent, Starred).
@@ -461,10 +461,12 @@ void MainWindow::trash_paths(const QStringList &selected)
         }
         return task->cancelled ? QVariant() : QVariant(failed);
     };
-    auto done = [this, paths, trashed](const QVariant &res) {
+    auto done = [this, paths, trashed, after](const QVariant &res) {
         undo::record_paths("trash", TX_NOOP("Move to Trash"), *trashed);
         fileops::dirsizes::drop_with_parents(*trashed);   // the folders they left are smaller now
         sidebar->refresh();
+        if (after)
+            after(*trashed);
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
             ask_yes(this, tx("Cannot move to trash"),

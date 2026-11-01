@@ -1,9 +1,11 @@
-// The file tools: Find Duplicates (dupes.h), Compare With… and Sync To… (compare.h), and Verify Signature
-// (signature.h).
+// The file tools: Find Duplicates (dupes.h), Disk Usage (diskusage.h), Compare With… and Sync To… (compare.h), and
+// Verify Signature (signature.h).
 #include "common.h"
 
 #include "compare.h"
+#include "diskusage.h"
 #include "dupes.h"
+#include "overview.h"
 #include "hashcheck.h"
 #include "signature.h"
 
@@ -13,6 +15,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QToolButton>
 #include <QTreeWidget>
 
 #include <fcntl.h>
@@ -222,6 +225,167 @@ int main(int argc, char **argv)
         check(menu_texts(w, {join(t, "in/two.bin")}).contains("Find Duplicates…") == false &&
                   menu_texts(w, {join(t, "in"), d}).contains("Find Duplicates…"),
               "Find Duplicates… is in the menu of a folder or several folders, not of a file");
+    }
+
+    // ================================================================ Disk Usage
+    {
+        using diskusage::Node;
+        QString d = home_path("du");
+        makedirs(join(d, "sub/deep"), true);
+        makedirs(join(d, "tiny"), true);
+        makedirs(join(d, "locked"), true);
+        write_text(join(d, "big.bin"), QByteArray(300 * 1024, 'b'));
+        write_text(join(d, "sub/a.bin"), QByteArray(200 * 1024, 'a'));
+        write_text(join(d, "sub/deep/c.bin"), QByteArray(150 * 1024, 'c'));
+        write_text(join(d, "tiny/t.txt"), "tiny");
+        write_text(join(d, "locked/secret.bin"), QByteArray(1000, 's'));
+        for (int i = 0; i < diskusage::FILES_KEPT + 10; ++i)   // more than are kept one by one, and too small anyway
+            write_text(join(d, QString("small%1.txt").arg(i)), QByteArray(100, 'x'));
+        ::symlink("big.bin", enc(join(d, "link")).constData());
+        ::chmod(enc(join(d, "locked")).constData(), 0);
+        QStringList unreadable;
+        diskusage::Tree t = diskusage::count(d, nullptr, 0, &unreadable);
+        fileops::DirStats want = fileops::dir_stats(d);
+        ::chmod(enc(join(d, "locked")).constData(), 0755);
+        QStringList order;
+        for (const auto &k : t->kids)
+            order << (k->rest ? QString("rest:%1").arg(k->files) : k->name);
+        Node *sub = diskusage::find(t.get(), join(d, "sub")), *tiny = diskusage::find(t.get(), join(d, "tiny"));
+        Node *deep = diskusage::find(t.get(), join(d, "sub/deep/c.bin"));
+        check(t->size == want.size && t->files == want.files && t->dirs == want.dirs && t->complete,
+              QString("Disk Usage: a folder's size, files and folders counted as Properties counts them, a folder that "
+                      "can't be read as empty (%1 bytes, %2 files, %3 folders; Properties: %4, %5, %6)")
+                  .arg(t->size).arg(t->files).arg(t->dirs).arg(want.size).arg(want.files).arg(want.dirs));
+        check(order.mid(0, 2) == QStringList({"sub", "big.bin"}) && order.contains("rest:31") && sub &&
+                  sub->size == 350 * 1024 && deep && deep->path() == join(d, "sub/deep/c.bin") &&
+                  unreadable == QStringList{join(d, "locked")},
+              "...biggest first, the small files of a folder together as one block, the folder that couldn't be read "
+              "named (" + order.join(" ") + "; " + unreadable.join(", ") + ")");
+        check(tiny && tiny->pruned && tiny->kids.empty() && tiny->size == 4 && !tiny->can_enter(),
+              "...a small folder keeps only its totals (a block, not gone into)");
+        diskusage::remove(diskusage::find(t.get(), join(d, "sub/deep")));
+        check(t->size == want.size - 150 * 1024 && sub->size == 200 * 1024 && sub->dirs == 0 &&
+                  !diskusage::find(t.get(), join(d, "sub/deep/c.bin")),
+              "...taking a folder out (moved to the trash) makes the folders above it smaller");
+
+        // the treemap: every block in the area, as big as its share, none overlapping
+        QList<double> sizes{6, 6, 4, 3, 2, 2, 1};
+        QRectF area(10, 20, 600, 400);
+        QList<QRectF> rects = diskusage::squarify(sizes, area);
+        bool in = rects.size() == sizes.size(), sized = true, apart = true;
+        double worst_aspect = 0;
+        for (int i = 0; i < rects.size(); ++i) {
+            in = in && area.adjusted(-1e-6, -1e-6, 1e-6, 1e-6).contains(rects[i]);
+            sized = sized && std::abs(rects[i].width() * rects[i].height() - sizes[i] / 24 * 600 * 400) < 1e-3;
+            worst_aspect = std::max(worst_aspect, std::max(rects[i].width() / rects[i].height(), rects[i].height() / rects[i].width()));
+            for (int j = 0; j < i; ++j)
+                apart = apart && rects[i].intersected(rects[j]).width() * rects[i].intersected(rects[j]).height() < 1e-6;
+        }
+        check(in && sized && apart && worst_aspect < 3,
+              QString("...the treemap: each block inside the map, sized by its share, none overlapping, none long and "
+                      "thin (the longest side %1 times the shortest)").arg(worst_aspect));
+
+        // the window, from a folder's right-click menu: it counts, then remembers what it counted for Properties
+        check(menu_texts(w, {d}).contains("Disk Usage…") && !menu_texts(w, {join(d, "big.bin")}).contains("Disk Usage…") &&
+                  !menu_texts(w, {d, join(d, "sub")}).contains("Disk Usage…"),
+              "Disk Usage… is in a folder's right-click menu, not a file's or several folders'");
+        QMenu *keep_menu = nullptr;
+        QAction *du_act = menu_action(w, {d}, "Disk Usage…", &keep_menu);
+        if (du_act)
+            du_act->trigger();
+        DiskUsageWindow *dw = nullptr;
+        bool shown = wait_for([&]() { return (dw = shown_window<DiskUsageWindow>()) != nullptr; });
+        bool counted = shown && wait_for([&]() { return !dw->counting() && dw->tree && !dw->tree->remembered; }, 20000);
+        delete keep_menu;
+        auto sub_size = fileops::dirsizes::get(join(d, "sub"));
+        auto all_size = fileops::dirsizes::get(d);
+        check(du_act && shown && is_free_window(dw) && counted && dw->map->shown == dw->tree.get() &&
+                  dw->list->topLevelItemCount() == int(dw->tree->kids.size()) && sub_size &&
+                  sub_size->stats.size == fileops::dir_stats(join(d, "sub")).size && all_size &&
+                  all_size->stats.files == fileops::dir_stats(d).files,
+              "...it opens a free window that counts the folder, maps it, lists it, and remembers its folders' sizes "
+              "for Properties");
+        if (counted) {
+            Node *s = diskusage::find(dw->tree.get(), join(d, "sub"));
+            dw->go(s);
+            bool into = dw->map->shown == s && dw->back_btn->isEnabled() && dw->where->text().contains("href");
+            dw->up();
+            check(into && dw->map->shown == dw->tree.get() && !dw->back_btn->isEnabled(),
+                  "...going into a folder and Back up again");
+            QStringList menu;
+            if (QMenu *m = dw->item_menu(diskusage::find(dw->tree.get(), join(d, "big.bin")))) {
+                for (QAction *a : m->actions())
+                    if (!a->isSeparator())
+                        menu << a->text();
+                delete m;
+            }
+            check(menu == QStringList({"Open", "Show in Folder", "Move to Trash", "Properties"}),
+                  "...a file's right-click menu there: Open, Show in Folder, Move to Trash, Properties (" + menu.join(", ") + ")");
+            makedirs(join(TRASH_DIR(), "files"), true);
+            makedirs(join(TRASH_DIR(), "info"), true);
+            qint64 before = dw->tree->size;
+            dw->trash(diskusage::find(dw->tree.get(), join(d, "big.bin")));
+            bool trashed = wait_for([&]() {
+                return !exists(join(d, "big.bin")) && !diskusage::find(dw->tree.get(), join(d, "big.bin"));
+            }, 10000);
+            check(trashed && dw->tree->size == before - 300 * 1024 && wait_for([]() { return undo::label() == "Move to Trash"; }),
+                  "...Move to Trash takes it off the map (the folder's size with it), and can be undone");
+            dw->close();
+        }
+
+        // opened again: what was counted shows at once, from the sizes remembered, while it counts again (not the
+        // folder the trashed file was in: its size changed, so it's forgotten)
+        diskusage::Tree mem = diskusage::remembered(join(d, "sub"));
+        Node *mdeep = mem ? diskusage::find(mem.get(), join(d, "sub/deep")) : nullptr;
+        bool has_rest = false;
+        if (mem)
+            for (const auto &k : mem->kids)
+                has_rest = has_rest || (k->rest && k->size == 200 * 1024);
+        check(mem && mem->remembered && mem->size == 350 * 1024 && mdeep && mdeep->size == 150 * 1024 && has_rest &&
+                  !fileops::dirsizes::get(d),
+              "...the sizes remembered make a map at once (the files not remembered one by one as one block); the "
+              "folder a file was trashed from is forgotten");
+
+        // on a tape, it counts only when asked
+        QString tape = home_path("du-tape");
+        makedirs(tape, true);
+        write_text(join(tape, "f.bin"), "on tape");
+        qputenv("KESTREL_TEST_SLOW", QString("tape=%1").arg(tape).toUtf8());
+        diskusage::open_window(w, tape);
+        DiskUsageWindow *tw = nullptr;
+        bool tshown = wait_for([&]() {
+            for (QWidget *x : QApplication::topLevelWidgets())
+                if (auto *y = qobject_cast<DiskUsageWindow *>(x); y && y->isVisible() && y->windowTitle().contains("du-tape"))
+                    tw = y;
+            return tw != nullptr;
+        });
+        spin(300);
+        bool waited = tshown && !tw->counting() && !tw->tree && tw->recount_btn->isEnabled();
+        if (tshown)
+            tw->recount();
+        bool counted_when_asked = tshown && wait_for([&]() { return !tw->counting() && tw->tree; }, 20000);
+        qunsetenv("KESTREL_TEST_SLOW");
+        check(waited && counted_when_asked, "...on a tape it doesn't count until asked (Count Now), then counts");
+        if (tw)
+            tw->close();
+
+        // a drive's Overview card: its button beside the usage bar opens Disk Usage
+        DriveInfo info;
+        info.name = "Drive";
+        info.root = "/";
+        info.total = 1000;
+        info.free = 400;
+        DriveCard card(info);
+        QString asked;
+        QObject::connect(&card, &DriveCard::disk_usage, [&]() { asked = "yes"; });
+        if (card.usage_button)
+            card.usage_button->click();
+        DriveInfo phone = info;
+        phone.kind = "phone";
+        DriveCard phone_card(phone);
+        check(card.usage_button && asked == "yes" && !phone_card.usage_button,
+              "a drive's Overview card has “What's using this space?” beside its usage, which opens Disk Usage (not "
+              "a phone's)");
     }
 
     // ================================================================ Compare

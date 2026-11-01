@@ -159,19 +159,6 @@ into.
     archive through 7-Zip; keep that as Open as Archive and add Mount).
   - Add the menu entries to docs/context-menus.md.
 
-- [ ] **Disk usage map: what's using this space?** A window showing what fills a folder or a drive as a treemap or
-  a sunburst (decide which, or offer both), like Baobab or Filelight: each folder a block or ring sized by what it
-  holds, its biggest files and subfolders inside it; click one to go into it, back to go up, hover for its size and
-  share.
-  - Opened from a drive's Overview card ("What's using this space?", beside its usage bar), the sidebar's drives,
-    and right-click a folder → Disk Usage….
-  - Counting is a job (the queue, its turn on the drive, progress, Pause / Stop) that stays on the drive, as Find
-    Duplicates does. It reuses the folder sizes Properties remembers where they're still current, shows them at
-    once with when they were counted, and saves what it counts for Properties in turn; Recalculate counts again.
-  - From the map: open or show an item in its folder, Move to Trash (Undo as usual), Properties.
-  - Not on tapes and floppies unless asked (counting walks the whole drive).
-  - Add the menu entries to docs/context-menus.md.
-
 ### Views and search
 
 - [ ] **Quick Look for every kind of file.** Space opens the image viewer for images, but Properties for anything
@@ -349,6 +336,20 @@ into.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done
+
+- [x] **Disk usage map: what's using this space?** A window showing what fills a folder or a drive as a treemap or
+  a sunburst (decide which, or offer both), like Baobab or Filelight: each folder a block or ring sized by what it
+  holds, its biggest files and subfolders inside it; click one to go into it, back to go up, hover for its size and
+  share.
+  - Opened from a drive's Overview card ("What's using this space?", beside its usage bar), the sidebar's drives,
+    and right-click a folder → Disk Usage….
+  - Counting is a job (the queue, its turn on the drive, progress, Pause / Stop) that stays on the drive, as Find
+    Duplicates does. It reuses the folder sizes Properties remembers where they're still current, shows them at
+    once with when they were counted, and saves what it counts for Properties in turn; Recalculate counts again.
+  - From the map: open or show an item in its folder, Move to Trash (Undo as usual), Properties.
+  - Not on tapes and floppies unless asked (counting walks the whole drive).
+  - Add the menu entries to docs/context-menus.md.
+  Done in 0.3.3-alpha.4 as a treemap (src/diskusage.cpp), with a list of the folder shown beside it: a folder's small files are one block, folders under 128 KB keep only their totals. The remembered sizes show at once while it counts again (no count is skipped: the map needs every level).
 
 - [x] **Kestrel freezes when a drive is busy with another program.** When another program loads a drive heavily
   and Kestrel does something on that drive, its window stops responding until GNOME's "not responding" (force quit)

@@ -10,6 +10,7 @@
 #include "drives.h"
 #include "compare.h"
 #include "convert.h"
+#include "diskusage.h"
 #include "dupes.h"
 #include "fileops.h"
 #include "hashcheck.h"
@@ -263,6 +264,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
         ArchiveWindow::drop_members(this, &md, target);
     });
     connect(sidebar, &Sidebar::find_duplicates, this, [this](const QString &root) { dupes::open_window(this, {root}); });
+    connect(sidebar, &Sidebar::disk_usage, this, [this](const QString &root) { diskusage::open_window(this, root); });
     connect(sidebar, &Sidebar::empty_trash_requested, this, &MainWindow::empty_trash);
     connect(sidebar, &Sidebar::shred_trash_requested, this, &MainWindow::empty_trash_with_bleachbit);
     tabs = new QTabWidget;
@@ -1494,6 +1496,9 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, paths]() { dupes::open_window(this, paths); }),
           "find_duplicates");
     if (is_dir) {
+        T(m->addAction(diskusage::icon(), tx("Disk Usage…"), this,
+                       [this, single]() { diskusage::open_window(this, single); }),
+          "disk_usage");
         T(m->addAction(icon({"view-dual", "view-split-left-right"}), tx("Compare With…"), this,
                        [this, single]() { compare::open_compare(this, single); }),
           "compare_with");

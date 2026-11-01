@@ -1,6 +1,7 @@
 #include "overview.h"
 
 #include "dialogs.h"
+#include "diskusage.h"
 #include "drives.h"
 #include "fileops.h"
 #include "places.h"
@@ -802,8 +803,9 @@ DriveCard::DriveCard(const DriveInfo &info_, const CardLook &look, QWidget *pare
     if (info.mounted && total) {
         qint64 free = info.free < 0 ? 0 : info.free;
         double pct = (total - free) * 100.0 / total;
+        QProgressBar *bar = nullptr;
         if (look.bar) {
-            auto *bar = new QProgressBar;
+            bar = new QProgressBar;
             bar->setObjectName("usage");
             bar->setRange(0, 1000);
             bar->setValue(int(pct * 10));
@@ -813,13 +815,35 @@ DriveCard::DriveCard(const DriveInfo &info_, const CardLook &look, QWidget *pare
             bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: %1; }"
                                        "QProgressBar::chunk { border-radius: 4px; background: %2; }")
                                    .arg(card_border().name(), color));
-            col->addWidget(bar);
         }
         QString line = look.percent ? tx("%1% free of %2").arg(i18n::number(qRound(100 - pct)), human_size(total))
                                     : tx("%1 free of %2  (%3% used)").arg(human_size(free), human_size(total), i18n::number(qRound(pct)));
         if ((info.kind == "tape" || info.kind == "floppy") && !info.status.isEmpty())   // "Tape · 12 loads" and the like
             line = info.status + "  ·  " + line;
-        col->addWidget(small(new QLabel(line)));
+        auto *line_label = small(new QLabel(line));
+        // Disk Usage… beside the usage bar (beside the line when there's no bar): not for phones (gvfs is slow)
+        QWidget *usage = look.bar ? static_cast<QWidget *>(bar) : line_label;
+        if (info.kind != "phone" && info.root.startsWith('/')) {
+            usage_button = new QToolButton;
+            usage_button->setObjectName("disk_usage");
+            usage_button->setAutoRaise(true);
+            usage_button->setIcon(diskusage::icon());
+            usage_button->setIconSize(QSize(16, 16));
+            usage_button->setToolTip(tx("What's using this space?"));
+            usage_button->setAccessibleName(tx("What's using this space?"));
+            connect(usage_button, &QToolButton::clicked, this, &DriveCard::disk_usage);
+            auto *row = new QHBoxLayout;
+            row->setSpacing(4);
+            row->addWidget(usage, 1, Qt::AlignVCenter);
+            row->addWidget(usage_button, 0, Qt::AlignVCenter);
+            col->addLayout(row);
+            if (look.bar)
+                col->addWidget(line_label);
+        } else {
+            if (look.bar)
+                col->addWidget(bar);
+            col->addWidget(line_label);
+        }
     } else {
         QString state = !info.status.isEmpty() ? info.status
                                                 : (!info.mounted ? tx("Not mounted — click to mount") : QString());
@@ -1361,6 +1385,8 @@ DriveCard *OverviewPage::drive_card(DriveInfo info)
                 Q_EMIT open_in_tab(target);
         });
         connect(card, &Card::menu_requested, this, [this, info](const QPoint &pos) { drive_menu(info, pos); });
+        QString root = info.root;
+        connect(card, &DriveCard::disk_usage, this, [this, root]() { Q_EMIT disk_usage(root); });
     } else {
         overview::VolumeRef v = info.volume;
         connect(card, &Card::clicked, this, [this, v]() { do_mount(v); });
@@ -1442,6 +1468,8 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             refresh();
         });
         m.addAction(tx("Find Duplicates…"), this, [this, target]() { Q_EMIT find_duplicates(target); });
+        if (info.kind != "phone" && target.startsWith('/'))
+            m.addAction(tx("Disk Usage…"), this, [this, target]() { Q_EMIT disk_usage(target); });
         if (info.has_health) {
             QString name = info.name;
             health::Info h = info.health;

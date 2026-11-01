@@ -6,6 +6,18 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.4
+
+Added:
+- `tools`: Disk Usage. Its count matches Properties' (sizes, files, folders; a folder that can't be read counts as
+  empty and is named), biggest first, a folder's small files as one block and small folders kept as totals only;
+  taking an item out shrinks the folders above it; the treemap's blocks stay inside the map, sized by their share,
+  apart and not long and thin. The window from a folder's menu (only a single folder's) counts, maps and lists the
+  folder and remembers its folders' sizes for Properties; going in and Back; an item's menu; Move to Trash takes it
+  off the map and can be undone; the sizes remembered make a map at once; on a tape it counts only when asked; a
+  drive's Overview card has the button that opens it (a phone's hasn't). Covers the new Disk Usage window.
+- `ui`: the folder menu's new Disk Usage… entry is in the list of the window's actions (`ui_actions.txt`).
+
 ## 0.3.3-alpha.3
 
 Added:

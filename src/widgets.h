@@ -327,6 +327,7 @@ Q_SIGNALS:
     void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
     void find_duplicates(const QString &root);   // a drive's Find Duplicates…
+    void disk_usage(const QString &root);        // a drive's Disk Usage…
     void shred_trash_requested();   // Empty Trash with BleachBit
 
 protected:

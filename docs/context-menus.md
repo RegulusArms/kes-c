@@ -98,6 +98,7 @@ The shared entries, plus:
 | **Open With ▸** | Other apps that open folders (not file managers), and **Other Application…** | Always |
 | **Paste Into Folder** | Pastes the clipboard's files into this folder | Enabled when files are on the clipboard |
 | **Find Duplicates…** | Finds the files with the same contents in the folder (and its subfolders), to keep some and move the others to the trash or replace them with hard links (see [Features](features.md)) | Always |
+| **Disk Usage…** | Shows what fills the folder as a map: each subfolder a block sized by what it holds, its biggest files and subfolders inside it (see [Features](features.md)) | Always |
 | **Compare With…** | Asks for another folder and lists what differs between the two: only on one side, newer on one side, other contents; copy across or trash from the list | Always |
 | **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again | Always |
 | **Folder Colour ▸** | Gives the folder's icon one of 10 colours, or **Default** | Always |
@@ -240,6 +241,7 @@ Right-click a tab's title.
 | **Open** / **Open in New Tab** | Opens the place here or in a new tab | Every entry |
 | **Open in Terminal** | Opens a terminal there | Folders, drives and mounted shares (not phones or servers) |
 | **Find Duplicates…** | Finds the files with the same contents on the drive (as for a folder) | Drives |
+| **Disk Usage…** | What's using the drive's space, as a map (as for a folder; on a tape or floppy it counts only when asked) | Drives |
 | **Edit Bookmark…** | Changes the bookmark's name and location | Bookmarks |
 | **Remove Bookmark** | Removes the bookmark (the folder stays) | Bookmarks |
 | **Move Up** / **Move Down** | Moves the bookmark in the list | Bookmarks |
@@ -263,6 +265,7 @@ On the Overview page.
 | **Add to Bookmarks** | Bookmarks the drive or folder | Mounted drives, frequent folders |
 | **Properties** | The drive's Properties | Mounted drives |
 | **Find Duplicates…** | As in the sidebar | Mounted drives |
+| **Disk Usage…** | As in the sidebar; also the button beside the card's usage bar ("What's using this space?") | Mounted drives (not phones) |
 | **Drive Health…** | What the drive reports about itself (S.M.A.R.T., through udisks), in plain words; also opened by clicking the card's health line | Drives with a health line (Preferences → Overview → Show each drive's health) |
 | **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
 | **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |
@@ -271,6 +274,18 @@ On the Overview page.
 | **Remove from Save Locations** | Takes the folder off the list (the folder stays) | Save locations |
 | **Unstar** | Takes it off the Starred list | Starred items |
 | **Remove from Frequent Folders** | Forgets how often the folder was opened, so it leaves the section until it's opened often again | Frequent folders |
+
+## Disk Usage window
+
+Right-click a block in the map, or a row in the list beside it.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Go Into** | Shows that folder in the map (as clicking it does) | Folders with their contents mapped (not small ones) |
+| **Open** | Opens the file in its app, or the folder in the Kestrel window it was opened from | Files and folders (not "smaller files") |
+| **Show in Folder** | Shows it selected in its folder, in that Kestrel window | Files and folders |
+| **Move to Trash** | Moves it to the trash and takes it off the map (Undo in a Kestrel window brings it back) | Files and folders |
+| **Properties** | Its Properties | Files and folders |
 
 ## Open as Archive window
 

@@ -33,7 +33,7 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+645"/>
+        <location filename="../src/app.cpp" line="+647"/>
         <location line="+587"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
@@ -239,7 +239,7 @@
     </message>
     <message>
         <location line="+32"/>
-        <location line="+89"/>
+        <location line="+91"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
         <location filename="../src/fileops.cpp" line="+1014"/>
@@ -248,18 +248,19 @@
         <translation>%1 di %2 — %3</translation>
     </message>
     <message>
-        <location line="-153"/>
+        <location line="-155"/>
         <location filename="../src/app.cpp" line="-725"/>
-        <location line="+940"/>
+        <location line="+943"/>
+        <location filename="../src/diskusage.cpp" line="+1003"/>
         <location filename="../src/menus.cpp" line="-32"/>
-        <location line="+108"/>
+        <location line="+109"/>
         <location filename="../src/opening.cpp" line="+249"/>
         <location line="+4"/>
         <source>Move to Trash</source>
         <translation>Sposta nel cestino</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+7"/>
         <source>Cannot move to trash</source>
         <translation>Impossibile spostare nel cestino</translation>
     </message>
@@ -329,14 +330,14 @@ L&apos;operazione non può essere annullata.</numerusform>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-939"/>
+        <location filename="../src/app.cpp" line="-942"/>
         <location line="+645"/>
         <source>Delete Permanently</source>
         <translation>Elimina definitivamente</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+502"/>
+        <location filename="../src/app.cpp" line="+505"/>
         <source>Delete</source>
         <translation>Elimina</translation>
     </message>
@@ -467,7 +468,7 @@ Non viene conservato alcun backup, quindi l&apos;operazione non può essere annu
     </message>
     <message>
         <location line="+20"/>
-        <location filename="../src/app.cpp" line="-503"/>
+        <location filename="../src/app.cpp" line="-506"/>
         <source>Restore</source>
         <translation>Ripristina</translation>
     </message>
@@ -480,8 +481,8 @@ Non viene conservato alcun backup, quindi l&apos;operazione non può essere annu
         <location line="+5"/>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
-        <location filename="../src/menus.cpp" line="-98"/>
-        <location filename="../src/widgets.cpp" line="+1800"/>
+        <location filename="../src/menus.cpp" line="-99"/>
+        <location filename="../src/widgets.cpp" line="+1797"/>
         <source>Empty Trash</source>
         <translation>Svuota cestino</translation>
     </message>
@@ -686,11 +687,12 @@ sudo apt install pkexec</translation>
         <translation>Riprova come amministratore</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1188"/>
+        <location filename="../src/app.cpp" line="-1189"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
+        <location filename="../src/diskusage.cpp" line="-250"/>
         <location filename="../src/dupes.cpp" line="+353"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1418"/>
+        <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
         <translation>Nome</translation>
     </message>
@@ -698,13 +700,13 @@ sudo apt install pkexec</translation>
         <location line="+0"/>
         <location filename="../src/archivewin.cpp" line="+0"/>
         <location filename="../src/compare.cpp" line="+786"/>
+        <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/dupes.cpp" line="+0"/>
-        <location filename="../src/pane.cpp" line="+887"/>
+        <location filename="../src/pane.cpp" line="+889"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1864"/>
-        <location line="+39"/>
+        <location line="+1862"/>
         <source>Size</source>
         <translation>Dimensione</translation>
     </message>
@@ -713,8 +715,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/pane.cpp" line="-3"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+103"/>
-        <location filename="../src/widgets.cpp" line="-38"/>
-        <location line="+39"/>
+        <location filename="../src/widgets.cpp" line="+1"/>
         <source>Type</source>
         <translation>Tipo</translation>
     </message>
@@ -725,14 +726,13 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1904"/>
-        <location line="+1867"/>
-        <location line="+39"/>
+        <location filename="../src/widgets.cpp" line="-1863"/>
+        <location line="+1865"/>
         <source>Modified</source>
         <translation>Modificato</translation>
     </message>
     <message>
-        <location line="+231"/>
+        <location line="+232"/>
         <source>Zoom (Ctrl+scroll)</source>
         <translation>Zoom (Ctrl+rotellina)</translation>
     </message>
@@ -754,6 +754,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+92"/>
         <location line="+290"/>
+        <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
         <translation>Indietro</translation>
     </message>
@@ -905,7 +906,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+37"/>
         <location filename="../src/hashcheck.cpp" line="+305"/>
-        <location filename="../src/widgets.cpp" line="-2223"/>
+        <location filename="../src/widgets.cpp" line="-2182"/>
         <source>File</source>
         <translation>File</translation>
     </message>
@@ -965,14 +966,14 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1311"/>
+        <location line="+1314"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>Annulla</translation>
     </message>
     <message>
-        <location line="-1307"/>
+        <location line="-1310"/>
         <location line="+726"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
@@ -988,7 +989,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+2246"/>
+        <location filename="../src/widgets.cpp" line="+2212"/>
         <source>Copy</source>
         <translation>Copia</translation>
     </message>
@@ -1030,18 +1031,19 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location line="+9"/>
         <location line="+608"/>
         <location line="+32"/>
-        <location line="+307"/>
+        <location line="+310"/>
         <location line="+237"/>
+        <location filename="../src/diskusage.cpp" line="+315"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
-        <location line="+102"/>
-        <location filename="../src/overview.cpp" line="+1450"/>
+        <location line="+103"/>
+        <location filename="../src/overview.cpp" line="+1478"/>
         <source>Properties</source>
         <translation>Proprietà</translation>
     </message>
     <message>
-        <location line="-1175"/>
-        <location filename="../src/menus.cpp" line="-180"/>
+        <location line="-1178"/>
+        <location filename="../src/menus.cpp" line="-181"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
         <location line="+2"/>
@@ -1094,7 +1096,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location line="-557"/>
         <location filename="../src/prefs.cpp" line="-124"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1052"/>
+        <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
         <translation>Barra laterale</translation>
     </message>
@@ -1106,13 +1108,13 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1169"/>
+        <location line="+1172"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>Schermo intero</translation>
     </message>
     <message>
-        <location line="-1161"/>
+        <location line="-1164"/>
         <source>Reload</source>
         <translation>Ricarica</translation>
     </message>
@@ -1150,7 +1152,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+1"/>
         <location filename="../src/dupes.cpp" line="-27"/>
-        <location filename="../src/pane.cpp" line="-500"/>
+        <location filename="../src/pane.cpp" line="-501"/>
         <location filename="../src/prefs.cpp" line="+49"/>
         <location line="+1"/>
         <source>Search</source>
@@ -1203,12 +1205,12 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1152"/>
+        <location line="+1155"/>
         <source>Keyboard Shortcuts</source>
         <translation>Scorciatoie da tastiera</translation>
     </message>
     <message>
-        <location line="-1151"/>
+        <location line="-1154"/>
         <source>About</source>
         <translation>Informazioni</translation>
     </message>
@@ -1504,8 +1506,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+985"/>
-        <location line="+36"/>
+        <location filename="../src/widgets.cpp" line="+986"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>%Ln elemento</numerusform>
@@ -1534,17 +1535,17 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+20"/>
-        <location line="+331"/>
+        <location line="+334"/>
         <location filename="../src/menus.cpp" line="+37"/>
-        <location line="+98"/>
-        <location filename="../src/overview.cpp" line="-11"/>
-        <location filename="../src/widgets.cpp" line="-490"/>
+        <location line="+99"/>
+        <location filename="../src/overview.cpp" line="-13"/>
+        <location filename="../src/widgets.cpp" line="-455"/>
         <source>Open in Terminal</source>
         <translation>Apri nel terminale</translation>
     </message>
     <message>
-        <location line="-329"/>
-        <location filename="../src/menus.cpp" line="-98"/>
+        <location line="-332"/>
+        <location filename="../src/menus.cpp" line="-99"/>
         <source>Bookmark This Folder</source>
         <translation>Aggiungi segnalibro per questa cartella</translation>
     </message>
@@ -1557,26 +1558,27 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+35"/>
-        <location line="+295"/>
-        <location filename="../src/menus.cpp" line="+98"/>
+        <location line="+298"/>
+        <location filename="../src/menus.cpp" line="+99"/>
         <source>Shred with BleachBit…</source>
         <translation>Distruggi con BleachBit…</translation>
     </message>
     <message>
-        <location line="-281"/>
-        <location line="+519"/>
+        <location line="-284"/>
+        <location line="+522"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
-        <location filename="../src/menus.cpp" line="-93"/>
+        <location filename="../src/diskusage.cpp" line="-22"/>
+        <location filename="../src/menus.cpp" line="-94"/>
         <location filename="../src/opening.cpp" line="-176"/>
         <location line="+55"/>
         <location line="+37"/>
         <location line="+7"/>
         <location line="+13"/>
         <location filename="../src/overview.cpp" line="-2"/>
-        <location line="+40"/>
+        <location line="+42"/>
         <location line="+27"/>
         <location line="+3"/>
         <location line="+11"/>
@@ -1586,10 +1588,10 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <translation>Apri</translation>
     </message>
     <message>
-        <location line="-516"/>
+        <location line="-519"/>
         <location filename="../src/menus.cpp" line="+3"/>
-        <location filename="../src/overview.cpp" line="-182"/>
-        <location line="+40"/>
+        <location filename="../src/overview.cpp" line="-184"/>
+        <location line="+42"/>
         <location line="+30"/>
         <location line="+11"/>
         <location line="+102"/>
@@ -1611,6 +1613,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/diskusage.cpp" line="+10"/>
         <location filename="../src/menus.cpp" line="-28"/>
         <location line="+29"/>
         <location filename="../src/overview.cpp" line="-116"/>
@@ -1765,8 +1768,8 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+5"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-71"/>
-        <location line="+80"/>
+        <location filename="../src/overview.cpp" line="-73"/>
+        <location line="+82"/>
         <source>Add to Bookmarks</source>
         <translation>Aggiungi ai segnalibri</translation>
     </message>
@@ -1846,7 +1849,7 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-76"/>
+        <location filename="../src/overview.cpp" line="-78"/>
         <location filename="../src/widgets.cpp" line="+18"/>
         <source>Find Duplicates…</source>
         <translation>Trova duplicati…</translation>
@@ -1854,12 +1857,20 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
+        <location filename="../src/overview.cpp" line="+2"/>
+        <location filename="../src/widgets.cpp" line="+1"/>
+        <source>Disk Usage…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location filename="../src/menus.cpp" line="+0"/>
         <source>Compare With…</source>
         <translation>Confronta con…</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+0"/>
+        <location filename="../src/menus.cpp" line="+1"/>
         <source>Sync To…</source>
         <translation>Sincronizza con…</translation>
     </message>
@@ -1871,8 +1882,8 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/menus.cpp" line="-67"/>
-        <location line="+69"/>
+        <location filename="../src/menus.cpp" line="-68"/>
+        <location line="+70"/>
         <location filename="../src/viewer.cpp" line="+55"/>
         <source>Add to Selected UWP Monitor</source>
         <translation>Aggiungi al monitor UWP selezionato</translation>
@@ -1880,13 +1891,13 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     <message>
         <location line="+8"/>
         <location filename="../src/dialogs.cpp" line="-912"/>
-        <location filename="../src/menus.cpp" line="-133"/>
+        <location filename="../src/menus.cpp" line="-134"/>
         <source>Image</source>
         <translation>Immagine</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+136"/>
+        <location filename="../src/menus.cpp" line="+137"/>
         <source>Use as Folder Cover</source>
         <translation>Usa come copertina della cartella</translation>
     </message>
@@ -1907,13 +1918,13 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
         <location filename="../src/convert.cpp" line="+93"/>
         <location line="+19"/>
         <location line="+18"/>
-        <location filename="../src/menus.cpp" line="-139"/>
+        <location filename="../src/menus.cpp" line="-140"/>
         <source>Rotate</source>
         <translation>Ruota</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+144"/>
+        <location filename="../src/menus.cpp" line="+145"/>
         <source>Rotate 90° Clockwise</source>
         <translation>Ruota di 90° in senso orario</translation>
     </message>
@@ -1931,8 +1942,8 @@ Disattivale nelle cartelle grandi o lente per velocizzare.</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/menus.cpp" line="-90"/>
-        <location line="+90"/>
+        <location filename="../src/menus.cpp" line="-91"/>
+        <location line="+91"/>
         <source>Flip Horizontally</source>
         <translation>Rifletti orizzontalmente</translation>
     </message>
@@ -2135,7 +2146,7 @@ Verranno rigenerate durante la navigazione.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-700"/>
+        <location filename="../src/widgets.cpp" line="-701"/>
         <source>Type a location</source>
         <translation>Digita una posizione</translation>
     </message>
@@ -2855,7 +2866,7 @@ Possono proseguire senza alcuna finestra di Kestrel: la finestra Operazioni le m
     <message>
         <location line="+7"/>
         <location line="+460"/>
-        <location filename="../src/overview.cpp" line="-1095"/>
+        <location filename="../src/overview.cpp" line="-1122"/>
         <source>Password:</source>
         <translation>Password:</translation>
     </message>
@@ -2920,7 +2931,7 @@ Possono proseguire senza alcuna finestra di Kestrel: la finestra Operazioni le m
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/pane.cpp" line="+512"/>
+        <location filename="../src/pane.cpp" line="+513"/>
         <source>KB</source>
         <translation>KB</translation>
     </message>
@@ -3582,6 +3593,7 @@ Installalo con:  sudo apt install %2</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
+        <location filename="../src/diskusage.cpp" line="-415"/>
         <location filename="../src/dupes.cpp" line="+229"/>
         <source>%Ln file(s)</source>
         <translation>
@@ -3757,7 +3769,7 @@ Installalo con:  sudo apt install </translation>
         <location line="+19"/>
         <location filename="../src/dupes.cpp" line="-202"/>
         <location filename="../src/viewer.cpp" line="-453"/>
-        <location filename="../src/widgets.cpp" line="-1047"/>
+        <location filename="../src/widgets.cpp" line="-1044"/>
         <source>Folder</source>
         <translation>Cartella</translation>
     </message>
@@ -3816,6 +3828,7 @@ Installalo con:  sudo apt install </translation>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/diskusage.cpp" line="+145"/>
         <location filename="../src/dupes.cpp" line="-26"/>
         <location filename="../src/hashcheck.cpp" line="-379"/>
         <location filename="../src/jobswin.cpp" line="-107"/>
@@ -3962,6 +3975,7 @@ Installalo con:  sudo apt install </translation>
         <location line="-342"/>
         <location line="+354"/>
         <location filename="../src/dialogs.cpp" line="-411"/>
+        <location filename="../src/diskusage.cpp" line="+176"/>
         <location filename="../src/dupes.cpp" line="+147"/>
         <source>Stopped.</source>
         <translation>Interrotto.</translation>
@@ -5397,7 +5411,7 @@ Accetta: %3</translation>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/overview.cpp" line="+495"/>
+        <location filename="../src/overview.cpp" line="+518"/>
         <source>Drive Health… (what the drive reports about itself)</source>
         <translation>Salute dell&apos;unità… (ciò che l&apos;unità riporta su se stessa)</translation>
     </message>
@@ -5418,6 +5432,8 @@ Accetta: %3</translation>
     </message>
     <message>
         <location line="+27"/>
+        <location filename="../src/diskusage.cpp" line="-192"/>
+        <location line="+150"/>
         <source>Recalculate</source>
         <translation>Ricalcola</translation>
     </message>
@@ -5830,7 +5846,7 @@ Effettivo: %2</translation>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/pane.cpp" line="-491"/>
+        <location filename="../src/pane.cpp" line="-492"/>
         <source>Regular expression</source>
         <translation>Espressione regolare</translation>
     </message>
@@ -6058,8 +6074,105 @@ Effettivo: %2</translation>
         <source>Hard links to one file are that file, not copies of it: they take no extra space</source>
         <translation>I collegamenti fisici a un file sono quel file, non sue copie: non occupano spazio in più</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/diskusage.cpp" line="-776"/>
+        <source>%1 in %Ln file(s) so far — %2</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+19"/>
+        <location line="+321"/>
+        <source>%1, as Properties remembers</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>This folder is on a tape: counting reads every folder in it, which keeps the tape busy for a long time. Count Now counts it anyway.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>This folder is on a floppy disk: counting reads every folder in it, which is slow. Count Now counts it anyway.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Count Now</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Other files and folders (not remembered one by one)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln smaller file(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Disk usage map</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Nothing counted yet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Nothing here takes up space</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+72"/>
+        <source>%1 in %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>%1% of “%2”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>%1% of everything counted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Small: its contents aren&apos;t mapped one by one</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Its contents aren&apos;t remembered: Recalculate to map them</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+92"/>
+        <source>Disk Usage — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Up to the folder this one is in (Backspace)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Count everything in it again</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <location filename="../src/dupes.cpp" line="+19"/>
         <location filename="../src/hashcheck.cpp" line="-124"/>
         <location filename="../src/jobswin.cpp" line="-55"/>
         <location line="+45"/>
@@ -6067,7 +6180,50 @@ Effettivo: %2</translation>
         <translation>Avanzamento</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+14"/>
+        <source>What&apos;s in the folder shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Share</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+120"/>
+        <source>Counting what fills “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+25"/>
+        <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Stopped: the sizes shown are from before.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <source>%1%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Go Into</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+58"/>
+        <source>Moved “%1” to the trash. Undo in a Kestrel window brings it back (Recalculate then counts it again).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/dupes.cpp" line="+12"/>
         <source>Duplicates</source>
         <translation>Duplicati</translation>
     </message>
@@ -6128,12 +6284,13 @@ Effettivo: %2</translation>
         <translation>Ogni file non mantenuto diventa un collegamento fisico a quello mantenuto: lo stesso file con entrambi i nomi, che occupa spazio una volta sola. Solo sulla stessa unità.</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location filename="../src/diskusage.cpp" line="-175"/>
+        <location filename="../src/dupes.cpp" line="+42"/>
         <source>Waiting for the drive…</source>
         <translation>In attesa dell&apos;unità…</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location filename="../src/dupes.cpp" line="+7"/>
         <source>Finding duplicates in %1</source>
         <translation>Ricerca di duplicati in %1</translation>
     </message>
@@ -6828,7 +6985,7 @@ Copiarli comunque?</translation>
         <translation>%1 di %2 distrutti</translation>
     </message>
     <message>
-        <location line="+111"/>
+        <location line="+125"/>
         <source>Calculated just now</source>
         <translation>Calcolato proprio ora</translation>
     </message>
@@ -6908,7 +7065,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/pane.cpp" line="+485"/>
+        <location filename="../src/pane.cpp" line="+486"/>
         <source>Today</source>
         <translation>Oggi</translation>
     </message>
@@ -7826,7 +7983,9 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
         <translation>Tempo</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location filename="../src/diskusage.cpp" line="-152"/>
+        <location line="+127"/>
+        <location filename="../src/jobswin.cpp" line="+15"/>
         <location line="+39"/>
         <location line="+161"/>
         <location line="+136"/>
@@ -7835,7 +7994,7 @@ sostituiti. Un&apos;unione non può essere annullata.</translation>
         <translation>Pausa</translation>
     </message>
     <message>
-        <location line="-330"/>
+        <location filename="../src/jobswin.cpp" line="-330"/>
         <source>Cancel the job (Delete)</source>
         <translation>Annulla l&apos;operazione (Canc)</translation>
     </message>
@@ -7949,13 +8108,14 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>%1, %2 di %3</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location filename="../src/diskusage.cpp" line="+0"/>
+        <location filename="../src/jobswin.cpp" line="+10"/>
         <location line="+136"/>
         <source>Resume</source>
         <translation>Riprendi</translation>
     </message>
     <message>
-        <location line="-33"/>
+        <location filename="../src/jobswin.cpp" line="-33"/>
         <source>  (another Kestrel)</source>
         <translation>  (un altro Kestrel)</translation>
     </message>
@@ -8139,7 +8299,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Nulla di installato qui può scrivere %1.</translation>
     </message>
     <message>
-        <location filename="../src/menus.cpp" line="-528"/>
+        <location filename="../src/menus.cpp" line="-529"/>
         <source>A folder</source>
         <translation>Una cartella</translation>
     </message>
@@ -8331,14 +8491,14 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+0"/>
-        <location line="+71"/>
+        <location line="+72"/>
         <location line="+2"/>
         <location filename="../src/uwp.cpp" line="+27"/>
         <source>Set as Wallpaper</source>
         <translation>Imposta come sfondo</translation>
     </message>
     <message>
-        <location line="-72"/>
+        <location line="-73"/>
         <source>while UWP&apos;s editor is open</source>
         <translation>mentre l&apos;editor di UWP è aperto</translation>
     </message>
@@ -8371,26 +8531,26 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+1"/>
-        <location line="+93"/>
+        <location line="+94"/>
         <source>Scripts ▸</source>
         <translation>Script ▸</translation>
     </message>
     <message>
-        <location line="-93"/>
-        <location line="+93"/>
+        <location line="-94"/>
+        <location line="+94"/>
         <source>when you have scripts</source>
         <translation>quando hai degli script</translation>
     </message>
     <message>
-        <location line="-87"/>
+        <location line="-88"/>
         <location line="+44"/>
-        <location line="+34"/>
+        <location line="+35"/>
         <location line="+15"/>
         <source>when all are folders</source>
         <translation>quando sono tutte cartelle</translation>
     </message>
     <message>
-        <location line="-89"/>
+        <location line="-90"/>
         <source>Open in (a code editor)</source>
         <translation>Apri in (un editor di codice)</translation>
     </message>
@@ -8448,7 +8608,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>dopo che hai compresso qualcosa</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+8"/>
         <source>for signatures (.sig, .asc, .gpg, .sign)</source>
         <translation>per le firme (.sig, .asc, .gpg, .sign)</translation>
     </message>
@@ -8463,8 +8623,8 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>per i video, con UWP</translation>
     </message>
     <message>
-        <location line="-45"/>
-        <location line="+49"/>
+        <location line="-46"/>
+        <location line="+50"/>
         <location line="+4"/>
         <location line="+17"/>
         <source>for images</source>
@@ -8567,7 +8727,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+1739"/>
+        <location filename="../src/widgets.cpp" line="+1736"/>
         <source>Move Up</source>
         <translation>Sposta su</translation>
     </message>
@@ -9312,7 +9472,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1415"/>
+        <location filename="../src/widgets.cpp" line="-1412"/>
         <source>Location</source>
         <translation>Posizione</translation>
     </message>
@@ -9386,14 +9546,14 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Impossibile aprire con %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/overview.cpp" line="-801"/>
+        <location filename="../src/overview.cpp" line="-824"/>
         <location filename="../src/prefs.cpp" line="-97"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
         <location line="+1"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+937"/>
+        <location filename="../src/widgets.cpp" line="+934"/>
         <source>Overview</source>
         <translation>Panoramica</translation>
     </message>
@@ -9405,7 +9565,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+8"/>
-        <location line="+850"/>
+        <location line="+873"/>
         <location filename="../src/prefs.cpp" line="-7"/>
         <location line="+4"/>
         <location line="+1"/>
@@ -9415,28 +9575,28 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Unità</translation>
     </message>
     <message>
-        <location line="-850"/>
-        <location line="+862"/>
+        <location line="-873"/>
+        <location line="+885"/>
         <source>Phones &amp; Cameras</source>
         <translation>Telefoni &amp; fotocamere</translation>
     </message>
     <message>
-        <location line="-861"/>
-        <location line="+873"/>
+        <location line="-884"/>
+        <location line="+896"/>
         <source>Network</source>
         <translation>Rete</translation>
     </message>
     <message>
-        <location line="-873"/>
-        <location line="+897"/>
+        <location line="-896"/>
+        <location line="+920"/>
         <location filename="../src/prefswin.cpp" line="-365"/>
         <location filename="../src/widgets.cpp" line="+55"/>
         <source>Bookmarks</source>
         <translation>Segnalibri</translation>
     </message>
     <message>
-        <location line="-896"/>
-        <location line="+923"/>
+        <location line="-919"/>
+        <location line="+946"/>
         <location filename="../src/places.cpp" line="+36"/>
         <location filename="../src/widgets.cpp" line="-259"/>
         <location line="+179"/>
@@ -9444,13 +9604,13 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Con stella</translation>
     </message>
     <message>
-        <location line="-923"/>
-        <location line="+945"/>
+        <location line="-946"/>
+        <location line="+968"/>
         <source>Frequent Folders</source>
         <translation>Cartelle frequenti</translation>
     </message>
     <message>
-        <location line="-861"/>
+        <location line="-884"/>
         <source>Authentication Required</source>
         <translation>Autenticazione richiesta</translation>
     </message>
@@ -9486,12 +9646,12 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+11"/>
-        <location line="+1013"/>
+        <location line="+1038"/>
         <source>Connect</source>
         <translation>Connetti</translation>
     </message>
     <message>
-        <location line="-979"/>
+        <location line="-1004"/>
         <source>Question</source>
         <translation>Domanda</translation>
     </message>
@@ -9562,7 +9722,13 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>%1 liberi su %2  (%3% usato)</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+12"/>
+        <location line="+1"/>
+        <source>What&apos;s using this space?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Not mounted — click to mount</source>
         <translation>Non montato — fai clic per montarlo</translation>
     </message>
@@ -9651,13 +9817,13 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+61"/>
-        <location filename="../src/widgets.cpp" line="+327"/>
+        <location filename="../src/widgets.cpp" line="+328"/>
         <source>Eject</source>
         <translation>Espelli</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+84"/>
+        <location line="+86"/>
         <location filename="../src/widgets.cpp" line="-11"/>
         <location line="+4"/>
         <location line="+7"/>
@@ -9684,7 +9850,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Monta</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+39"/>
         <source>Drive Health…</source>
         <translation>Salute dell&apos;unità…</translation>
     </message>
@@ -9712,7 +9878,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+17"/>
-        <location filename="../src/widgets.cpp" line="-16"/>
+        <location filename="../src/widgets.cpp" line="-17"/>
         <source>Edit Bookmark…</source>
         <translation>Modifica segnalibro…</translation>
     </message>
@@ -9773,7 +9939,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Rimuovi dalle posizioni di salvataggio</translation>
     </message>
     <message>
-        <location filename="../src/pane.cpp" line="-221"/>
+        <location filename="../src/pane.cpp" line="-222"/>
         <source>Search… (supports * and ? wildcards)</source>
         <translation>Cerca… (supporta i caratteri jolly * e ?)</translation>
     </message>
@@ -9835,12 +10001,12 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     <message>
         <location line="+8"/>
         <location line="+4"/>
-        <location line="+576"/>
+        <location line="+577"/>
         <source>Filters</source>
         <translation>Filtri</translation>
     </message>
     <message>
-        <location line="-577"/>
+        <location line="-578"/>
         <source>Find by type, size and date too (also with an empty name)</source>
         <translation>Trova anche per tipo, dimensione e data (anche con nome vuoto)</translation>
     </message>
@@ -9850,7 +10016,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
         <translation>Ricerca</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+40"/>
         <location line="+1094"/>
         <source>Folder is empty</source>
         <translation>La cartella è vuota</translation>
@@ -11073,7 +11239,7 @@ Per ogni finestra di Kestrel (anche in Preferenze → Immagini e video).</transl
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+591"/>
+        <location filename="../src/widgets.cpp" line="+585"/>
         <source>%1:</source>
         <translation>%1:</translation>
     </message>
@@ -12440,12 +12606,12 @@ Ci si connette a Internet: il server delle chiavi vede quale chiave viene richie
         <translation>Annulla	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1788"/>
+        <location filename="../src/widgets.cpp" line="-1779"/>
         <source>Match</source>
         <translation>Corrispondenza</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+40"/>
         <source>%1: %2</source>
         <comment>a line number and the line</comment>
         <translation>%1: %2</translation>
@@ -12456,7 +12622,7 @@ Ci si connette a Internet: il server delle chiavi vede quale chiave viene richie
         <translation>Riga %1: %2</translation>
     </message>
     <message>
-        <location line="+680"/>
+        <location line="+673"/>
         <source>Type a location (Ctrl+L)</source>
         <translation>Digita una posizione (Ctrl+L)</translation>
     </message>
@@ -12544,7 +12710,7 @@ Non connesso: fai clic per connetterti</translation>
         <translation>%1 — fai clic per connetterti</translation>
     </message>
     <message>
-        <location line="+254"/>
+        <location line="+255"/>
         <source>Remove from Recent Servers</source>
         <translation>Rimuovi dai server recenti</translation>
     </message>
@@ -12596,25 +12762,21 @@ Non connesso: fai clic per connetterti</translation>
     </message>
     <message>
         <location line="+57"/>
-        <location line="+36"/>
-        <location line="+2"/>
         <source>Contents</source>
         <translation>Contenuto</translation>
     </message>
     <message>
-        <location line="-38"/>
-        <location line="+38"/>
+        <location line="+0"/>
         <source>unreadable</source>
         <translation>illeggibile</translation>
     </message>
     <message>
-        <location line="-31"/>
-        <location line="+40"/>
+        <location line="+7"/>
         <source>Link to</source>
         <translation>Collegamento a</translation>
     </message>
     <message>
-        <location line="-37"/>
+        <location line="+3"/>
         <source>not read from this tape (right-click the drive: Show Previews on This Drive)</source>
         <translation>non letto da questo nastro (clic destro sull&apos;unità: Mostra anteprime su questa unità)</translation>
     </message>

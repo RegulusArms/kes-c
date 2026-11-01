@@ -2297,6 +2297,20 @@ void put(const QString &folder, const DirStats &s)
     save(all);
 }
 
+void put_many(const QList<Counted> &counted)
+{
+    if (counted.isEmpty())
+        return;
+    QJsonObject &all = entries();
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    for (const Counted &c : counted)
+        all[c.folder] = QJsonObject{{"dev", qint64(c.dev)},     {"ino", qint64(c.ino)},       {"size", c.stats.size},
+                                    {"files", c.stats.files},   {"dirs", c.stats.dirs},       {"at", now}};
+    save(all);
+}
+
+QStringList folders() { return entries().keys(); }
+
 void drop_with_parents(const QStringList &paths)
 {
     QJsonObject &all = entries();

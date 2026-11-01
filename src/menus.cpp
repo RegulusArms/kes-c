@@ -193,7 +193,8 @@ QList<Entry> defaults(Kind k)
     if (folder || several)
         l << item("find_duplicates", tx("Find Duplicates…"), several ? tx("when all are folders") : QString());
     if (folder)
-        l << item("compare_with", tx("Compare With…")) << item("sync_to", tx("Sync To…"));
+        l << item("disk_usage", tx("Disk Usage…")) << item("compare_with", tx("Compare With…"))
+          << item("sync_to", tx("Sync To…"));
     if (file)
         l << item("verify_signature", tx("Verify Signature"), tx("for signatures (.sig, .asc, .gpg, .sign)"));
     if (file)

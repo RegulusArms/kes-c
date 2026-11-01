@@ -47,7 +47,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
 | [`viewer`](#viewer) | 89 | The image viewer and saving its changes |
-| [`tools`](#tools) | 31 | Find Duplicates, Compare, Sync, Verify Signature |
+| [`tools`](#tools) | 44 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature |
 | [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 59 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 9 | Translations |
@@ -620,6 +620,12 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - keeping the oldest, newest or those in a folder;
   - replacing with hard links (failing part-way leaves the file whole);
   - the window from a folder's menu trashing the copies not kept (undoable).
+- **Disk Usage:**
+  - the count matches Properties' (an unreadable folder as empty, named); biggest first, small files together, small folders kept as a block;
+  - taking an item out makes the folders above it smaller; the treemap's blocks fill the map by share, apart, not long and thin;
+  - the window from a folder's menu (not a file's or several folders'): it counts, maps, lists, remembers the sizes for Properties;
+  - going in and Back, an item's menu, Move to Trash taking it off the map (undoable);
+  - a map at once from the sizes remembered; on a tape, counting only when asked; the Overview card's button.
 - **Compare:** each kind of difference, a deep compare, the window and Copy to Right.
 - **Sync:** the plan, a preview and sync with Kestrel's copy, deleting asked again, saved pairs, and rsync (a part-way failure leaves the old file; run again it completes).
 - **Verify Signature:**

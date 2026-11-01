@@ -1799,6 +1799,7 @@ void Sidebar::menu(const QPoint &pos)
             m.addAction(tx("Empty Trash with BleachBit…"), this, [this]() { Q_EMIT shred_trash_requested(); });
     } else if (kind == "mount") {
         m.addAction(tx("Find Duplicates…"), this, [this, path]() { Q_EMIT find_duplicates(path); });
+        m.addAction(tx("Disk Usage…"), this, [this, path]() { Q_EMIT disk_usage(path); });
         drives::Slow slow = drives::slow_kind(path);
         if (slow != drives::Slow::None) {
             m.addSeparator();

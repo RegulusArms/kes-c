@@ -31,7 +31,7 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+645"/>
+        <location filename="../src/app.cpp" line="+647"/>
         <location line="+587"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
@@ -234,7 +234,7 @@
     </message>
     <message>
         <location line="+32"/>
-        <location line="+89"/>
+        <location line="+91"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
         <location filename="../src/fileops.cpp" line="+1014"/>
@@ -243,18 +243,19 @@
         <translation>%1 / %2 — %3</translation>
     </message>
     <message>
-        <location line="-153"/>
+        <location line="-155"/>
         <location filename="../src/app.cpp" line="-725"/>
-        <location line="+940"/>
+        <location line="+943"/>
+        <location filename="../src/diskusage.cpp" line="+1003"/>
         <location filename="../src/menus.cpp" line="-32"/>
-        <location line="+108"/>
+        <location line="+109"/>
         <location filename="../src/opening.cpp" line="+249"/>
         <location line="+4"/>
         <source>Move to Trash</source>
         <translation>휴지통으로 이동</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+7"/>
         <source>Cannot move to trash</source>
         <translation>휴지통으로 이동할 수 없음</translation>
     </message>
@@ -316,14 +317,14 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-939"/>
+        <location filename="../src/app.cpp" line="-942"/>
         <location line="+645"/>
         <source>Delete Permanently</source>
         <translation>영구 삭제</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+502"/>
+        <location filename="../src/app.cpp" line="+505"/>
         <source>Delete</source>
         <translation>삭제</translation>
     </message>
@@ -443,7 +444,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+20"/>
-        <location filename="../src/app.cpp" line="-503"/>
+        <location filename="../src/app.cpp" line="-506"/>
         <source>Restore</source>
         <translation>복원</translation>
     </message>
@@ -456,8 +457,8 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+5"/>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
-        <location filename="../src/menus.cpp" line="-98"/>
-        <location filename="../src/widgets.cpp" line="+1800"/>
+        <location filename="../src/menus.cpp" line="-99"/>
+        <location filename="../src/widgets.cpp" line="+1797"/>
         <source>Empty Trash</source>
         <translation>휴지통 비우기</translation>
     </message>
@@ -656,11 +657,12 @@ sudo apt install pkexec</translation>
         <translation>관리자로 다시 시도</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1188"/>
+        <location filename="../src/app.cpp" line="-1189"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
+        <location filename="../src/diskusage.cpp" line="-250"/>
         <location filename="../src/dupes.cpp" line="+353"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1418"/>
+        <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
         <translation>이름</translation>
     </message>
@@ -668,13 +670,13 @@ sudo apt install pkexec</translation>
         <location line="+0"/>
         <location filename="../src/archivewin.cpp" line="+0"/>
         <location filename="../src/compare.cpp" line="+786"/>
+        <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/dupes.cpp" line="+0"/>
-        <location filename="../src/pane.cpp" line="+887"/>
+        <location filename="../src/pane.cpp" line="+889"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1864"/>
-        <location line="+39"/>
+        <location line="+1862"/>
         <source>Size</source>
         <translation>크기</translation>
     </message>
@@ -683,8 +685,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/pane.cpp" line="-3"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+103"/>
-        <location filename="../src/widgets.cpp" line="-38"/>
-        <location line="+39"/>
+        <location filename="../src/widgets.cpp" line="+1"/>
         <source>Type</source>
         <translation>종류</translation>
     </message>
@@ -695,14 +696,13 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1904"/>
-        <location line="+1867"/>
-        <location line="+39"/>
+        <location filename="../src/widgets.cpp" line="-1863"/>
+        <location line="+1865"/>
         <source>Modified</source>
         <translation>수정한 날짜</translation>
     </message>
     <message>
-        <location line="+231"/>
+        <location line="+232"/>
         <source>Zoom (Ctrl+scroll)</source>
         <translation>확대/축소 (Ctrl+스크롤)</translation>
     </message>
@@ -724,6 +724,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+92"/>
         <location line="+290"/>
+        <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
         <translation>뒤로</translation>
     </message>
@@ -874,7 +875,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+37"/>
         <location filename="../src/hashcheck.cpp" line="+305"/>
-        <location filename="../src/widgets.cpp" line="-2223"/>
+        <location filename="../src/widgets.cpp" line="-2182"/>
         <source>File</source>
         <translation>파일</translation>
     </message>
@@ -934,14 +935,14 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1311"/>
+        <location line="+1314"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>실행 취소</translation>
     </message>
     <message>
-        <location line="-1307"/>
+        <location line="-1310"/>
         <location line="+726"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
@@ -957,7 +958,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+2246"/>
+        <location filename="../src/widgets.cpp" line="+2212"/>
         <source>Copy</source>
         <translation>복사</translation>
     </message>
@@ -999,18 +1000,19 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+9"/>
         <location line="+608"/>
         <location line="+32"/>
-        <location line="+307"/>
+        <location line="+310"/>
         <location line="+237"/>
+        <location filename="../src/diskusage.cpp" line="+315"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
-        <location line="+102"/>
-        <location filename="../src/overview.cpp" line="+1450"/>
+        <location line="+103"/>
+        <location filename="../src/overview.cpp" line="+1478"/>
         <source>Properties</source>
         <translation>속성</translation>
     </message>
     <message>
-        <location line="-1175"/>
-        <location filename="../src/menus.cpp" line="-180"/>
+        <location line="-1178"/>
+        <location filename="../src/menus.cpp" line="-181"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
         <location line="+2"/>
@@ -1063,7 +1065,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="-557"/>
         <location filename="../src/prefs.cpp" line="-124"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1052"/>
+        <location filename="../src/widgets.cpp" line="-1021"/>
         <source>Sidebar</source>
         <translation>사이드바</translation>
     </message>
@@ -1075,13 +1077,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1169"/>
+        <location line="+1172"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>전체 화면</translation>
     </message>
     <message>
-        <location line="-1161"/>
+        <location line="-1164"/>
         <source>Reload</source>
         <translation>새로 고침</translation>
     </message>
@@ -1119,7 +1121,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+1"/>
         <location filename="../src/dupes.cpp" line="-27"/>
-        <location filename="../src/pane.cpp" line="-500"/>
+        <location filename="../src/pane.cpp" line="-501"/>
         <location filename="../src/prefs.cpp" line="+49"/>
         <location line="+1"/>
         <source>Search</source>
@@ -1172,12 +1174,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1152"/>
+        <location line="+1155"/>
         <source>Keyboard Shortcuts</source>
         <translation>키보드 단축키</translation>
     </message>
     <message>
-        <location line="-1151"/>
+        <location line="-1154"/>
         <source>About</source>
         <translation>정보</translation>
     </message>
@@ -1470,8 +1472,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+985"/>
-        <location line="+36"/>
+        <location filename="../src/widgets.cpp" line="+986"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>항목 %Ln개</numerusform>
@@ -1499,17 +1500,17 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+20"/>
-        <location line="+331"/>
+        <location line="+334"/>
         <location filename="../src/menus.cpp" line="+37"/>
-        <location line="+98"/>
-        <location filename="../src/overview.cpp" line="-11"/>
-        <location filename="../src/widgets.cpp" line="-490"/>
+        <location line="+99"/>
+        <location filename="../src/overview.cpp" line="-13"/>
+        <location filename="../src/widgets.cpp" line="-455"/>
         <source>Open in Terminal</source>
         <translation>터미널에서 열기</translation>
     </message>
     <message>
-        <location line="-329"/>
-        <location filename="../src/menus.cpp" line="-98"/>
+        <location line="-332"/>
+        <location filename="../src/menus.cpp" line="-99"/>
         <source>Bookmark This Folder</source>
         <translation>이 폴더 책갈피에 추가</translation>
     </message>
@@ -1522,26 +1523,27 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+35"/>
-        <location line="+295"/>
-        <location filename="../src/menus.cpp" line="+98"/>
+        <location line="+298"/>
+        <location filename="../src/menus.cpp" line="+99"/>
         <source>Shred with BleachBit…</source>
         <translation>BleachBit으로 파쇄…</translation>
     </message>
     <message>
-        <location line="-281"/>
-        <location line="+519"/>
+        <location line="-284"/>
+        <location line="+522"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
-        <location filename="../src/menus.cpp" line="-93"/>
+        <location filename="../src/diskusage.cpp" line="-22"/>
+        <location filename="../src/menus.cpp" line="-94"/>
         <location filename="../src/opening.cpp" line="-176"/>
         <location line="+55"/>
         <location line="+37"/>
         <location line="+7"/>
         <location line="+13"/>
         <location filename="../src/overview.cpp" line="-2"/>
-        <location line="+40"/>
+        <location line="+42"/>
         <location line="+27"/>
         <location line="+3"/>
         <location line="+11"/>
@@ -1551,10 +1553,10 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>열기</translation>
     </message>
     <message>
-        <location line="-516"/>
+        <location line="-519"/>
         <location filename="../src/menus.cpp" line="+3"/>
-        <location filename="../src/overview.cpp" line="-182"/>
-        <location line="+40"/>
+        <location filename="../src/overview.cpp" line="-184"/>
+        <location line="+42"/>
         <location line="+30"/>
         <location line="+11"/>
         <location line="+102"/>
@@ -1576,6 +1578,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/diskusage.cpp" line="+10"/>
         <location filename="../src/menus.cpp" line="-28"/>
         <location line="+29"/>
         <location filename="../src/overview.cpp" line="-116"/>
@@ -1729,8 +1732,8 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+5"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-71"/>
-        <location line="+80"/>
+        <location filename="../src/overview.cpp" line="-73"/>
+        <location line="+82"/>
         <source>Add to Bookmarks</source>
         <translation>책갈피에 추가</translation>
     </message>
@@ -1810,7 +1813,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-76"/>
+        <location filename="../src/overview.cpp" line="-78"/>
         <location filename="../src/widgets.cpp" line="+18"/>
         <source>Find Duplicates…</source>
         <translation>중복 찾기…</translation>
@@ -1818,12 +1821,20 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
+        <location filename="../src/overview.cpp" line="+2"/>
+        <location filename="../src/widgets.cpp" line="+1"/>
+        <source>Disk Usage…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location filename="../src/menus.cpp" line="+0"/>
         <source>Compare With…</source>
         <translation>비교…</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+0"/>
+        <location filename="../src/menus.cpp" line="+1"/>
         <source>Sync To…</source>
         <translation>동기화 대상…</translation>
     </message>
@@ -1835,8 +1846,8 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/menus.cpp" line="-67"/>
-        <location line="+69"/>
+        <location filename="../src/menus.cpp" line="-68"/>
+        <location line="+70"/>
         <location filename="../src/viewer.cpp" line="+55"/>
         <source>Add to Selected UWP Monitor</source>
         <translation>선택한 UWP 모니터에 추가</translation>
@@ -1844,13 +1855,13 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+8"/>
         <location filename="../src/dialogs.cpp" line="-912"/>
-        <location filename="../src/menus.cpp" line="-133"/>
+        <location filename="../src/menus.cpp" line="-134"/>
         <source>Image</source>
         <translation>이미지</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+136"/>
+        <location filename="../src/menus.cpp" line="+137"/>
         <source>Use as Folder Cover</source>
         <translation>폴더 표지로 사용</translation>
     </message>
@@ -1871,13 +1882,13 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/convert.cpp" line="+93"/>
         <location line="+19"/>
         <location line="+18"/>
-        <location filename="../src/menus.cpp" line="-139"/>
+        <location filename="../src/menus.cpp" line="-140"/>
         <source>Rotate</source>
         <translation>회전</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+144"/>
+        <location filename="../src/menus.cpp" line="+145"/>
         <source>Rotate 90° Clockwise</source>
         <translation>시계 방향으로 90° 회전</translation>
     </message>
@@ -1895,8 +1906,8 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/menus.cpp" line="-90"/>
-        <location line="+90"/>
+        <location filename="../src/menus.cpp" line="-91"/>
+        <location line="+91"/>
         <source>Flip Horizontally</source>
         <translation>좌우 뒤집기</translation>
     </message>
@@ -2098,7 +2109,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-700"/>
+        <location filename="../src/widgets.cpp" line="-701"/>
         <source>Type a location</source>
         <translation>위치 입력</translation>
     </message>
@@ -2817,7 +2828,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     <message>
         <location line="+7"/>
         <location line="+460"/>
-        <location filename="../src/overview.cpp" line="-1095"/>
+        <location filename="../src/overview.cpp" line="-1122"/>
         <source>Password:</source>
         <translation>암호:</translation>
     </message>
@@ -2881,7 +2892,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/pane.cpp" line="+512"/>
+        <location filename="../src/pane.cpp" line="+513"/>
         <source>KB</source>
         <translation>KB</translation>
     </message>
@@ -3526,6 +3537,7 @@ Install it with:  sudo apt install %2</source>
     </message>
     <message numerus="yes">
         <location line="+1"/>
+        <location filename="../src/diskusage.cpp" line="-415"/>
         <location filename="../src/dupes.cpp" line="+229"/>
         <source>%Ln file(s)</source>
         <translation>
@@ -3696,7 +3708,7 @@ Install it with:  sudo apt install </source>
         <location line="+19"/>
         <location filename="../src/dupes.cpp" line="-202"/>
         <location filename="../src/viewer.cpp" line="-453"/>
-        <location filename="../src/widgets.cpp" line="-1047"/>
+        <location filename="../src/widgets.cpp" line="-1044"/>
         <source>Folder</source>
         <translation>폴더</translation>
     </message>
@@ -3755,6 +3767,7 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/diskusage.cpp" line="+145"/>
         <location filename="../src/dupes.cpp" line="-26"/>
         <location filename="../src/hashcheck.cpp" line="-379"/>
         <location filename="../src/jobswin.cpp" line="-107"/>
@@ -3901,6 +3914,7 @@ Install it with:  sudo apt install </source>
         <location line="-342"/>
         <location line="+354"/>
         <location filename="../src/dialogs.cpp" line="-411"/>
+        <location filename="../src/diskusage.cpp" line="+176"/>
         <location filename="../src/dupes.cpp" line="+147"/>
         <source>Stopped.</source>
         <translation>중지됨.</translation>
@@ -5299,7 +5313,7 @@ Accepts: %3</source>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/overview.cpp" line="+495"/>
+        <location filename="../src/overview.cpp" line="+518"/>
         <source>Drive Health… (what the drive reports about itself)</source>
         <translation>드라이브 상태… (드라이브가 스스로 보고하는 정보)</translation>
     </message>
@@ -5320,6 +5334,8 @@ Accepts: %3</source>
     </message>
     <message>
         <location line="+27"/>
+        <location filename="../src/diskusage.cpp" line="-192"/>
+        <location line="+150"/>
         <source>Recalculate</source>
         <translation>다시 계산</translation>
     </message>
@@ -5726,7 +5742,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+6"/>
-        <location filename="../src/pane.cpp" line="-491"/>
+        <location filename="../src/pane.cpp" line="-492"/>
         <source>Regular expression</source>
         <translation>정규 표현식</translation>
     </message>
@@ -5950,8 +5966,103 @@ Actual: %2</source>
         <source>Hard links to one file are that file, not copies of it: they take no extra space</source>
         <translation>파일에 대한 하드 링크는 그 파일 자체이지 사본이 아닙니다: 공간을 더 차지하지 않습니다</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/diskusage.cpp" line="-776"/>
+        <source>%1 in %Ln file(s) so far — %2</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+19"/>
+        <location line="+321"/>
+        <source>%1, as Properties remembers</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>This folder is on a tape: counting reads every folder in it, which keeps the tape busy for a long time. Count Now counts it anyway.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>This folder is on a floppy disk: counting reads every folder in it, which is slow. Count Now counts it anyway.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Count Now</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Other files and folders (not remembered one by one)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln smaller file(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Disk usage map</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Nothing counted yet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Nothing here takes up space</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+72"/>
+        <source>%1 in %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>%1% of “%2”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>%1% of everything counted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Small: its contents aren&apos;t mapped one by one</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Its contents aren&apos;t remembered: Recalculate to map them</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+92"/>
+        <source>Disk Usage — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Up to the folder this one is in (Backspace)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Count everything in it again</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <location filename="../src/dupes.cpp" line="+19"/>
         <location filename="../src/hashcheck.cpp" line="-124"/>
         <location filename="../src/jobswin.cpp" line="-55"/>
         <location line="+45"/>
@@ -5959,7 +6070,49 @@ Actual: %2</source>
         <translation>진행 상황</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+14"/>
+        <source>What&apos;s in the folder shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Share</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+120"/>
+        <source>Counting what fills “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+25"/>
+        <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Stopped: the sizes shown are from before.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <source>%1%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Go Into</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+58"/>
+        <source>Moved “%1” to the trash. Undo in a Kestrel window brings it back (Recalculate then counts it again).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/dupes.cpp" line="+12"/>
         <source>Duplicates</source>
         <translation>중복</translation>
     </message>
@@ -6020,12 +6173,13 @@ Actual: %2</source>
         <translation>유지하지 않는 각 파일이 유지하는 파일에 대한 하드 링크가 됩니다: 두 이름으로 같은 파일이 되며 공간은 한 번만 차지합니다. 같은 드라이브에서만.</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location filename="../src/diskusage.cpp" line="-175"/>
+        <location filename="../src/dupes.cpp" line="+42"/>
         <source>Waiting for the drive…</source>
         <translation>드라이브를 기다리는 중…</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location filename="../src/dupes.cpp" line="+7"/>
         <source>Finding duplicates in %1</source>
         <translation>%1에서 중복 찾는 중</translation>
     </message>
@@ -6678,7 +6832,7 @@ Copy them anyway?</source>
         <translation>%2 중 %1 파쇄함</translation>
     </message>
     <message>
-        <location line="+111"/>
+        <location line="+125"/>
         <source>Calculated just now</source>
         <translation>방금 계산함</translation>
     </message>
@@ -6753,7 +6907,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/pane.cpp" line="+485"/>
+        <location filename="../src/pane.cpp" line="+486"/>
         <source>Today</source>
         <translation>오늘</translation>
     </message>
@@ -7655,7 +7809,9 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>시간</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location filename="../src/diskusage.cpp" line="-152"/>
+        <location line="+127"/>
+        <location filename="../src/jobswin.cpp" line="+15"/>
         <location line="+39"/>
         <location line="+161"/>
         <location line="+136"/>
@@ -7664,7 +7820,7 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>일시 중지</translation>
     </message>
     <message>
-        <location line="-330"/>
+        <location filename="../src/jobswin.cpp" line="-330"/>
         <source>Cancel the job (Delete)</source>
         <translation>작업 취소 (Delete)</translation>
     </message>
@@ -7778,13 +7934,14 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>%1, %3 중 %2</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location filename="../src/diskusage.cpp" line="+0"/>
+        <location filename="../src/jobswin.cpp" line="+10"/>
         <location line="+136"/>
         <source>Resume</source>
         <translation>재개</translation>
     </message>
     <message>
-        <location line="-33"/>
+        <location filename="../src/jobswin.cpp" line="-33"/>
         <source>  (another Kestrel)</source>
         <translation>  (다른 Kestrel)</translation>
     </message>
@@ -7967,7 +8124,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>여기에 설치된 것 중 %1을(를) 기록할 수 있는 것이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/menus.cpp" line="-528"/>
+        <location filename="../src/menus.cpp" line="-529"/>
         <source>A folder</source>
         <translation>폴더</translation>
     </message>
@@ -8159,14 +8316,14 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+71"/>
+        <location line="+72"/>
         <location line="+2"/>
         <location filename="../src/uwp.cpp" line="+27"/>
         <source>Set as Wallpaper</source>
         <translation>배경 화면으로 설정</translation>
     </message>
     <message>
-        <location line="-72"/>
+        <location line="-73"/>
         <source>while UWP&apos;s editor is open</source>
         <translation>UWP 편집기가 열려 있는 동안</translation>
     </message>
@@ -8199,26 +8356,26 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+93"/>
+        <location line="+94"/>
         <source>Scripts ▸</source>
         <translation>스크립트 ▸</translation>
     </message>
     <message>
-        <location line="-93"/>
-        <location line="+93"/>
+        <location line="-94"/>
+        <location line="+94"/>
         <source>when you have scripts</source>
         <translation>스크립트가 있을 때</translation>
     </message>
     <message>
-        <location line="-87"/>
+        <location line="-88"/>
         <location line="+44"/>
-        <location line="+34"/>
+        <location line="+35"/>
         <location line="+15"/>
         <source>when all are folders</source>
         <translation>모두 폴더일 때</translation>
     </message>
     <message>
-        <location line="-89"/>
+        <location line="-90"/>
         <source>Open in (a code editor)</source>
         <translation>(코드 편집기)에서 열기</translation>
     </message>
@@ -8276,7 +8433,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>무언가를 압축한 뒤</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+8"/>
         <source>for signatures (.sig, .asc, .gpg, .sign)</source>
         <translation>서명(.sig, .asc, .gpg, .sign)에</translation>
     </message>
@@ -8291,8 +8448,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>동영상에, UWP 사용 시</translation>
     </message>
     <message>
-        <location line="-45"/>
-        <location line="+49"/>
+        <location line="-46"/>
+        <location line="+50"/>
         <location line="+4"/>
         <location line="+17"/>
         <source>for images</source>
@@ -8395,7 +8552,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+1739"/>
+        <location filename="../src/widgets.cpp" line="+1736"/>
         <source>Move Up</source>
         <translation>위로 이동</translation>
     </message>
@@ -9139,7 +9296,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1415"/>
+        <location filename="../src/widgets.cpp" line="-1412"/>
         <source>Location</source>
         <translation>위치</translation>
     </message>
@@ -9213,14 +9370,14 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>%1(으)로 열 수 없습니다: %2</translation>
     </message>
     <message>
-        <location filename="../src/overview.cpp" line="-801"/>
+        <location filename="../src/overview.cpp" line="-824"/>
         <location filename="../src/prefs.cpp" line="-97"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
         <location line="+1"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+937"/>
+        <location filename="../src/widgets.cpp" line="+934"/>
         <source>Overview</source>
         <translation>개요</translation>
     </message>
@@ -9232,7 +9389,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+8"/>
-        <location line="+850"/>
+        <location line="+873"/>
         <location filename="../src/prefs.cpp" line="-7"/>
         <location line="+4"/>
         <location line="+1"/>
@@ -9242,28 +9399,28 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>드라이브</translation>
     </message>
     <message>
-        <location line="-850"/>
-        <location line="+862"/>
+        <location line="-873"/>
+        <location line="+885"/>
         <source>Phones &amp; Cameras</source>
         <translation>휴대폰 및 카메라</translation>
     </message>
     <message>
-        <location line="-861"/>
-        <location line="+873"/>
+        <location line="-884"/>
+        <location line="+896"/>
         <source>Network</source>
         <translation>네트워크</translation>
     </message>
     <message>
-        <location line="-873"/>
-        <location line="+897"/>
+        <location line="-896"/>
+        <location line="+920"/>
         <location filename="../src/prefswin.cpp" line="-365"/>
         <location filename="../src/widgets.cpp" line="+55"/>
         <source>Bookmarks</source>
         <translation>책갈피</translation>
     </message>
     <message>
-        <location line="-896"/>
-        <location line="+923"/>
+        <location line="-919"/>
+        <location line="+946"/>
         <location filename="../src/places.cpp" line="+36"/>
         <location filename="../src/widgets.cpp" line="-259"/>
         <location line="+179"/>
@@ -9271,13 +9428,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>별표</translation>
     </message>
     <message>
-        <location line="-923"/>
-        <location line="+945"/>
+        <location line="-946"/>
+        <location line="+968"/>
         <source>Frequent Folders</source>
         <translation>자주 가는 폴더</translation>
     </message>
     <message>
-        <location line="-861"/>
+        <location line="-884"/>
         <source>Authentication Required</source>
         <translation>인증 필요</translation>
     </message>
@@ -9313,12 +9470,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+11"/>
-        <location line="+1013"/>
+        <location line="+1038"/>
         <source>Connect</source>
         <translation>연결</translation>
     </message>
     <message>
-        <location line="-979"/>
+        <location line="-1004"/>
         <source>Question</source>
         <translation>질문</translation>
     </message>
@@ -9389,7 +9546,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>%2 중 %1 남음  (%3% 사용)</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+12"/>
+        <location line="+1"/>
+        <source>What&apos;s using this space?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
         <source>Not mounted — click to mount</source>
         <translation>마운트 안 됨 — 클릭하여 마운트</translation>
     </message>
@@ -9477,13 +9640,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+61"/>
-        <location filename="../src/widgets.cpp" line="+327"/>
+        <location filename="../src/widgets.cpp" line="+328"/>
         <source>Eject</source>
         <translation>꺼내기</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+84"/>
+        <location line="+86"/>
         <location filename="../src/widgets.cpp" line="-11"/>
         <location line="+4"/>
         <location line="+7"/>
@@ -9510,7 +9673,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>마운트</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+39"/>
         <source>Drive Health…</source>
         <translation>드라이브 상태…</translation>
     </message>
@@ -9538,7 +9701,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+17"/>
-        <location filename="../src/widgets.cpp" line="-16"/>
+        <location filename="../src/widgets.cpp" line="-17"/>
         <source>Edit Bookmark…</source>
         <translation>책갈피 편집…</translation>
     </message>
@@ -9599,7 +9762,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>저장 위치에서 제거</translation>
     </message>
     <message>
-        <location filename="../src/pane.cpp" line="-221"/>
+        <location filename="../src/pane.cpp" line="-222"/>
         <source>Search… (supports * and ? wildcards)</source>
         <translation>검색… (와일드카드 *와 ? 지원)</translation>
     </message>
@@ -9661,12 +9824,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+8"/>
         <location line="+4"/>
-        <location line="+576"/>
+        <location line="+577"/>
         <source>Filters</source>
         <translation>필터</translation>
     </message>
     <message>
-        <location line="-577"/>
+        <location line="-578"/>
         <source>Find by type, size and date too (also with an empty name)</source>
         <translation>종류, 크기, 날짜로도 찾기 (이름이 비어 있어도 됨)</translation>
     </message>
@@ -9676,7 +9839,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>검색 중</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+40"/>
         <location line="+1094"/>
         <source>Folder is empty</source>
         <translation>폴더가 비어 있음</translation>
@@ -10899,7 +11062,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+591"/>
+        <location filename="../src/widgets.cpp" line="+585"/>
         <source>%1:</source>
         <translation>%1:</translation>
     </message>
@@ -12262,12 +12425,12 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>실행 취소	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1788"/>
+        <location filename="../src/widgets.cpp" line="-1779"/>
         <source>Match</source>
         <translation>일치</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+40"/>
         <source>%1: %2</source>
         <comment>a line number and the line</comment>
         <translation>%1: %2</translation>
@@ -12278,7 +12441,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>%1번째 줄: %2</translation>
     </message>
     <message>
-        <location line="+680"/>
+        <location line="+673"/>
         <source>Type a location (Ctrl+L)</source>
         <translation>위치 입력 (Ctrl+L)</translation>
     </message>
@@ -12366,7 +12529,7 @@ Not connected: click to connect</source>
         <translation>%1 — 클릭하여 연결</translation>
     </message>
     <message>
-        <location line="+254"/>
+        <location line="+255"/>
         <source>Remove from Recent Servers</source>
         <translation>최근 서버에서 제거</translation>
     </message>
@@ -12418,25 +12581,21 @@ Not connected: click to connect</source>
     </message>
     <message>
         <location line="+57"/>
-        <location line="+36"/>
-        <location line="+2"/>
         <source>Contents</source>
         <translation>내용</translation>
     </message>
     <message>
-        <location line="-38"/>
-        <location line="+38"/>
+        <location line="+0"/>
         <source>unreadable</source>
         <translation>읽을 수 없음</translation>
     </message>
     <message>
-        <location line="-31"/>
-        <location line="+40"/>
+        <location line="+7"/>
         <source>Link to</source>
         <translation>링크 대상</translation>
     </message>
     <message>
-        <location line="-37"/>
+        <location line="+3"/>
         <source>not read from this tape (right-click the drive: Show Previews on This Drive)</source>
         <translation>이 테이프에서 읽지 않음 (드라이브를 오른쪽 클릭: 이 드라이브에서 미리 보기 표시)</translation>
     </message>

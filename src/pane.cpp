@@ -17,6 +17,7 @@
 #include "util.h"
 #include "archivewin.h"
 #include "widgets.h"
+#include "diskusage.h"
 #include "dupes.h"
 #include "windows.h"
 
@@ -473,6 +474,7 @@ Pane::Pane(MainWindow *win, const QString &start) : win(win), thumbs(win->thumbs
     connect(overview, &OverviewPage::add_bookmark, win, [win](const QString &t) { win->sidebar->add_bookmark(t); });
     connect(overview, &OverviewPage::properties, win, [win](const QString &t) { win->properties({t}); });
     connect(overview, &OverviewPage::find_duplicates, win, [win](const QString &t) { dupes::open_window(win, {t}); });
+    connect(overview, &OverviewPage::disk_usage, win, [win](const QString &t) { diskusage::open_window(win, t); });
     connect(overview, &OverviewPage::open_file, win, [win](const QString &t) { win->open_file(t); });
     stack->addWidget(overview);
     lay->addWidget(stack);

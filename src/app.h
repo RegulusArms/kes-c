@@ -105,7 +105,8 @@ public:
     void start_move_into(const QStringList &items, const QStringList &gone, const QString &folder);   // it's made
     void new_file(const QString &tmpl = QString());
     void rename(const QStringList &paths);
-    void trash_paths(const QStringList &paths);
+    // after(trashed): once it's done, with the items now in the trash (also after a cancel part-way)
+    void trash_paths(const QStringList &paths, std::function<void(const QStringList &)> after = nullptr);
     // Wipe Metadata…: the images' metadata taken out (metadata::wipe), as a queued job; copies beside them or the
     // originals themselves (asked first), as Preferences says. Undo moves the copies to the trash.
     void wipe_metadata(const QStringList &paths);

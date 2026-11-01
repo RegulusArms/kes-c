@@ -1089,5 +1089,26 @@ This can&apos;t be undone.</numerusform>
             <numerusform>Job queue: %Ln jobs, by drive</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>%1 in %Ln file(s) so far — %2</source>
+        <translation>
+            <numerusform>%1 in %Ln file so far — %2</numerusform>
+            <numerusform>%1 in %Ln files so far — %2</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln smaller file(s)</source>
+        <translation>
+            <numerusform>%Ln smaller file</numerusform>
+            <numerusform>%Ln smaller files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
+        <translation>
+            <numerusform>%Ln folder couldn&apos;t be read and counts as empty: %1</numerusform>
+            <numerusform>%Ln folders couldn&apos;t be read and count as empty, such as %1</numerusform>
+        </translation>
+    </message>
 </context>
 </TS>

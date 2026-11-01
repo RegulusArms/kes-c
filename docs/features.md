@@ -249,6 +249,17 @@ Right-click a folder, several folders or a drive (in the sidebar or on the Overv
 
 The results list each group with its files' thumbnails, folders, dates and sizes, and the space that can be freed. A **Keep** box on each file, and helpers to keep **the oldest**, **the newest** or **those in a folder** in every group. Then **Move the Others to Trash** (Undo brings them back) or **Replace the Others with Hard Links…** (on the same drive only, asking first: each becomes the same file as the one kept, so the space is used once). A group with no file kept is never touched, and a file that changed since the search is left alone. Double-click a file to show it in its folder.
 
+## What's using this space? (Disk Usage)
+
+Right-click a folder → **Disk Usage…**, or a drive in the sidebar or on the Overview (its card also has a button beside the usage bar, **What's using this space?**). A window shows what fills it as a treemap: each subfolder a block sized by what it holds, with its biggest subfolders and files inside it, a few levels deep, each top block in its own colour. A list beside the map has the folder shown, biggest first, with each item's size and share.
+
+- **Click a folder** (in the map, or double-click it in the list) to go into it; **Back** (or Backspace, Alt+Left, the mouse's back button, or a folder named in the path above the map) goes up. **Hover** over a block for its size, its file count and its share of the folder shown and of everything counted.
+- A folder's smaller files are drawn together as one hatched block ("40 smaller files"); a folder under 128 KB is one block, not gone into.
+- **Right-click** a block or a row: **Open**, **Show in Folder**, **Move to Trash** (taken off the map; Undo as usual) and **Properties**. Double-click a file to open it.
+- Counting is a job, with progress, **Pause** and **Stop**, waiting for its turn on the drive like a copy; it stays on the folder's own drive (a drive mounted inside it isn't counted). Sizes are counted as Properties counts them (each file's size, a hard link under each of its names).
+- The folder sizes Properties remembers show at once, with when they were counted, while it counts again; what it counts is remembered for Properties in turn. **Recalculate** counts again.
+- On a tape or a floppy it doesn't count until you click **Count Now**: counting reads every folder there.
+
 ## Comparing and syncing folders
 
 Right-click a folder → **Compare With…** asks for another folder and lists the differences, through every subfolder: only on one side (a folder there is one row), newer on one side, or the same name with other contents. By size and date, or tick **Compare contents** to read the files byte by byte. Choose what's listed (the same items are hidden), and for the items selected: **Open Left** / **Open Right**, **Copy to Right →** / **← Copy to Left** (asking before replacing anything), **Trash on Left** / **Trash on Right**. The list is compared again after a copy.

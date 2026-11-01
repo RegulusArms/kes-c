@@ -304,6 +304,14 @@ struct Entry {
 QString cache_file();
 std::optional<Entry> get(const QString &folder);
 void put(const QString &folder, const DirStats &stats);
+// Many counted at once (Disk Usage), in one write: each with the device and inode it had when counted
+struct Counted {
+    QString folder;
+    quint64 dev = 0, ino = 0;
+    DirStats stats;
+};
+void put_many(const QList<Counted> &counted);
+QStringList folders();   // every folder remembered (not checked: get() checks one)
 void drop_with_parents(const QStringList &paths);   // each path's own entry and every folder's above it
 QString age_text(qint64 measured, qint64 now);      // "Calculated 3 days ago (2026-10-21 14:05)", "Calculated just now"
 }  // namespace dirsizes

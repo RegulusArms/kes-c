@@ -4,7 +4,18 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.3
+## 0.3.3-alpha.4
+
+- **What's using this space? Disk Usage shows it as a map.** Right-click a folder → **Disk Usage…**, or a drive in
+  the sidebar or on the Overview (whose drive cards also have a button for it beside the usage bar). Each subfolder
+  is a block sized by what it holds, with its biggest subfolders and files inside it; click a folder to go into it,
+  Back to go up, hover for a size and its share, and a list beside the map has the folder shown, biggest first.
+  Right-click an item to open it, show it in its folder, move it to the trash (Undo as usual) or see its Properties.
+  Counting is a job with progress, Pause and Stop that waits for its turn on the drive and stays on that drive. The
+  folder sizes Properties remembers show at once while it counts, and what it counts is remembered for Properties
+  in turn. On a tape or a floppy it counts only when you ask.
+
+## 0.3.3-alpha.3 (2026-11-01)
 
 - **Kestrel no longer freezes when another program keeps a drive busy.** Opening a folder on such a drive, refreshing
   it, or right-clicking an item there could hold the window until GNOME offered to force-quit it: each of these asked
