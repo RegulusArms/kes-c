@@ -351,6 +351,7 @@ int main(int argc, char **argv)
         makedirs(tape, true);
         write_text(join(tape, "f.bin"), "on tape");
         qputenv("KESTREL_TEST_SLOW", QString("tape=%1").arg(tape).toUtf8());
+        drives::reread_mounts();   // (the mount list read under a second ago, without the tape, would be used)
         diskusage::open_window(w, tape);
         DiskUsageWindow *tw = nullptr;
         bool tshown = wait_for([&]() {
@@ -365,6 +366,7 @@ int main(int argc, char **argv)
             tw->recount();
         bool counted_when_asked = tshown && wait_for([&]() { return !tw->counting() && tw->tree; }, 20000);
         qunsetenv("KESTREL_TEST_SLOW");
+        drives::reread_mounts();
         check(waited && counted_when_asked, "...on a tape it doesn't count until asked (Count Now), then counts");
         if (tw)
             tw->close();

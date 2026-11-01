@@ -6,6 +6,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.5
+
+Changed:
+- `jobs`: the check that a stopped job's log ends with when it was stopped accepts a log of that line alone (a job
+  that logs nothing else has no line before it). It wanted a line break before it, so it failed in CI.
+- `tools`: Disk Usage on a tape asks for the mount list to be read again after marking the folder as a tape (and after
+  unmarking it). The list read under a second earlier, without the tape, was used, so the window counted at once and
+  the check failed in CI.
+
 ## 0.3.3-alpha.4
 
 Added:

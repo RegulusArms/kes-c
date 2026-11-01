@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.4
+## 0.3.3-alpha.5
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha5).
+
+## 0.3.3-alpha.4 (2026-11-01)
 
 - **What's using this space? Disk Usage shows it as a map.** Right-click a folder → **Disk Usage…**, or a drive in
   the sidebar or on the Overview (whose drive cards also have a button for it beside the usage bar). Each subfolder

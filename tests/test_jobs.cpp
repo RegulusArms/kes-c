@@ -340,7 +340,7 @@ int main(int argc, char **argv)
         if (stopped)
             stopped->cancel();
         wait_for([&]() { return !stopped; }, 5000);
-        check(QRegularExpression("\nStopped after \\d+ s$").match(log_of("Stopped here")).hasMatch(),
+        check(QRegularExpression("(^|\n)Stopped after \\d+ s$").match(log_of("Stopped here")).hasMatch(),
               "a stopped job's log ends with when it was stopped");
     }
 
