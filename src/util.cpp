@@ -68,7 +68,6 @@ const char *COPY_ONLY_MIME = "application/x-kestrel-copy-only";
 const char *APP_COMMAND = "kes";
 const QStringList LEGACY_NAMES = {"Folder Explorer"};
 const char *LEGACY_ID = "folder-explorer";
-const char *VERSION = KES_VERSION;
 
 static QString env_or(const char *var, const QString &fallback)
 {

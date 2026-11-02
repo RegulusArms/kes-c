@@ -14,14 +14,17 @@ for t in "${TESTS[@]}"; do
     [[ " ${ALL[*]} " == *" $t "* ]] || { echo "Unknown test: $t (tests: ${ALL[*]})" >&2; exit 2; }
 done
 
-# build the app (the tab test launches it) and the test programs, with the system cmake, into build/ (or
-# KESTREL_BUILD_DIR: another machine sharing this folder keeps its own build)
+# build the app (the tab test launches it) and the test programs, with the system cmake, in one build: build/ (or
+# KESTREL_BUILD_DIR: another machine sharing this folder keeps its own build), the tests in its tests/. The app's code
+# is compiled once for both, through ccache when it's installed (CI keeps its cache between runs).
 B="${KESTREL_BUILD_DIR:-build}"
 CMAKE=/usr/bin/cmake
 [[ -x "$CMAKE" ]] || CMAKE="$(command -v cmake)"
 # KESTREL_SANITIZE=address,undefined (or thread): build everything with those sanitizers (CI does; give it its own
 # KESTREL_BUILD_DIR). A finding stops the program, so its test fails.
 SAN=(-DCMAKE_BUILD_TYPE=Release)
+OPTS=(-DKES_BUILD_TESTS=ON)
+command -v ccache >/dev/null && OPTS+=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
 if [[ -n "${KESTREL_SANITIZE:-}" ]]; then
     SAN=(-DCMAKE_BUILD_TYPE=RelWithDebInfo "-DCMAKE_CXX_FLAGS=-fsanitize=$KESTREL_SANITIZE -fno-omit-frame-pointer"
          "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$KESTREL_SANITIZE")
@@ -30,8 +33,8 @@ if [[ -n "${KESTREL_SANITIZE:-}" ]]; then
     export TSAN_OPTIONS="${TSAN_OPTIONS:-halt_on_error=1:second_deadlock_stack=1}"
 fi
 echo "Building…"
-{ "$CMAKE" -S "$ROOT" -B "$ROOT/$B" "${SAN[@]}" && "$CMAKE" --build "$ROOT/$B" -j"$(nproc)" &&
-  "$CMAKE" -S "$HERE" -B "$HERE/$B" "${SAN[@]}" && "$CMAKE" --build "$HERE/$B" -j"$(nproc)"; } >"$HERE/build.log" 2>&1 ||
+{ "$CMAKE" -S "$ROOT" -B "$ROOT/$B" "${SAN[@]}" "${OPTS[@]}" && "$CMAKE" --build "$ROOT/$B" -j"$(nproc)"; } \
+    >"$HERE/build.log" 2>&1 ||
     { tail -30 "$HERE/build.log"; echo "Build failed (full log: tests/build.log)"; exit 1; }
 
 export KES_CXX="$ROOT/$B/kes"
@@ -48,20 +51,22 @@ for t in "${TESTS[@]}"; do
     if [[ $t == installer ]]; then
         cmd=("$HERE/test_installer.sh")
     else
-        cmd=("$HERE/$B/test_$t")
+        cmd=("$ROOT/$B/tests/test_$t")
     fi
+    started=$SECONDS
     env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u CONDA_DEFAULT_ENV \
         HOME="$work/home" QT_QPA_PLATFORM=offscreen \
         timeout 600 dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
     rc=$?
+    took=$(( SECONDS - started ))
     # (with a failed check's indented lines under it: what it found)
     awk '/^(PASS|FAIL|SKIP) / { more = /^FAIL/; print; next } more && /^  / { print; next } { more = 0 }' "$work/log"
     if grep -q '^ALL PASSED' "$work/log" && (( rc == 0 )); then
-        grep '^ALL PASSED' "$work/log"
+        echo "$(grep '^ALL PASSED' "$work/log") in $took s"
     else
         failed+=("$t")
         grep -q -E '^FAILED' "$work/log" && grep -E '^FAILED' "$work/log" ||
-            { echo "CRASHED or timed out (exit $rc). Last lines:"; tail -15 "$work/log"; }
+            { echo "CRASHED or timed out (exit $rc, after $took s). Last lines:"; tail -15 "$work/log"; }
     fi
     # (a desktop service started by the test, such as gvfsd-metadata, may still be writing there for a moment)
     case "$work" in */kestrel-test.*) rm -rf "$work" 2>/dev/null || { sleep 1; rm -rf "$work"; } ;; esac

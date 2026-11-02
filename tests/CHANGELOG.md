@@ -6,6 +6,27 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.8
+
+Changed:
+- The build (`run.sh`, `tests/CMakeLists.txt`, `common.h`): the app's code is compiled once, for `kes` and the tests
+  alike. The tests were a CMake project of their own that compiled all of `src/` a second time (`kes_core`), and
+  `app.cpp` once more in each of the 24 programs, as `common.h` included it. Now the root project builds them with
+  `-DKES_BUILD_TESTS=ON` into `build/tests/`, linking the same objects as `kes` (`kes_objs`); only the version
+  (`src/version.cpp`, "test") is compiled per program, and `common.h` includes the app's headers instead of `app.cpp`.
+  A clean build of the app and the tests takes half the processor time, which is most of each CI test job. The checks
+  themselves are unchanged.
+- `run.sh` builds through ccache when it's installed, and prints how long each test took, to find the slow ones.
+- CI (`deb.yml`): the four test jobs install ccache and keep its cache between runs (`actions/cache`, one per job, so
+  each release and the sanitizer builds keep their own), so a push compiles only what changed since the last passing run.
+- `tools`: the disk image checks fill their stand-in device with an unsigned counter. The pattern's multiplication
+  overflowed an int past the first 271 KB, which UBSAN stops on, so CI's sanitizer jobs failed there and the rest of
+  the file never ran under them.
+- `archives`: the big-archive checks make their 25,000 and 60,000 small files as new files (`write_text(…, true)`), with
+  no fsync each. Replacing-style writes fsync every file, which cost about 5 ms each on a Docker container's storage:
+  the 60,000-file check took over 300 s there and the test hit run.sh's 600 s limit, while GitHub's runners did it in
+  under a minute. What the checks test is unchanged.
+
 ## 0.3.3-alpha.7
 
 Changed:

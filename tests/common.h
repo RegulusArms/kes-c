@@ -1,11 +1,83 @@
 // Shared helpers for the test programs (see tests/README.md).
 //
-// Each test is one program that includes app.cpp (for the app's internal state), runs the real code offscreen and
-// prints PASS / FAIL lines. run.sh starts every test with a throwaway HOME on a private D-Bus session bus, so your own
+// Each test is one program linked with the app's code (kes_objs: the same objects as kes), runs the real code offscreen
+// and prints PASS / FAIL lines. run.sh starts every test with a throwaway HOME on a private D-Bus session bus, so your own
 // files, settings and running Kestrel windows are never touched.
 #pragma once
 
-#include "app.cpp"   // the app's state and statics (WINDOWS, g_thumbs, open_window…); on_atc, handle_fm1: incoming.h
+// the app's headers (its shared state, WINDOWS, g_thumbs, open_window…: app.h; on_atc, handle_fm1: incoming.h)
+#include "app.h"
+#include "admin.h"
+#include "animate.h"
+#include "archive.h"
+#include "archive_ui.h"
+#include "atc.h"
+#include "chooser.h"
+#include "diskimage.h"
+#include "linkwin.h"
+#include "dialogs.h"
+#include "drives.h"
+#include "compare.h"
+#include "convert.h"
+#include "diskusage.h"
+#include "dupes.h"
+#include "fileops.h"
+#include "hashcheck.h"
+#include "fm1.h"
+#include "groups.h"
+#include "incoming.h"
+#include "jobs.h"
+#include "jobswin.h"
+#include "overview.h"
+#include "menus.h"
+#include "places.h"
+#include "prefswin.h"
+#include "metadata.h"
+#include "prefs.h"
+#include "sharing.h"
+#include "signature.h"
+#include "undo.h"
+#include "proc.h"
+#include "thumbs.h"
+#include "towerwin.h"
+#include "stats.h"
+#include "util.h"
+#include "uwp.h"
+#include "viewer.h"
+#include "windiag.h"
+#include "archivewin.h"
+#include "widgets.h"
+#include "windows.h"
+#include <QApplication>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QCloseEvent>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QImageReader>
+#include <QJsonArray>
+#include <QLabel>
+#include <QMenu>
+#include <QMessageBox>
+#include <QMimeData>
+#include <QPainter>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSlider>
+#include <QTabBar>
+#include <QSplitter>
+#include <QStatusBar>
+#include <QTabWidget>
+#include <QToolBar>
+#include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include <QWindow>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+
+using namespace util;
 #include "atc.h"
 #include "fileops.h"
 #include "undo.h"

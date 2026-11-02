@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.3-alpha.7")
+set(KES_VERSION "0.3.3-alpha.8")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -19,10 +19,11 @@ pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)   # focus.cpp: activating a 
 pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)   # keyring.cpp: remembered archive passwords
 
 # GLib headers use "signals" as an identifier, so Qt's lowercase keywords are off (Q_SIGNALS, Q_EMIT, ...)
-add_compile_definitions(QT_NO_KEYWORDS KES_VERSION="${KES_VERSION}")
+add_compile_definitions(QT_NO_KEYWORDS)
 
-add_executable(kes
-    src/main.cpp
+# The app's code, compiled once: kes is it plus main.cpp and the version (src/version.cpp); the tests (KES_BUILD_TESTS)
+# link the same objects with their own version.
+add_library(kes_objs OBJECT
     src/util.cpp
     src/proc.cpp
     src/uwp.cpp
@@ -77,17 +78,22 @@ add_executable(kes
     src/pane.cpp
     src/stats.cpp
     src/i18n.cpp
-    data/kestrel.qrc
 )
-target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)
+target_include_directories(kes_objs PUBLIC src)
+target_link_libraries(kes_objs PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)
+target_compile_options(kes_objs PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+add_executable(kes src/main.cpp src/version.cpp data/kestrel.qrc)
+target_link_libraries(kes PRIVATE kes_objs)
+target_compile_definitions(kes PRIVATE KES_VERSION="${KES_VERSION}")
 target_compile_options(kes PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 # Translations (src/i18n.h): each translations/kestrel_<language>.ts built into kes as :/i18n/kestrel_<language>.qm,
 # so adding a language is adding its .ts. `cmake --build build --target update_translations` refreshes them from the
 # code (translations/update.sh).
 file(GLOB KES_TS_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/translations/kestrel_*.ts)
-qt_add_lrelease(kes TS_FILES ${KES_TS_FILES} QM_FILES_OUTPUT_VARIABLE KES_QM_FILES)
-qt_add_resources(kes kes_translations PREFIX /i18n BASE ${CMAKE_CURRENT_BINARY_DIR} FILES ${KES_QM_FILES})
+qt_add_lrelease(kes_objs TS_FILES ${KES_TS_FILES} QM_FILES_OUTPUT_VARIABLE KES_QM_FILES)
+qt_add_resources(kes_objs kes_translations PREFIX /i18n BASE ${CMAKE_CURRENT_BINARY_DIR} FILES ${KES_QM_FILES})
 add_custom_target(update_translations COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/translations/update.sh
                   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} VERBATIM)
 
@@ -95,6 +101,12 @@ add_custom_target(update_translations COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/transl
 add_executable(kes-admin-helper src/admin_helper.cpp)
 target_link_libraries(kes-admin-helper PRIVATE Qt6::Core)
 target_compile_options(kes-admin-helper PRIVATE -Wall -Wextra)
+
+# The test programs (tests/README.md), built into build/tests by tests/run.sh; not for install.sh or the .deb
+option(KES_BUILD_TESTS "Build the test programs" OFF)
+if(KES_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS kes kes-admin-helper RUNTIME DESTINATION bin)
 install(PROGRAMS kes-setup DESTINATION bin)   # kes-setup --default: what install.sh --default does, for the .deb

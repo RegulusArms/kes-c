@@ -9,9 +9,9 @@ tests/run.sh                     # build, then run every test
 tests/run.sh fileops atc_undo    # only some of them
 ```
 
-`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`tests/build/`). It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build.
+`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`build/tests/`) in one build, through ccache when it's installed. It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines, how long it took, and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build.
 
-To build into other folders, set `KESTREL_BUILD_DIR` (for example `KESTREL_BUILD_DIR=build-mint tests/run.sh` builds into `build-mint/` and `tests/build-mint/`). That keeps two machines' builds apart when they share this folder, such as a virtual machine with an older Qt.
+To build into other folders, set `KESTREL_BUILD_DIR` (for example `KESTREL_BUILD_DIR=build-mint tests/run.sh` builds into `build-mint/`, the tests in `build-mint/tests/`). That keeps two machines' builds apart when they share this folder, such as a virtual machine with an older Qt.
 
 ## Your own setup is never touched
 
@@ -755,7 +755,7 @@ Everything `install.sh` needs to build, plus a few tools a normal Ubuntu desktop
 
 GitHub Actions (`.github/workflows/deb.yml`) runs `tests/run.sh` on Ubuntu 24.04 (a GitHub runner) and on Ubuntu
 26.04 (a clean ubuntu:26.04 container, the tests run as a normal user) before building a .deb on each; a failing test on
-either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or tools is caught too. A push or pull request that only changes Markdown files doesn't start it. Two more jobs:
+either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or tools is caught too. A push or pull request that only changes Markdown files doesn't start it. Each of these test jobs keeps its own ccache between runs (`actions/cache`), so only the files changed since the last passing run are compiled again. Two more jobs:
 
 - **Sanitizers:** the whole suite with AddressSanitizer and UndefinedBehaviorSanitizer, on 24.04 and 26.04, which find
   memory errors (use after free, overflows) and undefined behaviour that a normal run can miss. Locally:
@@ -782,7 +782,7 @@ either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or 
 
 Each test is one small program in `tests/`, built from `test_<name>.cpp`:
 
-- **It includes `app.cpp` directly** (`common.h`), so it can reach the app's internal state (the window list, the thumbnail manager, `on_atc`, `handle_fm1`…). The rest of `src/` is compiled once into `kes_core`, shared by all tests.
+- **It links the app's own code**: everything in `src/` but `main.cpp` and the admin helper is compiled once into `kes_objs` (the root `CMakeLists.txt`, with `-DKES_BUILD_TESTS=ON`), which `kes` and every test link. A test reaches the app's state through its headers (`common.h`: the window list, the thumbnail manager, `on_atc`, `handle_fm1`…). Only the version differs: `src/version.cpp`, compiled into each program, says "test" in the tests.
 - **It drives the real code** (`fileops::start_ops`, `undo::undo`, `places::set_starred`, …) and checks the results on disk and in the windows.
 - **`FakeFlight`** (`common.h`) plays "another Kestrel": a second connection to the bus that checks in with the tower, reports changes, calls tower methods and records everything the tower broadcasts.
 - **Each test program can also act as the tower.** When a test's Kestrel finds no tower, it starts `<test program> --atc`, just as the app starts `kes --atc`.

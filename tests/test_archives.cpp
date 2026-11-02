@@ -790,7 +790,7 @@ int main(int argc, char **argv)
             makedirs(join(many, dir), true);
             for (int f = 0; f < per; ++f) {
                 QString name = QString("%1/a_rather_long_file_name_to_make_the_listing_longer_%2.txt").arg(dir).arg(f, 3, 10, QChar('0'));
-                write_text(join(many, name), "x");
+                write_text(join(many, name), "x", true);   // new: no fsync each (25,000 of them)
                 want << name;
             }
         }
@@ -1131,7 +1131,7 @@ int main(int argc, char **argv)
             QString dir = join(big, QString("d%1").arg(d, 3, 10, QChar('0')));
             makedirs(dir, true);
             for (int f = 0; f < 200; ++f)
-                write_text(join(dir, QString("f%1").arg(f, 3, 10, QChar('0'))), "");
+                write_text(join(dir, QString("f%1").arg(f, 3, 10, QChar('0'))), "", true);   // new: no fsync each
         }
         write_text(join(big, "a.txt"), "x");
         QDateTime when(QDate(2021, 3, 4), QTime(5, 6, 7));

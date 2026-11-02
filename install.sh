@@ -126,7 +126,7 @@ command -v ffmpeg >/dev/null || echo "Tip: 'sudo apt install ffmpeg' for video t
 # build (the system cmake: a pip-installed one earlier on PATH may be broken)
 CMAKE=/usr/bin/cmake
 [[ -x "$CMAKE" ]] || CMAKE="$(command -v cmake)"
-"$CMAKE" -S "$HERE" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
+"$CMAKE" -S "$HERE" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DKES_BUILD_TESTS=OFF   # (tests/run.sh turns them on)
 "$CMAKE" --build "$BUILD" -j"$(nproc)"
 
 mkdir -p "$(dirname "$BIN")" "$(dirname "$DESKTOP")"

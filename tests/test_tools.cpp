@@ -690,7 +690,7 @@ int main(int argc, char **argv)
         QString d = home_path("images");
         makedirs(d, true);
         QByteArray data;
-        for (int i = 0; i < 3 * 1024 * 1024; ++i)
+        for (quint32 i = 0; i < 3 * 1024 * 1024; ++i)
             data += char((i * 7919 + i / 4096) & 0xff);
         QString src = join(d, "device.bin");
         write_text(src, data);
