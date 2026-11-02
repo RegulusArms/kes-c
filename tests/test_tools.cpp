@@ -760,11 +760,13 @@ int main(int argc, char **argv)
 
         // cancelled part-way: the stream still coming (a pipe fed slowly)
         int p[2];
-        ::pipe(p);
+        (void)!::pipe(p);
+        // never blocking: once the image stops reading (cancelled), a full pipe would hold the feeder, and the test with it
+        ::fcntl(p[1], F_SETFL, O_NONBLOCK);
         std::atomic<bool> stop{false};
         std::thread feeder([&]() {
             for (int i = 0; i < 300 && !stop; ++i) {
-                (void)!::write(p[1], data.constData(), 64 * 1024);
+                (void)!::write(p[1], data.constData(), 64 * 1024);   // (EAGAIN while it's full: skipped)
                 ::usleep(20000);
             }
             ::close(p[1]);

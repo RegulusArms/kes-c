@@ -10,7 +10,20 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(dirname "$here")
 image=kes-bench-fs
-docker build -q -t "$image" "$here/fs" >/dev/null
+# Each run in a clean new container, destroyed once it's done: first any left from an earlier run (stopped, or still
+# running: --init's tini ends at a TERM sent from inside, where a docker stop can be refused), then the image built
+# again from a freshly pulled base with nothing cached, so no state or old package carries over.
+destroy() {
+    local c
+    for c in $(docker ps -aq --filter "name=^$image-"); do
+        [[ "$(docker inspect -f '{{.State.Running}}' "$c")" == true ]] && docker exec -u root "$c" kill -TERM 1 2>/dev/null || true
+        for _ in $(seq 50); do [[ "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" == true ]] || break; sleep 0.2; done
+        docker rm -f "$c" >/dev/null 2>&1 || echo "Couldn't remove the container $c (sudo snap restart docker, then docker rm $c)" >&2
+    done
+}
+destroy
+docker build -q --pull --no-cache -t "$image" "$here/fs" >/dev/null
+trap destroy EXIT
 
 args=("$@")
 [[ " $* " == *" --apps"* ]] || args=(--apps kestrel,nautilus "${args[@]}")

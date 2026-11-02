@@ -89,6 +89,9 @@ static QStringList placeholders(const QString &text)
     return out;
 }
 
+// where each text was seen (its window and widget, and for a list its column), to name in a failure
+static QHash<QString, QString> seen_in;
+
 // what a window shows: its labels, buttons, tabs, combo box items, placeholders, tooltips, header labels and the rows
 // of its lists (plain text, markup taken out)
 static void texts_of(QWidget *top, QStringList &out)
@@ -105,28 +108,35 @@ static void texts_of(QWidget *top, QStringList &out)
     for (QWidget *w : all) {
         if (!w->isVisibleTo(top))
             continue;
-        out << plain(w->toolTip());
+        QString where = QString(w->window()->metaObject()->className()) + " › " + w->metaObject()->className() +
+                        (w->objectName().isEmpty() ? QString() : " " + w->objectName());
+        auto add = [&](const QString &t, const QString &what = QString()) {
+            out << t;
+            if (!t.isEmpty() && !seen_in.contains(t.trimmed()))
+                seen_in.insert(t.trimmed(), what.isEmpty() ? where : where + " " + what);
+        };
+        add(plain(w->toolTip()), "tooltip");
         if (auto *l = qobject_cast<QLabel *>(w))
-            out << plain(l->text());
+            add(plain(l->text()));
         else if (auto *b = qobject_cast<QAbstractButton *>(w))
-            out << b->text();
+            add(b->text());
         else if (auto *g = qobject_cast<QGroupBox *>(w))
-            out << g->title();
+            add(g->title());
         else if (auto *e = qobject_cast<QLineEdit *>(w))
-            out << e->placeholderText();
+            add(e->placeholderText(), "placeholder");
         else if (auto *c = qobject_cast<QComboBox *>(w)) {
             for (int i = 0; i < c->count(); ++i)
-                out << c->itemText(i);
+                add(c->itemText(i));
         } else if (auto *tw = qobject_cast<QTabWidget *>(w)) {
             for (int i = 0; i < tw->count(); ++i)
-                out << tw->tabText(i);
+                add(tw->tabText(i), "tab");
         } else if (auto *tree = qobject_cast<QTreeWidget *>(w)) {
             for (int c = 0; c < tree->columnCount(); ++c)
-                out << tree->headerItem()->text(c);
+                add(tree->headerItem()->text(c), "header");
             int n = 0;   // every row, also those inside others (Preferences → Menus' submenus)
             for (QTreeWidgetItemIterator it(tree); *it && n < 2000; ++it, ++n)
                 for (int c = 0; c < tree->columnCount(); ++c)
-                    out << (*it)->text(c);
+                    add((*it)->text(c), QString("row, column %1").arg(c));
         }
     }
 }
@@ -340,8 +350,9 @@ int main(int argc, char **argv)
                 rest.remove(k);
         for (const QString &k : kept)
             rest.remove(QRegularExpression("\\b" + QRegularExpression::escape(k) + "\\w*", QRegularExpression::CaseInsensitiveOption));
-        if (word.match(rest).hasMatch() && !english_left.contains(t.trimmed()))
-            english_left << t.trimmed();
+        QString shown_as = t.trimmed() + "  (in " + seen_in.value(t.trimmed(), "a menu") + ")";
+        if (word.match(rest).hasMatch() && !english_left.contains(shown_as))
+            english_left << shown_as;
     }
     check(shown.size() > 200 && english_left.isEmpty(),
           QString("the main window, its menus, the Overview, Preferences, the Jobs window and Properties show no "

@@ -6,6 +6,16 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.7
+
+Changed:
+- `tools`: the check that a Back Up Drive to Image cancelled part-way leaves nothing feeds its stream without blocking.
+  Once the cancel stopped the reading, the pipe filled and held the feeder thread, which the test waits for: CI's
+  24.04 job timed out there.
+- `i18n`: a text left untranslated is named with where it was shown (its window and widget, a list's column). CI's
+  26.04 job once found "Created:" untranslated, which didn't happen again in a clean 26.04 container, and the check
+  said only the text, so there was no telling which window showed it.
+
 ## 0.3.3-alpha.6
 
 Added:

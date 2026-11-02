@@ -18,17 +18,17 @@ A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is 
 ## On Kubuntu (Kestrel vs Dolphin)
 
 ```bash
-bench/kubuntu.sh                       # build the image the first time, run Kestrel and Dolphin, write bench/results-kubuntu.md
+bench/kubuntu.sh                       # build the image afresh, run Kestrel and Dolphin, write bench/results-kubuntu.md
 bench/kubuntu.sh --only startup,copy   # takes run.sh's options; re-runs keep the other results from the last run
 bench/kubuntu.sh --report              # rebuild bench/results-kubuntu.md from the last results
 ```
 
-This runs the same benchmark in a Docker container of Kubuntu 26.04: Ubuntu 26.04's image with the parts of Kubuntu's desktop Dolphin uses (KIO and its thumbnailers for images, videos and PDFs, `ktrash6`, Plasma's Qt integration and Breeze), built from `bench/kubuntu/Dockerfile` as `kes-bench-kubuntu`. It needs only Docker on the machine. The desktop is set to KDE's (`XDG_CURRENT_DESKTOP=KDE`, `KDE_FULL_SESSION`), so both apps load Plasma's integration as on Kubuntu. The source is copied into the container without its build folders, and Kestrel is built there. The data and the throwaway homes are on a RAM disk in the container (`/tmp`), and the move between drives goes to its `/dev/shm`, so the data is made again each run (about a minute and a half). It measures Kestrel and Dolphin unless `--apps` names others. The results are copied out to `bench/results-kubuntu.json` and `bench/results-kubuntu.md`, whose section is "Kestrel vs Dolphin on Kubuntu", beside the Dolphin section of a run on Ubuntu. Each run leaves a stopped container named `kes-bench-kubuntu-<time>`.
+This runs the same benchmark in a Docker container of Kubuntu 26.04: Ubuntu 26.04's image with the parts of Kubuntu's desktop Dolphin uses (KIO and its thumbnailers for images, videos and PDFs, `ktrash6`, Plasma's Qt integration and Breeze), built from `bench/kubuntu/Dockerfile` as `kes-bench-kubuntu`. It needs only Docker on the machine. The desktop is set to KDE's (`XDG_CURRENT_DESKTOP=KDE`, `KDE_FULL_SESSION`), so both apps load Plasma's integration as on Kubuntu. The source is copied into the container without its build folders, and Kestrel is built there. The data and the throwaway homes are on a RAM disk in the container (`/tmp`), and the move between drives goes to its `/dev/shm`, so the data is made again each run (about a minute and a half). It measures Kestrel and Dolphin unless `--apps` names others. The results are copied out to `bench/results-kubuntu.json` and `bench/results-kubuntu.md`, whose section is "Kestrel vs Dolphin on Kubuntu", beside the Dolphin section of a run on Ubuntu. Each run is in a clean new container, destroyed once it's done: any left from an earlier run is destroyed first (`kes-bench-kubuntu-*`), and the image is built again from a freshly pulled Ubuntu image, with nothing cached, so no state or old package carries over (`bench/fs.sh` does the same with `kes-bench-fs-*`). A container Docker refuses to remove (the snap's AppArmor profile can) is named; `sudo snap restart docker` frees it.
 
 ## Copying on Btrfs, XFS and SMB
 
 ```bash
-bench/fs.sh                 # build the image the first time, run the three copy tests, write bench/results-fs.md
+bench/fs.sh                 # build the image afresh, run the three copy tests, write bench/results-fs.md
 bench/fs.sh --runs 5        # takes run.sh's options (--only, --apps, --report…)
 ```
 

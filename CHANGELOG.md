@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.6
+## 0.3.3-alpha.7
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha7).
+
+## 0.3.3-alpha.6 (2026-11-02)
 
 - **Make and change links in one window.** Right-click → Links & Shortcuts → **Link…** opens two browsers side by
   side: what the links point to on the left, the folder they go in on the right, where the links-to-be show ghosted
