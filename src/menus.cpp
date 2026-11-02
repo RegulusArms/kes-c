@@ -134,8 +134,8 @@ QList<Entry> defaults(Kind k)
     }
     if (k == BACKGROUND) {
         l << item("new_folder", tx("New Folder…")) << item("new_document", tx("New Document ▸")) << sep() << item("paste", tx("Paste"))
-          << item("paste_link", tx("Paste as Link")) << item("select_all", tx("Select All")) << sep()
-          << item("sort_by", tx("Sort By ▸")) << item("show_hidden", tx("Show Hidden Files"))
+          << item("paste_link", tx("Paste as Link")) << item("link_window", tx("Link…"), tx("not in the Trash"))
+          << item("select_all", tx("Select All")) << sep() << item("sort_by", tx("Sort By ▸")) << item("show_hidden", tx("Show Hidden Files"))
           << item("collapse_groups", tx("Collapse All Groups"), tx("when grouped by date"))
           << item("expand_groups", tx("Expand All Groups"), tx("when grouped by date")) << sep()
           << item("open_terminal", tx("Open in Terminal")) << item("bookmark_folder", tx("Bookmark This Folder"))
@@ -171,9 +171,8 @@ QList<Entry> defaults(Kind k)
                           item("link_rel_here", tx("Create Relative Symbolic Link Here"))};
     if (!folder)
         links << item("link_hard_here", tx("Create Hard Link Here"), tx("for files"));
-    links << item("link_sym_in", tx("Create Symbolic Link In…")) << sep() << item("link_desktop", tx("Send Link to Desktop"))
-          << item("desktop_shortcut_here", tx("Create Desktop Shortcut (.desktop) Here"))
-          << item("desktop_shortcut_desktop", tx("Send Shortcut (.desktop) to Desktop")) << sep()
+    links << item("link_window", tx("Link…")) << sep() << item("link_desktop", tx("Send Link to Desktop")) << sep()
+          << item("link_edit", tx("Edit Link…"), tx("for symbolic links"))
           << item("link_target", tx("Open Link Target Location"), tx("for symbolic links"));
     if (folder)
         links << sep() << item("add_bookmark", tx("Add to Bookmarks"));
@@ -188,6 +187,9 @@ QList<Entry> defaults(Kind k)
         l << item("extract_all_here", tx("Extract All Here"), tx("when all are archives"))
           << item("extract_all_to", tx("Extract All To…"), tx("when all are archives"))
           << item("test_archives", tx("Test Archives"), tx("when all are archives"));
+    if (file || arc)
+        l << item("mount_image", tx("Mount Image"), tx("disk images (.img, .iso, .raw)"))
+          << item("mount_image_rw", tx("Mount Image for Writing"), tx("plain disk images you can write to"));
     l << item("compress_quick", tx("Compress to “name.ext”"), tx("once you've compressed something"))
       << item("compress", tx("Compress…")) << item("checksum_create", tx("Create Checksum File…"));
     if (folder || several)

@@ -54,12 +54,13 @@ QVariantMap resolve_paths(const QString &op, QVariantMap args)
     static const QMap<QString, QStringList> PATHS = {
         {"delete", {"path"}},  {"copy", {"src", "dst"}},   {"move", {"src", "dst"}},       {"rename", {"src", "dst"}},
         {"mkdir", {"path"}},   {"touch", {"path"}},        {"copyfile", {"src", "dst"}},   {"symlink", {"link"}},
-        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}};
+        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}, {"readdev", {"device", "fifo"}}};
     for (const QString &key : PATHS.value(op)) {
         QString p = args.value(key).toString();
         if (!p.startsWith('/'))
             continue;   // the helper refuses it
-        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src");
+        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src") ||
+                     (op == "readdev" && key == "device");   // (/dev/disk/by-… names: the device itself)
         args[key] = whole ? resolve_existing(p) : util::join(resolve_existing(util::dirname(p)), util::basename(p));
     }
     return args;

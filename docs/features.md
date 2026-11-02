@@ -57,6 +57,15 @@
   - Symbolic links (absolute or relative) and hard links.
   - Link to the Desktop.
   - `.desktop` shortcuts, marked as trusted so they can be launched.
+  - **The Link window** (Links & Shortcuts → **Link…**): what the links point to on the left, the folder they go in on
+    the right (both browsed as in the file chooser), the links-to-be shown there ghosted and renamable in place. A list
+    below collects links from as many folders as you like, with their problems (a name taken, something that isn't
+    there, a hard link to another drive); click one to change it. **OK** shows everything that will be made or
+    changed, and only then makes it, as one job, undone in one step. A file with several names (hard links) says so,
+    and **Find the Other Names** searches its drive for them.
+  - **Edit Link…** on symbolic links (or **Edit…** beside a link's target in Properties): the same window, to point them
+    elsewhere, switch between absolute and relative, or rename them. A changed link is made beside the old one and
+    swapped in, never deleted first; one changed by another program meanwhile is left alone.
 - Rename (F2). Batch rename works with templates (`[Name] ###`, `[Date]`) or find and replace with regex.
 - **New Folder with Selection…** (right-click one or more items) makes a folder beside them, named as you choose, and moves them into it; Undo puts them back.
 - Duplicate, Move To…, Copy To…, and Compress / Extract (see [Archives](archives.md)).
@@ -262,6 +271,27 @@ Right-click a folder → **Disk Usage…**, or a drive in the sidebar or on the 
 - Counting is a job, with progress, **Pause** and **Stop**, waiting for its turn on the drive like a copy; it stays on the folder's own drive (a drive mounted inside it isn't counted). Sizes are counted as Properties counts them (each file's size, a hard link under each of its names).
 - The folder sizes Properties remembers show at once, with when they were counted, while it counts again; what it counts is remembered for Properties in turn. **Recalculate** counts again.
 - On a tape or a floppy it doesn't count until you click **Count Now**: counting reads every folder there.
+
+## Drive images: backing up and mounting
+
+**Back Up Drive to Image…** (right-click a drive in the sidebar, or its card on the Overview, mounted or not) copies
+the drive byte for byte into an image file: that partition, or its whole disk. Tick **Compress** (zstd: the drive's
+empty space takes almost nothing) and **Encrypt with a password** (gpg, AES-256, as Compress… encrypts tar archives),
+and the image is never on the disk unencrypted. Reading the drive asks for the administrator password once (the admin
+helper only reads it; compressing, encrypting and writing are done as you). It runs as a job with progress and speed,
+writes under a hidden name and is renamed into place only once the whole drive has been read: a cancel or a failure
+leaves nothing behind. It won't save onto the drive being read, checks the free space first (a compressed image's
+size can't be known, so it asks), and asks first while the drive is mounted for writing (unmounting it gives the most
+faithful copy).
+
+**Mount Image** (double-click an `.img`, or right-click any `.img`, `.iso` or `.raw`) sets the image up as a drive
+through udisks, as GNOME's Disk Image Mounter does, and mounts its file systems read-only (**Mount Image for Writing**
+for a plain image you can change). They show in the sidebar and on the Overview like a plugged-in drive; unmount the
+last of them and the image is detached. A LUKS-encrypted file system inside asks for its password (it can be
+remembered in your keyring, like archive passwords). A compressed (`.img.zst`, `.xz`, `.gz`) or encrypted (`.img.gpg`,
+as Back Up makes them) image is expanded first into a copy in your cache folder, after asking (the copy isn't
+encrypted while it's there), mounted read-only, and deleted once unmounted. An `.iso` still opens as an archive when
+double-clicked.
 
 ## Comparing and syncing folders
 

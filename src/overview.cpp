@@ -2,6 +2,7 @@
 
 #include "dialogs.h"
 #include "diskusage.h"
+#include "diskimage.h"
 #include "drives.h"
 #include "fileops.h"
 #include "places.h"
@@ -142,7 +143,7 @@ QVariantList scan_filesystems(bool system_mounts, bool with_health)
                 hidden = false;
             if (root != "/" && hidden && !root.startsWith("/run/media/") && !(system_mounts && system_mount(root)))
                 continue;
-            if (dev.startsWith("/dev/loop"))
+            if (dev.startsWith("/dev/loop") && drives::user_loop(dev).isEmpty())   // (a mounted disk image shows)
                 continue;
         }
         bool net = drives::network_fs(fs);
@@ -272,7 +273,7 @@ QStringList save_order(const QList<QPair<QString, bool>> &order)
 }
 
 // filesystem type from the udev database (no root, no subprocess)
-static QString udev_fstype(const QString &dev)
+QString udev_fstype(const QString &dev)
 {
     struct stat st;
     if (!stat_(dev, st))
@@ -1390,6 +1391,7 @@ DriveCard *OverviewPage::drive_card(DriveInfo info)
     } else {
         overview::VolumeRef v = info.volume;
         connect(card, &Card::clicked, this, [this, v]() { do_mount(v); });
+        connect(card, &Card::menu_requested, this, [this, info](const QPoint &pos) { drive_menu(info, pos); });
     }
     return card;
 }
@@ -1476,6 +1478,15 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             m.addAction(tx("Drive Health…"), this, [this, name, h]() { health::open_window(this, name, h); });
         }
         m.addAction(tx("Properties"), this, [this, target]() { Q_EMIT properties(target); });
+    } else if (info.volume) {   // not mounted
+        overview::VolumeRef v = info.volume;
+        m.addAction(tx("Mount"), this, [this, v]() { do_mount(v); });
+    }
+    QString dev = info.device;
+    if (dev.startsWith("/dev/") && info.kind != "phone" && info.kind != "network" && info.kind != "tape" &&
+        info.kind != "floppy") {
+        m.addSeparator();
+        m.addAction(tx("Back Up Drive to Image…"), this, [this, dev]() { diskimage::backup_window(this, dev); });
     }
     if (info.kind == "tape" || info.kind == "floppy") {
         m.addSeparator();

@@ -1,9 +1,11 @@
 #include "dialogs.h"
 
 #include "admin.h"
+#include "app.h"
 #include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "linkwin.h"
 #include "health.h"
 #include "prefs.h"
 #include "undo.h"
@@ -427,7 +429,21 @@ QWidget *PropertiesDialog::general_tab()
                 target = util::readlink(path);
             } catch (const OSError &) {
             }
-            form->addRow(tx("Link target:"), sel_label(exists(path) ? target : tx("%1  (broken link)").arg(target)));
+            auto *row = new QHBoxLayout;
+            row->addWidget(sel_label(exists(path) ? target : tx("%1  (broken link)").arg(target)), 1);
+            auto *edit = new QPushButton(tx("Edit…"));
+            edit->setToolTip(tx("Change what it points to, or its name, in the Link window"));
+            connect(edit, &QPushButton::clicked, this, [this, link = path]() {
+                // the Kestrel window it was opened from (or any)
+                MainWindow *w = nullptr;
+                for (QWidget *p = parentWidget(); p && !w; p = p->parentWidget())
+                    w = qobject_cast<MainWindow *>(p);
+                if (!w && !WINDOWS.isEmpty())
+                    w = WINDOWS.first();
+                LinkWindow::open(w, {}, QString(), {link});
+            });
+            row->addWidget(edit);
+            form->addRow(tx("Link target:"), row);
         }
         size_label = sel_label(is_dir ? tx("Calculating…")
                                       : txn("%1 (%Ln byte(s))", st.st_size).arg(human_size(qint64(st.st_size))));

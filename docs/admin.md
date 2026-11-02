@@ -33,6 +33,7 @@ Requests to extend the admin session into those areas are out of scope and won't
 - New folder, new empty file
 - Symbolic links, hard links and `.desktop` shortcuts
 - Changing permissions in Properties
+- Reading a drive for **Back Up Drive to Image** (the helper only reads the block device and passes its bytes to Kestrel, which makes the image as you)
 
 ## What it doesn't do, on purpose
 

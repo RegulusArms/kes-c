@@ -66,7 +66,8 @@ static bool argv_tool(const QString &t) { return t == "zpaq"; }
 namespace archive_ui {
 
 QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool offer_remember,
-                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled)
+                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled,
+                      const QString &accept)
 {
     auto *dlg = new QDialog(parent);
     dlg->setObjectName("archive_password");
@@ -89,11 +90,11 @@ QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool off
         lay->addWidget(remember);
         lay->addWidget(small(tx("Saved in your login keyring (Passwords and Keys), where any app you run can read it.")));
     }
-    QString t = archive::extract_tool(path);
-    if (argv_tool(t))
+    QString t = accept.isEmpty() ? archive::extract_tool(path) : QString();   // (not extracting: no tool's note)
+    if (!t.isEmpty() && argv_tool(t))
         lay->addWidget(small(tx(ARGV_NOTE).arg(t)));
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    bb->button(QDialogButtonBox::Ok)->setText(tx("Extract"));
+    bb->button(QDialogButtonBox::Ok)->setText(accept.isEmpty() ? tx("Extract") : accept);
     QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
     QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
     QObject::connect(dlg, &QDialog::finished, dlg, [edit, remember, ok, cancelled](int r) {

@@ -132,6 +132,9 @@ QList<DriveInfo> network_infos(GVolumeMonitor *monitor, const QSet<QString> &kno
 // A recent server's address is one of these shares, or inside one
 bool connected(const QString &server, const QList<DriveInfo> &shares);
 
+// a block device's file system type as udev found it ("ext4", "crypto_LUKS"; empty: none), asking no drive
+QString udev_fstype(const QString &dev);
+
 }  // namespace overview
 
 // What drive cards show (Preferences → Overview); size: 0 small, 1 normal, 2 large (bookmark cards too)

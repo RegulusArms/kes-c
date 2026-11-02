@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QRegularExpression>
 #include <QMutex>
 #include <QPointer>
 #include <QSettings>
@@ -99,6 +100,20 @@ QList<Mount> mounts()
 
 static QMutex labels_lock;
 static QHash<QString, QString> labels;   // device -> its label, until the mount table changes (MountWatch)
+
+QString user_loop(const QString &device)
+{
+    static const QRegularExpression loop_re("^(loop\\d+)");
+    QRegularExpressionMatch m = loop_re.match(basename(realpath(device)));
+    if (!device.startsWith("/dev/") || !m.hasMatch())
+        return QString();
+    QString backing = QString::fromUtf8(read_file("/sys/block/" + m.captured(1) + "/loop/backing_file")).trimmed();
+    if (backing.endsWith(" (deleted)"))
+        backing.chop(10);
+    if (backing.isEmpty() || backing.contains("/snapd/") || backing.endsWith(".snap"))
+        return QString();
+    return backing;
+}
 
 static QString read_label(const QString &device);
 

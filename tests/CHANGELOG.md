@@ -6,6 +6,35 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.6
+
+Added:
+- `fileops`: the Link window. Link… opens a free window with its two browsers embedded (not Kestrel windows of their
+  own), the picks previewed in the folder with nothing made; a preview renamed in place and the kind chosen are kept by
+  Add to List; a name taken in the folder shows in the list and OK makes nothing; OK's summary names what will be
+  made, and its OK makes it (relative path, no part names left), closes the window and offers Undo. Edit Link… lists
+  a link, changes its kind and name in the list only, then renames and repoints it in one step, and Undo puts it back.
+  Also: a hard link to a folder is refused and a broken target is only a warning; a link changed by another program
+  after it was listed isn't overwritten; a new link never replaces what has its name; a link whose replacement can't
+  be made (a read-only folder) keeps what it held with no part left; a file's other names (hard links) are found.
+- `tools`: Back Up Drive to Image's stream (write_image): the image byte for byte, for the user alone, no part left;
+  none made when the drive wasn't read to its end or gave fewer bytes than it holds; none, and no part, when a write
+  fails part-way (a file size limit) or it's cancelled part-way; compressed and encrypted, it opens with its password
+  to the drive's bytes and holds none of them as they were. Which names are disk images, which are mounted from a copy
+  and which can be mounted for writing; Mount Image in an image's menu only; an image can't be saved on the drive being
+  read (skipped where the test's folder isn't on a block device).
+- `admin_helper`: readdev reads block devices only (a file or /dev/null is refused) and writes only into a FIFO of
+  the user's, never a file (skipped without a block device the user can read).
+- `atc_undo`: the tower takes the undo kind "links" with a link's old contents ("->" + text), refuses "->" in other
+  kinds, and Ctrl+Z puts another Kestrel's changed link back.
+
+- `ui`: the Link window is a free window, with its two browsers inside it, not windows of their own nor native ones
+  (which glitch on Wayland).
+
+Changed:
+- `ui`: `ui_actions.txt` has Link… in the empty space's menu, and in place of Create Symbolic Link In…, and no longer the two `.desktop` shortcut
+  entries (now in the Link window).
+
 ## 0.3.3-alpha.5
 
 Changed:

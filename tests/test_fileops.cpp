@@ -4,9 +4,12 @@
 #include "archive_ui.h"
 #include "dialogs.h"
 #include "hashcheck.h"
+#include "links.h"
+#include "linkwin.h"
 #include "prefs.h"
 #include "stats.h"
 
+#include <QComboBox>
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -14,10 +17,12 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QTreeWidget>
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -725,6 +730,173 @@ int main(int argc, char **argv)
               undo_and_wait(w, [&]() { return !lexists(P("u/rep-dst/fresh.txt")); }) &&
               text_of(P("u/rep-dst/rep.txt")) == "newer",
           "undoing a batch of copies leaves the one that replaced a file where it is");
+
+    // ---- the Link window (linkwin.h, links.h): links are listed first and made or changed only at OK, as one job,
+    // undone as one step; a name taken or a link changed meanwhile is never overwritten
+    {
+        makedirs(P("lk/to/dir"), true);
+        makedirs(P("lk/in"), true);
+        make(P("lk/to/a.txt"), "a");
+        make(P("lk/to/b.txt"), "b");
+        LinkWindow *lw = LinkWindow::open(w, {P("lk/to/a.txt"), P("lk/to/b.txt")}, P("lk/in"));
+        QPointer<LinkWindow> lwp(lw);
+        // closed and deleted (Qt 6.4 doesn't carry out a deleteLater() in the nested loop spin() runs: done here)
+        auto closed = [&lwp]() {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return !lwp;
+        };
+        auto ghost_names = [&]() {
+            QStringList out;
+            for (int i = 0; i < lw->ghosts->count(); ++i)
+                out << lw->ghosts->item(i)->text();
+            out.sort();
+            return out;
+        };
+        bool picked = wait_for([&]() { return lw->picks().size() == 2; });
+        bool previews = wait_for([&]() { return ghost_names() == QStringList({"a.txt", "b.txt"}); });
+        check(is_free_window(lw) && picked && previews && lw->dest() == P("lk/in") && listdir(P("lk/in")).isEmpty(),
+              "Link… opens a free window: the items picked on the left, the folder on the right, the links-to-be shown "
+              "there and nothing made yet");
+        check(lw->left->embedded && lw->right->embedded && !WINDOWS.contains(lw->left) && !WINDOWS.contains(lw->right),
+              "its two browsers are the file chooser's, inside the window (not Kestrel windows of their own)");
+
+        // a preview renamed in place, the kind chosen, then added to the list
+        for (int i = 0; i < lw->ghosts->count(); ++i)
+            if (lw->ghosts->item(i)->text() == "a.txt")
+                lw->ghosts->item(i)->setText("renamed a");
+        lw->kind->setCurrentIndex(lw->kind->findData("rel"));
+        spin(100);
+        lw->add_picks();
+        QStringList names;
+        for (const links::Link &l : lw->pending)
+            names << l.name + "/" + l.kind;
+        names.sort();
+        check(names == QStringList({"b.txt/rel", "renamed a/rel"}) && lw->list->topLevelItemCount() == 2 &&
+                  listdir(P("lk/in")).isEmpty(),
+              "Add to List keeps them in the list with the name given in place and the kind chosen, still unmade (" +
+                  names.join(", ") + ")");
+
+        // a problem: the name taken in the folder meanwhile
+        make(P("lk/in/b.txt"), "someone else's");
+        lw->remove_selected();   // (nothing selected: the list is only checked again)
+        QString problem;
+        for (int i = 0; i < lw->list->topLevelItemCount(); ++i)
+            if (lw->list->topLevelItem(i)->text(0) == "b.txt")
+                problem = lw->list->topLevelItem(i)->text(5);
+        boxes.clear();
+        lw->commit();
+        check(problem.contains("taken") && wait_for([]() { return !boxes.isEmpty(); }) &&
+                  boxes.last().contains("can't be made") && text_of(P("lk/in/b.txt")) == "someone else's" &&
+                  !lexists(P("lk/in/renamed a")),
+              "a name taken in the folder shows in the list, and OK makes nothing until it's changed (" + problem + ")");
+
+        // the one in the way removed from the list; OK shows the summary, and its OK makes the rest as one job
+        for (int i = 0; i < lw->list->topLevelItemCount(); ++i)
+            lw->list->topLevelItem(i)->setSelected(lw->list->topLevelItem(i)->text(0) == "b.txt");
+        lw->remove_selected();
+        closer.stop();
+        lw->commit();
+        QMessageBox *summary = nullptr;
+        wait_for([&]() { return (summary = shown_window<QMessageBox>()) != nullptr; });
+        QString said = summary ? summary->informativeText() : QString();
+        bool none_yet = !lexists(P("lk/in/renamed a"));
+        if (summary)
+            summary->button(QMessageBox::Ok)->click();
+        closer.start(100);
+        check(summary && said.contains("1 new link") && said.contains(P("lk/in/renamed a")) && none_yet,
+              "OK first shows what will be made (" + said.simplified() + ")");
+        check(wait_for([&]() { return islink(P("lk/in/renamed a")) && closed(); }) &&
+                  util::readlink(P("lk/in/renamed a")) == "../to/a.txt" && undo::label() == "Create Link",
+              "...then makes it, with a relative path, closes the window, and offers Undo");
+        bool parts = false;
+        for (const QString &n : listdir(P("lk/in")))
+            parts = parts || n.startsWith(".kes-");
+        check(!parts, "no part names are left beside the links made");
+
+        // Edit Link…: the link in the list, kind and name changed, both done in one step and undone in one
+        lw = LinkWindow::open(w, {}, QString(), {P("lk/in/renamed a")});
+        lwp = lw;
+        bool listed = lw->pending.size() == 1 && lw->pending[0].is_edit() && lw->pending[0].kind == "rel" &&
+                      lw->list->selectedItems().size() == 1;
+        lw->kind->setCurrentIndex(lw->kind->findData("sym"));
+        bool shown_there = wait_for([&]() { return lw->ghosts->count() == 1; });
+        if (shown_there)
+            lw->ghosts->item(0)->setText("final");
+        spin(100);
+        check(listed && shown_there && lw->pending[0].name == "final" && lw->pending[0].kind == "sym" &&
+                  islink(P("lk/in/renamed a")) && !lexists(P("lk/in/final")),
+              "Edit Link… lists the link to change it; the kind and name change in the list only");
+        lw->run(lw->pending);
+        check(wait_for([&]() { return islink(P("lk/in/final")) && closed(); }) && !lexists(P("lk/in/renamed a")) &&
+                  util::readlink(P("lk/in/final")) == P("lk/to/a.txt") && undo::label() == "Change Links",
+              "its OK changes it: renamed and pointing by the absolute path");
+        check(undo_and_wait(w, [&]() { return islink(P("lk/in/renamed a")) && !lexists(P("lk/in/final")); }) &&
+                  util::readlink(P("lk/in/renamed a")) == "../to/a.txt",
+              "Undo puts the link back as it was (its name and what it held)");
+
+        // the checks, and what a commit refuses
+        links::Link hard;
+        hard.name = "h";
+        hard.folder = P("lk/in");
+        hard.points_to = P("lk/to/dir");
+        hard.kind = "hard";
+        bool folder_refused = !links::check(hard, {hard}).isEmpty() && links::check(hard, {hard}).first().blocks;
+        links::Link broken;
+        broken.name = "br";
+        broken.folder = P("lk/in");
+        broken.points_to = P("lk/to/gone");
+        QList<links::Problem> bp = links::check(broken, {broken});
+        check(folder_refused && bp.size() == 1 && !bp[0].blocks,
+              "a hard link to a folder is refused; a symbolic link to something that isn't there is only a warning");
+
+        links::Link changed = links::from_existing(P("lk/in/renamed a"));
+        changed.kind = "sym";
+        util::rename(P("lk/in/renamed a"), P("lk/in/aside"));
+        util::symlink("elsewhere", P("lk/in/renamed a"));   // another program changes it meanwhile
+        links::UndoItems items;
+        bool refused = false;
+        try {
+            links::commit(changed, &items);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused && items.isEmpty() && util::readlink(P("lk/in/renamed a")) == "elsewhere",
+              "a link changed after it was listed is left as it is, not overwritten");
+
+        links::Link fresh;
+        fresh.name = "b.txt";   // taken (by someone else's file)
+        fresh.folder = P("lk/in");
+        fresh.points_to = P("lk/to/b.txt");
+        refused = false;
+        try {
+            links::commit(fresh, &items);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused && items.isEmpty() && text_of(P("lk/in/b.txt")) == "someone else's",
+              "a new link never replaces what has its name");
+
+        // replacing a link fails part-way (the folder can't take the new one): the old link stays, and no part
+        makedirs(P("lk/ro"), true);
+        util::symlink("old", P("lk/ro/l"));
+        ::chmod(enc(P("lk/ro")).constData(), 0555);
+        refused = false;
+        try {
+            links::replace_symlink(P("lk/ro/l"), "new", "old");
+        } catch (const Error &) {
+            refused = true;
+        }
+        ::chmod(enc(P("lk/ro")).constData(), 0755);
+        check((refused || ::geteuid() == 0) && util::readlink(P("lk/ro/l")) == (::geteuid() == 0 ? "new" : "old") &&
+                  listdir(P("lk/ro")) == QStringList{"l"},
+              "a link whose new version can't be made keeps what it held, with no part left");
+
+        // hard links: the other names of a file, found on its drive
+        util::link(P("lk/to/b.txt"), P("lk/to/dir/b-again"));
+        QStringList others = links::other_names(P("lk/to/b.txt"), nullptr);
+        check(others == QStringList{P("lk/to/dir/b-again")}, "the other names of a file are found on its drive (" +
+                                                                 others.join(", ") + ")");
+    }
 
     // ---- batch rename: a failure part-way puts every item back under its old name (a dangling symlink too, which
     // exists() wouldn't see), and a name taken meanwhile is never replaced

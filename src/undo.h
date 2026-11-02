@@ -29,7 +29,8 @@ Signals *signals_();
 
 // kind "move": pairs (src, dst) · "move_into": (folder, -) the folder made for them, then the moves (src, dst): undone
 // by moving them back and removing the folder if it's left empty · "rename": (old, new) · "trash": (original, -) · "create": (path, -) ·
-// "none": no items (what was done can't be undone)
+// "none": no items (what was done can't be undone) · "links": the Link window's batch (links.h UndoItems), undone
+// backwards: links made go to the trash, renamed ones are renamed back, changed ones get their old contents back
 void record(const QString &kind, const QString &label, const QList<QPair<QString, QString>> &items);
 void record_paths(const QString &kind, const QString &label, const QStringList &paths);   // "trash" / "create"
 QString label();   // what Ctrl+Z would undo, e.g. "Move", or empty

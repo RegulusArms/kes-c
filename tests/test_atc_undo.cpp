@@ -78,6 +78,18 @@ int main(int argc, char **argv)
     undo::undo(w);
     check(wait_for([&]() { return !exists(P("newdir")); }), "on: undoing another Kestrel's New Folder moves it to the trash");
 
+    // the Link window's batch (undo kind "links"): a changed link's old contents travel as "->" + what it held, which the
+    // tower takes for that kind only
+    util::symlink("new-target", P("lnk"));
+    push("links", "Change Links", QJsonArray{QJsonArray{P("lnk"), "->old-target"}});
+    push("rename", "Not Valid", QJsonArray{QJsonArray{P("q"), "->x"}});
+    spin(300);
+    check(undo::label() == "Change Links",
+          "the tower takes a links batch holding a link's old contents, and refuses \"->\" in other kinds (" + undo::label() + ")");
+    undo::undo(w);
+    check(wait_for([&]() { return islink(P("lnk")) && util::readlink(P("lnk")) == "old-target"; }),
+          "on: Ctrl+Z puts another Kestrel's changed link back as it was");
+
     // ---- no tower: falls back to this Kestrel's own history
     push("rename", "Stale", QJsonArray{QJsonArray{P("q"), P("r")}});
     spin(200);

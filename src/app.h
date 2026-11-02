@@ -57,6 +57,11 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow(const QStringList &paths, ThumbnailManager *thumbs, bool chooser_mode = false);
     void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
+    // A browser inside another window (each side of the Link window, linkwin.h): a chooser-mode window made a widget,
+    // its shortcuts working only while the focus is in it, and the files opened there (double-click, Enter) handed to
+    // activated instead of being opened. Its size and panels aren't saved.
+    void embed(std::function<void(const QStringList &)> activated = nullptr);
+    bool embedded = false;
 
     Pane *pane() const;
     QList<Pane *> panes() const;
@@ -145,10 +150,15 @@ public:
     void sort_subfolders(Pane *p);    // Sort → Apply to Subfolders: p's sort, for every folder below p's
     void remember_server(const QString &uri);   // a server connected to, first in recent_servers (unless Privacy says no)
 
+Q_SIGNALS:
+    void selection_changed();   // in the current tab
+    void folder_changed();      // the current tab shows another folder, or another tab is current
+
 protected:
     void closeEvent(QCloseEvent *ev) override;
 
 private:
+    std::function<void(const QStringList &)> embed_activated;
     void build_toolbar();
     void fill_sort_menu();
     void add_sort_items(QMenu *m, Pane *p);   // the Sort menu's items, for p's folder

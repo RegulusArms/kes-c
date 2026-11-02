@@ -5,6 +5,7 @@
 #include "common.h"
 
 #include "groups.h"
+#include "linkwin.h"
 
 #include <QAbstractSlider>
 #include <QAccessible>
@@ -823,6 +824,22 @@ int main(int argc, char **argv)
         check(bad.isEmpty(), "the grid packs its items (no empty cell, as many columns as fit), also after zooming and at "
                              "every window width" + (bad.isEmpty() ? QString() : " (" + bad + ")"));
         w->close_tab(w->tabs->indexOf(own));
+    }
+
+    // -- the Link window: a free window, with its two browsers (the file chooser's) inside it, not windows of their own
+    // and not native ones
+    {
+        LinkWindow *lw = LinkWindow::open(w, {home_path("file.txt")}, HOME());
+        spin(100);
+        QStringList native;
+        for (QWidget *x : lw->findChildren<QWidget *>())
+            if (x->internalWinId())
+                native << x->metaObject()->className();
+        check(is_free_window(lw) && lw->left && !lw->left->isWindow() && lw->right && !lw->right->isWindow() &&
+                  native.isEmpty(),
+              "the Link window is a free window, its two browsers inside it (not windows, nor native ones)" +
+                  (native.isEmpty() ? QString() : " (" + native.join(", ") + ")"));
+        lw->close();
     }
 
     // -- Properties windows: each a free window of its own (not modal, not kept above or attached to Kestrel), several

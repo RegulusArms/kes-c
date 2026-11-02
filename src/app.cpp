@@ -6,6 +6,8 @@
 #include "archive_ui.h"
 #include "atc.h"
 #include "chooser.h"
+#include "diskimage.h"
+#include "linkwin.h"
 #include "dialogs.h"
 #include "drives.h"
 #include "compare.h"
@@ -367,6 +369,17 @@ void MainWindow::make_chooser(const chooser::Request &req, std::function<void(co
     chooser->folder_changed();   // the suggested name made free in the folder it starts in
     if (chooser->name)
         chooser->name->setFocus();
+}
+
+void MainWindow::embed(std::function<void(const QStringList &)> activated)
+{
+    embedded = true;
+    embed_activated = std::move(activated);
+    setWindowFlags(Qt::Widget);
+    // two of them side by side in one window: each one's shortcuts only while the focus is in it (otherwise both
+    // would claim Ctrl+C and neither would get it)
+    for (QAction *a : findChildren<QAction *>())
+        a->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 }
 
 // A file chooser window keeps its own view settings, under "chooser/": changing the zoom, view, sort, panels and so on
@@ -771,6 +784,7 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
         }
         if (chooser)   // at once: its OK button follows the selection
             chooser->selection_changed();
+        Q_EMIT selection_changed();
     });
     if (activate) {
         tabs->setCurrentIndex(i);
@@ -872,6 +886,7 @@ void MainWindow::pane_path_changed(Pane *p)
     update_status();
     if (chooser)   // Save needs a folder, and the names a free one in each: re-checked in each place
         chooser->folder_changed();
+    Q_EMIT folder_changed();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }
@@ -1239,6 +1254,12 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         pa->setEnabled(have_files || (md && md->hasImage()));
         QAction *pl = T(m->addAction(tx("Paste as Link"), this, [this]() { paste(QString(), true); }), "paste_link");
         pl->setEnabled(have_files);
+        if (!p->is_trash() && !p->dir().isEmpty()) {   // links to make here, picked in the Link window
+            QString here = p->dir();
+            T(m->addAction(icon({"emblem-symbolic-link", "insert-link"}), tx("Link…"), this,
+                           [this, here]() { LinkWindow::open(this, {}, here); }),
+              "link_window");
+        }
         T(m->addAction(tx("Select All"), this, [p]() { p->view()->selectAll(); }), "select_all");
         m->addSeparator();
         QMenu *sm = m->addMenu(tx("Sort By"));
@@ -1425,20 +1446,20 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [&kind_of](const QString &x) { return kind_of(x) == 0; }))
         T(lm->addAction(tx("Create Hard Link Here"), this, [this, paths, here]() { make_links(paths, here, "hard"); }),
           "link_hard_here");
-    T(lm->addAction(tx("Create Symbolic Link In…"), this, [this, paths]() { make_links(paths, QString(), "sym"); }), "link_sym_in");
+    // the rest (another folder, a .desktop shortcut, several folders at once, renamed as they're made): the Link window
+    T(lm->addAction(tx("Link…"), this, [this, paths, here]() { LinkWindow::open(this, paths, here); }), "link_window");
     lm->addSeparator();
     QString desktop = xdg_user_dir("DESKTOP");
     T(lm->addAction(tx("Send Link to Desktop"), this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); }),
       "link_desktop");
-    if (!here.isEmpty())
-        T(lm->addAction(tx("Create Desktop Shortcut (.desktop) Here"), this,
-                        [this, paths, here]() { make_links(paths, here, "desktop"); }),
-          "desktop_shortcut_here");
-    T(lm->addAction(tx("Send Shortcut (.desktop) to Desktop"), this,
-                    [this, paths, desktop]() { make_links(paths, desktop, "desktop"); }),
-      "desktop_shortcut_desktop");
-    if (std::any_of(paths.begin(), paths.end(), [&link_](const QString &x) { return link_(x); })) {
+    QStringList sym_links;
+    for (const QString &x : paths)
+        if (link_(x))
+            sym_links << x;
+    if (!sym_links.isEmpty()) {
         lm->addSeparator();
+        T(lm->addAction(tx("Edit Link…"), this, [this, sym_links]() { LinkWindow::open(this, {}, QString(), sym_links); }),
+          "link_edit");
         T(lm->addAction(tx("Open Link Target Location"), this, [this, paths]() { reveal(realpath(paths.first())); }),
           "link_target");
     }
@@ -1483,6 +1504,16 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(m->addAction(icon({"emblem-ok-symbolic", "dialog-information"}), tx("Test Archives"), this,
                        [this, arcs]() { archive_ui::test_archives(this, arcs); }),
           "test_archives");
+    }
+    // disk images: set up as a drive (diskimage.h); read-only unless asked
+    if (paths.size() == 1 && diskimage::is_image(paths[0])) {
+        QString img = paths[0];
+        T(m->addAction(icon({"drive-harddisk", "media-mount"}), tx("Mount Image"), this,
+                       [this, img]() { diskimage::mount_image(this, img, false); }),
+          "mount_image");
+        if (diskimage::can_write(img))
+            T(m->addAction(tx("Mount Image for Writing"), this, [this, img]() { diskimage::mount_image(this, img, true); }),
+              "mount_image_rw");
     }
     QString quick = archive_ui::quick_compress_label(paths);
     if (!quick.isEmpty())
@@ -1935,9 +1966,11 @@ void MainWindow::closeEvent(QCloseEvent *ev)
                 m->task_panel->add(t);
             break;
         }
-    if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
-        set_view_value("geometry", saveGeometry());
-    set_view_value("splitter", split->saveState());
+    if (!embedded) {   // (one inside another window: its size is that window's)
+        if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
+            set_view_value("geometry", saveGeometry());
+        set_view_value("splitter", split->saveState());
+    }
     if (chooser)
         chooser->finish(false);   // closed without choosing: cancelled
     // the thumbnails and folder previews it asked for (the queue is the process's, which other windows may keep
@@ -2123,6 +2156,9 @@ int kes_main(int argc, char **argv)
     QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
     atc::radio()->start();
     fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);
+    // mounted disk images: detached once nothing from them is mounted any more (diskimage.h)
+    QObject::connect(drives::MountWatch::instance(), &drives::MountWatch::changed, qApp, []() { diskimage::tidy(); });
+    QTimer::singleShot(3000, qApp, []() { diskimage::tidy(); });
     if (service) {
         // started by D-Bus for a "show in folder" request: no window of our own; quit if none is asked for
         QTimer::singleShot(30000, qApp, []() {

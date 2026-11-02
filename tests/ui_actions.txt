@@ -116,6 +116,7 @@ context menu, empty space > New Document > Empty File…
 context menu, empty space > ---
 context menu, empty space > Paste
 context menu, empty space > Paste as Link
+context menu, empty space > Link…
 context menu, empty space > Select All
 context menu, empty space > ---
 context menu, empty space > Sort By
@@ -174,11 +175,9 @@ context menu, a file > Links & Shortcuts
 context menu, a file > Links & Shortcuts > Create Symbolic Link Here
 context menu, a file > Links & Shortcuts > Create Relative Symbolic Link Here
 context menu, a file > Links & Shortcuts > Create Hard Link Here
-context menu, a file > Links & Shortcuts > Create Symbolic Link In…
+context menu, a file > Links & Shortcuts > Link…
 context menu, a file > Links & Shortcuts > ---
 context menu, a file > Links & Shortcuts > Send Link to Desktop
-context menu, a file > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, a file > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, a file > ---
 context menu, a file > Compress…
 context menu, a file > Create Checksum File…
@@ -209,11 +208,9 @@ context menu, a folder > Pin
 context menu, a folder > Links & Shortcuts
 context menu, a folder > Links & Shortcuts > Create Symbolic Link Here
 context menu, a folder > Links & Shortcuts > Create Relative Symbolic Link Here
-context menu, a folder > Links & Shortcuts > Create Symbolic Link In…
+context menu, a folder > Links & Shortcuts > Link…
 context menu, a folder > Links & Shortcuts > ---
 context menu, a folder > Links & Shortcuts > Send Link to Desktop
-context menu, a folder > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, a folder > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, a folder > Links & Shortcuts > ---
 context menu, a folder > Links & Shortcuts > Add to Bookmarks
 context menu, a folder > ---
@@ -275,11 +272,9 @@ context menu, two files > Links & Shortcuts
 context menu, two files > Links & Shortcuts > Create Symbolic Link Here
 context menu, two files > Links & Shortcuts > Create Relative Symbolic Link Here
 context menu, two files > Links & Shortcuts > Create Hard Link Here
-context menu, two files > Links & Shortcuts > Create Symbolic Link In…
+context menu, two files > Links & Shortcuts > Link…
 context menu, two files > Links & Shortcuts > ---
 context menu, two files > Links & Shortcuts > Send Link to Desktop
-context menu, two files > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, two files > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, two files > ---
 context menu, two files > Compress…
 context menu, two files > Create Checksum File…

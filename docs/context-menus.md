@@ -60,10 +60,9 @@ These entries are on the file, folder, archive and several-items menus. The sect
 | **Create Symbolic Link Here** | Makes a symbolic link to each item in this folder | In a real folder (not Starred or Recent) |
 | **Create Relative Symbolic Link Here** | The same, with a relative target, so the link keeps working if both are moved together | In a real folder |
 | **Create Hard Link Here** | Makes a hard link to each file in this folder | Files only (not folders or links), in a real folder |
-| **Create Symbolic Link In…** | Asks for a folder and makes the links there | Always |
+| **Link…** | Opens the Link window with the items picked on the left and this folder on the right: links of any kind (symbolic, relative, hard, `.desktop` shortcut) to make in any folders, renamed as they're listed, all made with OK as one job and undone as one step | Always |
 | **Send Link to Desktop** | Makes a symbolic link on the Desktop | Always |
-| **Create Desktop Shortcut (.desktop) Here** | Makes a `.desktop` launcher that opens the item | In a real folder |
-| **Send Shortcut (.desktop) to Desktop** | The same, on the Desktop | Always |
+| **Edit Link…** | Opens the Link window with the selected symbolic links in its list, to change what they point to, switch between absolute and relative, or rename or move them | When a symbolic link is selected |
 | **Open Link Target Location** | Goes to the folder of what the link points to and selects it | When a symbolic link is selected |
 | **Add to Bookmarks** | Adds the folder to the sidebar's bookmarks | Folders only |
 
@@ -75,6 +74,8 @@ The shared entries, plus:
 |---|---|---|
 | **View Image** | Opens the image in Kestrel's own viewer, whatever app images open with | Images |
 | **Open With ▸** | The apps that can open it (up to 8), and **Other Application…** to pick any | Always |
+| **Mount Image** | Sets the disk image up as a drive (through udisks) and mounts its file systems read-only, so they show in the sidebar and on the Overview; a LUKS-encrypted one asks for its password. A compressed (`.img.zst`, `.xz`, `.gz`) or encrypted (`.img.gpg`) image is first expanded into a copy in the cache (asked first), deleted once unmounted. Unmounting the last of its file systems detaches it. Double-clicking an `.img` does the same | Disk images (`.img`, `.iso`, `.raw`; compressed or `.gpg` too) |
+| **Mount Image for Writing** | The same, mounted so it can be changed | Plain `.img` and `.raw` images you can write to |
 | **Verify Signature** | Checks the signature with `gpg` against the file it signs (the same name without the extension; a clearsigned file against itself) and says plainly what it means: valid and by whom (and whether that's a key you've verified), a bad signature, or the signer's key missing (with **Fetch Key…**, asking first). A signed checksum file's files are checked next | Signatures (`.sig`, `.asc`, `.gpg`, `.sign`), not encrypted archives |
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
@@ -141,6 +142,7 @@ menu's entries, with these after Links & Shortcuts:
 | **Open as Archive** | Opens a window listing what's inside, to open or extract single items (see [below](#open-as-archive-window)) | When its program can list it |
 | **Test Archive** | Checks the archive for damage without extracting | Always |
 | **Extract (install …)** | Greyed out in place of the above, naming the package that extracts this format | When that program is missing |
+| **Mount Image** | As for a file: an `.iso`, or a compressed disk image (`.img.xz`…), set up as a drive and mounted (an `.iso` still opens as an archive when double-clicked) | Disk images |
 
 See [Archives](archives.md) for formats, passwords and limits.
 
@@ -172,6 +174,7 @@ The shared entries, plus:
 | **New Document ▸** | **Empty File…**, and a new file from each template in your Templates folder | Always |
 | **Paste** | Pastes the clipboard's files here; an image on the clipboard (a screenshot) is saved as a file | Enabled with files or an image on the clipboard |
 | **Paste as Link** | Makes symbolic links here to the clipboard's files | Enabled with files on the clipboard |
+| **Link…** | Opens the Link window with this folder on the right ("Link goes in"): pick on the left what the links point to, of any kind, and make them all with OK as one job, undone as one step | Not in the Trash |
 | **Select All** | Selects everything in the folder | Always |
 | **Sort By ▸** | The column (Name, Size, Type, Modified) and order; **Pinned & Starred First**; **Group by Period** / **Group by Day** and **Date to Group By**; **Set as Default** (this sort for folders without their own); **Apply to Subfolders** | Always |
 | **Show Hidden Files** | Shows or hides dot files (Ctrl+H) | Always |
@@ -242,6 +245,7 @@ Right-click a tab's title.
 | **Open in Terminal** | Opens a terminal there | Folders, drives and mounted shares (not phones or servers) |
 | **Find Duplicates…** | Finds the files with the same contents on the drive (as for a folder) | Drives |
 | **Disk Usage…** | What's using the drive's space, as a map (as for a folder; on a tape or floppy it counts only when asked) | Drives |
+| **Back Up Drive to Image…** | Copies the drive (that partition, or its whole disk) byte for byte into an image file, optionally compressed (zstd) and encrypted with a password (gpg), as a job; reading it asks for the administrator password. Refuses to save onto the drive being read, checks the free space, and asks first while it's mounted for writing | Drives (not tapes or floppies) |
 | **Edit Bookmark…** | Changes the bookmark's name and location | Bookmarks |
 | **Remove Bookmark** | Removes the bookmark (the folder stays) | Bookmarks |
 | **Move Up** / **Move Down** | Moves the bookmark in the list | Bookmarks |
@@ -266,6 +270,8 @@ On the Overview page.
 | **Properties** | The drive's Properties | Mounted drives |
 | **Find Duplicates…** | As in the sidebar | Mounted drives |
 | **Disk Usage…** | As in the sidebar; also the button beside the card's usage bar ("What's using this space?") | Mounted drives (not phones) |
+| **Mount** | Mounts the drive (as clicking its card does) | Drives not mounted |
+| **Back Up Drive to Image…** | As in the sidebar | Drives, mounted or not (not phones, network shares, tapes or floppies) |
 | **Drive Health…** | What the drive reports about itself (S.M.A.R.T., through udisks), in plain words; also opened by clicking the card's health line | Drives with a health line (Preferences → Overview → Show each drive's health) |
 | **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
 | **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |

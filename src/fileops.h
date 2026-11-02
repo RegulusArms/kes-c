@@ -294,6 +294,10 @@ void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(c
 // What creating a link of `kind` ("sym", "rel", "hard" or "desktop") to target in dest_dir means, as an
 // admin-helper request ({"op": "symlink" | "hardlink" | "write", ...}). The name is made unique.
 QVariantMap link_plan(const QString &kind, const QString &target, const QString &dest_dir);
+// The name such a link gets by default, before it's made unique ("Link to a.txt" beside a.txt, "a.desktop")
+QString link_name(const QString &kind, const QString &target, const QString &dest_dir);
+// A .desktop shortcut's contents for target (raises Error for a path with control characters)
+QString desktop_entry(const QString &target);
 QString plan_path(const QVariantMap &plan);
 QString make_link(const QVariantMap &plan);   // as the current user; raises OSError
 

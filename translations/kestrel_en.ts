@@ -1229,5 +1229,75 @@ This can&apos;t be undone.</numerusform>
             <numerusform>%Ln files too big for a preview (Preferences → Images &amp; Videos)</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>%Ln names</source>
+        <translation>
+            <numerusform>%Ln name</numerusform>
+            <numerusform>%Ln names</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>“%1” has %Ln names (hard links).</source>
+        <translation>
+            <numerusform>“%1” has %Ln name (hard link).</numerusform>
+            <numerusform>“%1” has %Ln names (hard links).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln new link(s):</source>
+        <translation>
+            <numerusform>%Ln new link:</numerusform>
+            <numerusform>%Ln new links:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln link(s) to point elsewhere:</source>
+        <translation>
+            <numerusform>%Ln link to point elsewhere:</numerusform>
+            <numerusform>%Ln links to point elsewhere:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln link(s) to rename or move:</source>
+        <translation>
+            <numerusform>%Ln link to rename or move:</numerusform>
+            <numerusform>%Ln links to rename or move:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Making %Ln link(s)</source>
+        <translation>
+            <numerusform>Making %Ln link</numerusform>
+            <numerusform>Making %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Making and changing %Ln link(s)</source>
+        <translation>
+            <numerusform>Making and changing %Ln link</numerusform>
+            <numerusform>Making and changing %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>You don&apos;t have permission to make %Ln of these links.</source>
+        <translation>
+            <numerusform>You don&apos;t have permission to make %Ln of these links.</numerusform>
+            <numerusform>You don&apos;t have permission to make %Ln of these links.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Made or changed %Ln link(s)</source>
+        <translation>
+            <numerusform>Made or changed %Ln link</numerusform>
+            <numerusform>Made or changed %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Mounted %Ln file system(s) from “%1”</source>
+        <translation>
+            <numerusform>Mounted %Ln file system from “%1”</numerusform>
+            <numerusform>Mounted %Ln file systems from “%1”</numerusform>
+        </translation>
+    </message>
 </context>
 </TS>

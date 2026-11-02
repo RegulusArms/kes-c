@@ -29,6 +29,9 @@ QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a
 void reread_mounts();    // the next mounts() reads the table again, not its copy
 QString device_label(const QString &device);   // a file system's label (/dev/disk/by-label), without asking the drive
 qint64 device_bytes(const QString &device);    // a block device's size from /sys (as lsblk), without asking it; -1: none
+// A loop device (or a partition of one) set up for a disk image the user mounted (diskimage.h), not one of snap's
+// squashfs images: shown as a drive. Its image file, or empty.
+QString user_loop(const QString &device);
 
 // The kernel's mount table changing (a drive mounted or unmounted, by anything): changed() then, and only then. Nothing
 // is polled: GIO waits on /proc/self/mountinfo, which the kernel wakes. mounts() and the labels are read afresh after.

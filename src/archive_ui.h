@@ -82,9 +82,11 @@ namespace archive_ui {
 // Extract All doesn't open this one
 enum class Ask { First, Wrong, NotSame };
 // Asks for the archive's password: ok(password, remember) runs with it; cancelled() when it's closed, cancelled or left
-// empty. offer_remember: a "Remember this password" box (a keyring is running). Returns the window, already shown.
+// empty. offer_remember: a "Remember this password" box (a keyring is running). accept: the OK button's text, for
+// something other than extracting (a disk image: Mount, Unlock). Returns the window, already shown.
 QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool offer_remember,
-                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled = nullptr);
+                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled = nullptr,
+                      const QString &accept = QString());
 // Extracting runs one job for one or several archives (extract_all): each one's password is found the same way, first
 // one typed in this job (or the dialog), then the one saved in the keyring for this archive, then the other saved ones
 // (a quick test each), and only when none opens it is it asked for.

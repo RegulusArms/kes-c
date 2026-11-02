@@ -27,12 +27,12 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 | Test | Checks | Covers |
 |---|---|---|
-| [`fileops`](#fileops) | 145 | File operations |
+| [`fileops`](#fileops) | 160 | File operations |
 | [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
 | [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
 | [`atc_tasks`](#atc_tasks) | 35 | The shared task list |
-| [`atc_undo`](#atc_undo) | 20 | Undo between Kestrels |
+| [`atc_undo`](#atc_undo) | 22 | Undo between Kestrels |
 | [`atc_tabs`](#atc_tabs) | 18 | Open folders as tabs |
 | [`devices`](#devices) | 22 | Phones and cameras |
 | [`sidebar`](#sidebar) | 32 | Rearranging the sidebar, and its Mounts section |
@@ -42,12 +42,12 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`jobs`](#jobs) | 58 | The job queue, the Jobs window and the Tower window |
 | [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
-| [`admin_helper`](#admin_helper) | 47 | The admin helper, the part that runs as root |
-| [`ui`](#ui) | 33 | Menus, shortcuts, accessibility, drag and drop |
+| [`admin_helper`](#admin_helper) | 49 | The admin helper, the part that runs as root |
+| [`ui`](#ui) | 34 | Menus, shortcuts, accessibility, drag and drop |
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
 | [`viewer`](#viewer) | 89 | The image viewer and saving its changes |
-| [`tools`](#tools) | 44 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature |
+| [`tools`](#tools) | 54 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature, disk images |
 | [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 59 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 9 | Translations |
@@ -73,6 +73,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - another hard link of the old file is left alone.
 - **Replacing a folder** does the same: a cancel or a write that fails part-way keeps the old folder and leaves no half-made copy. Copying or moving a folder onto another replaces it whole.
 - **A destination another program saves meanwhile** (free when the job was planned, then saved while a file or folder copy runs, or before it starts) is kept and the conflict reported; only Replace replaces. Also when decompressing a single file.
+- **The Link window:** a free window whose two browsers are inside it; the picks previewed in the folder with nothing made; a preview renamed in place and the kind kept by Add to List; a name taken shows in the list and OK makes nothing; OK's summary, then the link made (no part names left) and Undo offered. Edit Link… renames and repoints a link in one step, and Undo puts it back. A link changed by another program meanwhile, or a name taken, is never overwritten; a link whose replacement can't be made keeps what it held; a file's other names (hard links) are found.
 - **Trash and undo:**
   - Move to Trash, and where the item came from;
   - undo of trash, move, copy (into the trash, not deleted) and rename; undo explaining what it can't put back;
@@ -262,6 +263,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 - Off (the default): each Kestrel undoes only its own actions.
 - On: Ctrl+Z undoes the newest action from any Kestrel, each action is handed out once, and trash and create entries are sent as `[path, ""]`.
+- The Link window's batches (kind `links`): a changed link's old contents are accepted for that kind only, and Ctrl+Z puts another Kestrel's changed link back.
 - With no tower, undo falls back to the Kestrel's own history.
 
 ### atc_tabs
@@ -498,7 +500,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **The admin helper, the part that runs as root** (`kes-admin-helper`). It runs as the normal user (no pkexec) and gets requests over its pipe, as Kestrel sends them.
 
-- **Every operation works:** mkdir, touch, write, copyfile, copy, move, rename, symlink, hardlink, chmod, delete, cancel. Hardlink refuses a file that isn't the user's.
+- **Every operation works:** mkdir, touch, write, copyfile, copy, move, rename, symlink, hardlink, chmod, delete, cancel. Hardlink refuses a file that isn't the user's. Readdev reads block devices only, into a FIFO of the user's only.
 - **Onto itself:**
   - moving or copying a file or folder onto itself (with or without merging) leaves it as it was, instead of deleting it as the destination it replaces;
   - moving or copying a folder into itself is refused;
@@ -521,6 +523,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **Menus and shortcuts, and the window's controls.**
 
+- **The Link window** is a free window, with its two browsers inside it (not windows of their own, nor native ones).
 - **Properties shortcuts in the right-click menu:** Calculate Folder Size counts the folder again (not the size remembered), Open Metadata opens it on the Metadata tab, and neither shows for a plain text file.
 - **Every menu entry, compared with `tests/ui_actions.txt`:**
   - every entry, submenu and separator, with its shortcuts, in the main menu, the toolbar's menus and the context menus (empty space, a file, a folder, two files, a tab); an entry or shortcut lost when code moves is named in the failure;
@@ -621,6 +624,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **The file tools.**
 
+- **Disk images:** Back Up Drive to Image's stream becomes the image byte for byte (for the user alone, no part left); no image when the drive wasn't read to its end, a write fails part-way or it's cancelled part-way; compressed and encrypted, it opens with its password. Which names are disk images, mounted from a copy, or mountable for writing; Mount Image in their menu only; never saved on the drive being read.
 - **Find Duplicates:**
   - what's grouped: identical files through subfolders; not a later difference, symlinks, hidden files or hard links unless asked;
   - keeping the oldest, newest or those in a folder;

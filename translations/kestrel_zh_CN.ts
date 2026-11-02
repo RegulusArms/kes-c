@@ -31,15 +31,15 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+651"/>
-        <location line="+587"/>
+        <location filename="../src/app.cpp" line="+664"/>
+        <location line="+589"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="+140"/>
+        <location filename="../src/app.cpp" line="+146"/>
         <location filename="../src/menus.cpp" line="+27"/>
         <source>Paste Into Folder</source>
         <translation>粘贴到文件夹</translation>
@@ -81,8 +81,8 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="-720"/>
-        <location line="+726"/>
+        <location filename="../src/app.cpp" line="-728"/>
+        <location line="+734"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Duplicate</source>
         <translation>创建副本</translation>
@@ -217,7 +217,7 @@
         <location line="+44"/>
         <location line="+9"/>
         <location line="+2"/>
-        <location filename="../src/dialogs.cpp" line="+1209"/>
+        <location filename="../src/dialogs.cpp" line="+1225"/>
         <location line="+3"/>
         <location line="+7"/>
         <location line="+130"/>
@@ -237,7 +237,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1058"/>
+        <location filename="../src/fileops.cpp" line="+1059"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 / %2 — %3</translation>
@@ -245,17 +245,18 @@
     <message>
         <location line="-165"/>
         <location filename="../src/undo.cpp" line="+265"/>
+        <location line="+26"/>
         <source>Moved to the trash: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+10"/>
-        <location filename="../src/app.cpp" line="-725"/>
-        <location line="+943"/>
+        <location filename="../src/app.cpp" line="-733"/>
+        <location line="+961"/>
         <location filename="../src/diskusage.cpp" line="+1013"/>
         <location filename="../src/menus.cpp" line="-32"/>
-        <location line="+109"/>
-        <location filename="../src/opening.cpp" line="+249"/>
+        <location line="+111"/>
+        <location filename="../src/opening.cpp" line="+259"/>
         <location line="+4"/>
         <source>Move to Trash</source>
         <translation>移到回收站</translation>
@@ -323,14 +324,14 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-942"/>
-        <location line="+645"/>
+        <location filename="../src/app.cpp" line="-960"/>
+        <location line="+653"/>
         <source>Delete Permanently</source>
         <translation>永久删除</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+507"/>
+        <location filename="../src/app.cpp" line="+517"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
@@ -467,7 +468,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+13"/>
-        <location filename="../src/app.cpp" line="-508"/>
+        <location filename="../src/app.cpp" line="-518"/>
         <source>Restore</source>
         <translation>还原</translation>
     </message>
@@ -480,8 +481,8 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+5"/>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
-        <location filename="../src/menus.cpp" line="-99"/>
-        <location filename="../src/widgets.cpp" line="+1797"/>
+        <location filename="../src/menus.cpp" line="-101"/>
+        <location filename="../src/widgets.cpp" line="+1798"/>
         <source>Empty Trash</source>
         <translation>清空回收站</translation>
     </message>
@@ -551,8 +552,9 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message numerus="yes">
         <location line="+18"/>
-        <location filename="../src/archive_ui.cpp" line="+835"/>
+        <location filename="../src/archive_ui.cpp" line="+836"/>
         <location filename="../src/jobswin.cpp" line="+537"/>
+        <location filename="../src/linkwin.cpp" line="+620"/>
         <source>… and %Ln more</source>
         <translation>
             <numerusform>……以及另外 %Ln 个</numerusform>
@@ -577,6 +579,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+18"/>
         <location line="+1"/>
         <location line="+29"/>
+        <location filename="../src/linkwin.cpp" line="+145"/>
         <source>Create Link</source>
         <translation>创建链接</translation>
     </message>
@@ -593,7 +596,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <translation>您没有在“%1”中创建链接的权限。</translation>
     </message>
     <message>
-        <location filename="../src/admin.cpp" line="+123"/>
+        <location filename="../src/admin.cpp" line="+124"/>
         <source>Administrator actions need pkexec. Install it with:  sudo apt install pkexec</source>
         <translation>管理员操作需要 pkexec。请用以下命令安装：  sudo apt install pkexec</translation>
     </message>
@@ -674,7 +677,7 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+20"/>
-        <location filename="../src/drives.cpp" line="+532"/>
+        <location filename="../src/drives.cpp" line="+547"/>
         <source>Failed: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -696,10 +699,11 @@ sudo apt install pkexec</translation>
         <translation>以管理员身份重试</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1193"/>
+        <location filename="../src/app.cpp" line="-1212"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+369"/>
+        <location filename="../src/linkwin.cpp" line="-586"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -715,7 +719,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1862"/>
+        <location line="+1865"/>
         <source>Size</source>
         <translation>大小</translation>
     </message>
@@ -735,8 +739,8 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1863"/>
-        <location line="+1865"/>
+        <location filename="../src/widgets.cpp" line="-1866"/>
+        <location line="+1868"/>
         <source>Modified</source>
         <translation>修改时间</translation>
     </message>
@@ -761,7 +765,7 @@ sudo apt install pkexec</translation>
         <translation>正在后台生成缩略图和文件夹预览</translation>
     </message>
     <message>
-        <location line="+92"/>
+        <location line="+103"/>
         <location line="+294"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
@@ -872,20 +876,20 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+748"/>
+        <location line="+756"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>折叠所有分组</translation>
     </message>
     <message>
-        <location line="-744"/>
-        <location line="+749"/>
+        <location line="-752"/>
+        <location line="+757"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>展开所有分组</translation>
     </message>
     <message>
-        <location line="-743"/>
+        <location line="-751"/>
         <source>Set as Default</source>
         <translation>设为默认</translation>
     </message>
@@ -933,7 +937,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+37"/>
         <location filename="../src/hashcheck.cpp" line="+315"/>
-        <location filename="../src/widgets.cpp" line="-2182"/>
+        <location filename="../src/widgets.cpp" line="-2185"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
@@ -949,19 +953,19 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+211"/>
+        <location line="+212"/>
         <source>Close Tab</source>
         <translation>关闭标签页</translation>
     </message>
     <message>
-        <location line="-209"/>
-        <location line="+606"/>
+        <location line="-210"/>
+        <location line="+608"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <source>New Folder…</source>
         <translation>新建文件夹…</translation>
     </message>
     <message>
-        <location line="-605"/>
+        <location line="-607"/>
         <source>New Empty File…</source>
         <translation>新建空文件…</translation>
     </message>
@@ -993,62 +997,62 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1316"/>
+        <location line="+1336"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>撤销</translation>
     </message>
     <message>
-        <location line="-1312"/>
-        <location line="+726"/>
+        <location line="-1332"/>
+        <location line="+734"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
         <translation>剪切</translation>
     </message>
     <message>
-        <location line="-725"/>
-        <location line="+726"/>
+        <location line="-733"/>
+        <location line="+734"/>
         <location filename="../src/compare.cpp" line="-154"/>
         <location line="+281"/>
-        <location filename="../src/dialogs.cpp" line="-1119"/>
+        <location filename="../src/dialogs.cpp" line="-1133"/>
         <location filename="../src/jobswin.cpp" line="-280"/>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+2212"/>
+        <location filename="../src/widgets.cpp" line="+2215"/>
         <source>Copy</source>
         <translation>复制</translation>
     </message>
     <message>
-        <location line="-724"/>
-        <location line="+588"/>
+        <location line="-732"/>
+        <location line="+590"/>
         <location filename="../src/menus.cpp" line="-24"/>
         <source>Paste as Link</source>
         <translation>粘贴为链接</translation>
     </message>
     <message>
-        <location line="-586"/>
-        <location line="+560"/>
-        <location line="+28"/>
-        <location filename="../src/menus.cpp" line="+0"/>
+        <location line="-588"/>
+        <location line="+562"/>
+        <location line="+34"/>
+        <location filename="../src/menus.cpp" line="+1"/>
         <source>Select All</source>
         <translation>全选</translation>
     </message>
     <message>
-        <location line="-587"/>
+        <location line="-595"/>
         <source>Invert Selection</source>
         <translation>反向选择</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+730"/>
-        <location filename="../src/menus.cpp" line="+29"/>
+        <location line="+738"/>
+        <location filename="../src/menus.cpp" line="+28"/>
         <source>Rename…</source>
         <translation>重命名…</translation>
     </message>
     <message>
-        <location line="-726"/>
+        <location line="-734"/>
         <location filename="../src/menus.cpp" line="-36"/>
         <location filename="../src/viewer.cpp" line="+1413"/>
         <source>Copy Path</source>
@@ -1056,21 +1060,21 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+608"/>
+        <location line="+616"/>
         <location line="+32"/>
-        <location line="+310"/>
+        <location line="+320"/>
         <location line="+239"/>
         <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
-        <location line="+103"/>
-        <location filename="../src/overview.cpp" line="+1478"/>
+        <location line="+105"/>
+        <location filename="../src/overview.cpp" line="+1480"/>
         <source>Properties</source>
         <translation>属性</translation>
     </message>
     <message>
-        <location line="-1180"/>
-        <location filename="../src/menus.cpp" line="-181"/>
+        <location line="-1198"/>
+        <location filename="../src/menus.cpp" line="-183"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
         <location line="+2"/>
@@ -1114,16 +1118,16 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+559"/>
+        <location line="+567"/>
         <location filename="../src/menus.cpp" line="+72"/>
         <source>Show Hidden Files</source>
         <translation>显示隐藏文件</translation>
     </message>
     <message>
-        <location line="-557"/>
+        <location line="-565"/>
         <location filename="../src/prefs.cpp" line="-137"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1021"/>
+        <location filename="../src/widgets.cpp" line="-1024"/>
         <source>Sidebar</source>
         <translation>侧边栏</translation>
     </message>
@@ -1135,13 +1139,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1174"/>
+        <location line="+1192"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>全屏</translation>
     </message>
     <message>
-        <location line="-1166"/>
+        <location line="-1184"/>
         <source>Reload</source>
         <translation>重新加载</translation>
     </message>
@@ -1232,12 +1236,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1157"/>
+        <location line="+1175"/>
         <source>Keyboard Shortcuts</source>
         <translation>键盘快捷键</translation>
     </message>
     <message>
-        <location line="-1156"/>
+        <location line="-1174"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
@@ -1252,24 +1256,24 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>&lt;b&gt;%1&lt;/b&gt; %2&lt;br&gt;一款轻量级、面向图片库的文件管理器。</translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+81"/>
         <source>Duplicate Tab</source>
         <translation>复制标签页</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+514"/>
+        <location line="+521"/>
         <location filename="../src/menus.cpp" line="+38"/>
         <source>Open in New Window</source>
         <translation>在新窗口中打开</translation>
     </message>
     <message>
-        <location line="-478"/>
+        <location line="-485"/>
         <source>%1 free</source>
         <translation>可用 %1</translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+54"/>
         <source>Connecting to %1…</source>
         <translation>正在连接到 %1…</translation>
     </message>
@@ -1495,6 +1499,8 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/linkwin.cpp" line="+456"/>
+        <location line="+65"/>
         <source>%1: %2</source>
         <translation>%1：%2</translation>
     </message>
@@ -1506,7 +1512,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message numerus="yes">
         <location line="+34"/>
         <location filename="../src/archivewin.cpp" line="+105"/>
-        <location filename="../src/dialogs.cpp" line="+534"/>
+        <location filename="../src/dialogs.cpp" line="+548"/>
         <location filename="../src/diskusage.cpp" line="-139"/>
         <source>%Ln folder(s)</source>
         <translation>
@@ -1532,7 +1538,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+986"/>
+        <location filename="../src/widgets.cpp" line="+989"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>%Ln 个项目</numerusform>
@@ -1554,23 +1560,23 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>空文件…</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+29"/>
         <source>Sort By</source>
         <translation>排序方式</translation>
     </message>
     <message>
         <location line="+20"/>
-        <location line="+334"/>
+        <location line="+344"/>
         <location filename="../src/menus.cpp" line="+37"/>
-        <location line="+99"/>
+        <location line="+101"/>
         <location filename="../src/overview.cpp" line="-13"/>
-        <location filename="../src/widgets.cpp" line="-455"/>
+        <location filename="../src/widgets.cpp" line="-458"/>
         <source>Open in Terminal</source>
         <translation>在终端中打开</translation>
     </message>
     <message>
-        <location line="-332"/>
-        <location filename="../src/menus.cpp" line="-99"/>
+        <location line="-342"/>
+        <location filename="../src/menus.cpp" line="-101"/>
         <source>Bookmark This Folder</source>
         <translation>为此文件夹添加书签</translation>
     </message>
@@ -1583,27 +1589,27 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+35"/>
-        <location line="+298"/>
-        <location filename="../src/menus.cpp" line="+99"/>
+        <location line="+308"/>
+        <location filename="../src/menus.cpp" line="+101"/>
         <source>Shred with BleachBit…</source>
         <translation>用 BleachBit 粉碎…</translation>
     </message>
     <message>
-        <location line="-284"/>
-        <location line="+524"/>
+        <location line="-294"/>
+        <location line="+534"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
         <location filename="../src/diskusage.cpp" line="+117"/>
-        <location filename="../src/menus.cpp" line="-94"/>
-        <location filename="../src/opening.cpp" line="-176"/>
-        <location line="+55"/>
+        <location filename="../src/menus.cpp" line="-96"/>
+        <location filename="../src/opening.cpp" line="-185"/>
+        <location line="+64"/>
         <location line="+37"/>
         <location line="+7"/>
         <location line="+13"/>
         <location filename="../src/overview.cpp" line="-2"/>
-        <location line="+42"/>
+        <location line="+51"/>
         <location line="+27"/>
         <location line="+3"/>
         <location line="+11"/>
@@ -1613,10 +1619,10 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>打开</translation>
     </message>
     <message>
-        <location line="-521"/>
+        <location line="-531"/>
         <location filename="../src/menus.cpp" line="+3"/>
-        <location filename="../src/overview.cpp" line="-184"/>
-        <location line="+42"/>
+        <location filename="../src/overview.cpp" line="-193"/>
+        <location line="+51"/>
         <location line="+30"/>
         <location line="+11"/>
         <location line="+102"/>
@@ -1760,40 +1766,36 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>在此处创建硬链接</translation>
     </message>
     <message>
-        <location line="+2"/>
-        <location filename="../src/menus.cpp" line="+1"/>
-        <source>Create Symbolic Link In…</source>
-        <translation>在…中创建符号链接</translation>
+        <location line="-188"/>
+        <location line="+191"/>
+        <location filename="../src/menus.cpp" line="-36"/>
+        <location line="+37"/>
+        <source>Link…</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+0"/>
+        <location line="+11"/>
+        <location filename="../src/menus.cpp" line="+1"/>
+        <source>Edit Link…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-8"/>
+        <location filename="../src/menus.cpp" line="-1"/>
         <source>Send Link to Desktop</source>
         <translation>发送链接到桌面</translation>
     </message>
     <message>
-        <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+1"/>
-        <source>Create Desktop Shortcut (.desktop) Here</source>
-        <translation>在此处创建快捷方式（.desktop）</translation>
-    </message>
-    <message>
-        <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+1"/>
-        <source>Send Shortcut (.desktop) to Desktop</source>
-        <translation>发送快捷方式（.desktop）到桌面</translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <location filename="../src/menus.cpp" line="+1"/>
+        <location line="+10"/>
+        <location filename="../src/menus.cpp" line="+2"/>
         <source>Open Link Target Location</source>
         <translation>打开链接目标所在位置</translation>
     </message>
     <message>
         <location line="+5"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-73"/>
-        <location line="+82"/>
+        <location filename="../src/overview.cpp" line="-82"/>
+        <location line="+91"/>
         <source>Add to Bookmarks</source>
         <translation>添加到书签</translation>
     </message>
@@ -1858,7 +1860,20 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>测试压缩包</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+7"/>
+        <location filename="../src/diskimage.cpp" line="+701"/>
+        <location filename="../src/menus.cpp" line="+2"/>
+        <source>Mount Image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location filename="../src/menus.cpp" line="+1"/>
+        <source>Mount Image for Writing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location filename="../src/prefs.cpp" line="-8"/>
         <source>Compress…</source>
@@ -1873,7 +1888,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
-        <location filename="../src/overview.cpp" line="-78"/>
+        <location filename="../src/overview.cpp" line="-87"/>
         <location filename="../src/widgets.cpp" line="+18"/>
         <source>Find Duplicates…</source>
         <translation>查找重复文件…</translation>
@@ -1906,22 +1921,22 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/menus.cpp" line="-68"/>
-        <location line="+70"/>
+        <location filename="../src/menus.cpp" line="-70"/>
+        <location line="+72"/>
         <location filename="../src/viewer.cpp" line="+55"/>
         <source>Add to Selected UWP Monitor</source>
         <translation>添加到所选 UWP 监视器</translation>
     </message>
     <message>
         <location line="+8"/>
-        <location filename="../src/dialogs.cpp" line="-930"/>
-        <location filename="../src/menus.cpp" line="-134"/>
+        <location filename="../src/dialogs.cpp" line="-944"/>
+        <location filename="../src/menus.cpp" line="-136"/>
         <source>Image</source>
         <translation>图像</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+137"/>
+        <location filename="../src/menus.cpp" line="+139"/>
         <source>Use as Folder Cover</source>
         <translation>用作文件夹封面</translation>
     </message>
@@ -1942,13 +1957,13 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/convert.cpp" line="+93"/>
         <location line="+19"/>
         <location line="+18"/>
-        <location filename="../src/menus.cpp" line="-140"/>
+        <location filename="../src/menus.cpp" line="-142"/>
         <source>Rotate</source>
         <translation>旋转</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+145"/>
+        <location filename="../src/menus.cpp" line="+147"/>
         <source>Rotate 90° Clockwise</source>
         <translation>顺时针旋转 90°</translation>
     </message>
@@ -1966,8 +1981,8 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/menus.cpp" line="-91"/>
-        <location line="+91"/>
+        <location filename="../src/menus.cpp" line="-93"/>
+        <location line="+93"/>
         <source>Flip Horizontally</source>
         <translation>水平翻转</translation>
     </message>
@@ -2055,7 +2070,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+8"/>
-        <location filename="../src/dialogs.cpp" line="+153"/>
+        <location filename="../src/dialogs.cpp" line="+167"/>
         <source>Default</source>
         <translation>默认</translation>
     </message>
@@ -2457,7 +2472,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+747"/>
+        <location filename="../src/fileops.cpp" line="+751"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -2493,8 +2508,8 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <translation>停止所有任务并退出</translation>
     </message>
     <message>
-        <location line="+48"/>
-        <location filename="../src/undo.cpp" line="-121"/>
+        <location line="+50"/>
+        <location filename="../src/undo.cpp" line="-146"/>
         <source>Undo %1</source>
         <translation>撤销%1</translation>
     </message>
@@ -2601,7 +2616,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <translation>%1 — 正在读取文件 %2%%3</translation>
     </message>
     <message>
-        <location line="+116"/>
+        <location line="+121"/>
         <source>gpg failed (exit code %1)</source>
         <translation>gpg 失败（退出代码 %1）</translation>
     </message>
@@ -2648,6 +2663,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+45"/>
         <location line="+750"/>
         <location line="+66"/>
+        <location filename="../src/diskimage.cpp" line="-538"/>
         <source>%1 failed (exit code %2)</source>
         <translation>%1 失败（退出代码 %2）</translation>
     </message>
@@ -2712,7 +2728,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+59"/>
         <location filename="../src/archivewin.cpp" line="-258"/>
         <location filename="../src/hashcheck.cpp" line="-339"/>
-        <location filename="../src/opening.cpp" line="-118"/>
+        <location filename="../src/opening.cpp" line="-127"/>
         <source>Reading %1</source>
         <translation>正在读取 %1</translation>
     </message>
@@ -2743,7 +2759,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <translation>%1 报告了一个问题（退出代码 %2）</translation>
     </message>
     <message>
-        <location filename="../src/archive_ui.cpp" line="-1314"/>
+        <location filename="../src/archive_ui.cpp" line="-1315"/>
         <source>%1 only accepts the password on its command line, so other users on this computer could see it in the process list while the job runs.</source>
         <translation>%1 只接受在命令行中输入密码，因此任务运行期间，这台计算机上的其他用户可能会在进程列表中看到它。</translation>
     </message>
@@ -2753,7 +2769,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <translation>显示</translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+20"/>
         <source>Password Required</source>
         <translation>需要密码</translation>
     </message>
@@ -2833,8 +2849,8 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="-482"/>
-        <location filename="../src/dialogs.cpp" line="-1145"/>
-        <location line="+38"/>
+        <location filename="../src/dialogs.cpp" line="-1159"/>
+        <location line="+52"/>
         <location line="+1116"/>
         <source>Location:</source>
         <translation>位置：</translation>
@@ -2888,7 +2904,8 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     <message>
         <location line="+7"/>
         <location line="+460"/>
-        <location filename="../src/overview.cpp" line="-1122"/>
+        <location filename="../src/diskimage.cpp" line="+235"/>
+        <location filename="../src/overview.cpp" line="-1123"/>
         <source>Password:</source>
         <translation>密码：</translation>
     </message>
@@ -3672,8 +3689,9 @@ Install it with:  sudo apt install </source>
         <location line="-147"/>
         <location filename="../src/compare.cpp" line="-145"/>
         <location filename="../src/convert.cpp" line="+3"/>
-        <location filename="../src/dialogs.cpp" line="-236"/>
-        <location line="+1157"/>
+        <location filename="../src/dialogs.cpp" line="-250"/>
+        <location line="+1171"/>
+        <location filename="../src/diskimage.cpp" line="-20"/>
         <location filename="../src/hashcheck.cpp" line="+102"/>
         <location filename="../src/menus.cpp" line="+338"/>
         <source>Name:</source>
@@ -3806,6 +3824,7 @@ Install it with:  sudo apt install </source>
     <message>
         <location line="+19"/>
         <location filename="../src/dupes.cpp" line="-202"/>
+        <location filename="../src/linkwin.cpp" line="-521"/>
         <location filename="../src/viewer.cpp" line="-453"/>
         <location filename="../src/widgets.cpp" line="-1044"/>
         <source>Folder</source>
@@ -3840,6 +3859,7 @@ Install it with:  sudo apt install </source>
         <location line="+2"/>
         <location line="+319"/>
         <location filename="../src/convert.cpp" line="-298"/>
+        <location filename="../src/diskimage.cpp" line="-6"/>
         <source>Choose…</source>
         <translation>选择…</translation>
     </message>
@@ -3988,6 +4008,8 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+2"/>
+        <location filename="../src/linkwin.cpp" line="+11"/>
+        <location line="+108"/>
         <location filename="../src/prefswin.cpp" line="-448"/>
         <source>Close</source>
         <translation>关闭</translation>
@@ -4093,6 +4115,7 @@ Install it with:  sudo apt install </source>
         <location line="+2"/>
         <location filename="../src/dialogs.cpp" line="-339"/>
         <location line="+45"/>
+        <location filename="../src/linkwin.cpp" line="-110"/>
         <location filename="../src/menus.cpp" line="+10"/>
         <location filename="../src/prefswin.cpp" line="+290"/>
         <location line="+25"/>
@@ -5140,7 +5163,7 @@ Delete them and sync?</source>
         <translation>ffmpeg 会以隐藏名称写入每个文件，完成后再赋予其名称；停止或失败不会留下半成品文件，也不会替换任何文件。</translation>
     </message>
     <message>
-        <location filename="../src/dialogs.cpp" line="-324"/>
+        <location filename="../src/dialogs.cpp" line="-338"/>
         <source>Add Tag</source>
         <translation>添加标签</translation>
     </message>
@@ -5156,12 +5179,12 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+873"/>
+        <location line="+887"/>
         <source>Loading tags…</source>
         <translation>正在加载标签…</translation>
     </message>
     <message>
-        <location line="-864"/>
+        <location line="-878"/>
         <location line="+4"/>
         <source>Tag:</source>
         <translation>标签：</translation>
@@ -5173,12 +5196,12 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+22"/>
-        <location line="+638"/>
+        <location line="+652"/>
         <source>Tag</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location line="-638"/>
+        <location line="-652"/>
         <source>What it&apos;s for</source>
         <translation>用途</translation>
     </message>
@@ -5267,19 +5290,19 @@ Accepts: %3</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+827"/>
+        <location line="+841"/>
         <location line="+7"/>
         <source>Permissions</source>
         <translation>权限</translation>
     </message>
     <message>
-        <location line="-829"/>
-        <location line="+514"/>
+        <location line="-843"/>
+        <location line="+528"/>
         <source>Metadata</source>
         <translation>元数据</translation>
     </message>
     <message>
-        <location line="-513"/>
+        <location line="-527"/>
         <location filename="../src/prefs.cpp" line="+104"/>
         <location line="+2"/>
         <source>Checksums</source>
@@ -5291,17 +5314,17 @@ Accepts: %3</source>
         <translation>类型：</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+22"/>
         <source>Link target:</source>
         <translation>链接目标：</translation>
     </message>
     <message>
-        <location line="+0"/>
+        <location line="-13"/>
         <source>%1  (broken link)</source>
         <translation>%1  （损坏的链接）</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+15"/>
         <location line="+30"/>
         <location line="+147"/>
         <source>Calculating…</source>
@@ -5583,12 +5606,18 @@ Accepts: %3</source>
         <translation>添加标签…</translation>
     </message>
     <message>
-        <location line="-237"/>
+        <location line="-643"/>
+        <location line="+406"/>
         <source>Edit…</source>
         <translation>编辑…</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="-405"/>
+        <source>Change what it points to, or its name, in the Link window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+409"/>
         <source>Clear All Metadata…</source>
         <translation>清除所有元数据…</translation>
     </message>
@@ -6475,7 +6504,7 @@ This can&apos;t be undone.</source>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1637"/>
+        <location filename="../src/fileops.cpp" line="-1642"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… 省略 %Ln 行 …</numerusform>
@@ -6590,7 +6619,7 @@ This can&apos;t be undone.</source>
         <translation>正在统计…</translation>
     </message>
     <message>
-        <location line="+62"/>
+        <location line="+63"/>
         <source>  done (replaced what was there)</source>
         <translation>  完成（替换了原有内容）</translation>
     </message>
@@ -6616,14 +6645,14 @@ This can&apos;t be undone.</source>
         <translation>  已取消</translation>
     </message>
     <message>
-        <location line="-803"/>
-        <location line="+854"/>
+        <location line="-804"/>
+        <location line="+855"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/秒</translation>
     </message>
     <message>
-        <location line="-846"/>
+        <location line="-847"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6653,7 +6682,7 @@ This can&apos;t be undone.</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location line="+767"/>
+        <location line="+768"/>
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -6750,7 +6779,7 @@ This can&apos;t be undone.</source>
         <translation>磁带上没有足够空间存放“%1”：需要 %2，磁带剩余 %3</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+52"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>源的读取速度为 %1/秒，低于磁带的最低流式速度：磁带会从缓冲区断续写入，中间停顿。从更快的驱动器复制，或先在快速磁盘上创建压缩包，可以保持流式写入。</translation>
     </message>
@@ -6760,7 +6789,7 @@ This can&apos;t be undone.</source>
         <translation>  “%2”已有 %1 写入磁带：在磁带重新格式化之前，LTFS 会一直将这部分空间视为已用。</translation>
     </message>
     <message>
-        <location line="+83"/>
+        <location line="+89"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>操作期间“%1”出现在 %2 中；已保持原样，没有放入任何内容替代它</translation>
     </message>
@@ -7060,12 +7089,12 @@ Copy them anyway?</source>
         <translation>到：%1</translation>
     </message>
     <message>
-        <location line="+73"/>
+        <location line="+76"/>
         <source>A shortcut can&apos;t point to “%1”: its name or folder holds control characters.</source>
         <translation>快捷方式不能指向“%1”：其名称或文件夹包含控制字符。</translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+92"/>
         <source>Starting BleachBit…</source>
         <translation>正在启动 BleachBit…</translation>
     </message>
@@ -7463,12 +7492,310 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>checksums</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location filename="../src/diskimage.cpp" line="-258"/>
+        <source>“%1” is on the drive being read: the image would be written onto what&apos;s being copied. Save it on another drive.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+57"/>
+        <source>%1 of %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <location line="+195"/>
+        <source>%1 (%2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-136"/>
+        <source>The drive wasn&apos;t read to its end, so no image was made.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Wrote %1 from the drive into %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Back Up Drive to Image: %1 (%2) to %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+109"/>
+        <source>size unknown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-107"/>
+        <source>Compressed with zstd</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Encrypted with a password (gpg, AES-256)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Backing up %1 to “%2”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+61"/>
+        <location line="+29"/>
+        <location line="+119"/>
+        <location line="+65"/>
+        <source>Back Up Drive to Image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-213"/>
+        <source>The image of %1 is saved as “%2”.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>Copies everything on the drive, byte for byte, into an image file, which Mount Image can open later. Reading the drive needs your administrator password.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>This partition: %1 (%2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>The whole disk: %1 (%2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Copy:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <location filename="../src/hashcheck.cpp" line="+7"/>
         <source>Save in:</source>
         <translation>保存到：</translation>
     </message>
     <message>
+        <location line="+3"/>
+        <source>Compress (zstd): smaller, as the drive&apos;s empty space takes almost nothing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Install zstd to compress images</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Encrypt with a password (gpg): the image is never on the disk unencrypted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Install gpg to encrypt images</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Again:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Back Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Save the Image In</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+44"/>
+        <source>The drive holds %1; %2 is free there.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Mounted for writing: %1. Unmounting it first gives the most faithful copy.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Reading a drive needs pkexec. Install it with:
+
+sudo apt install pkexec</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>“%1” isn&apos;t a folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>That name can&apos;t be used.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+5"/>
+        <source>“%1” is already there. Choose another name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Enter the password to encrypt the image with.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>The two passwords aren&apos;t the same.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>There isn&apos;t room for the image there: it takes %1, and %2 is free.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Compressed, the image&apos;s size can&apos;t be known beforehand: it may not fit in the %1 free there (the drive holds %2).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>It&apos;s mounted for writing (%1): programs may change it while it&apos;s read, and the image could then be inconsistent. Unmounting it first, or mounting it read-only, is safer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>%1
+
+Back up anyway?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Kestrel can&apos;t tell which device this drive is.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+79"/>
+        <source>udisksctl failed (exit code %1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+57"/>
+        <location line="+426"/>
+        <source>Detaching %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-378"/>
+        <source>Looking for a saved password</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Mounting disk images needs udisks2 (udisksctl). Install it with:
+
+sudo apt install udisks2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Opening “%1” needs %2, which isn&apos;t installed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>“%1” is encrypted. To mount it, Kestrel decrypts it into a copy in your cache folder (%2 free there; the image takes %3, and more once expanded if it&apos;s also compressed). The copy isn&apos;t encrypted while it&apos;s there; it&apos;s mounted read-only and deleted once unmounted.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>“%1” is compressed. To mount it, Kestrel expands it into a copy in your cache folder (%2 free there; it may need several times the %3 it takes now). The copy is mounted read-only and deleted once unmounted.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+48"/>
+        <source>Expanding “%1” to mount it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Expanded into %1 (%2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+41"/>
+        <source>Setting up “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>“%1” couldn&apos;t be set up as a drive:
+
+%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <location line="+54"/>
+        <source>%1: not unlocked</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-50"/>
+        <location line="+54"/>
+        <source>Unlock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-37"/>
+        <source>Unlocking %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+54"/>
+        <source>Mounting %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>No file system Kestrel can mount was found in it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Nothing in “%1” could be mounted:
+
+%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Some of “%1” couldn&apos;t be mounted:
+
+%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+4"/>
+        <source>Mounted %Ln file system(s) from “%1”</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/hashcheck.cpp" line="+5"/>
         <source>Save Checksum File In</source>
         <translation>将校验和文件保存到</translation>
     </message>
@@ -7808,6 +8135,7 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="-17"/>
         <location line="+17"/>
+        <location filename="../src/linkwin.cpp" line="+3"/>
         <source>OK</source>
         <translation>正常</translation>
     </message>
@@ -8003,7 +8331,7 @@ replaced. A merge can&apos;t be undone.</source>
         <translation>正在排队（其驱动器正在使用）…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-803"/>
+        <location filename="../src/fileops.cpp" line="-818"/>
         <source>Waiting</source>
         <translation>等待中</translation>
     </message>
@@ -8425,7 +8753,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>这里安装的程序都无法写入 %1。</translation>
     </message>
     <message>
-        <location filename="../src/menus.cpp" line="-529"/>
+        <location filename="../src/menus.cpp" line="-531"/>
         <source>A folder</source>
         <translation>文件夹</translation>
     </message>
@@ -8617,14 +8945,14 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+72"/>
+        <location line="+74"/>
         <location line="+2"/>
         <location filename="../src/uwp.cpp" line="+27"/>
         <source>Set as Wallpaper</source>
         <translation>设为壁纸</translation>
     </message>
     <message>
-        <location line="-73"/>
+        <location line="-75"/>
         <source>while UWP&apos;s editor is open</source>
         <translation>UWP 编辑器打开时</translation>
     </message>
@@ -8634,7 +8962,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>新建文档 ▸</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+1"/>
+        <source>not in the Trash</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Sort By ▸</source>
         <translation>排序方式 ▸</translation>
     </message>
@@ -8657,26 +8990,26 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+94"/>
+        <location line="+96"/>
         <source>Scripts ▸</source>
         <translation>脚本 ▸</translation>
     </message>
     <message>
-        <location line="-94"/>
-        <location line="+94"/>
+        <location line="-96"/>
+        <location line="+96"/>
         <source>when you have scripts</source>
         <translation>有脚本时</translation>
     </message>
     <message>
-        <location line="-88"/>
-        <location line="+44"/>
+        <location line="-90"/>
+        <location line="+46"/>
         <location line="+35"/>
         <location line="+15"/>
         <source>when all are folders</source>
         <translation>全部是文件夹时</translation>
     </message>
     <message>
-        <location line="-90"/>
+        <location line="-92"/>
         <source>Open in (a code editor)</source>
         <translation>在（代码编辑器）中打开</translation>
     </message>
@@ -8702,7 +9035,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>用于文件</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+2"/>
+        <location line="+1"/>
         <source>for symbolic links</source>
         <translation>用于符号链接</translation>
     </message>
@@ -8722,6 +9056,16 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+1"/>
         <source>when all are archives</source>
         <translation>全部是压缩包时</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>disk images (.img, .iso, .raw)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>plain disk images you can write to</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
@@ -8749,8 +9093,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>用于视频，配合 UWP</translation>
     </message>
     <message>
-        <location line="-46"/>
-        <location line="+50"/>
+        <location line="-48"/>
+        <location line="+52"/>
         <location line="+4"/>
         <location line="+17"/>
         <source>for images</source>
@@ -9659,7 +10003,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location filename="../src/opening.cpp" line="+6"/>
-        <location line="+55"/>
+        <location line="+64"/>
         <location line="+37"/>
         <location line="+7"/>
         <source>Could not open %1</source>
@@ -9771,12 +10115,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+11"/>
-        <location line="+1038"/>
+        <location line="+1039"/>
         <source>Connect</source>
         <translation>连接</translation>
     </message>
     <message>
-        <location line="-1004"/>
+        <location line="-1005"/>
         <source>Question</source>
         <translation>询问</translation>
     </message>
@@ -9943,13 +10287,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+61"/>
-        <location filename="../src/widgets.cpp" line="+328"/>
+        <location filename="../src/widgets.cpp" line="+331"/>
         <source>Eject</source>
         <translation>弹出</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+86"/>
+        <location line="+87"/>
         <location filename="../src/widgets.cpp" line="-11"/>
         <location line="+4"/>
         <location line="+7"/>
@@ -9971,18 +10315,26 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>smb://server/share   sftp://user@host/path   nfs://server/export   ftp://…</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location filename="../src/diskimage.cpp" line="-312"/>
+        <location filename="../src/overview.cpp" line="+35"/>
+        <location line="+44"/>
         <source>Mount</source>
         <translation>挂载</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location filename="../src/overview.cpp" line="-5"/>
         <source>Drive Health…</source>
         <translation>驱动器健康状况…</translation>
     </message>
     <message>
-        <location line="+7"/>
-        <location filename="../src/widgets.cpp" line="-107"/>
+        <location line="+11"/>
+        <location filename="../src/widgets.cpp" line="-111"/>
+        <source>Back Up Drive to Image…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <location filename="../src/widgets.cpp" line="+4"/>
         <source>Write Tape Index Now</source>
         <translation>立即写入磁带索引</translation>
     </message>
@@ -10004,7 +10356,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+17"/>
-        <location filename="../src/widgets.cpp" line="-17"/>
+        <location filename="../src/widgets.cpp" line="-20"/>
         <source>Edit Bookmark…</source>
         <translation>编辑书签…</translation>
     </message>
@@ -11390,7 +11742,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+585"/>
+        <location filename="../src/widgets.cpp" line="+588"/>
         <source>%1:</source>
         <translation>%1：</translation>
     </message>
@@ -12255,21 +12607,24 @@ This connects to the internet: the keyserver sees which key is asked for. Having
     </message>
     <message>
         <location line="-24"/>
+        <location line="+52"/>
         <source>%1: no longer exists</source>
         <translation>%1：已不存在</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-50"/>
+        <location line="+52"/>
         <source>%1: that name is taken again</source>
         <translation>%1：该名称又被占用了</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="-48"/>
+        <location line="+51"/>
         <source>Renamed back: %1 → %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="-37"/>
         <source>%1: not in the trash any more</source>
         <translation>%1：已不在回收站中</translation>
     </message>
@@ -12279,7 +12634,12 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+17"/>
+        <source>Pointed back: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+29"/>
         <source>Couldn&apos;t undo: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -12811,7 +13171,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>撤销	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1779"/>
+        <location filename="../src/widgets.cpp" line="-1782"/>
         <source>Match</source>
         <translation>匹配</translation>
     </message>
@@ -12915,7 +13275,7 @@ Not connected: click to connect</source>
         <translation>%1 — 点击连接</translation>
     </message>
     <message>
-        <location line="+255"/>
+        <location line="+258"/>
         <source>Remove from Recent Servers</source>
         <translation>从最近的服务器中移除</translation>
     </message>
@@ -13011,6 +13371,518 @@ Not connected: click to connect</source>
         <location line="+4"/>
         <source>Log:</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/links.cpp" line="+28"/>
+        <source>Symbolic link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Relative symbolic link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Hard link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Shortcut (.desktop)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+41"/>
+        <source>That name can&apos;t be used</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The folder it goes in isn&apos;t there</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>The name is taken in that folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Another link in the list has this name in this folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>The link isn&apos;t there any more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>The link was changed since it was put in the list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>A symbolic link can only be changed into another symbolic link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>What it points to isn&apos;t there: the link will be broken</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>What it points to isn&apos;t there</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hard links are for files only (not folders or links)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>A hard link has to be on the same drive as the file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+40"/>
+        <location line="+46"/>
+        <source>“%1” isn&apos;t a symbolic link any more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-36"/>
+        <location line="+38"/>
+        <source>“%1” was changed meanwhile, so it was left as it is</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-14"/>
+        <source>Made “%1”, but couldn&apos;t remove “%2”: %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <location line="+20"/>
+        <source>“%1” is taken</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-8"/>
+        <source>Made “%1”, but couldn&apos;t remove the old link “%2”: %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>The folder “%1” isn&apos;t there</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>“%1” isn&apos;t a file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/linkwin.cpp" line="-133"/>
+        <source>New</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Points elsewhere, renamed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Renamed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Moved</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Points elsewhere</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>No change yet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <location line="+541"/>
+        <location line="+21"/>
+        <location line="+45"/>
+        <location line="+72"/>
+        <location line="+44"/>
+        <source>Link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-708"/>
+        <location line="+6"/>
+        <location line="+62"/>
+        <source>Points to</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-67"/>
+        <location line="+25"/>
+        <source>Link goes in</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-19"/>
+        <source>What the links lead to: pick one item, or select several.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Links to be made in this folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>The folder the links are made in. They show below, among what&apos;s here, until they&apos;re made.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Kind of link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>A relative path: the link keeps working when it&apos;s moved together with what it points to</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Another name of the same file: files only, on the same drive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>A .desktop file that opens it, as a launcher on a desktop or dock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Find the Other Names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Searches its drive for the other names of this file (a job: slow on a big drive)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Add to List</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Keeps the links shown on the right in the list, to be made with OK</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Change Link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>The link selected in the list points to what&apos;s picked on the left, in the folder shown on the right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Kind:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <location line="+27"/>
+        <source>Links to make or change</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-25"/>
+        <source>Kind</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Change</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Problems</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Takes the selected links out of the list (nothing on the disk changes)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Shows what will be made or changed, to confirm</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Nothing is made or changed until OK. Click a link to show it on both sides and change it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+83"/>
+        <source>Edit Link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>These links couldn&apos;t be read:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>The links in the list haven&apos;t been made or changed. Close the window anyway?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+147"/>
+        <source>%1  (%2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>%Ln names</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The link will hold: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>Open a folder on the right to make links in it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>The links to be made or changed in this folder (double-click a name to rename it):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Points to: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Points to: %1
+Not in the list yet: Add to List keeps it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+33"/>
+        <source>The kind of the links added</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>The kind of the links selected in the list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>“%1” isn&apos;t there: this link is broken.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <source>“%1” has %Ln names (hard links).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+48"/>
+        <source>Finding the other names of “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Also named: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Other Names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>No other name of “%1” was found on its drive (it may have some in folders you can&apos;t open).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The other names of “%1”:
+
+%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Some links in the list can&apos;t be made as they are. Change them or remove them from the list first:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>%1 → %2 (%3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>%1: %2 → %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1 → %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Nothing in the list changes anything yet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+12"/>
+        <source>%Ln new link(s):</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln link(s) to point elsewhere:</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>%Ln link(s) to rename or move:</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>To note:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Make and Change Links</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>These links will be made or changed. Undo (Ctrl+Z) puts them all back as they were.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>Something changed since the list was checked, so nothing was made or changed:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+24"/>
+        <source>Making %Ln link(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>Making and changing %Ln link(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Made: %1 → %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Changed and renamed: %1 → %2 (now → %3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Renamed: %1 → %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Changed: %1 → %2 (was → %3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <location line="+4"/>
+        <source>Couldn&apos;t make or change %1: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Change Links</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Some links couldn&apos;t be made or changed, and are still in the list:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+45"/>
+        <source>You don&apos;t have permission to make %Ln of these links.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <source>Made or changed %Ln link(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
     </message>
 </context>
 </TS>

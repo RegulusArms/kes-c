@@ -4,6 +4,7 @@
 #include "archive.h"
 #include "atc.h"
 #include "dialogs.h"
+#include "diskimage.h"
 #include "drives.h"
 #include "fileops.h"
 #include "jobs.h"
@@ -1419,7 +1420,7 @@ QList<Sidebar::Mount> Sidebar::mount_list() const
                 if (!(root.startsWith("/media/") || root.startsWith("/run/media/") || root.startsWith("/mnt")))
                     continue;
             }
-            if (dev.startsWith("/dev/loop"))
+            if (dev.startsWith("/dev/loop") && drives::user_loop(dev).isEmpty())   // (a mounted disk image shows)
                 continue;
         }
         seen << root;
@@ -1801,6 +1802,9 @@ void Sidebar::menu(const QPoint &pos)
         m.addAction(tx("Find Duplicates…"), this, [this, path]() { Q_EMIT find_duplicates(path); });
         m.addAction(tx("Disk Usage…"), this, [this, path]() { Q_EMIT disk_usage(path); });
         drives::Slow slow = drives::slow_kind(path);
+        QString dev = extra.toString();
+        if (dev.startsWith("/dev/") && slow == drives::Slow::None)
+            m.addAction(tx("Back Up Drive to Image…"), this, [this, dev]() { diskimage::backup_window(this, dev); });
         if (slow != drives::Slow::None) {
             m.addSeparator();
             if (slow == drives::Slow::Tape)

@@ -3,6 +3,8 @@
 #include "common.h"
 
 #include "compare.h"
+#include "diskimage.h"
+#include "drives.h"
 #include "diskusage.h"
 #include "dupes.h"
 #include "overview.h"
@@ -21,6 +23,10 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include <thread>
 
 using namespace test;
 
@@ -679,5 +685,157 @@ int main(int argc, char **argv)
             skip("checking signatures with gpg (gpg isn't installed)");
         }
     }
+    // ================================================================ disk images (diskimage.h)
+    {
+        QString d = home_path("images");
+        makedirs(d, true);
+        QByteArray data;
+        for (int i = 0; i < 3 * 1024 * 1024; ++i)
+            data += char((i * 7919 + i / 4096) & 0xff);
+        QString src = join(d, "device.bin");
+        write_text(src, data);
+        // write_image in a job, fed by fd (a file standing for the device, or a pipe): what it raised, or ""
+        auto make = [&](int fd, qint64 total, const QString &dest, bool compress, const QString &pw, bool whole,
+                        Task **task = nullptr) {
+            auto err = std::make_shared<QString>("(not finished)");
+            Task *t = fileops::run_job(w, "image", [=](Task *t) {
+                try {
+                    diskimage::write_image(t, fd, total, dest, compress, pw, [whole]() { return whole; });
+                    *err = QString();
+                } catch (const Cancelled &) {
+                    *err = "cancelled";
+                } catch (const Error &e) {
+                    *err = e.message();
+                }
+                return QVariant(true);
+            }, nullptr, true, true);
+            if (task)
+                *task = t;
+            QPointer<Task> tp(t);
+            wait_for([&]() { return !tp; }, 30000);
+            return *err;
+        };
+        auto parts_in = [&]() {
+            QStringList out;
+            for (const QString &n : QDir(d).entryList(QDir::Files | QDir::Hidden))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        int fd = ::open(enc(src).constData(), O_RDONLY);
+        QString plain = join(d, "plain.img");
+        QString e = make(fd, data.size(), plain, false, QString(), true);
+        ::close(fd);
+        struct stat st;
+        check(e.isEmpty() && read_file(plain) == data && stat_(plain, st) && (st.st_mode & 0777) == 0600 &&
+                  parts_in().isEmpty(),
+              "Back Up Drive to Image: the stream becomes the image file, byte for byte, for the user alone, with no "
+              "part left (" + e + ")");
+
+        fd = ::open(enc(src).constData(), O_RDONLY);
+        e = make(fd, data.size(), join(d, "short.img"), false, QString(), false);
+        ::close(fd);
+        check(!e.isEmpty() && !lexists(join(d, "short.img")) && parts_in().isEmpty(),
+              "an image whose drive wasn't read to its end (the helper failed) isn't made, and no part is left");
+
+        fd = ::open(enc(src).constData(), O_RDONLY);
+        e = make(fd, data.size() + 1, join(d, "fewer.img"), false, QString(), true);
+        ::close(fd);
+        check(!e.isEmpty() && !lexists(join(d, "fewer.img")), "...nor one with fewer bytes than the drive holds");
+
+        // a write that fails part-way (a file size limit, as a full disk): no image, no part
+        struct rlimit old_lim, lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        fd = ::open(enc(src).constData(), O_RDONLY);
+        e = make(fd, data.size(), join(d, "full.img"), false, QString(), true);
+        ::close(fd);
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        check(!e.isEmpty() && !lexists(join(d, "full.img")) && parts_in().isEmpty(),
+              "a write that fails part-way leaves no image and no part (" + e + ")");
+
+        // cancelled part-way: the stream still coming (a pipe fed slowly)
+        int p[2];
+        ::pipe(p);
+        std::atomic<bool> stop{false};
+        std::thread feeder([&]() {
+            for (int i = 0; i < 300 && !stop; ++i) {
+                (void)!::write(p[1], data.constData(), 64 * 1024);
+                ::usleep(20000);
+            }
+            ::close(p[1]);
+        });
+        auto cerr = std::make_shared<QString>();
+        QPointer<Task> ctp = fileops::run_job(w, "image", [&, cerr](Task *t) {
+            try {
+                diskimage::write_image(t, p[0], -1, join(d, "cancelled.img"), false, QString(), []() { return true; });
+            } catch (const Cancelled &) {
+                *cerr = "cancelled";
+            } catch (const Error &x) {
+                *cerr = x.message();
+            }
+            return QVariant(true);
+        }, nullptr, true, true);
+        bool writing = wait_for([&]() { return !parts_in().isEmpty(); }, 10000);
+        spin(200);
+        if (ctp)
+            ctp->cancel();
+        wait_for([&]() { return !ctp; }, 10000);
+        stop = true;
+        feeder.join();
+        ::close(p[0]);
+        check(writing && *cerr == "cancelled" && !lexists(join(d, "cancelled.img")) && parts_in().isEmpty(),
+              "cancelled part-way, it leaves no image and no part");
+
+        if (which("zstd") && which("gpg")) {
+            fd = ::open(enc(src).constData(), O_RDONLY);
+            QString packed = join(d, "packed.img.zst.gpg");
+            e = make(fd, data.size(), packed, true, "pass word", true);
+            ::close(fd);
+            proc::Options o;
+            o.c_utf8 = true;
+            auto r = proc::run({"sh", "-c", "gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 0 -d -o - \"$1\" | zstd -d -q -c",
+                                "sh", packed},
+                               60000, o, "pass word\n");
+            bool raw_inside = read_file(packed).contains(data.mid(100000, 4096));
+            check(e.isEmpty() && r.out == data && !raw_inside && parts_in().isEmpty(),
+                  "compressed and encrypted, it opens with its password to the drive's bytes, and holds none of them "
+                  "as they were (" + e + ")");
+        } else {
+            skip("compressed and encrypted images (zstd or gpg isn't installed)");
+        }
+
+        // which files are disk images, and which can be mounted for writing
+        write_text(join(d, "disk.img"), "x");
+        check(diskimage::is_image(join(d, "disk.img")) && diskimage::is_image(join(d, "cd.ISO")) &&
+                  diskimage::is_image(join(d, "b.img.zst.gpg")) && diskimage::is_image(join(d, "b.raw.xz")) &&
+                  !diskimage::is_image(join(d, "notes.txt")) && !diskimage::is_image(join(d, ".img")) &&
+                  !diskimage::is_image(join(d, "a.tar.gz")),
+              "disk images are told by their names: .img, .iso, .raw, also compressed or encrypted");
+        check(diskimage::needs_expanding(join(d, "b.img.gpg")) && diskimage::needs_expanding(join(d, "b.img.xz")) &&
+                  !diskimage::needs_expanding(join(d, "disk.img")) && diskimage::can_write(join(d, "disk.img")) &&
+                  !diskimage::can_write(join(d, "b.img.zst")) && !diskimage::can_write(join(d, "cd.iso")),
+              "compressed or encrypted ones are mounted from a copy (read-only); only a plain one can be mounted for writing");
+        QStringList img_menu = menu_texts(w, {join(d, "disk.img")});
+        check(img_menu.contains("Mount Image") && img_menu.contains("Mount Image for Writing") &&
+                  !menu_texts(w, {src}).contains("Mount Image"),
+              "Mount Image (and for Writing) are in a disk image's right-click menu, not other files'");
+
+        // the image is never saved onto the drive being read
+        QString source;
+        for (const drives::Mount &m : drives::mounts())
+            if (m.root == drives::mount_root(d))
+                source = m.source;
+        if (source.startsWith("/dev/") && exists(source))
+            check(!diskimage::refuse_reason(source, d).isEmpty(),
+                  "an image of a drive can't be saved on that same drive (" + source + ")");
+        else
+            skip("refusing to save an image on the drive being read (the test's folder isn't on a block device)");
+    }
+
     finish();
 }

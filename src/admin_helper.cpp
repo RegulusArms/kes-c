@@ -9,7 +9,8 @@
 //            "error": "..."}
 //
 // Ops: delete(path) · copy/move(src, dst, merge) · rename(src, dst) · mkdir(path) · copyfile(src, dst) ·
-//      touch(path) · symlink(target, link) · hardlink(target, link) · write(path, text, mode) · chmod(path, mode)
+//      touch(path) · symlink(target, link) · hardlink(target, link) · write(path, text, mode) · chmod(path, mode) ·
+//      readdev(device, fifo)
 //
 // Safety: the files being worked on can change while root works on them (another user, or a program, swapping a
 // folder for a symlink). So the helper never trusts a path string:
@@ -27,6 +28,8 @@
 // - A copy root makes is root's, so it drops set-user-ID and set-group-ID from a file that wasn't root's (else a
 //   user's program would become a set-user-ID root program). A move between drives keeps the owner instead.
 // - A mount point is never deleted (that would empty the drive mounted there), nor is another drive inside a tree.
+// - readdev (Back Up Drive to Image) only reads: a block device and nothing else, opened read-only, its bytes written
+//   into a FIFO the user made (theirs, and a FIFO: never a file), from which Kestrel, as the user, makes the image.
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -50,6 +53,9 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <linux/fs.h>
+#include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/random.h>
 #include <sys/stat.h>
 #include <thread>
@@ -79,6 +85,7 @@ static const std::map<std::string, std::vector<std::pair<const char *, Kind>>> P
     {"hardlink", {{"target", READ}, {"link", CREATE}}},
     {"write", {{"path", CREATE}}},
     {"chmod", {{"path", CHANGE}}},
+    {"readdev", {{"device", READ}, {"fifo", READ}}},
 };
 
 static std::mutex out_lock, cancel_lock;
@@ -984,6 +991,54 @@ static void handle(const QJsonObject &req)
             unlinkat(p.dir.get(), part.c_str(), 0);
             throw;
         }
+    } else if (op == "readdev") {
+        // the device: a block device, read only (never a file, never through a symlink)
+        const Walk &dev = w.at("device"), &fifo = w.at("fifo");
+        Fd in(openat(dev.dir.get(), dev.name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        struct stat st;
+        if (in.get() < 0 || fstat(in.get(), &st) != 0)
+            fail_errno();
+        if (!S_ISBLK(st.st_mode))
+            throw Failure("not a block device: " + dev.path);
+        uint64_t size = 0;
+        if (ioctl(in.get(), BLKGETSIZE64, &size) == 0)
+            job.total = double(size);
+        // the FIFO Kestrel reads: its reader may take a moment to open it (ENXIO until then)
+        Fd out;
+        for (int tries = 0;; ++tries) {
+            job.check_cancel();
+            out = Fd(openat(fifo.dir.get(), fifo.name.c_str(), O_WRONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+            if (out.get() >= 0)
+                break;
+            if (errno != ENXIO || tries > 600)
+                fail_errno();
+            usleep(100000);
+        }
+        if (fstat(out.get(), &st) != 0 || !S_ISFIFO(st.st_mode) || st.st_uid != session_uid())
+            throw Failure("not the user's FIFO: " + fifo.path);
+        int flags = fcntl(out.get(), F_GETFL);
+        if (flags < 0 || fcntl(out.get(), F_SETFL, flags & ~O_NONBLOCK) != 0)
+            fail_errno();
+        // (no progress from here: Kestrel counts what comes through the FIFO, with its speed)
+        std::vector<char> buf(4 << 20);
+        for (;;) {
+            job.check_cancel();
+            ssize_t n = read(in.get(), buf.data(), buf.size());
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n < 0)
+                fail_errno();
+            if (n == 0)
+                break;
+            for (ssize_t off = 0; off < n;) {
+                ssize_t wr = write(out.get(), buf.data() + off, size_t(n - off));
+                if (wr < 0 && errno == EINTR)
+                    continue;
+                if (wr < 0)
+                    fail_errno();   // EPIPE: Kestrel stopped reading
+                off += wr;
+            }
+        }
     } else if (op == "chmod") {
         // the file itself, opened without following a symlink; chmod through /proc/self/fd changes that inode
         const Walk &p = w.at("path");
@@ -1036,6 +1091,7 @@ static void worker()
 int main()
 {
     umask(022);
+    signal(SIGPIPE, SIG_IGN);   // a reader gone (readdev's FIFO): EPIPE, not the helper killed
     std::thread(worker).detach();
     send(QJsonObject{{"hello", true}, {"uid", int(getuid())}, {"pid", int(getpid())}});
     std::string line;

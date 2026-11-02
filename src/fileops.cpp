@@ -2250,42 +2250,57 @@ static QString exec_arg(const QString &arg)
     return "\"" + q.replace("%", "%%") + "\"";
 }
 
-QVariantMap link_plan(const QString &kind, const QString &target, const QString &dest_dir)
+QString link_name(const QString &kind, const QString &target, const QString &dest_dir)
 {
     QString name = basename(rstrip(target, '/'));
     if (name.isEmpty())
         name = target;
     bool same_dir = dirname(target) == dest_dir;
-    if (kind == "sym" || kind == "rel") {
-        QString link = unique_path(dest_dir, same_dir ? "Link to " + name : name, "num");
-        QString src = kind == "rel" ? relpath(target, dest_dir) : abspath(target);
-        return {{"op", "symlink"}, {"target", src}, {"link", link}};
-    }
-    if (kind == "hard") {
-        QString link = unique_path(dest_dir, same_dir ? name + " (hard link)" : name, "num");
-        return {{"op", "hardlink"}, {"target", abspath(target)}, {"link", link}};
-    }
+    if (kind == "sym" || kind == "rel")
+        return same_dir ? "Link to " + name : name;
+    if (kind == "hard")
+        return same_dir ? name + " (hard link)" : name;
+    return split_ext(name).first + ".desktop";
+}
+
+QString desktop_entry(const QString &target)
+{
+    QString name = basename(rstrip(target, '/'));
+    if (name.isEmpty())
+        name = target;
     // a freedesktop .desktop launcher pointing to target. Every value is escaped (desktop_value), so a name can't add
     // keys of its own; control characters the format has no escape for are refused.
     static const QRegularExpression control("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]");
     if (target.contains(control))
         throw Error(tx("A shortcut can't point to “%1”: its name or folder holds control characters.").arg(name));
     bool is_dir = isdir(target);
-    QString body;
     if (isfile(target) && util::access(target, X_OK)) {
         // GLib checks that the program exists before it turns %% back into %, so it won't load a launcher whose
         // program's path holds a "%": sh starts that one (the path is its $0, never parsed as a command)
         QString exec = target.contains('%') ? "sh -c " + exec_arg("exec \"$0\"") + " " + exec_arg(target)
                                             : exec_arg(target);
-        body = "[Desktop Entry]\nType=Application\nName=" + desktop_value(name) +
+        return "[Desktop Entry]\nType=Application\nName=" + desktop_value(name) +
                "\nExec=" + desktop_value(exec) + "\nPath=" + desktop_value(dirname(target)) +
                "\nIcon=application-x-executable\nTerminal=false\n";
-    } else {
-        QString icon = is_dir ? QString("folder") : mime_for(target, is_dir).iconName();
-        body = "[Desktop Entry]\nType=Link\nName=" + desktop_value(name) + "\nURL=" + desktop_value(file_uri(target)) +
-               "\nIcon=" + desktop_value(icon) + "\n";
     }
-    QString path = unique_path(dest_dir, split_ext(name).first + ".desktop", "num");
+    QString icon = is_dir ? QString("folder") : mime_for(target, is_dir).iconName();
+    return "[Desktop Entry]\nType=Link\nName=" + desktop_value(name) + "\nURL=" + desktop_value(file_uri(target)) +
+           "\nIcon=" + desktop_value(icon) + "\n";
+}
+
+QVariantMap link_plan(const QString &kind, const QString &target, const QString &dest_dir)
+{
+    if (kind == "sym" || kind == "rel") {
+        QString link = unique_path(dest_dir, link_name(kind, target, dest_dir), "num");
+        QString src = kind == "rel" ? relpath(target, dest_dir) : abspath(target);
+        return {{"op", "symlink"}, {"target", src}, {"link", link}};
+    }
+    if (kind == "hard") {
+        QString link = unique_path(dest_dir, link_name(kind, target, dest_dir), "num");
+        return {{"op", "hardlink"}, {"target", abspath(target)}, {"link", link}};
+    }
+    QString body = desktop_entry(target);
+    QString path = unique_path(dest_dir, link_name(kind, target, dest_dir), "num");
     return {{"op", "write"}, {"path", path}, {"text", body}, {"mode", 0755}};
 }
 

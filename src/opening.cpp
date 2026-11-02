@@ -6,6 +6,7 @@
 
 #include "archive.h"
 #include "archive_ui.h"
+#include "diskimage.h"
 #include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
@@ -106,6 +107,13 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
         bool dir = kind >= 0 && !(kind & KIND_LINK) ? bool(kind & KIND_DIR) : isdir(x);
         (dir ? dirs : files) << x;
     }
+    if (embedded) {   // a browser inside another window (embed()): folders open as usual, files go to it
+        if (!dirs.isEmpty())
+            p->set_path(dirs.first());
+        else if (!files.isEmpty() && embed_activated)
+            embed_activated(files);
+        return;
+    }
     if (chooser) {   // a file chooser: folders open as usual, files are the choice
         if (!dirs.isEmpty())
             p->set_path(dirs.first());
@@ -124,7 +132,9 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     }
     QStringList images, videos, fetch, others;
     for (const QString &f : files) {
-        if (archive::opens_as_archive(f))
+        if (diskimage::is_image(f) && !f.toLower().endsWith(".iso"))   // (an .iso opens as an archive, as before)
+            diskimage::mount_image(this, f);
+        else if (archive::opens_as_archive(f))
             archive_ui::open_archive(this, f);   // Kestrel's own extraction, not the system's archive app
         else if (signature::is_signature_name(f))   // Verify Signature (a key or an encrypted file opens as usual)
             signature::open_window(this, f, [self = QPointer<MainWindow>(this), f]() {

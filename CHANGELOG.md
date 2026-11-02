@@ -4,7 +4,37 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.5
+## 0.3.3-alpha.6
+
+- **Make and change links in one window.** Right-click → Links & Shortcuts → **Link…** opens two browsers side by
+  side: what the links point to on the left, the folder they go in on the right, where the links-to-be show ghosted
+  and can be renamed before they exist. Pick the kind (symbolic, relative symbolic, hard link, `.desktop` shortcut)
+  and **Add to List**; the list below gathers links from any number of folders and flags problems (a name already
+  taken, something that isn't there, a hard link to another drive). **OK** shows everything that will be made or
+  changed and makes it only once you confirm, as one job in the Jobs window, and Ctrl+Z undoes the whole batch.
+  A file that already has several names (hard links) says so, and **Find the Other Names** searches its drive.
+- The Link window also opens from the empty space in a folder (right-click → **Link…**), with that folder as where
+  the links go.
+- **Edit Link…** on symbolic links (also **Edit…** beside a link's target in Properties): point them somewhere else,
+  switch between absolute and relative, rename or move them, several at once. The new link is made beside the old
+  one and swapped in, never deleted first, and a link another program changed meanwhile is left alone.
+- **Back up a drive to an image file.** Right-click a drive in the sidebar or on the Overview (mounted or not) →
+  **Back Up Drive to Image…**: that partition or its whole disk, byte for byte, optionally compressed (zstd) and
+  encrypted with a password (gpg), as a job with progress and speed. It asks for the administrator password to read
+  the drive (only reading it); the image is made as you, never on the disk unencrypted, and appears only once the whole
+  drive is read, so a cancel or a failure leaves nothing. It won't save onto the drive being read, checks the free
+  space, and asks first while the drive is mounted for writing.
+- **Mount disk images.** Double-click an `.img` (or right-click any `.img`, `.iso`, `.raw` → **Mount Image**): its
+  file systems are mounted read-only and show in the sidebar and on the Overview like a plugged-in drive; unmounting
+  the last of them detaches it. **Mount Image for Writing** for a plain image you can change. LUKS encryption inside
+  asks for its password (which can be remembered in the keyring). Compressed (`.img.zst`, `.xz`, `.gz`) and
+  gpg-encrypted (`.img.gpg`) images, such as Back Up makes, are expanded into a copy in the cache first (asked first),
+  deleted once unmounted. Unmounted drives' cards on the Overview now have a right-click menu too (Mount, Back Up).
+- Links & Shortcuts is shorter: **Create Symbolic Link In…** and the two `.desktop` shortcut entries are now done in
+  the Link window. The one-click entries (Create Symbolic Link Here, Relative, Hard Link, Send Link to Desktop) stay.
+  If you had customised that menu, the removed entries simply drop out of it.
+
+## 0.3.3-alpha.5 (2026-11-01)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha5).
 

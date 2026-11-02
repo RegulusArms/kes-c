@@ -3,6 +3,7 @@
 #include "app.h"
 #include "atc.h"
 #include "fileops.h"
+#include "links.h"
 #include "util.h"
 #include "widgets.h"
 #include "windows.h"
@@ -73,10 +74,10 @@ void record(const QString &kind, const QString &label, const QList<QPair<QString
 {
     if (items.isEmpty() && kind != "none")
         return;
-    if (kind == "move" || kind == "move_into" || kind == "rename") {
+    if (kind == "move" || kind == "move_into" || kind == "rename" || kind == "links") {
         QList<QPair<QString, QString>> done;
         for (const auto &it : items)
-            if (!it.second.isEmpty())   // (move_into's folder)
+            if (it.second.startsWith('/'))   // (not move_into's folder, nor a link made or changed)
                 done << it;
         Q_EMIT signals_()->moved(done);
     }
@@ -152,14 +153,14 @@ void undo(MainWindow *win, std::function<void()> after)
     auto tell_moved = [op]() {
         QList<QPair<QString, QString>> back;
         for (const auto &[from, to] : op.items)
-            if (!to.isEmpty() && lexists(from) && !lexists(to))
+            if (to.startsWith('/') && lexists(from) && !lexists(to))
                 back << qMakePair(to, from);
         if (!back.isEmpty())
             Q_EMIT signals_()->moved(back);
     };
     QPointer<MainWindow> w(win);
     auto done = [w, title, op, after, tell_moved](const QVariant &res) {
-        if (op.kind == "rename")
+        if (op.kind == "rename" || op.kind == "links")
             tell_moved();
         if (after)
             after();
@@ -251,6 +252,31 @@ void undo(MainWindow *win, std::function<void()> after)
                     task->log(tx("Put back: %1").arg(orig));
                 } catch (const OSError &e) {
                     errors << basename(orig) + ": " + e.message();
+                }
+            }
+        } else if (op.kind == "links") {   // the Link window's batch (links.h), backwards
+            for (int i = op.items.size() - 1; i >= 0; --i) {
+                task->check();
+                const auto &[a, b] = op.items[i];
+                try {
+                    if (b.isEmpty()) {   // made: to the trash, as any item created
+                        if (lexists(a)) {
+                            util::trash(a);
+                            task->log(tx("Moved to the trash: %1").arg(a));
+                        }
+                    } else if (b.startsWith("->")) {   // its contents changed: what it held before, put back
+                        links::replace_symlink(a, b.mid(2));
+                        task->log(tx("Pointed back: %1").arg(a));
+                    } else if (!lexists(b)) {
+                        errors << tx("%1: no longer exists").arg(basename(b));
+                    } else if (lexists(a)) {
+                        errors << tx("%1: that name is taken again").arg(basename(a));
+                    } else {   // renamed or moved: back
+                        links::move_symlink(b, a);
+                        task->log(tx("Renamed back: %1 → %2").arg(b, a));
+                    }
+                } catch (const Error &e) {
+                    errors << basename(a) + ": " + e.message();
                 }
             }
         } else if (op.kind == "create") {   // move what was created to the trash

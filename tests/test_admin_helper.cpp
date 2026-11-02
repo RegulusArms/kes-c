@@ -582,5 +582,39 @@ int main(int argc, char **argv)
               "...and a write there that fails part-way leaves no half-written file under its name (" + left.join(", ") + ")");
         qunsetenv("KESTREL_TEST_SLOW");
     }
+
+    // ---- readdev (Back Up Drive to Image): reads a block device and nothing else, into a FIFO of the user's
+    {
+        Helper rd;
+        bool started = rd.start();
+        QString f = join(W, "not-a-device.bin"), fifo = join(W, "image.fifo");
+        write_file(f, "secret");
+        ::mkfifo(fifo.toLocal8Bit().constData(), 0600);
+        QJsonObject r1 = rd.call({{"op", "readdev"}, {"device", f}, {"fifo", fifo}}, 10000);
+        QJsonObject r2 = rd.call({{"op", "readdev"}, {"device", "/dev/null"}, {"fifo", fifo}}, 10000);
+        check(started && !ok(r1) && r1.value("error").toString().contains("not a block device") && !ok(r2) &&
+                  r2.value("error").toString().contains("not a block device"),
+              "readdev reads block devices only: a file, or /dev/null, is refused");
+        QString blk;   // a block device this user can read, where the machine has one
+        for (const QString &n : QDir("/dev").entryList(QDir::System | QDir::NoDotAndDotDot)) {
+            struct stat st;
+            QString p = "/dev/" + n;
+            if (::stat(p.toLocal8Bit().constData(), &st) == 0 && S_ISBLK(st.st_mode) &&
+                ::access(p.toLocal8Bit().constData(), R_OK) == 0) {
+                blk = p;
+                break;
+            }
+        }
+        if (blk.isEmpty()) {
+            skip("readdev writes only into a FIFO (no block device here this user can read)");
+        } else {
+            QString plain = join(W, "plain.out");
+            write_file(plain, "");
+            QJsonObject r3 = rd.call({{"op", "readdev"}, {"device", blk}, {"fifo", plain}}, 10000);
+            check(!ok(r3) && r3.value("error").toString().contains("FIFO") && QFileInfo(plain).size() == 0,
+                  "readdev writes only into a FIFO of the user's, never a file (" + blk + ")");
+        }
+        rd.stop();
+    }
     finish();
 }
