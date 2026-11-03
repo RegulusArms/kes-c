@@ -31,8 +31,8 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+665"/>
-        <location line="+589"/>
+        <location filename="../src/app.cpp" line="+680"/>
+        <location line="+607"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
         <translation>붙여넣기</translation>
@@ -81,8 +81,8 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="-728"/>
-        <location line="+734"/>
+        <location filename="../src/app.cpp" line="-746"/>
+        <location line="+752"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Duplicate</source>
         <translation>복제</translation>
@@ -251,8 +251,8 @@
     </message>
     <message>
         <location line="+10"/>
-        <location filename="../src/app.cpp" line="-733"/>
-        <location line="+969"/>
+        <location filename="../src/app.cpp" line="-751"/>
+        <location line="+987"/>
         <location filename="../src/diskusage.cpp" line="+1013"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+115"/>
@@ -324,14 +324,14 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-968"/>
-        <location line="+653"/>
+        <location filename="../src/app.cpp" line="-986"/>
+        <location line="+671"/>
         <source>Delete Permanently</source>
         <translation>영구 삭제</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+525"/>
+        <location filename="../src/app.cpp" line="+534"/>
         <source>Delete</source>
         <translation>삭제</translation>
     </message>
@@ -468,7 +468,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+13"/>
-        <location filename="../src/app.cpp" line="-526"/>
+        <location filename="../src/app.cpp" line="-535"/>
         <source>Restore</source>
         <translation>복원</translation>
     </message>
@@ -482,7 +482,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
         <location filename="../src/menus.cpp" line="-105"/>
-        <location filename="../src/widgets.cpp" line="+1798"/>
+        <location filename="../src/widgets.cpp" line="+1826"/>
         <source>Empty Trash</source>
         <translation>휴지통 비우기</translation>
     </message>
@@ -596,7 +596,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <translation>“%1”에 링크를 만들 권한이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/admin.cpp" line="+124"/>
+        <location filename="../src/admin.cpp" line="+125"/>
         <source>Administrator actions need pkexec. Install it with:  sudo apt install pkexec</source>
         <translation>관리자 작업에는 pkexec가 필요합니다. 다음으로 설치하세요:  sudo apt install pkexec</translation>
     </message>
@@ -678,6 +678,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+20"/>
         <location filename="../src/drives.cpp" line="+547"/>
+        <location filename="../src/ramdisk.cpp" line="+742"/>
         <source>Failed: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -699,14 +700,14 @@ sudo apt install pkexec</translation>
         <translation>관리자로 다시 시도</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1212"/>
+        <location filename="../src/app.cpp" line="-1243"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
         <location filename="../src/pgp.cpp" line="+460"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1415"/>
+        <location filename="../src/widgets.cpp" line="-1441"/>
         <source>Name</source>
         <translation>이름</translation>
     </message>
@@ -718,9 +719,10 @@ sudo apt install pkexec</translation>
         <location filename="../src/dupes.cpp" line="+0"/>
         <location filename="../src/pane.cpp" line="+889"/>
         <location filename="../src/prefs.cpp" line="+0"/>
+        <location filename="../src/ramdiskwin.cpp" line="+50"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1865"/>
+        <location line="+1910"/>
         <source>Size</source>
         <translation>크기</translation>
     </message>
@@ -740,8 +742,8 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1866"/>
-        <location line="+1868"/>
+        <location filename="../src/widgets.cpp" line="-1911"/>
+        <location line="+1913"/>
         <source>Modified</source>
         <translation>수정한 날짜</translation>
     </message>
@@ -766,7 +768,30 @@ sudo apt install pkexec</translation>
         <translation>백그라운드에서 썸네일과 폴더 미리 보기를 만드는 중</translation>
     </message>
     <message>
-        <location line="+103"/>
+        <location line="+11"/>
+        <location filename="../src/widgets.cpp" line="-724"/>
+        <source>Private</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Private mode: Kestrel&apos;s caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Open the Private Folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location filename="../src/ramdisk.cpp" line="+346"/>
+        <location filename="../src/widgets.cpp" line="+296"/>
+        <source>Leave Private Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+96"/>
         <location line="+294"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
@@ -877,20 +902,20 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+756"/>
+        <location line="+774"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>모든 그룹 접기</translation>
     </message>
     <message>
-        <location line="-752"/>
-        <location line="+757"/>
+        <location line="-770"/>
+        <location line="+775"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>모든 그룹 펼치기</translation>
     </message>
     <message>
-        <location line="-751"/>
+        <location line="-769"/>
         <source>Set as Default</source>
         <translation>기본값으로 설정</translation>
     </message>
@@ -938,7 +963,7 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+37"/>
         <location filename="../src/hashcheck.cpp" line="+315"/>
-        <location filename="../src/widgets.cpp" line="-2185"/>
+        <location filename="../src/widgets.cpp" line="-1802"/>
         <source>File</source>
         <translation>파일</translation>
     </message>
@@ -954,19 +979,19 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+212"/>
+        <location line="+230"/>
         <source>Close Tab</source>
         <translation>탭 닫기</translation>
     </message>
     <message>
-        <location line="-210"/>
-        <location line="+608"/>
+        <location line="-228"/>
+        <location line="+626"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <source>New Folder…</source>
         <translation>새 폴더…</translation>
     </message>
     <message>
-        <location line="-607"/>
+        <location line="-625"/>
         <source>New Empty File…</source>
         <translation>새 빈 파일…</translation>
     </message>
@@ -998,22 +1023,22 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1344"/>
+        <location line="+1389"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>실행 취소</translation>
     </message>
     <message>
-        <location line="-1340"/>
-        <location line="+734"/>
+        <location line="-1385"/>
+        <location line="+752"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
         <translation>잘라내기</translation>
     </message>
     <message>
-        <location line="-733"/>
-        <location line="+734"/>
+        <location line="-751"/>
+        <location line="+752"/>
         <location filename="../src/compare.cpp" line="-176"/>
         <location line="+373"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
@@ -1021,39 +1046,39 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+2215"/>
+        <location filename="../src/widgets.cpp" line="+2260"/>
         <source>Copy</source>
         <translation>복사</translation>
     </message>
     <message>
-        <location line="-732"/>
-        <location line="+590"/>
+        <location line="-750"/>
+        <location line="+608"/>
         <location filename="../src/menus.cpp" line="-24"/>
         <source>Paste as Link</source>
         <translation>링크로 붙여넣기</translation>
     </message>
     <message>
-        <location line="-588"/>
-        <location line="+562"/>
+        <location line="-606"/>
+        <location line="+580"/>
         <location line="+34"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Select All</source>
         <translation>모두 선택</translation>
     </message>
     <message>
-        <location line="-595"/>
+        <location line="-613"/>
         <source>Invert Selection</source>
         <translation>선택 반전</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+738"/>
+        <location line="+756"/>
         <location filename="../src/menus.cpp" line="+28"/>
         <source>Rename…</source>
         <translation>이름 바꾸기…</translation>
     </message>
     <message>
-        <location line="-734"/>
+        <location line="-752"/>
         <location filename="../src/menus.cpp" line="-36"/>
         <location filename="../src/viewer.cpp" line="+1413"/>
         <source>Copy Path</source>
@@ -1061,10 +1086,10 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+616"/>
+        <location line="+634"/>
         <location line="+32"/>
         <location line="+328"/>
-        <location line="+239"/>
+        <location line="+248"/>
         <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
@@ -1074,7 +1099,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>속성</translation>
     </message>
     <message>
-        <location line="-1206"/>
+        <location line="-1233"/>
         <location filename="../src/menus.cpp" line="-187"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1119,16 +1144,16 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+567"/>
+        <location line="+585"/>
         <location filename="../src/menus.cpp" line="+72"/>
         <source>Show Hidden Files</source>
         <translation>숨긴 파일 표시</translation>
     </message>
     <message>
-        <location line="-565"/>
+        <location line="-583"/>
         <location filename="../src/prefs.cpp" line="-148"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1024"/>
+        <location filename="../src/widgets.cpp" line="-1069"/>
         <source>Sidebar</source>
         <translation>사이드바</translation>
     </message>
@@ -1140,13 +1165,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1200"/>
+        <location line="+1227"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>전체 화면</translation>
     </message>
     <message>
-        <location line="-1192"/>
+        <location line="-1219"/>
         <source>Reload</source>
         <translation>새로 고침</translation>
     </message>
@@ -1217,6 +1242,19 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
+        <location filename="../src/widgets.cpp" line="+608"/>
+        <location line="+4"/>
+        <source>New RAM Disk…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <location filename="../src/ramdisk.cpp" line="-34"/>
+        <source>Private Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
         <source>Tower…</source>
         <translation>타워…</translation>
     </message>
@@ -1237,12 +1275,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1183"/>
+        <location line="+1205"/>
         <source>Keyboard Shortcuts</source>
         <translation>키보드 단축키</translation>
     </message>
     <message>
-        <location line="-1182"/>
+        <location line="-1204"/>
         <source>About</source>
         <translation>정보</translation>
     </message>
@@ -1257,7 +1295,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>&lt;b&gt;%1&lt;/b&gt; %2&lt;br&gt;이미지 갤러리 중심의 가벼운 파일 관리자.</translation>
     </message>
     <message>
-        <location line="+81"/>
+        <location line="+94"/>
         <source>Duplicate Tab</source>
         <translation>탭 복제</translation>
     </message>
@@ -1274,7 +1312,12 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>%1 남음</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+15"/>
+        <source>%1 (Private)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+39"/>
         <source>Connecting to %1…</source>
         <translation>%1에 연결 중…</translation>
     </message>
@@ -1539,7 +1582,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+989"/>
+        <location filename="../src/widgets.cpp" line="+422"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>항목 %Ln개</numerusform>
@@ -1571,7 +1614,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+37"/>
         <location line="+105"/>
         <location filename="../src/overview.cpp" line="-13"/>
-        <location filename="../src/widgets.cpp" line="-458"/>
+        <location filename="../src/widgets.cpp" line="-477"/>
         <source>Open in Terminal</source>
         <translation>터미널에서 열기</translation>
     </message>
@@ -1597,7 +1640,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-302"/>
-        <location line="+542"/>
+        <location line="+551"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
@@ -1620,7 +1663,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>열기</translation>
     </message>
     <message>
-        <location line="-539"/>
+        <location line="-548"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-193"/>
         <location line="+51"/>
@@ -2119,7 +2162,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>UWP에 연결할 수 없습니다. 편집기 창이 아직 열려 있습니까?</translation>
     </message>
     <message>
-        <location line="+142"/>
+        <location line="+151"/>
         <source>Folder preview cache cleared</source>
         <translation>폴더 미리 보기 캐시를 지웠습니다</translation>
     </message>
@@ -2202,7 +2245,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-701"/>
+        <location filename="../src/widgets.cpp" line="-727"/>
         <source>Type a location</source>
         <translation>위치 입력</translation>
     </message>
@@ -2526,7 +2569,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <translation>모든 작업을 중지하고 종료</translation>
     </message>
     <message>
-        <location line="+50"/>
+        <location line="+68"/>
         <location filename="../src/undo.cpp" line="-146"/>
         <source>Undo %1</source>
         <translation>%1 실행 취소</translation>
@@ -2863,7 +2906,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <location filename="../src/dialogs.cpp" line="+597"/>
         <location line="+450"/>
         <location filename="../src/hashcheck.cpp" line="+226"/>
-        <location filename="../src/prefswin.cpp" line="+206"/>
+        <location filename="../src/prefswin.cpp" line="+207"/>
         <source>Browse…</source>
         <translation>찾아보기…</translation>
     </message>
@@ -2977,7 +3020,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message numerus="yes">
         <location line="+7"/>
-        <location filename="../src/util.cpp" line="+917"/>
+        <location filename="../src/util.cpp" line="+964"/>
         <source>%Ln byte(s)</source>
         <translation>
             <numerusform>%Ln바이트</numerusform>
@@ -2998,6 +3041,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <location line="+0"/>
         <location filename="../src/pane.cpp" line="+0"/>
         <location filename="../src/prefswin.cpp" line="-9"/>
+        <location filename="../src/ramdiskwin.cpp" line="+2"/>
         <source>MB</source>
         <translation>MB</translation>
     </message>
@@ -3005,6 +3049,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <location line="+0"/>
         <location filename="../src/pane.cpp" line="+0"/>
         <location filename="../src/prefswin.cpp" line="+1"/>
+        <location filename="../src/ramdiskwin.cpp" line="+1"/>
         <source>GB</source>
         <translation>GB</translation>
     </message>
@@ -3702,6 +3747,7 @@ Install it with:  sudo apt install </source>
     <message>
         <location line="+1"/>
         <location line="+282"/>
+        <location filename="../src/ramdiskwin.cpp" line="+56"/>
         <location filename="../src/viewer.cpp" line="-1012"/>
         <source>Save</source>
         <translation>저장</translation>
@@ -3715,6 +3761,7 @@ Install it with:  sudo apt install </source>
         <location filename="../src/diskimage.cpp" line="-20"/>
         <location filename="../src/hashcheck.cpp" line="+102"/>
         <location filename="../src/menus.cpp" line="+338"/>
+        <location filename="../src/ramdiskwin.cpp" line="-65"/>
         <source>Name:</source>
         <translation>이름:</translation>
     </message>
@@ -3881,6 +3928,8 @@ Install it with:  sudo apt install </source>
         <location line="+332"/>
         <location filename="../src/convert.cpp" line="-298"/>
         <location filename="../src/diskimage.cpp" line="-6"/>
+        <location filename="../src/ramdiskwin.cpp" line="+22"/>
+        <location line="+22"/>
         <source>Choose…</source>
         <translation>선택…</translation>
     </message>
@@ -4140,6 +4189,7 @@ Install it with:  sudo apt install </source>
         <location filename="../src/menus.cpp" line="+10"/>
         <location filename="../src/prefswin.cpp" line="+290"/>
         <location line="+25"/>
+        <location filename="../src/ramdisk.cpp" line="-184"/>
         <source>Remove</source>
         <translation>제거</translation>
     </message>
@@ -4639,6 +4689,7 @@ Delete them and sync?</source>
     <message>
         <location line="+6"/>
         <location filename="../src/dialogs.cpp" line="-437"/>
+        <location filename="../src/ramdiskwin.cpp" line="-26"/>
         <source>Size:</source>
         <translation>크기:</translation>
     </message>
@@ -6412,7 +6463,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/thumbs.cpp" line="+1537"/>
+        <location filename="../src/thumbs.cpp" line="+1544"/>
         <source>Looking through %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7944,6 +7995,7 @@ sudo apt install udisks2</source>
     </message>
     <message>
         <location line="+9"/>
+        <location filename="../src/ramdiskwin.cpp" line="+47"/>
         <source>Create</source>
         <translation>만들기</translation>
     </message>
@@ -9377,7 +9429,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+1736"/>
+        <location filename="../src/widgets.cpp" line="+1762"/>
         <source>Move Up</source>
         <translation>위로 이동</translation>
     </message>
@@ -10121,7 +10173,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1412"/>
+        <location filename="../src/widgets.cpp" line="-1438"/>
         <source>Location</source>
         <translation>위치</translation>
     </message>
@@ -10238,8 +10290,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="-896"/>
         <location line="+920"/>
-        <location filename="../src/prefswin.cpp" line="-365"/>
-        <location filename="../src/widgets.cpp" line="+55"/>
+        <location filename="../src/prefswin.cpp" line="-366"/>
+        <location filename="../src/widgets.cpp" line="+71"/>
         <source>Bookmarks</source>
         <translation>책갈피</translation>
     </message>
@@ -10247,7 +10299,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="-919"/>
         <location line="+946"/>
         <location filename="../src/places.cpp" line="+36"/>
-        <location filename="../src/widgets.cpp" line="-259"/>
+        <location filename="../src/widgets.cpp" line="-275"/>
         <location line="+179"/>
         <source>Starred</source>
         <translation>별표</translation>
@@ -10469,16 +10521,16 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+61"/>
-        <location filename="../src/widgets.cpp" line="+331"/>
+        <location filename="../src/widgets.cpp" line="+376"/>
         <source>Eject</source>
         <translation>꺼내기</translation>
     </message>
     <message>
         <location line="+0"/>
         <location line="+87"/>
-        <location filename="../src/widgets.cpp" line="-11"/>
+        <location filename="../src/widgets.cpp" line="-30"/>
         <location line="+4"/>
-        <location line="+7"/>
+        <location line="+26"/>
         <location line="+36"/>
         <location line="+5"/>
         <location line="+19"/>
@@ -10510,7 +10562,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+11"/>
-        <location filename="../src/widgets.cpp" line="-111"/>
+        <location filename="../src/widgets.cpp" line="-130"/>
         <source>Back Up Drive to Image…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10561,7 +10613,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+3"/>
         <location filename="../src/thumbs.cpp" line="-6"/>
-        <location filename="../src/widgets.cpp" line="-616"/>
+        <location filename="../src/widgets.cpp" line="-642"/>
         <location line="+140"/>
         <location line="+178"/>
         <source>Home</source>
@@ -10579,7 +10631,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/prefswin.cpp" line="+373"/>
+        <location filename="../src/prefswin.cpp" line="+374"/>
         <source>Add a Save Location</source>
         <translation>저장 위치 추가</translation>
     </message>
@@ -11435,6 +11487,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
+        <location filename="../src/ramdiskwin.cpp" line="-14"/>
         <source> min</source>
         <translation> 분</translation>
     </message>
@@ -11817,11 +11870,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+2"/>
+        <location line="+3"/>
+        <location line="+6"/>
         <source>Privacy</source>
         <translation>개인 정보</translation>
     </message>
     <message>
-        <location line="-12"/>
+        <location line="-21"/>
         <source>The desktop&apos;s File History</source>
         <translation>데스크톱의 파일 기록</translation>
     </message>
@@ -11866,7 +11921,38 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>자주 가는 폴더에서 제거, 최근 서버에서 제거 (오른쪽 클릭)</translation>
     </message>
     <message>
-        <location filename="../src/prefswin.cpp" line="-238"/>
+        <location line="+1"/>
+        <location line="+1"/>
+        <source>Private mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>☰ → Private Mode; the status bar&apos;s Private; the sidebar&apos;s Private (Leave Private Mode)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Kestrel&apos;s caches (the previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent servers, remembered syncs, the viewer&apos;s folders) are kept in memory and deleted when the last Kestrel closes; nothing is added to the desktop&apos;s Recent; Save windows start in the Private folder, in memory too. It stays on, also after Kestrel is closed and opened again, until it&apos;s turned off.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Say which files will be deleted when the last Kestrel closes or private mode is left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>the warning&apos;s Don&apos;t show this again</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>The files saved in Private (private mode) and in RAM disks that last until Kestrel closes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/prefswin.cpp" line="-239"/>
         <source>System default (%1)</source>
         <translation>시스템 기본값 (%1)</translation>
     </message>
@@ -11882,7 +11968,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+17"/>
-        <location filename="../src/widgets.cpp" line="+81"/>
+        <location filename="../src/widgets.cpp" line="+96"/>
         <source>Places</source>
         <translation>위치</translation>
     </message>
@@ -11897,6 +11983,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location filename="../src/widgets.cpp" line="+0"/>
         <source>Mounts</source>
         <translation>마운트</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location filename="../src/widgets.cpp" line="+1"/>
+        <source>RAM Disks</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+4"/>
@@ -11946,7 +12038,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+588"/>
+        <location filename="../src/widgets.cpp" line="+617"/>
         <source>%1:</source>
         <translation>%1:</translation>
     </message>
@@ -12677,7 +12769,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         </translation>
     </message>
     <message>
-        <location filename="../src/thumbs.cpp" line="-1291"/>
+        <location filename="../src/thumbs.cpp" line="-1298"/>
         <source>Red</source>
         <translation>빨강</translation>
     </message>
@@ -12722,7 +12814,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>갈색</translation>
     </message>
     <message>
-        <location line="+1290"/>
+        <location line="+1297"/>
         <source>Thumbnails: %1</source>
         <translation>썸네일: %1</translation>
     </message>
@@ -13595,7 +13687,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>실행 취소	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1782"/>
+        <location filename="../src/widgets.cpp" line="-1827"/>
         <source>Match</source>
         <translation>일치</translation>
     </message>
@@ -13699,12 +13791,37 @@ Not connected: click to connect</source>
         <translation>%1 — 클릭하여 연결</translation>
     </message>
     <message>
-        <location line="+258"/>
+        <location line="+8"/>
+        <source>Private mode: Save windows start here. Deleted when the last Kestrel closes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+276"/>
         <source>Remove from Recent Servers</source>
         <translation>최근 서버에서 제거</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+7"/>
+        <source>Bring Back into Memory</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Save to Disk Now</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Edit RAM Disk…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Remove RAM Disk…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>Hide from Sidebar</source>
         <translation>사이드바에서 숨기기</translation>
     </message>
@@ -14307,6 +14424,338 @@ Not in the list yet: Add to List keeps it.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
         </translation>
+    </message>
+    <message>
+        <location filename="../src/ramdisk.cpp" line="-726"/>
+        <source>Give it a name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>A name can&apos;t contain “/” or start with “.”.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>A name can&apos;t contain control characters.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>Until Kestrel closes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Until you restart</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Until you log out or restart</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Always: back, empty, at every start</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Always: back, empty, at every login</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Always, with its files saved to disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>RAM disk of %1, mounted on %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>RAM disk in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+3"/>
+        <source>Saved to %1 every %Ln minute(s), at logout and at shutdown</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Saved to %1 at logout and at shutdown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Not in memory now: click to bring it back</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+275"/>
+        <source>“%1” isn&apos;t in memory.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>“%1” isn&apos;t in memory: nothing to save.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>“%1” hasn&apos;t been loaded from %2 yet, so it isn&apos;t saved over it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+165"/>
+        <source>systemctl %1 failed: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+52"/>
+        <location filename="../src/ramdiskwin.cpp" line="+71"/>
+        <source>RAM disks without a size limit need a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>Making the RAM disk “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Loading what&apos;s saved in %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <location line="+163"/>
+        <location filename="../src/ramdiskwin.cpp" line="-123"/>
+        <location line="+20"/>
+        <source>RAM Disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-127"/>
+        <source>Saving the RAM disk “%1” to disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Saving to %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>It couldn&apos;t all be saved, so it&apos;s kept:
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Not all of %1 could be deleted.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Remove the RAM disk “%1”? Its files are saved to %2 one last time, and that copy is kept; they&apos;re no longer kept in memory.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Remove the RAM disk “%1”? The files in it are deleted.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+23"/>
+        <source>Remove RAM Disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-15"/>
+        <source>Removing the RAM disk “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>Changing the RAM disk “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+145"/>
+        <source>Private mode needs a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>Private (private mode&apos;s folder)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Leaving private mode deletes what&apos;s in its RAM disk, also the files saved in Private:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Closing Kestrel deletes the files in these RAM disks:
+
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Close Kestrel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Delete and Leave Private Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Delete and Close</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Don&apos;t show this again (Preferences → Privacy)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/ramdiskwin.cpp" line="-29"/>
+        <source>Edit RAM Disk “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>New RAM Disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>A RAM disk keeps its files in memory: very fast, and gone when it&apos;s taken down, unless it saves them to disk.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>A size limit of its own (needs your password to mount it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <source>Mounted on:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>How long it lasts:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>A folder on disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Saved to:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Only at logout and shutdown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Also saved every</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Also saved every:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Mount the RAM Disk On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Save the RAM Disk&apos;s Files To</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+38"/>
+        <source>There&apos;s a RAM disk called that already.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>There&apos;s something called that in %1 already.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Choose the folder to mount it on.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The folder&apos;s path can&apos;t contain %, \ or &quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Mount it on a new folder, or an empty one.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Choose the folder on disk its files are saved to.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The folder it&apos;s saved to must be outside the RAM disk (and not around it).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Save it to a folder on a disk, not in memory.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>This needs systemd&apos;s user services (systemctl --user), which aren&apos;t running.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>It uses memory only for what&apos;s in it, up to its size. Mounting it (and changing or removing it) asks for your password once.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>No password needed. It has no size limit of its own: it shares the memory set aside for /dev/shm (half the RAM).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Its files are loaded from the folder on disk when it comes up, and saved there when you log out or shut down, and as often as set here. A power cut loses what changed since the last save.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

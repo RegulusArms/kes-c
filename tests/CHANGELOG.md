@@ -6,6 +6,26 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.10
+
+Added:
+- `tools`: RAM disks and private mode (new): saving a persistent RAM disk makes its folder on disk match (changed
+  files replaced, links as links, what's gone deleted, a copy still being made in it left out; again: nothing copied),
+  a load deletes nothing; a save failing part-way (RLIMIT_FSIZE) or cancelled leaves each saved file whole and no part
+  file; one that came up without its files isn't saved over them, and after loading it is; its systemd units quote the
+  program and expand nothing in a name or path; New RAM Disk is a free window and refuses saving into memory and
+  mounting on a folder that isn't empty; RAM disks whose time is over are forgotten at start; the sidebar lists them;
+  private mode moves the caches, thumbnails and histories into memory (shown in the sidebar, status bar and title),
+  keeps a server connected to off the disk, and leaving it (or the last Kestrel going) deletes its RAM disk.
+- `admin_helper`: the RAM disk ops refuse a folder that isn't empty or isn't yours, a size outside 1 MB to the memory,
+  unmounting what isn't a RAM disk, and a mount unit for a path with `%` in it, before mounting or writing anything.
+
+Changed:
+- `run.sh`: each test gets its own `/dev/shm` folder (`KESTREL_SHM_DIR`), so a test's tower landing never deletes the
+  private RAM disk of a Kestrel you're running.
+- `sidebar`: the default section order includes the new RAM Disks section.
+- `ui`: the menu list has ☰ → New RAM Disk… and Private Mode, and the status bar's Private button.
+
 ## 0.3.3-alpha.9
 
 Added:

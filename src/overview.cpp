@@ -1141,7 +1141,7 @@ void OverviewPage::network_section(const QList<DriveInfo> &network)
     if (network.isEmpty())
         nflow->addWidget(small(new QLabel(tx("No network locations connected."))));
     lay->addLayout(connect_row());
-    QStringList recents = settings().value("recent_servers").toStringList();
+    QStringList recents = history_settings().value("recent_servers").toStringList();
     if (!recents.isEmpty()) {
         auto *row = new QHBoxLayout;
         row->addWidget(small(new QLabel(tx("Recent:"))));
@@ -1638,7 +1638,7 @@ void OverviewPage::save_places_section()
     auto *add = new QPushButton(theme_icon({"list-add", "folder-new"}), tx("Add Folder…"));
     add->setObjectName("add_save_place");
     connect(add, &QPushButton::clicked, this, [this]() {
-        QString start = settings().value("chooser_folder").toString();   // where the last Save window saved
+        QString start = history_settings().value("chooser_folder").toString();   // where the last Save window saved
         QPointer<OverviewPage> self(this);
         choose_folder(window(), tx("Add a Save Location"), isdir(start) ? start : HOME(), [self](const QString &p) {
             if (self)

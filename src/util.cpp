@@ -24,11 +24,13 @@
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QMutex>
+#include <QMutexLocker>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
 #include <atomic>
+#include <memory>
 #include <gio/gdesktopappinfo.h>
 #include <gio/gio.h>
 
@@ -82,8 +84,37 @@ QString HOME()
 }
 QString CONFIG_DIR() { return join(env_or("XDG_CONFIG_HOME", HOME() + "/.config"), APP_ID); }
 QString CACHE_ROOT() { return env_or("XDG_CACHE_HOME", HOME() + "/.cache"); }
-QString THUMB_DIR() { return join(CACHE_ROOT(), "thumbnails"); }
-QString APP_CACHE() { return join(CACHE_ROOT(), APP_ID); }
+static QMutex private_lock;
+static QString private_dir_;   // private mode's RAM disk (ramdisk.h), empty when it's off
+
+void set_private_dir(const QString &dir)
+{
+    QMutexLocker g(&private_lock);
+    private_dir_ = dir;
+}
+
+QString private_dir_in_use()
+{
+    QMutexLocker g(&private_lock);
+    return private_dir_;
+}
+
+QString SHARED_THUMB_DIR() { return join(CACHE_ROOT(), "thumbnails"); }
+QString THUMB_DIR()
+{
+    QString p = private_dir_in_use();
+    return p.isEmpty() ? SHARED_THUMB_DIR() : join(p, "thumbnails");
+}
+QString APP_CACHE()
+{
+    QString p = private_dir_in_use();
+    return p.isEmpty() ? join(CACHE_ROOT(), APP_ID) : join(p, "cache");
+}
+QString HISTORY_DIR()
+{
+    QString p = private_dir_in_use();
+    return p.isEmpty() ? CONFIG_DIR() : join(p, "history");
+}
 QString TRASH_DIR() { return join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"), "Trash"); }
 QString GTK_BOOKMARKS() { return HOME() + "/.config/gtk-3.0/bookmarks"; }
 
@@ -152,6 +183,22 @@ QSettings &settings()
 {
     static QSettings s(APP_ID, APP_ID);
     return s;
+}
+
+QSettings &history_settings()
+{
+    static std::unique_ptr<QSettings> priv;
+    static QString priv_dir;
+    QString dir = private_dir_in_use();
+    if (dir.isEmpty())
+        return settings();
+    if (!priv || priv_dir != dir) {
+        priv = std::make_unique<QSettings>(join(join(dir, "history"), "history.ini"), QSettings::IniFormat);
+        priv_dir = dir;
+    } else {
+        priv->sync();   // another Kestrel may have added to it
+    }
+    return *priv;
 }
 
 // ---------------------------------------------------------------- paths

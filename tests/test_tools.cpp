@@ -9,6 +9,9 @@
 #include "dupes.h"
 #include "overview.h"
 #include "pgp.h"
+#include "prefs.h"
+#include "ramdisk.h"
+#include "ramdiskwin.h"
 #include "hashcheck.h"
 #include "signature.h"
 
@@ -24,6 +27,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -1136,6 +1140,200 @@ int main(int argc, char **argv)
                   "an image of a drive can't be saved on that same drive (" + source + ")");
         else
             skip("refusing to save an image on the drive being read (the test's folder isn't on a block device)");
+    }
+
+    // ================================================================ RAM disks and private mode (ramdisk.h)
+    {
+        QString shm = ramdisk::shm_root();
+        check(!shm.isEmpty() && shm.startsWith(qEnvironmentVariable("KESTREL_SHM_DIR") + "/") && isdir(shm),
+              "RAM disks and private mode have a folder of Kestrel's own in /dev/shm (the test's own here: "
+              "KESTREL_SHM_DIR)");
+        struct stat sst;
+        check(stat_(shm, sst) && (sst.st_mode & 0777) == 0700, "...which only you can open");
+
+        // -- the mirror (a persistent RAM disk's loading and saving)
+        QString r = home_path("rd/ram"), disk = home_path("rd/disk");
+        makedirs(join(r, "sub"), true);
+        makedirs(join(disk, "gone"), true);
+        write_text(join(r, "a.txt"), "new a");
+        write_text(join(r, "sub/b.txt"), "b");
+        write_text(join(r, ".kes-00000000.part"), "half-made");   // a copy into the RAM disk still running
+        (void)!::symlink("a.txt", enc(join(r, "link")).constData());
+        write_text(join(disk, "a.txt"), "old a");
+        write_text(join(disk, "only-on-disk.txt"), "x");
+        write_text(join(disk, "gone/c.txt"), "c");
+        QStringList errors;
+        ramdisk::MirrorStats st = ramdisk::mirror(r, disk, true, &errors);
+        check(errors.isEmpty() && read_file(join(disk, "a.txt")) == "new a" && read_file(join(disk, "sub/b.txt")) == "b" &&
+                  islink(join(disk, "link")) && readlink(join(disk, "link")) == "a.txt" &&
+                  !exists(join(disk, "only-on-disk.txt")) && !exists(join(disk, "gone")) &&
+                  !exists(join(disk, ".kes-00000000.part")) && st.copied == 3,
+              "saving makes the folder on disk match the RAM disk: changed files replaced, links as links, what's gone "
+              "deleted, and a copy still being made in the RAM disk left out (" + errors.join("; ") + ")");
+        st = ramdisk::mirror(r, disk, true, &errors);
+        check(errors.isEmpty() && st.copied == 0 && st.deleted == 0, "saving again copies only what changed (nothing)");
+        write_text(join(disk, "extra.txt"), "kept");
+        ramdisk::mirror(r, disk, false, &errors);
+        check(exists(join(disk, "extra.txt")), "without deleting (a load, a partly loaded RAM disk's save), nothing "
+                                               "only in the destination is deleted");
+
+        // a save cut off part-way (a full disk: RLIMIT_FSIZE): the saved file is still the old one, whole, and no part
+        // file is left
+        write_text(join(r, "big.bin"), QByteArray(3 << 20, 'n'));
+        write_text(join(disk, "big.bin"), "old big");
+        errors.clear();
+        {
+            struct rlimit old_lim, lim;
+            ::getrlimit(RLIMIT_FSIZE, &old_lim);
+            lim = old_lim;
+            lim.rlim_cur = 1 << 20;
+            auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+            ramdisk::mirror(r, disk, true, &errors);
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+        }
+        QStringList parts;
+        for (const QString &n : listdir(disk))
+            if (n.startsWith(".kes-"))
+                parts << n;
+        check(!errors.isEmpty() && read_file(join(disk, "big.bin")) == "old big" && parts.isEmpty(),
+              "a save that fails part-way keeps the saved file as it was, whole, and leaves no part file");
+        // ...and one cancelled after its first file: what's saved is whole, the rest still the old one
+        write_text(join(r, "a.txt"), "newer a");
+        write_text(join(r, "sub/b.txt"), "newer b");
+        int asked = 0;
+        bool stopped = false;
+        try {
+            ramdisk::mirror(r, disk, true, &errors, [&]() { return ++asked > 3; });
+        } catch (const Cancelled &) {
+            stopped = true;
+        }
+        QByteArray a = read_file(join(disk, "a.txt")), b = read_file(join(disk, "sub/b.txt"));
+        parts.clear();
+        for (const QString &n : listdir(disk) + listdir(join(disk, "sub")))
+            if (n.startsWith(".kes-"))
+                parts << n;
+        check(stopped && (a == "new a" || a == "newer a") && (b == "b" || b == "newer b") && parts.isEmpty(),
+              "a cancelled save leaves each file whole, old or new, and no part file");
+        ::unlink(enc(join(r, "big.bin")).constData());
+
+        // -- a persistent RAM disk is saved only once it has been loaded
+        ramdisk::Disk d;
+        d.id = "0badf00d";
+        d.name = "Test";
+        d.kind = ramdisk::FOLDER;
+        d.path = home_path("rd/fresh");
+        d.life = ramdisk::PERSISTENT;
+        d.save_to = disk;
+        makedirs(d.path, true);
+        QStringList before = listdir(disk);
+        before.sort();
+        errors.clear();
+        bool saved = ramdisk::save(d, &errors);
+        QStringList after = listdir(disk);
+        after.sort();
+        check(!saved && !errors.isEmpty() && after == before,
+              "a persistent RAM disk that came up without its files isn't saved (it would empty the saved copy)");
+        if (::setxattr(enc(d.path).constData(), "user.kestrel-test", "1", 1, 0) != 0 &&
+            qEnvironmentVariableIsEmpty("XDG_RUNTIME_DIR")) {
+            skip("loading a persistent RAM disk (no user.* attributes here, and no XDG_RUNTIME_DIR)");
+        } else {
+            errors.clear();
+            bool loaded = ramdisk::load(d, &errors);
+            check(loaded && ramdisk::loaded(d.path, d.id) && read_file(join(d.path, "a.txt")) == read_file(join(disk, "a.txt")) &&
+                      read_file(join(d.path, "extra.txt")) == "kept",
+                  "loading copies the saved files into it and marks it loaded");
+            write_text(join(d.path, "made-in-ram.txt"), "r");
+            ::unlink(enc(join(d.path, "extra.txt")).constData());
+            errors.clear();
+            check(ramdisk::save(d, &errors) && read_file(join(disk, "made-in-ram.txt")) == "r" &&
+                      !exists(join(disk, "extra.txt")),
+                  "...then it's saved: what's new goes to disk, what was deleted in it goes from there too");
+        }
+
+        // -- its systemd units: nothing in a name or path is expanded or splits the command
+        d.name = "50% off";
+        d.interval = 10;
+        QString svc = ramdisk::service_text(d, "/opt/my kes/kes$x");
+        check(svc.contains("ExecStart=\"/opt/my kes/kes$$x\" --ramdisk-start 0badf00d\n") &&
+                  svc.contains("ExecStop=\"/opt/my kes/kes$$x\" --ramdisk-stop 0badf00d\n") &&
+                  svc.contains("Description=Kestrel Explorer RAM disk 50%% off\n") &&
+                  ramdisk::timer_text(d).contains("OnUnitActiveSec=10min\n") &&
+                  ramdisk::unit_names(d) == QStringList({"kestrel-ramdisk-0badf00d.service",
+                                                         "kestrel-ramdisk-0badf00d-save.service",
+                                                         "kestrel-ramdisk-0badf00d.timer"}),
+              "a persistent RAM disk's units run kes with its path quoted and nothing in it expanded, and save on a timer");
+        d.life = ramdisk::SESSION;
+        check(ramdisk::unit_names(d).isEmpty(), "one that lasts until logout has no units");
+
+        // -- the list, and the New RAM Disk window
+        check(!ramdisk::name_problem("").isEmpty() && !ramdisk::name_problem("a/b").isEmpty() &&
+                  !ramdisk::name_problem(".hidden").isEmpty() && ramdisk::name_problem("Scratch").isEmpty(),
+              "a RAM disk's name can't be empty, have a / or start with a dot");
+        auto *win = new RamDiskWindow(w);
+        show_free(win);
+        spin(50);
+        win->name->setText("Scratch");
+        check(is_free_window(win) && win->problem_text().isEmpty() && win->chosen().path == join(shm, "Scratch") &&
+                  win->chosen().kind == ramdisk::FOLDER,
+              "New RAM Disk is a free window; without a size limit it's a folder in Kestrel's /dev/shm folder");
+        win->lives[ramdisk::PERSISTENT]->setChecked(true);
+        win->save_to->setText(join(shm, "inside"));
+        check(!win->problem_text().isEmpty(), "...a persistent one can't be saved to a folder in memory");
+        win->limit->setChecked(true);
+        win->location->setText(disk);   // not empty
+        win->lives[ramdisk::SESSION]->setChecked(true);
+        check(!win->problem_text().isEmpty() && win->chosen().kind == ramdisk::MOUNT,
+              "...with a size limit it's mounted on a folder, which must be new or empty");
+        win->close();
+        QList<ramdisk::Disk> list;
+        ramdisk::Disk e;
+        e.id = "00000001", e.name = "Gone", e.path = join(shm, "Gone"), e.life = ramdisk::SESSION;
+        ramdisk::Disk k = e;
+        k.id = "00000002", k.name = "Kept", k.path = join(shm, "Kept"), k.life = ramdisk::PERMANENT;
+        list << e << k;
+        ramdisk::save_disks(list);
+        ramdisk::prune();
+        list = ramdisk::disks();
+        check(list.size() == 1 && list[0].id == "00000002",
+              "at start, a RAM disk whose time is over (until logout, and no longer there) is forgotten; a permanent "
+              "one is kept to bring back");
+        makedirs(join(shm, "Kept"), true);
+        w->sidebar->refresh();
+        check(wait_for([&]() { return w->sidebar->entry_keys("ramdisks").contains("ramdisk:00000002"); }),
+              "the sidebar's RAM Disks section lists it");
+
+        // -- private mode: caches and histories in memory, Save windows start in Private, all of it deleted when
+        // it's left (or the last Kestrel closes)
+        QString cache_before = APP_CACHE(), thumbs_before = THUMB_DIR(), history_before = HISTORY_DIR();
+        prefs::set("private_mode", true);
+        QString priv = ramdisk::private_dir();
+        check(APP_CACHE().startsWith(priv + "/") && THUMB_DIR().startsWith(priv + "/") && HISTORY_DIR().startsWith(priv + "/") &&
+                  SHARED_THUMB_DIR() == thumbs_before && isdir(ramdisk::private_files()),
+              "in private mode the caches, thumbnails and histories are in the private RAM disk (thumbnails made "
+              "before are still read from the shared cache)");
+        check(wait_for([&]() { return w->sidebar->entry_keys("ramdisks").contains("private") && w->private_btn->isVisible(); }) &&
+                  w->windowTitle().contains("(Private)"),
+              "...and the window says so: Private in the sidebar and the status bar, and in its title");
+        history_settings().setValue("recent_servers", QStringList{"sftp://private.example"});
+        check(!settings().value("recent_servers").toStringList().contains("sftp://private.example"),
+              "a server connected to in private mode isn't remembered on disk");
+        prefs::set("ramdisk_wipe_warning", false);
+        write_text(join(ramdisk::private_files(), "saved.txt"), "s");
+        ramdisk::set_private(w, false);
+        check(APP_CACHE() == cache_before && HISTORY_DIR() == history_before && THUMB_DIR() == thumbs_before,
+              "leaving private mode puts the caches and histories back where they were");
+        check(wait_for([&]() { return !lexists(priv); }, 5000),
+              "...and deletes the private RAM disk, with the files saved in Private");
+        prefs::set("private_mode", true);
+        prefs::set("ramdisk_wipe_warning", true);
+        write_text(join(ramdisk::private_files(), "saved.txt"), "s");
+        check(ramdisk::wipe_needs_warning(true), "with files in Private, leaving says first that they'll be deleted");
+        ramdisk::last_kestrel_gone();
+        check(!lexists(ramdisk::private_dir()) && lexists(join(shm, "Kept")),
+              "when the last Kestrel has gone, the private RAM disk is deleted (and a permanent RAM disk isn't)");
+        prefs::set("private_mode", false);
     }
 
     finish();

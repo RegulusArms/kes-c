@@ -259,6 +259,12 @@ Right-click a tab's title.
 | **Unmount** | Unmounts the drive (a tape writes its index first); asks first while a job still uses it | Drives, mounted network shares |
 | **Remove from Recent Servers** | Forgets a recently used server | Servers not connected |
 | **Eject** / **Unmount** | Disconnects the phone or camera | Mounted phones and cameras |
+| **Bring Back into Memory** | Makes the RAM disk again (mounting one with a size limit asks for your password once), and loads its saved files if it keeps them | RAM disks not in memory now (greyed; a click does the same) |
+| **Save to Disk Now** | Saves the RAM disk's files to its folder on disk now, as a job (only what changed) | RAM disks that save their files to disk, while in memory |
+| **Edit RAM Disk…** | Changes its name, size limit, how long it lasts, and where and how often it's saved | RAM disks |
+| **Remove RAM Disk…** | Asks, then takes it down for good: saved one last time first if it keeps its files (that copy stays), its files deleted from memory, its startup units removed | RAM disks |
+| **New RAM Disk…** | Makes a RAM disk (also ☰ → New RAM Disk…) | RAM disks, Private |
+| **Leave Private Mode** | Turns private mode off in every Kestrel; its RAM disk, with the files saved in Private, is deleted (said first, unless that's turned off) | Private (while private mode is on) |
 | **Hide from Sidebar** | Takes the place out of the sidebar, in every window; Preferences → Sidebar → Places shown brings it back | Places (Overview, Home, Recent, Starred, the user folders, Trash) |
 
 ## Overview cards

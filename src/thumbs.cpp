@@ -257,9 +257,16 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
     QString uri = file_uri(path);
     QString cache_dir = join(THUMB_DIR(), flavor);
     QString cache_path = join(cache_dir, md5(uri) + ".png");
-    bool in_cache_dir = path.startsWith(THUMB_DIR());
-    if (!in_cache_dir && !fresh && exists(cache_path)) {
-        QImage img(cache_path);
+    bool in_cache_dir = path.startsWith(THUMB_DIR()) || path.startsWith(SHARED_THUMB_DIR());
+    // in private mode, those made before (the shared cache) are still used, and new ones go to the private RAM disk
+    QString shared_path = join(join(SHARED_THUMB_DIR(), flavor), md5(uri) + ".png");
+    QStringList cached_at{cache_path};
+    if (shared_path != cache_path)
+        cached_at << shared_path;
+    for (const QString &cached : cached_at) {
+        if (in_cache_dir || fresh || !exists(cached))
+            continue;
+        QImage img(cached);
         if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
             stats::count("thumbnails from the disk cache");
             return img;

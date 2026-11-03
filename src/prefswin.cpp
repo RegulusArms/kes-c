@@ -71,7 +71,8 @@ static void select_data(QComboBox *cb, const QVariant &v)
 }
 
 static const QMap<QString, QString> SECTION_NAMES = {
-    {"places", TX_NOOP("Places")}, {"bookmarks", TX_NOOP("Bookmarks")}, {"devices", TX_NOOP("Devices")}, {"mounts", TX_NOOP("Mounts")}};
+    {"places", TX_NOOP("Places")}, {"bookmarks", TX_NOOP("Bookmarks")}, {"devices", TX_NOOP("Devices")}, {"mounts", TX_NOOP("Mounts")},
+    {"ramdisks", TX_NOOP("RAM Disks")}};
 
 PreferencesDialog::PreferencesDialog(QWidget *parent) : QDialog(parent)
 {

@@ -261,6 +261,17 @@ static QList<Pref> build()
         TX_NOOP("Remember the image viewer's Move To / Copy To folders (Ctrl+1–9, Alt+1–9)"), BOOL, true);
     add(TX_NOOP("Privacy"), history, "history_clear", TX_NOOP("Clear"), CUSTOM, QVariant(),
         TX_NOOP("Remove from Frequent Folders, Remove from Recent Servers (right-click one)"));
+    const QString priv = TX_NOOP("Private mode");
+    add(TX_NOOP("Privacy"), priv, "private_mode", TX_NOOP("Private mode"), BOOL, false,
+        TX_NOOP("☰ → Private Mode; the status bar's Private; the sidebar's Private (Leave Private Mode)"),
+        TX_NOOP("Kestrel's caches (the previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent "
+        "servers, remembered syncs, the viewer's folders) are kept in memory and deleted when the last Kestrel closes; "
+        "nothing is added to the desktop's Recent; Save windows start in the Private folder, in memory too. It stays on, "
+        "also after Kestrel is closed and opened again, until it's turned off."));
+    add(TX_NOOP("Privacy"), priv, "ramdisk_wipe_warning",
+        TX_NOOP("Say which files will be deleted when the last Kestrel closes or private mode is left"), BOOL, true,
+        TX_NOOP("the warning's Don't show this again"),
+        TX_NOOP("The files saved in Private (private mode) and in RAM disks that last until Kestrel closes."));
     return l;
 }
 

@@ -141,6 +141,9 @@ public:
     ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
     bool chooser_mode = false;       // a chooser window: has its own view settings (view_value)
     QAction *a_tower = nullptr;      // ☰ → Tower…, with Preferences → Show developer tools
+    QAction *a_private = nullptr;    // ☰ → Private Mode (ticked while it's on)
+    QToolButton *private_btn = nullptr;   // "Private" in the status bar while private mode is on
+    void sync_private();             // those two and the title, after private_mode changed
     // the window's and its tabs' view settings (size, zoom, view, sort, panels, hidden files, folder previews, search
     // options); a chooser window keeps its own (see view_value in app.cpp)
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
@@ -184,6 +187,8 @@ private:
     void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
     QPointer<QMessageBox> close_box;             // "Jobs Are Running" (the last window), while it's asking
     bool close_confirmed = false;                // answered: close without asking again
+    QPointer<QMessageBox> wipe_box;              // "Close Kestrel" (RAM disk files deleted), while it's asking
+    bool wipe_confirmed = false;
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

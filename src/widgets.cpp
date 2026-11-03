@@ -14,6 +14,8 @@
 #include "places.h"
 #include "prefs.h"
 #include "proc.h"
+#include "ramdisk.h"
+#include "ramdiskwin.h"
 #include "thumbs.h"
 #include "util.h"
 #include "windows.h"
@@ -1311,7 +1313,7 @@ void Sidebar::drives_changed()
 
 namespace sidebar {
 
-const QStringList SECTIONS = {"places", "bookmarks", "devices", "mounts"};
+const QStringList SECTIONS = {"places", "bookmarks", "devices", "mounts", "ramdisks"};
 
 const QList<QPair<QString, QString>> PLACES = {
     {"overview", TX_NOOP("Overview")}, {"home", TX_NOOP("Home")},         {"recent", TX_NOOP("Recent")},
@@ -1549,7 +1551,7 @@ void Sidebar::refresh()
         mount_entries << Entry{sh.name, target, sh.icon.isNull() ? theme_icon({"folder-remote", "folder"}) : sh.icon,
                                "share", i, target, tx("Network share: %1").arg(sh.uri)};
     }
-    for (const QString &uri : settings().value("recent_servers").toStringList().mid(0, 6)) {
+    for (const QString &uri : history_settings().value("recent_servers").toStringList().mid(0, 6)) {
         if (overview::connected(uri, shares))
             continue;
         Entry e{server_label(uri), uri, theme_icon({"folder-remote", "network-server", "folder"}), "server",
@@ -1565,16 +1567,32 @@ void Sidebar::refresh()
         device_list << Entry{ph.name, ph.mounted ? ph.root : ph.uri, icon, "phone", i, "phone:" + ph.name,
                              ph.mounted ? ph.fs : tx("%1 — click to connect").arg(ph.fs)};
     }
+    // RAM disks (ramdisk.h): private mode's Private folder, then each RAM disk (greyed when it's not in memory: a
+    // click brings it back)
+    QList<Entry> ramdisk_list;
+    if (ramdisk::private_mode() && !ramdisk::private_files().isEmpty())
+        ramdisk_list << Entry{tx("Private"), ramdisk::private_files(), theme_icon({"security-high", "changes-prevent", "folder"}),
+                              "private", QVariant(), "private",
+                              tx("Private mode: Save windows start here. Deleted when the last Kestrel closes.")};
+    for (const ramdisk::Disk &d : ramdisk::disks()) {
+        QString label = d.kind == ramdisk::MOUNT ? QString("%1 (%2)").arg(d.name, human_size(d.size_mb * 1024 * 1024)) : d.name;
+        Entry e{label, d.path, theme_icon({"media-memory", "drive-removable-media", "folder"}), "ramdisk", d.id,
+                "ramdisk:" + d.id, ramdisk::describe(d)};
+        e.dim = !ramdisk::online(d);
+        ramdisk_list << e;
+    }
     QStringList collapsed = settings().value("sidebar_collapsed").toStringList();
     for (const QString &id : sidebar::section_order(settings().value("sidebar_sections").toStringList())) {
-        QList<Entry> entries = id == "places"    ? in_order(place_list, "sidebar_places_order")
-                               : id == "devices" ? in_order(device_list, "sidebar_devices_order")
-                               : id == "mounts"  ? in_order(mount_entries, "sidebar_mounts_order")
-                                                 : bookmark_list;
+        QList<Entry> entries = id == "places"     ? in_order(place_list, "sidebar_places_order")
+                               : id == "devices"  ? in_order(device_list, "sidebar_devices_order")
+                               : id == "mounts"   ? in_order(mount_entries, "sidebar_mounts_order")
+                               : id == "ramdisks" ? in_order(ramdisk_list, "sidebar_ramdisks_order")
+                                                  : bookmark_list;
         if (entries.isEmpty())
             continue;
         bool shut = collapsed.contains(id);
-        header(id, (id == "places" ? tx("Places") : id == "devices" ? tx("Devices") : id == "mounts" ? tx("Mounts") : tx("Bookmarks")).toUpper(), shut);
+        header(id, (id == "places" ? tx("Places") : id == "devices" ? tx("Devices") : id == "mounts" ? tx("Mounts")
+                    : id == "ramdisks" ? tx("RAM Disks") : tx("Bookmarks")).toUpper(), shut);
         if (!shut)
             for (const Entry &e : entries)
                 add(e, id);
@@ -1655,9 +1673,10 @@ void Sidebar::move_entry(const QString &section, const QString &key, int index)
     }
     QStringList now = sidebar::moved(keys, key, index);
     if (now != keys)
-        save_order(section == "places"   ? "sidebar_places_order"
-                   : section == "mounts" ? "sidebar_mounts_order"
-                                         : "sidebar_devices_order",
+        save_order(section == "places"     ? "sidebar_places_order"
+                   : section == "mounts"   ? "sidebar_mounts_order"
+                   : section == "ramdisks" ? "sidebar_ramdisks_order"
+                                           : "sidebar_devices_order",
                    now);
 }
 
@@ -1717,6 +1736,15 @@ void Sidebar::clicked(QListWidgetItem *it)
         return;
     }
     QString p = it->data(PathRole).toString();
+    QVariantList ke = it->data(Qt::UserRole).toList();
+    if (ke.value(0) == "ramdisk") {   // not in memory now: brought back first
+        const QList<ramdisk::Disk> list = ramdisk::disks();
+        const ramdisk::Disk *d = ramdisk::find(list, ke.value(1).toString());
+        if (d && !ramdisk::online(*d)) {
+            ramdisk::bring_up(this, d->id);
+            return;
+        }
+    }
     if (!p.isEmpty())
         Q_EMIT open_path(p, QGuiApplication::keyboardModifiers() & Qt::ControlModifier);
 }
@@ -1822,6 +1850,25 @@ void Sidebar::menu(const QPoint &pos)
     } else if (kind == "server") {
         m.addSeparator();
         m.addAction(tx("Remove from Recent Servers"), this, [this, path]() { forget_server(path); });
+    } else if (kind == "ramdisk") {
+        QString id = extra.toString();
+        const QList<ramdisk::Disk> list = ramdisk::disks();
+        const ramdisk::Disk *d = ramdisk::find(list, id);
+        m.addSeparator();
+        if (d && !ramdisk::online(*d))
+            m.addAction(tx("Bring Back into Memory"), this, [this, id]() { ramdisk::bring_up(this, id); });
+        if (d && d->life == ramdisk::PERSISTENT && ramdisk::online(*d))
+            m.addAction(tx("Save to Disk Now"), this, [this, id]() { ramdisk::save_now(this, id); });
+        if (d) {
+            ramdisk::Disk copy = *d;
+            m.addAction(tx("Edit RAM Disk…"), this, [this, copy]() { show_free(new RamDiskWindow(this, &copy)); });
+        }
+        m.addAction(tx("Remove RAM Disk…"), this, [this, id]() { ramdisk::remove(this, id); });
+        m.addAction(tx("New RAM Disk…"), this, [this]() { show_free(new RamDiskWindow(this)); });
+    } else if (kind == "private") {
+        m.addSeparator();
+        m.addAction(tx("Leave Private Mode"), this, [this]() { ramdisk::set_private(this, false); });
+        m.addAction(tx("New RAM Disk…"), this, [this]() { show_free(new RamDiskWindow(this)); });
     } else if (kind == "phone" && phones.value(extra.toInt()).mount) {
         int i = extra.toInt();
         m.addSeparator();
@@ -1899,10 +1946,10 @@ void Sidebar::hide_place(const QString &id)
 
 void Sidebar::forget_server(const QString &uri)
 {
-    QStringList recents = settings().value("recent_servers").toStringList();
+    QStringList recents = history_settings().value("recent_servers").toStringList();
     recents.removeAll(uri);
-    settings().setValue("recent_servers", recents);
-    settings().sync();
+    history_settings().setValue("recent_servers", recents);
+    history_settings().sync();
     atc::announce("sidebar");   // refreshes every sidebar, here and in other Kestrels
 }
 

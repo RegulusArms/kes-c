@@ -515,7 +515,7 @@ void ChooserBar::finish(bool ok, const QStringList &paths)
     res.filter = filter ? filter->currentIndex() : -1;
     if (ok && !paths.isEmpty()) {
         QString folder = req.directory && !req.saving() ? paths[0] : dirname(paths[0]);
-        settings().setValue("chooser_folder", folder);   // the next chooser starts here
+        history_settings().setValue("chooser_folder", folder);   // the next chooser starts here
     }
     done(res);
     win->close();

@@ -306,6 +306,45 @@ as Back Up makes them) image is expanded first into a copy in your cache folder,
 encrypted while it's there), mounted read-only, and deleted once unmounted. An `.iso` still opens as an archive when
 double-clicked.
 
+## RAM disks and private mode
+
+A **RAM disk** is a folder whose files are kept in memory: very fast, and gone when it's taken down. ☰ → **New RAM
+Disk…** (or right-click one in the sidebar's **RAM Disks**) makes one:
+
+- **Without a size limit** (no password): a folder in `/dev/shm`, in Kestrel's own folder there that only you can open.
+  It shares the memory set aside for `/dev/shm` (half the RAM). The desktop empties it when you log out.
+- **With a size limit of its own**: a tmpfs mounted on a folder you choose (new or empty), with the size you set. It
+  uses memory only for what's in it. Mounting it, and changing or removing it, asks for your password once (the
+  [admin session](admin.md)).
+
+How long it lasts:
+
+- **Until Kestrel closes**: taken down when the last Kestrel closes, also after a crash. (One with a size limit is
+  emptied then; the empty mount, using no memory, goes when the computer restarts or it's removed.)
+- **Until you log out or restart** (without a size limit) / **until you restart** (with one).
+- **Always: back, empty, at every login** (or every start, with a size limit).
+- **Always, with its files saved to disk**: pick a folder on disk. Its files are loaded from there when the RAM disk
+  comes up, and saved there when you log out or shut down, every so many minutes in between (15 by default; 0: only
+  at logout and shutdown), and with right-click → **Save to Disk Now**. Each save copies only what changed, writes
+  each file under a hidden name and renames it into place, so a cut-off save leaves every saved file whole, old or new;
+  what was deleted in the RAM disk is deleted from the saved copy after. One that came up without its files (a load that
+  failed) is never saved over the saved copy. A power cut loses what changed since the last save. The loading and
+  saving are done by systemd user units (`~/.config/systemd/user/kestrel-ramdisk-*`), so they also happen while Kestrel
+  isn't running; they're removed with the RAM disk.
+
+RAM disks are listed in the sidebar's **RAM Disks**, greyed while one isn't in memory (a click brings it back).
+Right-click one to edit, save or remove it.
+
+**Private mode** (☰ → **Private Mode**, or Preferences → Privacy): Kestrel's caches (the thumbnails and folder previews
+it makes, folder sizes, job logs) and its histories (Frequent Folders, recent servers, remembered syncs, the image
+viewer's Move To / Copy To folders, the last Save folder) are kept in a hidden RAM disk of its own, and nothing is added
+to the desktop's Recent. Thumbnails made before are still shown, read from the usual cache. Every Save window (Kestrel's
+own and other apps') starts in the **Private** folder, in memory too: to save to disk, choose another folder. The status
+bar, the window title and the sidebar say private mode is on. It stays on, also after Kestrel is closed and opened
+again, until you turn it off. Closing the last Kestrel deletes all of it, also the files saved in Private, and so does
+leaving private mode. Before that, it says which files will be deleted, until you tick **Don't show this again**
+(Preferences → Privacy turns it back on). Settings, stars, bookmarks and folder colours are still saved as usual.
+
 ## Comparing and syncing folders
 
 Right-click a folder → **Compare With…** asks for another folder and lists the differences, through every subfolder: only on one side (a folder there is one row), newer on one side, or the same name with other contents. By size and date, or tick **Compare contents** to read the files byte by byte. Choose what's listed (the same items are hidden), and for the items selected: **Open Left** / **Open Right**, **Copy to Right →** / **← Copy to Left** (asking before replacing anything), **Trash on Left** / **Trash on Right**. The list is compared again after a copy.

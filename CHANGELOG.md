@@ -4,7 +4,24 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.9
+## 0.3.3-alpha.10
+
+- **RAM disks.** ☰ → **New RAM Disk…** makes a folder whose files are kept in memory. Without a size limit it needs no
+  password (a folder in `/dev/shm`, only yours); with a size limit of its own it's a tmpfs mounted on a folder you
+  choose, which asks for your password once. It can last until Kestrel closes, until you log out or restart, or always
+  (back, empty, at every login or start). Or it can keep its files: they're saved to a folder on disk when you log out
+  or shut down, every few minutes in between (you set how often) and with **Save to Disk Now**, and loaded back when it
+  comes up, also while Kestrel isn't running. Each save copies only what changed and never leaves a saved file half
+  written, and a RAM disk that came up without its files is never saved over them. RAM disks are listed in the
+  sidebar's new **RAM Disks** section, with Edit, Save to Disk Now and Remove when you right-click one.
+- **Private mode** (☰ → **Private Mode**, or Preferences → Privacy). Kestrel's caches (the thumbnails and folder
+  previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent servers, remembered syncs, the
+  viewer's folders) are kept in a hidden RAM disk, nothing is added to the desktop's Recent, and every Save window
+  starts in a **Private** folder in memory. All of it is deleted when the last Kestrel closes, or when private mode is
+  turned off. Kestrel says which files will be deleted first, until you tick **Don't show this again**. Private mode
+  stays on across restarts until you turn it off; the status bar, the title and the sidebar show it's on.
+
+## 0.3.3-alpha.9 (2026-11-03)
 
 - **Encrypt and decrypt files with gpg.** Right-click one or more files → **Encrypt…**: an encrypted copy beside each
   (`name.gpg`, or `name.asc` as text to paste into an email), the original left as it is, either with a password

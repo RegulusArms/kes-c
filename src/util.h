@@ -73,8 +73,14 @@ extern const char *VERSION;
 QString HOME();
 QString CONFIG_DIR();      // ~/.config/kestrel-explorer
 QString CACHE_ROOT();      // ~/.cache
-QString THUMB_DIR();       // ~/.cache/thumbnails
-QString APP_CACHE();       // ~/.cache/kestrel-explorer
+QString THUMB_DIR();       // ~/.cache/thumbnails (in private mode: the private RAM disk's thumbnails)
+QString APP_CACHE();       // ~/.cache/kestrel-explorer (in private mode: the private RAM disk's cache)
+QString SHARED_THUMB_DIR();   // ~/.cache/thumbnails, also in private mode (read from there, never written)
+QString HISTORY_DIR();     // where history files go: CONFIG_DIR(), or in private mode the private RAM disk's history
+// Private mode (ramdisk.h): caches and histories in this folder (empty: back to the usual places). Any thread may
+// read the paths above while the UI thread changes this.
+void set_private_dir(const QString &dir);
+QString private_dir_in_use();
 QString TRASH_DIR();       // ~/.local/share/Trash
 QString GTK_BOOKMARKS();   // ~/.config/gtk-3.0/bookmarks
 
@@ -82,6 +88,9 @@ extern const QSet<QString> VIDEO_EXTS;
 extern const QSet<QString> RAW_EXTS;
 
 QSettings &settings();
+// The settings file for kept history (recent_servers, viewer_recent_folders, chooser_folder): settings(), or in
+// private mode a copy in the private RAM disk (UI thread only)
+QSettings &history_settings();
 
 // Prefer the system's programs and libraries over Anaconda's (or Miniconda's, Miniforge's…).
 //

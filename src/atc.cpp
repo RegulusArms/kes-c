@@ -1,6 +1,7 @@
 #include "atc.h"
 
 #include "jobs.h"
+#include "ramdisk.h"
 #include "stats.h"
 #include "util.h"
 
@@ -417,7 +418,11 @@ int run_tower(int argc, char **argv)
     tower->node = g_dbus_node_info_new_for_xml(XML, nullptr);
     tower->land.setSingleShot(true);
     tower->land.setInterval(LAND_MS);
-    QObject::connect(&tower->land, &QTimer::timeout, &app, &QCoreApplication::quit);
+    QObject::connect(&tower->land, &QTimer::timeout, &app, []() {
+        // the last Kestrel has gone: what lasts only while Kestrel runs goes with it (ramdisk.h)
+        ramdisk::last_kestrel_gone();
+        QCoreApplication::quit();
+    });
     tower->land.start();
     g_bus_own_name(
         G_BUS_TYPE_SESSION, NAME, G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE,

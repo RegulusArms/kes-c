@@ -305,7 +305,7 @@ static bool remember_recent()
 
 // ---------------------------------------------------------------- frequent folders
 
-static QString frequent_file() { return join(CONFIG_DIR(), "frequent.json"); }
+static QString frequent_file() { return join(HISTORY_DIR(), "frequent.json"); }
 
 struct Visits {
     qint64 count = 0, last = 0;
@@ -435,7 +435,8 @@ void add_recent(const QStringList &paths_in)
     for (const QString &p : paths_in)   // (files already; a tape's aren't asked again: it may be busy seeking)
         if (drives::slow_kind(p) != drives::Slow::None || isfile(p))
             wanted.insert(file_uri(p), p);
-    if (wanted.isEmpty() || !remember_recent() || !prefs::get("history_recent").toBool())
+    // (private mode: the desktop's Recent is on disk and shared, so nothing is added to it)
+    if (wanted.isEmpty() || !remember_recent() || !prefs::get("history_recent").toBool() || !private_dir_in_use().isEmpty())
         return;
     QString now = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH:mm:ss.zzz000Z");
     bool ok = false;
@@ -540,8 +541,14 @@ void clear_history()
     pending_visits.clear();
     write_frequent({});
     for (const char *key : {"recent_servers", "chooser_folder", "viewer_recent_folders"})
-        settings().remove(key);
-    settings().sync();
+        history_settings().remove(key);
+    history_settings().sync();
+    if (!private_dir_in_use().isEmpty()) {   // in private mode, what's kept on disk too
+        ::unlink(enc(join(CONFIG_DIR(), "frequent.json")).constData());
+        for (const char *key : {"recent_servers", "chooser_folder", "viewer_recent_folders"})
+            settings().remove(key);
+        settings().sync();
+    }
     atc::announce("sidebar");   // the sidebars' recent servers, here and in other Kestrels
 }
 

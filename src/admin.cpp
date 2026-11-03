@@ -54,7 +54,8 @@ QVariantMap resolve_paths(const QString &op, QVariantMap args)
     static const QMap<QString, QStringList> PATHS = {
         {"delete", {"path"}},  {"copy", {"src", "dst"}},   {"move", {"src", "dst"}},       {"rename", {"src", "dst"}},
         {"mkdir", {"path"}},   {"touch", {"path"}},        {"copyfile", {"src", "dst"}},   {"symlink", {"link"}},
-        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}, {"readdev", {"device", "fifo"}}};
+        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}, {"readdev", {"device", "fifo"}},
+        {"tmpfs_mount", {"path"}}, {"tmpfs_unmount", {"path"}}, {"tmpfs_unit", {"path"}}};
     for (const QString &key : PATHS.value(op)) {
         QString p = args.value(key).toString();
         if (!p.startsWith('/'))

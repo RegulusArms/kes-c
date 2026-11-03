@@ -32,6 +32,8 @@
 #include "signature.h"
 #include "undo.h"
 #include "proc.h"
+#include "ramdisk.h"
+#include "ramdiskwin.h"
 #include "thumbs.h"
 #include "towerwin.h"
 #include "stats.h"
@@ -329,7 +331,20 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     connect(task_panel, &TaskPanel::clicked, this, [this]() { JobsWindow::open(this); });
     setProperty("task_panel", QVariant::fromValue<QObject *>(task_panel));
     auto *admin_indicator = new admin::Indicator;   // 🛡 while an admin session is open
+    private_btn = new QToolButton;   // while private mode is on (ramdisk.h)
+    private_btn->setText(tx("Private"));
+    private_btn->setIcon(icon({"security-high", "changes-prevent"}));
+    private_btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    private_btn->setAutoRaise(true);
+    private_btn->setToolTip(tx("Private mode: Kestrel's caches and histories are kept in memory and deleted when the "
+                               "last Kestrel closes, and Save windows start in the Private folder."));
+    private_btn->setPopupMode(QToolButton::InstantPopup);
+    auto *private_menu = new QMenu(private_btn);
+    private_menu->addAction(tx("Open the Private Folder"), this, [this]() { navigate(ramdisk::private_files()); });
+    private_menu->addAction(tx("Leave Private Mode"), this, [this]() { ramdisk::set_private(this, false); });
+    private_btn->setMenu(private_menu);
     statusBar()->addWidget(status_label, 1);
+    statusBar()->addPermanentWidget(private_btn);
     statusBar()->addPermanentWidget(admin_indicator);
     statusBar()->addPermanentWidget(task_panel);
     statusBar()->addPermanentWidget(thumb_progress);
@@ -734,6 +749,11 @@ void MainWindow::build_actions()
     A(tx("Preferences…"), {"Ctrl+,"}, [this]() { preferences(); }, menu, {"preferences-system"});
     A(tx("Jobs…"), {"Ctrl+Shift+J"}, [this]() { JobsWindow::open(this); }, menu);
     A(tx("Sync Folders…"), {}, [this]() { compare::open_sync(this, QString()); }, menu, {"folder-sync", "view-refresh"});
+    A(tx("New RAM Disk…"), {}, [this]() { show_free(new RamDiskWindow(this)); }, menu, {"media-memory", "drive-removable-media"});
+    // (ticked again or not by sync_private: leaving may first ask, and Cancel keeps it on)
+    a_private = A(tx("Private Mode"), {}, [this]() { ramdisk::set_private(this, a_private->isChecked()); sync_private(); },
+                  menu, {"security-high", "changes-prevent"}, true);
+    QTimer::singleShot(0, this, [this]() { sync_private(); });   // once the window's made
     a_tower = A(tx("Tower…"), {}, [this]() { TowerWindow::open(this); }, menu);
     a_tower->setVisible(settings().value("developer_tools", false).toBool());
     A(tx("Start Admin Session…"), {}, [this]() { admin::start_session(this); }, menu, {"security-high", "dialog-password"});
@@ -748,6 +768,19 @@ void MainWindow::build_actions()
           box->setIconPixmap(windowIcon().pixmap(64));
       },
       menu);
+}
+
+void MainWindow::sync_private()
+{
+    bool on = ramdisk::private_mode();
+    if (a_private) {
+        QSignalBlocker quiet(a_private);
+        a_private->setChecked(on);
+    }
+    if (private_btn)
+        private_btn->setVisible(on);
+    if (pane())
+        pane_path_changed(pane());   // the title
 }
 
 // -- tabs
@@ -877,7 +910,7 @@ void MainWindow::pane_path_changed(Pane *p)
         return;
     pathbar->set_path(p->path);
     sidebar->select_path(p->path);
-    setWindowTitle(QString("%1 — %2").arg(p->title(), APP_NAME));
+    setWindowTitle(QString("%1 — %2").arg(p->title(), ramdisk::private_mode() ? tx("%1 (Private)").arg(APP_NAME) : QString(APP_NAME)));
     a_back->setEnabled(!p->back_stack.isEmpty());
     a_fwd->setEnabled(!p->fwd_stack.isEmpty());
     a_up->setEnabled(!p->is_overview() && !p->is_virtual() && p->path != "/");
@@ -951,10 +984,10 @@ void MainWindow::remember_server(const QString &uri)
     if (!prefs::get("history_servers").toBool())
         return;
     QStringList recents;
-    for (const QString &u : settings().value("recent_servers").toStringList())
+    for (const QString &u : history_settings().value("recent_servers").toStringList())
         if (u != uri)
             recents << u;
-    settings().setValue("recent_servers", QStringList{uri} + recents.mid(0, 9));
+    history_settings().setValue("recent_servers", QStringList{uri} + recents.mid(0, 9));
 }
 
 // -- view
@@ -1791,6 +1824,15 @@ void apply_settings(const QStringList &keys)
         } else if (key == "sidebar_sections" || key == "sidebar_collapsed" || key == "sidebar_hidden") {
             for (MainWindow *w : WINDOWS)
                 w->sidebar->refresh();
+        } else if (key == "private_mode") {
+            // this process's caches and histories to the private RAM disk or back (ramdisk.h), and what shows it
+            ramdisk::apply_private();
+            for (MainWindow *w : WINDOWS) {
+                w->sync_private();
+                w->sidebar->refresh();
+            }
+        } else if (key == "ramdisk_wipe_warning") {
+            // read when the last Kestrel closes, or private mode is left
         } else if (key.startsWith("history_")) {
             // read each time a file is opened, a folder entered…; the Overview follows history_frequent itself
         } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
@@ -1968,6 +2010,24 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         });
         return;
     }
+    // the last Kestrel closing deletes the files in private mode's RAM disk and in the RAM disks that last until
+    // Kestrel closes (the tower does it as it lands): said first, unless that's been turned off (ramdisk.h)
+    if (!wipe_confirmed && last && !chooser_mode && ramdisk::wipe_needs_warning()) {
+        QJsonObject status = QJsonDocument::fromJson(atc::radio()->request("Status").toUtf8()).object();
+        if (status.value("flights").toInt(1) <= 1) {   // (no other Kestrel: the tower's down, or we're its only flight)
+            ev->ignore();
+            if (wipe_box) {
+                wipe_box->raise();
+                wipe_box->activateWindow();
+                return;
+            }
+            wipe_box = ramdisk::warn_wipe(this, false, [this]() {
+                wipe_confirmed = true;
+                close();
+            });
+            return;
+        }
+    }
     // this window's jobs: shown in another window's status bar from now on
     for (MainWindow *m : WINDOWS)
         if (m != this && !m->chooser_mode) {
@@ -2053,8 +2113,10 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
     QString start = req.current_folder;
     if (req.saving() && !req.replacing && prefs::get("chooser_start").toString() == "overview")
         start = OVERVIEW;   // its own Overview, with the save locations (a file being replaced: its folder)
+    if (req.saving() && !req.replacing && ramdisk::private_mode() && isdir(ramdisk::private_files()))
+        start = ramdisk::private_files();   // private mode: saved into memory unless another folder is chosen
     if (start != OVERVIEW && !isdir(start))
-        start = settings().value("chooser_folder").toString();   // where the last chooser picked something
+        start = history_settings().value("chooser_folder").toString();   // where the last chooser picked something
     if (start != OVERVIEW && !isdir(start))
         start = HOME();
     auto *w = new MainWindow({start}, g_thumbs, true);
@@ -2110,6 +2172,8 @@ int kes_main(int argc, char **argv)
         if (QByteArray(argv[i]) == "--atc")
             return atc::run_tower(argc, argv);   // the tower: no window (see atc.h)
     }
+    if (int rc = ramdisk::run_cli(argc, argv); rc >= 0)
+        return rc;   // a RAM disk's systemd unit: load or save it (ramdisk.h), no window
     std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel (proc::write_pipe also guards)
     QApplication::setApplicationName(APP_ID);
     QApplication::setApplicationVersion(VERSION);
@@ -2126,6 +2190,8 @@ int kes_main(int argc, char **argv)
     ensure_desktop_entry();
     QImageReader::setAllocationLimit(2048);
     settings();
+    ramdisk::apply_private();   // before anything reads or writes a cache
+    ramdisk::prune();
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);
     for (int i = 1; i < argc; ++i)

@@ -29,8 +29,9 @@ int main(int argc, char **argv)
     QString trash = join(TRASH_DIR(), "files");
 
     // -- the order helpers
-    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices", "mounts"}) &&
-              sidebar::section_order({"devices", "nonsense"}) == QStringList({"devices", "places", "bookmarks", "mounts"}),
+    check(sidebar::section_order({}) == QStringList({"places", "bookmarks", "devices", "mounts", "ramdisks"}) &&
+              sidebar::section_order({"devices", "nonsense"}) ==
+                  QStringList({"devices", "places", "bookmarks", "mounts", "ramdisks"}),
           "a saved section order ignores unknown sections and adds missing ones");
     check(sidebar::ordered({"a", "b", "c", "d"}, {"c", "gone", "a"}) == QStringList({"c", "a", "b", "d"}),
           "a saved order puts new entries after the saved ones, in their natural order");

@@ -288,7 +288,7 @@ void run_rsync(Task *task, const QString &source, const QString &dest, bool dele
 
 // ---- saved pairs
 
-QString pairs_file() { return join(CONFIG_DIR(), "sync-pairs.json"); }
+QString pairs_file() { return join(HISTORY_DIR(), "sync-pairs.json"); }
 
 static Pair pair_from(const QJsonObject &o)
 {
@@ -334,7 +334,7 @@ static void write_pairs(const QString &file, const QList<Pair> &list)
     QJsonArray a;
     for (const Pair &p : list)
         a << pair_json(p);
-    makedirs(CONFIG_DIR(), true);
+    makedirs(dirname(file), true);
     write_atomic(file, QJsonDocument(a).toJson());
 }
 
@@ -344,7 +344,7 @@ void save_pairs(const QList<Pair> &list) { write_pairs(pairs_file(), list); }
 
 // ---- remembered syncs
 
-QString history_file() { return join(CONFIG_DIR(), "sync-history.json"); }
+QString history_file() { return join(HISTORY_DIR(), "sync-history.json"); }
 
 QList<Pair> history() { return read_pairs(history_file()); }
 

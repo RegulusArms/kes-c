@@ -47,7 +47,7 @@ for t in "${TESTS[@]}"; do
     echo
     echo "== $t"
     work="$(mktemp -d "${TMPDIR:-/tmp}/kestrel-test.XXXXXX")"
-    mkdir -p "$work/home"
+    mkdir -p "$work/home" "$work/shm"
     if [[ $t == installer ]]; then
         cmd=("$HERE/test_installer.sh")
     else
@@ -55,7 +55,7 @@ for t in "${TESTS[@]}"; do
     fi
     started=$SECONDS
     env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u CONDA_DEFAULT_ENV \
-        HOME="$work/home" QT_QPA_PLATFORM=offscreen \
+        HOME="$work/home" KESTREL_SHM_DIR="$work/shm" QT_QPA_PLATFORM=offscreen \
         timeout 600 dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
     rc=$?
     took=$(( SECONDS - started ))
