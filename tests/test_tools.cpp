@@ -1239,6 +1239,7 @@ int main(int argc, char **argv)
             qEnvironmentVariableIsEmpty("XDG_RUNTIME_DIR")) {
             skip("loading a persistent RAM disk (no user.* attributes here, and no XDG_RUNTIME_DIR)");
         } else {
+            write_text(join(disk, "extra.txt"), "kept");   // (the saves above deleted it: it isn't in the RAM disk)
             errors.clear();
             bool loaded = ramdisk::load(d, &errors);
             check(loaded && ramdisk::loaded(d.path, d.id) && read_file(join(d.path, "a.txt")) == read_file(join(disk, "a.txt")) &&

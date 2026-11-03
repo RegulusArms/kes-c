@@ -1365,7 +1365,7 @@ This can&apos;t be undone.</numerusform>
     <message numerus="yes">
         <source>Saved to %1 every %Ln minute(s), at logout and at shutdown</source>
         <translation>
-            <numerusform>Saved to %1 every minute, at logout and at shutdown</numerusform>
+            <numerusform>Saved to %1 every %Ln minute, at logout and at shutdown</numerusform>
             <numerusform>Saved to %1 every %Ln minutes, at logout and at shutdown</numerusform>
         </translation>
     </message>

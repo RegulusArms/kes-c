@@ -647,23 +647,26 @@ int main(int argc, char **argv)
         makedirs(full, true);
         makedirs(empty, true);
         write_file(join(full, "f.txt"), "f");
+        Helper rh;   // (the main one has been stopped by now)
+        check(rh.start(), "a helper for the RAM disk checks starts");
         auto error = [](const QJsonObject &r) { return r.value("ok").toBool() ? QString() : r.value("error").toString(); };
-        QString not_empty = error(h.call({{"op", "tmpfs_mount"}, {"path", full}, {"size_mb", 16}}));
-        QString no_size = error(h.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 0}}));
-        QString huge = error(h.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 1e12}}));
-        QString not_ram = error(h.call({{"op", "tmpfs_unmount"}, {"path", empty}}));
+        QString not_empty = error(rh.call({{"op", "tmpfs_mount"}, {"path", full}, {"size_mb", 16}}));
+        QString no_size = error(rh.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 0}}));
+        QString huge = error(rh.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 1e12}}));
+        QString not_ram = error(rh.call({{"op", "tmpfs_unmount"}, {"path", empty}}));
         QString percent = join(W, "rd-50%");
         makedirs(percent, true);
-        QString expands = error(h.call({{"op", "tmpfs_unit"}, {"path", percent}, {"size_mb", 16}, {"enable", true}}));
+        QString expands = error(rh.call({{"op", "tmpfs_unit"}, {"path", percent}, {"size_mb", 16}, {"enable", true}}));
         check(not_empty.contains("isn't empty") && no_size.contains("size") && huge.contains("size") &&
                   not_ram.contains("isn't a RAM disk") && expands.contains("%") && read_file(join(full, "f.txt")) == "f",
               "tmpfs_mount refuses a folder that isn't empty and a size outside 1 MB to the memory; tmpfs_unmount a "
               "folder that isn't a RAM disk; tmpfs_unit a path with % in it (" +
                   QStringList{not_empty, no_size, huge, not_ram, expands}.join(" | ") + ")");
         if (getuid() != 0) {
-            QString theirs = error(h.call({{"op", "tmpfs_mount"}, {"path", "/usr/share/doc"}, {"size_mb", 16}}));
+            QString theirs = error(rh.call({{"op", "tmpfs_mount"}, {"path", "/usr/share/doc"}, {"size_mb", 16}}));
             check(theirs.contains("isn't your folder"), "tmpfs_mount refuses a folder that isn't yours (" + theirs + ")");
         }
+        rh.stop();
     }
 
     finish();

@@ -53,6 +53,8 @@
 #include <QHeaderView>
 #include <QImageReader>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
@@ -779,7 +781,7 @@ void MainWindow::sync_private()
     }
     if (private_btn)
         private_btn->setVisible(on);
-    if (pane())
+    if (pane() && !chooser_mode)   // (a Save or Open window keeps the app's title)
         pane_path_changed(pane());   // the title
 }
 

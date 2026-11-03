@@ -67,9 +67,9 @@ button "Menu" > Clear Folder Preview Cache
 button "Menu" > Delete All Thumbnails…
 button "Menu" > Keyboard Shortcuts [F1]
 button "Menu" > About
-button "Admin session open: administrator actions don't ask for your password again." > End Admin Session
 button "Private mode: Kestrel's caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder." > Open the Private Folder
 button "Private mode: Kestrel's caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder." > Leave Private Mode
+button "Admin session open: administrator actions don't ask for your password again." > End Admin Session
 shortcut > Back [Alt+Left, Backspace]
 shortcut > Bookmark This Location [Ctrl+D]
 shortcut > Close Tab [Ctrl+W]
