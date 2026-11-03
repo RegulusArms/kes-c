@@ -9,6 +9,7 @@
 #include "windows.h"
 
 #include <QCheckBox>
+#include <QSignalBlocker>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QGuiApplication>
@@ -162,6 +163,18 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
     for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
         controls->addWidget(b);
+    verify_box = new QCheckBox(tx("Verify copies"));
+    verify_box->setToolTip(tx("Read each file back once it's copied and compare it with the original (for the files "
+                              "copied from now on). Its default is in Preferences → Files."));
+    connect(verify_box, &QCheckBox::toggled, this, [this](bool on) {
+        Task *t = local_task(selected_row());
+        if (!t || t->verify.load() < 0 || t->verify.load() == int(on))
+            return;
+        t->verify = int(on);
+        t->log(on ? tx("Verify copies turned on (Jobs window): each file copied from now on is read back and checked.")
+                  : tx("Verify copies turned off (Jobs window)."));
+    });
+    controls->addWidget(verify_box);
     controls->addStretch(1);
     jl->addLayout(controls);
     lists->addWidget(jbox);
@@ -474,6 +487,19 @@ const JobsWindow::Row *JobsWindow::selected_row() const
     return nullptr;
 }
 
+Task *JobsWindow::local_task(const Row *r) const
+{
+    if (!r || r->finished)
+        return nullptr;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        if (j.flight + "/" + j.id == r->key && j.local)
+            return j.local;
+    for (const TaskInfo &t : TaskBoard::instance()->all())
+        if (t.flight + "/" + t.id == r->key && t.local)
+            return t.local;
+    return nullptr;
+}
+
 void JobsWindow::show_details()
 {
     const Row *r = selected_row();
@@ -485,6 +511,17 @@ void JobsWindow::show_details()
     now_btn->setEnabled(queued && r->state == "waiting");
     up_btn->setEnabled(queued && r->state == "waiting");
     down_btn->setEnabled(queued && r->state == "waiting");
+    {
+        Task *t = r && !r->finished ? local_task(r) : nullptr;
+        int v = t ? t->verify.load() : -1;
+        QSignalBlocker block(verify_box);
+        verify_box->setChecked(v == 1);
+        verify_box->setEnabled(v >= 0);
+        verify_box->setToolTip(r && !r->finished && !t
+                                   ? tx("Only for this Kestrel's own jobs: set it in the Kestrel that started the job")
+                                   : tx("Read each file back once it's copied and compare it with the original (for the "
+                                        "files copied from now on). Its default is in Preferences → Files."));
+    }
     if (!r) {
         head->setText(tx("Choose a job to see what it's doing."));
         steps->clear();

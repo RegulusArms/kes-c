@@ -19,6 +19,7 @@ class QPushButton;
 class QSplitter;
 class QTreeWidget;
 class QTreeWidgetItem;
+class Task;
 
 class JobsWindow : public QDialog {
     Q_OBJECT
@@ -31,6 +32,8 @@ public:
     void refresh();
     QTreeWidget *list;   // one row per job: its key in Qt::UserRole ("flight/id", or "done:<n>" for a finished one)
     QPushButton *pause_btn, *stop_btn, *now_btn, *up_btn, *down_btn;   // right under it: for its jobs
+    // the job's Verify copies (Task::verify): read each file back once copied. This Kestrel's copying jobs only
+    QCheckBox *verify_box;
     // Below them (a quarter of the height), this Kestrel's thumbnail jobs (ThumbJob): browsing doesn't flood the list
     // of copies, moves and extractions. Their id in Qt::UserRole. Under it, their own Pause and Stop, and how
     // thumbnailing runs (thumb_mode, every Kestrel's).
@@ -55,6 +58,7 @@ private:
     QHash<QString, qint64> asked;   // another Kestrel's job: when its detail was last asked for
     QList<Row> rows() const;
     const Row *selected_row() const;
+    Task *local_task(const Row *r) const;   // the selected job, if it's this Kestrel's and still running or waiting
     void show_details();
     void act(const QString &action);
     void save_log();

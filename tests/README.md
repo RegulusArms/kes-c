@@ -27,7 +27,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 | Test | Checks | Covers |
 |---|---|---|
-| [`fileops`](#fileops) | 160 | File operations |
+| [`fileops`](#fileops) | 165 | File operations |
 | [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
 | [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
@@ -39,10 +39,10 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`pinned`](#pinned) | 31 | Pinned items and folder sorts |
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
-| [`jobs`](#jobs) | 58 | The job queue, the Jobs window and the Tower window |
+| [`jobs`](#jobs) | 59 | The job queue, the Jobs window and the Tower window |
 | [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
-| [`admin_helper`](#admin_helper) | 49 | The admin helper, the part that runs as root |
+| [`admin_helper`](#admin_helper) | 50 | The admin helper, the part that runs as root |
 | [`ui`](#ui) | 34 | Menus, shortcuts, accessibility, drag and drop |
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
@@ -67,6 +67,8 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - setting off: Kestrel's own loop (a file size limit part-way);
   - on, no clone (`KESTREL_TEST_NO_CLONE`): copy_file_range (a file size limit, a read error after its first 4 MB piece via `KESTREL_TEST_COPY_FAIL_AT`, a cancel between pieces);
   - a clone, where the test's drive can make one (Btrfs, XFS, ZFS 2.2+), with an error once it's in; skipped elsewhere (ext4 and overlayfs can't).
+- **Extended attributes and ACLs** (Preferences → Files → Copying, off by default): none copied while off; on, a file's and a folder's `user.*` attributes arrive, and an ACL (where setfacl and the file system allow); a destination that can't hold them (`KESTREL_TEST_XATTRS_UNSUPPORTED`) still gets the copy, and the log names what was left out once for the job. Skipped on a file system without `user.*` attributes.
+- **Verify copies** (off by default): on, a copy is read back and matches, hashed while Kestrel copied it or read again where the system copied it; one that reads back different (`KESTREL_TEST_CORRUPT_COPY`) is named in the log and the job's failures and kept.
 - **Replacing a file** keeps the old one until the new one is complete:
   - cancelling part-way, or a write that fails part-way, leaves it as it was and no temporary file;
   - a symlink in the way is replaced rather than written through;
@@ -415,7 +417,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **Steps and log:** a copy's steps, and its log kept after it ends, ending with how long it took.
 - **What jobs log:** a size count's what it counted and found; Move to Trash each item; a job that only reports gets its progress in its log while the log is quiet, now and then; a stopped one ends with when it stopped.
 - **Saving logs** (off by default): nothing saved while off; on, a file per job in the day's folder with its title, outcome, times, steps and log; a write failing part-way leaves nothing under the name and no part file; pruning by age, then by size (never today's, never other files).
-- **The Jobs window** opens from the job panel and lists running, waiting and finished jobs; Delete cancels the selected job (not the main window's Move to Trash).
+- **The Jobs window** opens from the job panel and lists running, waiting and finished jobs; Delete cancels the selected job (not the main window's Move to Trash). Verify copies: off for a copy by default, turned on for a waiting one (which then reads its copy back), not offered for a job that copies nothing.
 - **Through the tower:**
   - another Kestrel's job holds a lane ours waits for (one queue); a Kestrel that leaves frees its lanes;
   - another Kestrel pauses and resumes our job; everyone hears the queue;
@@ -511,6 +513,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - copying or moving a folder onto another replaces it whole.
 - **New names:** a copy or move to a new name keeps a file another program saves there meanwhile (or already had).
 - **Symlinks** inside a copied or deleted tree are handled as links.
+- **Extended attributes:** a copy keeps a file's and a folder's when Kestrel asks (`"xattrs"`), and not otherwise.
 - **Ownership:** what it makes (copies, new folders and the parents made for them, files, links) gets the owner of the folder it's made in, and a copy given another group loses its set-group-ID bit (seen through one of the user's other groups; skipped if there's none).
 - **Refused:** relative paths; deleting, replacing, moving away, renaming or changing the permissions of top-level and home folders (checked with paths that don't exist, so nothing real is touched).
 - **No escaping through symlinks:**

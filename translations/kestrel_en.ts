@@ -818,6 +818,34 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
+        <translation>
+            <numerusform>Verified %Ln copied file: read back, it matches its original (SHA-256).</numerusform>
+            <numerusform>Verified %Ln copied files: each one read back matches its original (SHA-256).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
+        <translation>
+            <numerusform>Verified %Ln copied file: %1 doesn&apos;t match its original (listed above).</numerusform>
+            <numerusform>Verified %Ln copied files: %1 don&apos;t match their originals (listed above).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
+        <translation>
+            <numerusform>%Ln cloned file shares its original&apos;s data on the drive: nothing to read back.</numerusform>
+            <numerusform>%Ln cloned files share their original&apos;s data on the drive: nothing to read back.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
+        <translation>
+            <numerusform>Extended attributes left out on %Ln item, as the destination can&apos;t hold them: %1</numerusform>
+            <numerusform>Extended attributes left out on %Ln items, as the destination can&apos;t hold them: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
         <translation>
             <numerusform>%Ln file cloned (the copy shares the original&apos;s space until one of them changes)</numerusform>
@@ -836,6 +864,27 @@ This can&apos;t be undone.</numerusform>
         <translation>
             <numerusform>%Ln file read and written by Kestrel</numerusform>
             <numerusform>%Ln files read and written by Kestrel</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
+        <translation>
+            <numerusform>%Ln copied file doesn&apos;t match its original (read back after copying), so nothing was deleted from where it came from: %1</numerusform>
+            <numerusform>%Ln copied files don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
+        <translation>
+            <numerusform>Verifying was turned off: %Ln copied file on the tape wasn&apos;t read back.</numerusform>
+            <numerusform>Verifying was turned off: %Ln copied files on the tape weren&apos;t read back.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
+        <translation>
+            <numerusform>Reading back %Ln file copied onto the tape, to verify it</numerusform>
+            <numerusform>Reading back %Ln files copied onto the tape, in the order they lie on it, to verify them</numerusform>
         </translation>
     </message>
     <message numerus="yes">

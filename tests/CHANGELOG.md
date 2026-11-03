@@ -23,6 +23,19 @@ Added:
   it, the older sync a click away; folders chosen before the lookup ends aren't overwritten; only the last five per
   folder are kept, the same pair run again moves to the top, and the saved pairs stay as they were.
 
+- `fileops`: Keep extended attributes and ACLs (new, off by default): nothing copied while off; on, a file's and a
+  folder's `user.*` attributes and an ACL (where setfacl and the file system allow) arrive; a destination that can't
+  hold them (`KESTREL_TEST_XATTRS_UNSUPPORTED`, a new hook) still gets the copy, and the log says once for the job
+  which were left out.
+- `fileops`: Verify copies (new, off by default): on, a copy is read back and matches its original, both where Kestrel
+  hashed the source while copying and where the system copied it (the source read again); a copy that reads back
+  different (`KESTREL_TEST_CORRUPT_COPY`, a new hook changing a byte of it before it's read back) is named in the log
+  and the job's failures, and kept.
+- `admin_helper`: a copy keeps a file's and a folder's extended attributes when Kestrel asks (`"xattrs"`), and not
+  otherwise.
+- `jobs`: the Jobs window's Verify copies: off for a copy by default, turned on for a waiting one, which then reads its
+  copy back; not offered for a job that copies nothing.
+
 Changed:
 - `ui` (`ui_actions.txt`): Encrypt… in the file and two-file menus.
 - `installer`: the BleachBit cleaner's History option also deletes the remembered syncs (`sync-history.json`): in the

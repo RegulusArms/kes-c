@@ -205,7 +205,7 @@ void AdminSession::send(const QByteArray &line)
     }
 }
 
-void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
+QJsonObject AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
 {
     start();
     qint64 rid;
@@ -255,7 +255,7 @@ void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
             continue;
         }
         if (msg->value("ok").toBool())
-            return;
+            return *msg;
         if (msg->value("cancelled").toBool())
             throw Cancelled();
         QString err = msg->value("error").toString();

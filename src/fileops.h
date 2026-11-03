@@ -63,6 +63,10 @@ public:
     std::unique_ptr<QEventLoopLocker> keeps_running;
     bool failed = false;         // ended with an error
     std::atomic<bool> had_errors{false};   // some of its items failed (it ends "done with errors")
+    // Verify after copy: -1 not a job that copies; 0 off; 1 on: each file copied is read back and compared with its
+    // original (fileops.cpp, Ops). Its default from Preferences → Files → Copying; changed per job in the Jobs window,
+    // also while it runs (for the files copied from then on)
+    std::atomic<int> verify{-1};
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
     static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
 

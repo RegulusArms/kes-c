@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -257,6 +258,28 @@ int main(int argc, char **argv)
     check(copied && QFile::exists(join(W, "tree2/d1/f1")) && is_link(join(W, "tree2/to-victim")) &&
               QFile::symLinkTarget(join(W, "tree2/to-victim")) == victim && victim_intact(),
           "copy copies a folder tree, and symlinks in it as links");
+    // extended attributes, when Kestrel asks for them ("xattrs": Preferences → Files → Copying), on files and folders
+    {
+        QString xs = join(W, "xsrc");
+        QDir().mkpath(xs);
+        write_file(join(xs, "f.txt"));
+        auto xattr_of = [](const QString &path, const char *name) {
+            char buf[256];
+            ssize_t n = ::getxattr(path.toLocal8Bit().constData(), name, buf, sizeof buf);
+            return n < 0 ? QByteArray() : QByteArray(buf, n);
+        };
+        if (::setxattr(join(xs, "f.txt").toLocal8Bit().constData(), "user.kestrel.test", "v", 1, 0) == 0 &&
+            ::setxattr(xs.toLocal8Bit().constData(), "user.kestrel.dir", "d", 1, 0) == 0) {
+            QJsonObject with = h.call({{"op", "copy"}, {"src", xs}, {"dst", join(W, "xwith")}, {"xattrs", true}});
+            QJsonObject without = h.call({{"op", "copy"}, {"src", xs}, {"dst", join(W, "xwithout")}});
+            check(ok(with) && xattr_of(join(W, "xwith/f.txt"), "user.kestrel.test") == "v" &&
+                      xattr_of(join(W, "xwith"), "user.kestrel.dir") == "d" && !with.contains("xattrs_left_out") && ok(without) &&
+                      xattr_of(join(W, "xwithout/f.txt"), "user.kestrel.test").isEmpty(),
+                  "copy keeps a file's and a folder's extended attributes when asked (\"xattrs\"), and not otherwise");
+        } else {
+            skip("copying extended attributes (this file system takes no user.* attributes)");
+        }
+    }
     check(ok(h.call({{"op", "move"}, {"src", join(W, "tree2")}, {"dst", join(W, "tree3")}})) &&
               !QFile::exists(join(W, "tree2")) && QFile::exists(join(W, "tree3/d0/f0")),
           "move moves a folder");

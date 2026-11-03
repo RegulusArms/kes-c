@@ -237,7 +237,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1059"/>
+        <location filename="../src/fileops.cpp" line="+1080"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 / %2 — %3</translation>
@@ -553,7 +553,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     <message numerus="yes">
         <location line="+18"/>
         <location filename="../src/archive_ui.cpp" line="+836"/>
-        <location filename="../src/jobswin.cpp" line="+537"/>
+        <location filename="../src/jobswin.cpp" line="+574"/>
         <location filename="../src/linkwin.cpp" line="+620"/>
         <source>… and %Ln more</source>
         <translation>
@@ -704,7 +704,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
-        <location filename="../src/pgp.cpp" line="+444"/>
+        <location filename="../src/pgp.cpp" line="+460"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -1017,7 +1017,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/compare.cpp" line="-176"/>
         <location line="+373"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
-        <location filename="../src/jobswin.cpp" line="-280"/>
+        <location filename="../src/jobswin.cpp" line="-304"/>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
@@ -1082,7 +1082,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+168"/>
+        <location line="+179"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>查看</translation>
@@ -1126,7 +1126,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-565"/>
-        <location filename="../src/prefs.cpp" line="-137"/>
+        <location filename="../src/prefs.cpp" line="-148"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1024"/>
         <source>Sidebar</source>
@@ -1818,7 +1818,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/archivewin.cpp" line="-176"/>
         <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+123"/>
+        <location filename="../src/prefs.cpp" line="+134"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2253,8 +2253,8 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-151"/>
-        <location line="+173"/>
+        <location filename="../src/prefs.cpp" line="-162"/>
+        <location line="+184"/>
         <source>Show hidden files</source>
         <translation>显示隐藏文件</translation>
     </message>
@@ -2335,7 +2335,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-117"/>
+        <location filename="../src/prefs.cpp" line="-128"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2490,7 +2490,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+751"/>
+        <location filename="../src/fileops.cpp" line="+906"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -3203,7 +3203,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+121"/>
         <source>Keep both (rename)</source>
         <translation>保留两者（重命名）</translation>
     </message>
@@ -3910,8 +3910,8 @@ Install it with:  sudo apt install </source>
         <location filename="../src/diskusage.cpp" line="-159"/>
         <location filename="../src/dupes.cpp" line="-26"/>
         <location filename="../src/hashcheck.cpp" line="-395"/>
-        <location filename="../src/jobswin.cpp" line="-107"/>
-        <location line="+35"/>
+        <location filename="../src/jobswin.cpp" line="-119"/>
+        <location line="+47"/>
         <source>Stop</source>
         <translation>停止</translation>
     </message>
@@ -4687,9 +4687,9 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-162"/>
+        <location filename="../src/prefs.cpp" line="-173"/>
         <location line="+2"/>
-        <location line="+172"/>
+        <location line="+183"/>
         <location line="+1"/>
         <source> px</source>
         <translation> 像素</translation>
@@ -4792,7 +4792,7 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-95"/>
+        <location filename="../src/prefs.cpp" line="-106"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -6134,7 +6134,7 @@ Actual: %2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+121"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6264,8 +6264,8 @@ Actual: %2</source>
         <location line="+27"/>
         <location filename="../src/dupes.cpp" line="+19"/>
         <location filename="../src/hashcheck.cpp" line="-124"/>
-        <location filename="../src/jobswin.cpp" line="-55"/>
-        <location line="+45"/>
+        <location filename="../src/jobswin.cpp" line="-67"/>
+        <location line="+57"/>
         <source>Progress</source>
         <translation>进度</translation>
     </message>
@@ -6565,7 +6565,7 @@ This can&apos;t be undone.</source>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1642"/>
+        <location filename="../src/fileops.cpp" line="-1816"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… 省略 %Ln 行 …</numerusform>
@@ -6675,7 +6675,7 @@ This can&apos;t be undone.</source>
         <translation>删除 %1</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <source>Counting…</source>
         <translation>正在统计…</translation>
     </message>
@@ -6706,14 +6706,14 @@ This can&apos;t be undone.</source>
         <translation>  已取消</translation>
     </message>
     <message>
-        <location line="-804"/>
-        <location line="+855"/>
+        <location line="-805"/>
+        <location line="+874"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/秒</translation>
     </message>
     <message>
-        <location line="-847"/>
+        <location line="-866"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6742,8 +6742,42 @@ This can&apos;t be undone.</source>
         <source>Finished in %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+765"/>
+        <source>%1: the copy doesn&apos;t match the original (read back after copying). It&apos;s kept; copy it again.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+768"/>
+        <location line="+3"/>
+        <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+3"/>
+        <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <location line="+1006"/>
+        <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="-997"/>
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -6805,17 +6839,24 @@ This can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+51"/>
-        <location line="+97"/>
+        <location line="+108"/>
         <source>%1 is a folder</source>
         <translation>%1 是文件夹</translation>
     </message>
+    <message numerus="yes">
+        <location line="-91"/>
+        <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="-50"/>
+        <location line="+41"/>
         <source>%1 is on another drive (a mount point); not deleting it</source>
         <translation>%1 位于另一个驱动器上（挂载点）；不删除</translation>
     </message>
     <message>
-        <location line="+94"/>
+        <location line="+95"/>
         <source>%1 exists and isn&apos;t a folder</source>
         <translation>%1 已存在且不是文件夹</translation>
     </message>
@@ -6830,7 +6871,7 @@ This can&apos;t be undone.</source>
         <translation>%1 在复制期间发生了更改</translation>
     </message>
     <message>
-        <location line="+32"/>
+        <location line="+34"/>
         <source>Positioning the tape — %1</source>
         <translation>正在定位磁带 — %1</translation>
     </message>
@@ -6840,17 +6881,56 @@ This can&apos;t be undone.</source>
         <translation>磁带上没有足够空间存放“%1”：需要 %2，磁带剩余 %3</translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+56"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>源的读取速度为 %1/秒，低于磁带的最低流式速度：磁带会从缓冲区断续写入，中间停顿。从更快的驱动器复制，或先在快速磁盘上创建压缩包，可以保持流式写入。</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+23"/>
         <source>  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the tape is reformatted.</source>
         <translation>  “%2”已有 %1 写入磁带：在磁带重新格式化之前，LTFS 会一直将这部分空间视为已用。</translation>
     </message>
     <message>
-        <location line="+89"/>
+        <location line="+80"/>
+        <source>Verifying — reading the original of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Verifying on the tape — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Verifying — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>  “%1” couldn&apos;t be read back to verify it: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>  ✘ The copy “%1” doesn&apos;t match its original: their checksums (SHA-256) differ.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+11"/>
+        <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+11"/>
+        <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+111"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>操作期间“%1”出现在 %2 中；已保持原样，没有放入任何内容替代它</translation>
     </message>
@@ -6937,7 +7017,7 @@ This can&apos;t be undone.</source>
         </translation>
     </message>
     <message>
-        <location line="+57"/>
+        <location line="+72"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1 秒</translation>
@@ -7021,7 +7101,7 @@ This can&apos;t be undone.</source>
 %1</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+20"/>
         <source>The folder it was moving into, “%1”, isn&apos;t there any more: it was moved or deleted while this job waited. Nothing was moved.</source>
         <translation>要移入的文件夹“%1”已不存在：在此任务等待期间它被移动或删除了。未移动任何内容。</translation>
     </message>
@@ -7041,14 +7121,14 @@ This can&apos;t be undone.</source>
         <translation>要复制到的文件夹“%1”已不存在：在此任务开始前它被移动或删除了。未复制任何内容。</translation>
     </message>
     <message numerus="yes">
-        <location line="+8"/>
+        <location line="+9"/>
         <source>%Ln item(s) failed.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
         </translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+58"/>
         <source>Cannot transfer</source>
         <translation>无法传输</translation>
     </message>
@@ -7527,7 +7607,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-27"/>
+        <location filename="../src/prefs.cpp" line="-38"/>
         <source>Algorithms</source>
         <translation>算法</translation>
     </message>
@@ -8394,7 +8474,7 @@ sudo apt install udisks2</source>
         <translation>正在排队（其驱动器正在使用）…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-818"/>
+        <location filename="../src/fileops.cpp" line="-829"/>
         <source>Waiting</source>
         <translation>等待中</translation>
     </message>
@@ -8431,11 +8511,11 @@ sudo apt install udisks2</source>
         <translation>已取消</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-80"/>
+        <location filename="../src/jobswin.cpp" line="-92"/>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
-        <location line="+10"/>
+        <location line="+21"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>任务</translation>
@@ -8467,7 +8547,7 @@ sudo apt install udisks2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-10"/>
+        <location filename="../src/prefs.cpp" line="-21"/>
         <source>Start new jobs paused</source>
         <translation>新任务以暂停状态开始</translation>
     </message>
@@ -8489,13 +8569,13 @@ sudo apt install udisks2</source>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+45"/>
+        <location line="+57"/>
         <location filename="../src/towerwin.cpp" line="+0"/>
         <source>State</source>
         <translation>状态</translation>
     </message>
     <message>
-        <location line="-45"/>
+        <location line="-57"/>
         <location filename="../src/towerwin.cpp" line="-14"/>
         <source>Time</source>
         <translation>时间</translation>
@@ -8504,15 +8584,15 @@ sudo apt install udisks2</source>
         <location filename="../src/diskusage.cpp" line="-152"/>
         <location line="+127"/>
         <location filename="../src/jobswin.cpp" line="+15"/>
-        <location line="+39"/>
+        <location line="+51"/>
         <location line="+161"/>
-        <location line="+136"/>
+        <location line="+149"/>
         <location filename="../src/towerwin.cpp" line="-6"/>
         <source>Pause</source>
         <translation>暂停</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-330"/>
+        <location filename="../src/jobswin.cpp" line="-355"/>
         <source>Cancel the job (Delete)</source>
         <translation>取消任务（Delete）</translation>
     </message>
@@ -8553,7 +8633,29 @@ sudo apt install udisks2</source>
         <translation>清除所有 Kestrel 的已完成任务</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+4"/>
+        <location filename="../src/prefs.cpp" line="+15"/>
+        <source>Verify copies</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+355"/>
+        <source>Read each file back once it&apos;s copied and compare it with the original (for the files copied from now on). Its default is in Preferences → Files.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-348"/>
+        <source>Verify copies turned on (Jobs window): each file copied from now on is read back and checked.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Verify copies turned off (Jobs window).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>Thumbnail jobs</source>
         <translation>缩略图任务</translation>
     </message>
@@ -8591,12 +8693,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+24"/>
-        <location line="+251"/>
+        <location line="+275"/>
         <source>Choose a job to see what it&apos;s doing.</source>
         <translation>选择一个任务以查看它正在做什么。</translation>
     </message>
     <message>
-        <location line="-247"/>
+        <location line="-271"/>
         <source>&lt;b&gt;Steps&lt;/b&gt;</source>
         <translation>&lt;b&gt;步骤&lt;/b&gt;</translation>
     </message>
@@ -8628,12 +8730,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/jobswin.cpp" line="+10"/>
-        <location line="+136"/>
+        <location line="+149"/>
         <source>Resume</source>
         <translation>继续</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-33"/>
+        <location filename="../src/jobswin.cpp" line="-46"/>
         <source>  (another Kestrel)</source>
         <translation>  （另一个 Kestrel）</translation>
     </message>
@@ -8643,12 +8745,17 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>%1 · 剩余 %2</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+37"/>
         <source>An administrator job can&apos;t be paused</source>
         <translation>管理员任务无法暂停</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+12"/>
+        <source>Only for this Kestrel&apos;s own jobs: set it in the Kestrel that started the job</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
         <source>Drives: %1</source>
         <translation>驱动器：%1</translation>
     </message>
@@ -9340,7 +9447,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+47"/>
+        <location filename="../src/prefs.cpp" line="+43"/>
         <source>Format</source>
         <translation>格式</translation>
     </message>
@@ -10089,7 +10196,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-110"/>
+        <location filename="../src/prefs.cpp" line="-121"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -10222,6 +10329,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+3"/>
         <location line="+1"/>
         <location line="+9"/>
+        <location line="+5"/>
+        <location line="+6"/>
         <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10796,7 +10905,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>没有最近的文件</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-223"/>
+        <location filename="../src/prefs.cpp" line="-234"/>
         <source>Grid</source>
         <translation>网格</translation>
     </message>
@@ -10896,47 +11005,47 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+175"/>
+        <location line="+186"/>
         <source>Icon size in the grid</source>
         <translation>网格中的图标大小</translation>
     </message>
     <message>
-        <location line="-175"/>
+        <location line="-186"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>缩放滑块、Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+174"/>
+        <location line="+185"/>
         <source>Icon size in the list</source>
         <translation>列表中的图标大小</translation>
     </message>
     <message>
-        <location line="-172"/>
+        <location line="-183"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → 查看 → 显示隐藏文件（Ctrl+H）</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+173"/>
+        <location line="+184"/>
         <source>Show the sidebar</source>
         <translation>显示侧边栏</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-184"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → 查看 → 侧边栏（F9）</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+118"/>
+        <location line="+129"/>
         <source>Show the info panel</source>
         <translation>显示信息面板</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-184"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → 查看 → 信息面板（F3）</translation>
     </message>
@@ -11413,11 +11522,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
+        <location line="+9"/>
+        <location line="+5"/>
         <source>Copying</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-13"/>
         <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11428,6 +11539,26 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+6"/>
+        <source>Keep extended attributes and ACLs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Copies also get their originals&apos; extended attributes: the address a download came from, tags other apps keep, access control lists (ACLs), and attributes backup tools rely on. Where the destination can&apos;t hold them (FAT, exFAT, some network and FUSE drives) the copy goes on without them, and its log says which were left out. Security labels need the administrator. A move within one drive always keeps them.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>each job in the Jobs window (Ctrl+Shift+J)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Each file copied (or moved to another drive) is read back once it&apos;s written and its checksum compared with the original&apos;s, read while it was copied. A copy that doesn&apos;t match is named in the job&apos;s log and its list of failures (a move then keeps its original). Onto a tape, the files are read back after the whole job, in the order they lie on it. Slower: every copy is read once more.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Save each finished job&apos;s log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -12084,19 +12215,19 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>密钥服务器没有响应。</translation>
     </message>
     <message>
-        <location filename="../src/pgp.cpp" line="-503"/>
+        <location filename="../src/pgp.cpp" line="-519"/>
         <source>decrypted</source>
         <comment>the name of a decrypted file whose own name was only “.gpg”</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+144"/>
+        <location line="+146"/>
         <location filename="../src/signature.cpp" line="+0"/>
         <source>gpg failed</source>
         <translation>gpg 失败</translation>
     </message>
     <message>
-        <location line="+55"/>
+        <location line="+69"/>
         <source>gpg couldn&apos;t encrypt “%1”: %2</source>
         <translation type="unfinished"></translation>
     </message>

@@ -35,6 +35,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "xattrs.h"
+
 #include <atomic>
 #include <cctype>
 #include <cerrno>
@@ -477,6 +479,22 @@ public:
     qint64 id;
     double done = 0, total = 0;
     bool to_tape = false;   // the destination is on an LTFS tape (on_tape): a new file is written straight to its name
+    bool xattrs = false;    // copies get their originals' extended attributes and ACLs too (Kestrel's "copy_xattrs")
+    std::set<std::string> left_out;   // attribute names a destination couldn't hold, told back with the answer
+    int left_items = 0;
+
+    // after copy_stat_fd: the owner set first (a chown clears security.capability), and an ACL set last agrees with
+    // the mode. As root, security.* and trusted.* are copied too.
+    void keep_xattrs(int from, int to)
+    {
+        if (!xattrs)
+            return;
+        std::vector<std::string> left = xattrs::copy(from, to);
+        if (left.empty())
+            return;
+        ++left_items;
+        left_out.insert(left.begin(), left.end());
+    }
 
     void check_cancel()
     {
@@ -553,6 +571,7 @@ public:
                 copy(in.get(), e, out.get(), e, merge, owner);
             Owner existing{owner.keep, dst_st.st_uid, dst_st.st_gid};   // a copy leaves the folder's owner as it was
             copy_stat_fd(out.get(), st, existing);
+            keep_xattrs(in.get(), out.get());
             done += 1;
             report(src);
             return;
@@ -585,6 +604,7 @@ public:
                 for (const std::string &e : list_dir(in.get()))
                     copy(in.get(), e, out.get(), e, false, owner, true);
                 copy_stat_fd(out.get(), st, owner);
+                keep_xattrs(in.get(), out.get());
             } else if (S_ISREG(st.st_mode)) {
                 check_cancel();
                 Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -614,6 +634,7 @@ public:
                 made = true;
                 copy_bytes(in.get(), out.get(), src);
                 copy_stat_fd(out.get(), st, owner);
+                keep_xattrs(in.get(), out.get());
                 // replacing something: on disk before the rename (a crash leaves the old or the new)
                 if (dst_exists && fsync(out.get()) != 0)
                     fail_errno();
@@ -860,7 +881,8 @@ static void put_new(const Walk &w, const std::string &part)
         fail_errno();
 }
 
-static void handle(const QJsonObject &req)
+// reply: the answer sent when it succeeds ({"id", "ok"}), with anything it has to tell (a copy's attributes left out)
+static void handle(const QJsonObject &req, QJsonObject &reply)
 {
     std::string op = req.value("op").toString().toStdString();
     auto rules = POLICY.find(op);
@@ -901,10 +923,18 @@ static void handle(const QJsonObject &req)
         // progress: every item, and the bytes copied; a move then deletes the items
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         job.to_tape = on_tape(dst.path);
+        job.xattrs = req.value("xattrs").toBool();
         if (op == "copy")
             job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else
             job.move(src, dst, merge, claim);
+        if (job.left_items) {
+            QJsonArray names;
+            for (const std::string &n : job.left_out)
+                names << QString::fromStdString(n);
+            reply["xattrs_left_out"] = names;
+            reply["xattrs_items"] = job.left_items;
+        }
     } else if (op == "rename") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         if (renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE) != 0) {
@@ -1073,8 +1103,9 @@ static void worker()
         }
         qint64 id = req.value("id").toVariant().toLongLong();
         try {
-            handle(req);
-            send(QJsonObject{{"id", id}, {"ok", true}});
+            QJsonObject reply{{"id", id}, {"ok", true}};
+            handle(req, reply);
+            send(reply);
         } catch (const Cancelled &) {
             send(QJsonObject{{"id", id}, {"ok", false}, {"error", "cancelled"}, {"cancelled", true}});
         } catch (const std::exception &e) {

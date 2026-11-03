@@ -48,7 +48,8 @@ public:
     void start();
     // Run one operation as root (call from a worker thread). Progress goes to task; Cancel is passed on.
     // Raises AdminError, or Cancelled.
-    void call(Task *task, const QString &op, const QVariantMap &args);
+    // returns the helper's answer (copy, move: "xattrs_left_out", the attribute names the destination couldn't hold)
+    QJsonObject call(Task *task, const QString &op, const QVariantMap &args);
     void end();   // close the session: the helper exits as soon as its input closes
 
 Q_SIGNALS:

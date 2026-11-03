@@ -24,6 +24,16 @@ What changed in each version of Kestrel Explorer, newest first.
   remembered folder that isn't there now (deleted, or its drive not connected) is said, not just filled in. Saved
   pairs work as before. The list (`sync-history.json`, the last five syncs per folder) is cleaned by
   `kes-setup --bleachbit`'s History option.
+- **Keep extended attributes and ACLs when copying** (Preferences → Files → Copying, off by default). Copies used to
+  keep only a file's times and permissions, silently dropping where a download came from, tags other apps keep, ACLs
+  and attributes backup tools rely on. With this on, copies of files and folders (and moves to another drive, and
+  copies made as administrator) keep them. Where the destination can't hold them (FAT, exFAT, some network and FUSE
+  drives) the copy goes on, and the job's log says once which were left out.
+- **Verify copies** (off by default; per job in the Jobs window, or for every job in Preferences → Files → Copying):
+  each file copied is read back once it's written and its checksum compared with the original's, which is worked out
+  while copying, so the original isn't read twice. Onto a tape, the files are read back after the whole job in the
+  order they lie on it, so the drive doesn't wind back and forth. A copy that doesn't match is named in the job's log
+  and its list of failures and kept, to copy again; a move between drives then keeps its original.
 
 ## 0.3.3-alpha.8 (2026-11-02)
 

@@ -242,7 +242,7 @@
         <location line="+94"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1059"/>
+        <location filename="../src/fileops.cpp" line="+1080"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 de %2 — %3</translation>
@@ -578,7 +578,7 @@ No se guarda ninguna copia de seguridad, así que esto no se puede deshacer.</nu
     <message numerus="yes">
         <location line="+18"/>
         <location filename="../src/archive_ui.cpp" line="+836"/>
-        <location filename="../src/jobswin.cpp" line="+537"/>
+        <location filename="../src/jobswin.cpp" line="+574"/>
         <location filename="../src/linkwin.cpp" line="+620"/>
         <source>… and %Ln more</source>
         <translation>
@@ -734,7 +734,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
-        <location filename="../src/pgp.cpp" line="+444"/>
+        <location filename="../src/pgp.cpp" line="+460"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -1050,7 +1050,7 @@ Desactívelo en carpetas grandes o lentas para ir más rápido.</translation>
         <location filename="../src/compare.cpp" line="-176"/>
         <location line="+373"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
-        <location filename="../src/jobswin.cpp" line="-280"/>
+        <location filename="../src/jobswin.cpp" line="-304"/>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
@@ -1115,7 +1115,7 @@ Desactívelo en carpetas grandes o lentas para ir más rápido.</translation>
         <location line="+2"/>
         <location line="+1"/>
         <location line="+1"/>
-        <location line="+168"/>
+        <location line="+179"/>
         <location filename="../src/viewer.cpp" line="-52"/>
         <source>View</source>
         <translation>Ver</translation>
@@ -1159,7 +1159,7 @@ Desactívelo en carpetas grandes o lentas para ir más rápido.</translation>
     </message>
     <message>
         <location line="-565"/>
-        <location filename="../src/prefs.cpp" line="-137"/>
+        <location filename="../src/prefs.cpp" line="-148"/>
         <location line="+2"/>
         <location filename="../src/widgets.cpp" line="-1024"/>
         <source>Sidebar</source>
@@ -1856,7 +1856,7 @@ Desactívelo en carpetas grandes o lentas para ir más rápido.</translation>
         <location filename="../src/archivewin.cpp" line="-176"/>
         <location line="+177"/>
         <location filename="../src/menus.cpp" line="+0"/>
-        <location filename="../src/prefs.cpp" line="+123"/>
+        <location filename="../src/prefs.cpp" line="+134"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2292,8 +2292,8 @@ Se volverán a generar mientras navega.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-151"/>
-        <location line="+173"/>
+        <location filename="../src/prefs.cpp" line="-162"/>
+        <location line="+184"/>
         <source>Show hidden files</source>
         <translation>Mostrar archivos ocultos</translation>
     </message>
@@ -2374,7 +2374,7 @@ Se volverán a generar mientras navega.</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/prefs.cpp" line="-117"/>
+        <location filename="../src/prefs.cpp" line="-128"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+2"/>
@@ -2529,7 +2529,7 @@ Se volverán a generar mientras navega.</translation>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+751"/>
+        <location filename="../src/fileops.cpp" line="+906"/>
         <location filename="../src/hashcheck.cpp" line="+533"/>
         <source>…and %Ln more</source>
         <translation>
@@ -3244,7 +3244,7 @@ Pueden continuar sin ninguna ventana de Kestrel: la ventana de tareas las muestr
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+121"/>
         <source>Keep both (rename)</source>
         <translation>Conservar ambos (renombrar)</translation>
     </message>
@@ -3975,8 +3975,8 @@ Instálelo con:  sudo apt install </translation>
         <location filename="../src/diskusage.cpp" line="-159"/>
         <location filename="../src/dupes.cpp" line="-26"/>
         <location filename="../src/hashcheck.cpp" line="-395"/>
-        <location filename="../src/jobswin.cpp" line="-107"/>
-        <location line="+35"/>
+        <location filename="../src/jobswin.cpp" line="-119"/>
+        <location line="+47"/>
         <source>Stop</source>
         <translation>Detener</translation>
     </message>
@@ -4773,9 +4773,9 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/prefs.cpp" line="-162"/>
+        <location filename="../src/prefs.cpp" line="-173"/>
         <location line="+2"/>
-        <location line="+172"/>
+        <location line="+183"/>
         <location line="+1"/>
         <source> px</source>
         <translation> px</translation>
@@ -4881,7 +4881,7 @@ Delete them and sync?</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-95"/>
+        <location filename="../src/prefs.cpp" line="-106"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
@@ -6246,7 +6246,7 @@ Obtenido: %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+110"/>
+        <location filename="../src/prefs.cpp" line="+121"/>
         <source> KB</source>
         <translation> KB</translation>
     </message>
@@ -6378,8 +6378,8 @@ Obtenido: %2</translation>
         <location line="+27"/>
         <location filename="../src/dupes.cpp" line="+19"/>
         <location filename="../src/hashcheck.cpp" line="-124"/>
-        <location filename="../src/jobswin.cpp" line="-55"/>
-        <location line="+45"/>
+        <location filename="../src/jobswin.cpp" line="-67"/>
+        <location line="+57"/>
         <source>Progress</source>
         <translation>Progreso</translation>
     </message>
@@ -6696,7 +6696,7 @@ Esto no se puede deshacer.</numerusform>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1642"/>
+        <location filename="../src/fileops.cpp" line="-1816"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln línea no conservada …</numerusform>
@@ -6809,7 +6809,7 @@ Esto no se puede deshacer.</numerusform>
         <translation>Eliminar %1</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <source>Counting…</source>
         <translation>Contando…</translation>
     </message>
@@ -6840,14 +6840,14 @@ Esto no se puede deshacer.</numerusform>
         <translation>  cancelado</translation>
     </message>
     <message>
-        <location line="-804"/>
-        <location line="+855"/>
+        <location line="-805"/>
+        <location line="+874"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-847"/>
+        <location line="-866"/>
         <source>%1  %2% · %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6876,8 +6876,46 @@ Esto no se puede deshacer.</numerusform>
         <source>Finished in %1</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+765"/>
+        <source>%1: the copy doesn&apos;t match the original (read back after copying). It&apos;s kept; copy it again.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location line="+768"/>
+        <location line="+3"/>
+        <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+1"/>
+        <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+3"/>
+        <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <location line="+1006"/>
+        <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="-997"/>
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -6942,17 +6980,25 @@ Esto no se puede deshacer.</numerusform>
     </message>
     <message>
         <location line="+51"/>
-        <location line="+97"/>
+        <location line="+108"/>
         <source>%1 is a folder</source>
         <translation>%1 es una carpeta</translation>
     </message>
+    <message numerus="yes">
+        <location line="-91"/>
+        <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="-50"/>
+        <location line="+41"/>
         <source>%1 is on another drive (a mount point); not deleting it</source>
         <translation>%1 está en otra unidad (un punto de montaje); no se elimina</translation>
     </message>
     <message>
-        <location line="+94"/>
+        <location line="+95"/>
         <source>%1 exists and isn&apos;t a folder</source>
         <translation>%1 existe y no es una carpeta</translation>
     </message>
@@ -6967,7 +7013,7 @@ Esto no se puede deshacer.</numerusform>
         <translation>%1 cambió mientras se copiaba</translation>
     </message>
     <message>
-        <location line="+32"/>
+        <location line="+34"/>
         <source>Positioning the tape — %1</source>
         <translation>Posicionando la cinta — %1</translation>
     </message>
@@ -6977,17 +7023,58 @@ Esto no se puede deshacer.</numerusform>
         <translation>No hay espacio suficiente en la cinta para “%1”: necesita %2, a la cinta le quedan %3</translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+56"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>El origen lee a %1/s, más despacio que la velocidad mínima de escritura continua de la cinta: la cinta escribe a ráfagas desde el búfer, deteniéndose entre medias. Copiar desde una unidad más rápida, o crear antes un archivo comprimido en un disco rápido, la mantendría en continuo.</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+23"/>
         <source>  %1 of “%2” had already been written to the tape: LTFS keeps that space used until the tape is reformatted.</source>
         <translation>  Ya se habían escrito %1 de “%2” en la cinta: LTFS mantiene ese espacio ocupado hasta que se reformatea la cinta.</translation>
     </message>
     <message>
-        <location line="+89"/>
+        <location line="+80"/>
+        <source>Verifying — reading the original of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Verifying on the tape — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Verifying — %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>  “%1” couldn&apos;t be read back to verify it: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>  ✘ The copy “%1” doesn&apos;t match its original: their checksums (SHA-256) differ.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+11"/>
+        <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+11"/>
+        <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+111"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>“%1” apareció en %2 mientras se hacía esto; se dejó como estaba y no se puso nada en su lugar</translation>
     </message>
@@ -7095,7 +7182,7 @@ Esto no se puede deshacer.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+57"/>
+        <location line="+72"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1 s</translation>
@@ -7181,7 +7268,7 @@ Esto no se puede deshacer.</numerusform>
 %1</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+20"/>
         <source>The folder it was moving into, “%1”, isn&apos;t there any more: it was moved or deleted while this job waited. Nothing was moved.</source>
         <translation>La carpeta de destino, “%1”, ya no está: se movió o eliminó mientras esta tarea esperaba. No se movió nada.</translation>
     </message>
@@ -7201,7 +7288,7 @@ Esto no se puede deshacer.</numerusform>
         <translation>La carpeta de destino, “%1”, ya no está: se movió o eliminó antes de que empezara esta tarea. No se copió nada.</translation>
     </message>
     <message numerus="yes">
-        <location line="+8"/>
+        <location line="+9"/>
         <source>%Ln item(s) failed.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -7209,7 +7296,7 @@ Esto no se puede deshacer.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+58"/>
         <source>Cannot transfer</source>
         <translation>No se puede transferir</translation>
     </message>
@@ -7705,7 +7792,7 @@ reemplazan. Una combinación no se puede deshacer.</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/prefs.cpp" line="-27"/>
+        <location filename="../src/prefs.cpp" line="-38"/>
         <source>Algorithms</source>
         <translation>Algoritmos</translation>
     </message>
@@ -8581,7 +8668,7 @@ sudo apt install udisks2</source>
         <translation>Esperando su turno (su unidad está en uso)…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-818"/>
+        <location filename="../src/fileops.cpp" line="-829"/>
         <source>Waiting</source>
         <translation>En espera</translation>
     </message>
@@ -8618,11 +8705,11 @@ sudo apt install udisks2</source>
         <translation>Cancelada</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-80"/>
+        <location filename="../src/jobswin.cpp" line="-92"/>
         <location line="+32"/>
         <location filename="../src/prefs.cpp" line="+3"/>
         <location line="+3"/>
-        <location line="+10"/>
+        <location line="+21"/>
         <location filename="../src/towerwin.cpp" line="-33"/>
         <source>Jobs</source>
         <translation>Tareas</translation>
@@ -8654,7 +8741,7 @@ sudo apt install udisks2</source>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="-10"/>
+        <location filename="../src/prefs.cpp" line="-21"/>
         <source>Start new jobs paused</source>
         <translation>Iniciar las tareas nuevas en pausa</translation>
     </message>
@@ -8676,13 +8763,13 @@ sudo apt install udisks2</source>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+45"/>
+        <location line="+57"/>
         <location filename="../src/towerwin.cpp" line="+0"/>
         <source>State</source>
         <translation>Estado</translation>
     </message>
     <message>
-        <location line="-45"/>
+        <location line="-57"/>
         <location filename="../src/towerwin.cpp" line="-14"/>
         <source>Time</source>
         <translation>Tiempo</translation>
@@ -8691,15 +8778,15 @@ sudo apt install udisks2</source>
         <location filename="../src/diskusage.cpp" line="-152"/>
         <location line="+127"/>
         <location filename="../src/jobswin.cpp" line="+15"/>
-        <location line="+39"/>
+        <location line="+51"/>
         <location line="+161"/>
-        <location line="+136"/>
+        <location line="+149"/>
         <location filename="../src/towerwin.cpp" line="-6"/>
         <source>Pause</source>
         <translation>Pausar</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-330"/>
+        <location filename="../src/jobswin.cpp" line="-355"/>
         <source>Cancel the job (Delete)</source>
         <translation>Cancelar la tarea (Supr)</translation>
     </message>
@@ -8740,7 +8827,29 @@ sudo apt install udisks2</source>
         <translation>Olvidar las tareas terminadas de todos los Kestrel</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+4"/>
+        <location filename="../src/prefs.cpp" line="+15"/>
+        <source>Verify copies</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+355"/>
+        <source>Read each file back once it&apos;s copied and compare it with the original (for the files copied from now on). Its default is in Preferences → Files.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-348"/>
+        <source>Verify copies turned on (Jobs window): each file copied from now on is read back and checked.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Verify copies turned off (Jobs window).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>Thumbnail jobs</source>
         <translation>Tareas de miniaturas</translation>
     </message>
@@ -8778,12 +8887,12 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location line="+24"/>
-        <location line="+251"/>
+        <location line="+275"/>
         <source>Choose a job to see what it&apos;s doing.</source>
         <translation>Elija una tarea para ver lo que está haciendo.</translation>
     </message>
     <message>
-        <location line="-247"/>
+        <location line="-271"/>
         <source>&lt;b&gt;Steps&lt;/b&gt;</source>
         <translation>&lt;b&gt;Pasos&lt;/b&gt;</translation>
     </message>
@@ -8815,12 +8924,12 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     <message>
         <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/jobswin.cpp" line="+10"/>
-        <location line="+136"/>
+        <location line="+149"/>
         <source>Resume</source>
         <translation>Reanudar</translation>
     </message>
     <message>
-        <location filename="../src/jobswin.cpp" line="-33"/>
+        <location filename="../src/jobswin.cpp" line="-46"/>
         <source>  (another Kestrel)</source>
         <translation>  (otro Kestrel)</translation>
     </message>
@@ -8830,12 +8939,17 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
         <translation>%1 · quedan %2</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+37"/>
         <source>An administrator job can&apos;t be paused</source>
         <translation>Una tarea de administrador no se puede pausar</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+12"/>
+        <source>Only for this Kestrel&apos;s own jobs: set it in the Kestrel that started the job</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
         <source>Drives: %1</source>
         <translation>Unidades: %1</translation>
     </message>
@@ -9529,7 +9643,7 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/prefs.cpp" line="+47"/>
+        <location filename="../src/prefs.cpp" line="+43"/>
         <source>Format</source>
         <translation>Formato</translation>
     </message>
@@ -10278,7 +10392,7 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location filename="../src/overview.cpp" line="-824"/>
-        <location filename="../src/prefs.cpp" line="-110"/>
+        <location filename="../src/prefs.cpp" line="-121"/>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+4"/>
@@ -10411,6 +10525,8 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
         <location line="+3"/>
         <location line="+1"/>
         <location line="+9"/>
+        <location line="+5"/>
+        <location line="+6"/>
         <location line="+7"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -10986,7 +11102,7 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
         <translation>No hay archivos recientes</translation>
     </message>
     <message>
-        <location filename="../src/prefs.cpp" line="-223"/>
+        <location filename="../src/prefs.cpp" line="-234"/>
         <source>Grid</source>
         <translation>Cuadrícula</translation>
     </message>
@@ -11086,47 +11202,47 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location line="+2"/>
-        <location line="+175"/>
+        <location line="+186"/>
         <source>Icon size in the grid</source>
         <translation>Tamaño de los iconos en la cuadrícula</translation>
     </message>
     <message>
-        <location line="-175"/>
+        <location line="-186"/>
         <location line="+2"/>
         <source>the zoom slider, Ctrl++ / Ctrl+-</source>
         <translation>el deslizador de zoom, Ctrl++ / Ctrl+-</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+174"/>
+        <location line="+185"/>
         <source>Icon size in the list</source>
         <translation>Tamaño de los iconos en la lista</translation>
     </message>
     <message>
-        <location line="-172"/>
+        <location line="-183"/>
         <source>☰ → View → Show Hidden Files (Ctrl+H)</source>
         <translation>☰ → Ver → Mostrar archivos ocultos (Ctrl+H)</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+173"/>
+        <location line="+184"/>
         <source>Show the sidebar</source>
         <translation>Mostrar la barra lateral</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-184"/>
         <source>☰ → View → Sidebar (F9)</source>
         <translation>☰ → Ver → Barra lateral (F9)</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+55"/>
-        <location line="+118"/>
+        <location line="+129"/>
         <source>Show the info panel</source>
         <translation>Mostrar el panel de información</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-184"/>
         <source>☰ → View → Info Panel (F3)</source>
         <translation>☰ → Ver → Panel de información (F3)</translation>
     </message>
@@ -11603,11 +11719,13 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location line="+2"/>
+        <location line="+9"/>
+        <location line="+5"/>
         <source>Copying</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-13"/>
         <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11618,6 +11736,26 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
     </message>
     <message>
         <location line="+6"/>
+        <source>Keep extended attributes and ACLs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Copies also get their originals&apos; extended attributes: the address a download came from, tags other apps keep, access control lists (ACLs), and attributes backup tools rely on. Where the destination can&apos;t hold them (FAT, exFAT, some network and FUSE drives) the copy goes on without them, and its log says which were left out. Security labels need the administrator. A move within one drive always keeps them.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>each job in the Jobs window (Ctrl+Shift+J)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Each file copied (or moved to another drive) is read back once it&apos;s written and its checksum compared with the original&apos;s, read while it was copied. A copy that doesn&apos;t match is named in the job&apos;s log and its list of failures (a move then keeps its original). Onto a tape, the files are read back after the whole job, in the order they lie on it. Slower: every copy is read once more.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Save each finished job&apos;s log</source>
         <translation type="unfinished"></translation>
     </message>
@@ -12274,19 +12412,19 @@ Para todas las ventanas de Kestrel (también Preferencias → Imágenes y vídeo
         <translation>El servidor de claves no respondió.</translation>
     </message>
     <message>
-        <location filename="../src/pgp.cpp" line="-503"/>
+        <location filename="../src/pgp.cpp" line="-519"/>
         <source>decrypted</source>
         <comment>the name of a decrypted file whose own name was only “.gpg”</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+144"/>
+        <location line="+146"/>
         <location filename="../src/signature.cpp" line="+0"/>
         <source>gpg failed</source>
         <translation>gpg falló</translation>
     </message>
     <message>
-        <location line="+55"/>
+        <location line="+69"/>
         <source>gpg couldn&apos;t encrypt “%1”: %2</source>
         <translation type="unfinished"></translation>
     </message>

@@ -11,6 +11,7 @@
 #include "towerwin.h"
 #include "windiag.h"
 
+#include <QCheckBox>
 #include <QClipboard>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -502,6 +503,48 @@ int main(int argc, char **argv)
     }
     check(wait_for([&]() { return !waiting; }) && !exists(home_path("a3.txt")) && exists(home_path("a.txt")),
           "Delete in the Jobs window cancels the selected job (and doesn't move the main window's selection to the trash)");
+    // Verify copies, per job: off by default (Preferences), turned on for a waiting copy in the Jobs window; not for a
+    // job that copies nothing
+    if (jw) {
+        write_text(home_path("v.bin"), QByteArray(300 * 1024, 'v'));
+        q->set_start_paused(true);
+        QPointer<Task> vjob = fileops::start_ops(w, {{"copy", home_path("v.bin"), home_path("v2.bin")}}, "Verified copy");
+        q->set_start_paused(false);
+        spin(200);
+        jw->refresh();
+        QTreeWidgetItem *vrow = nullptr, *hrow = nullptr;
+        for (int i = 0; i < jw->list->topLevelItemCount(); ++i) {
+            QTreeWidgetItem *it = jw->list->topLevelItem(i);
+            if (it->text(0) == "Verified copy")
+                vrow = it;
+            else if (it->text(0) == "Holding for the window")
+                hrow = it;
+        }
+        bool holder_off = false, off_first = false;
+        if (hrow) {
+            jw->list->setCurrentItem(hrow);
+            holder_off = !jw->verify_box->isEnabled();
+        }
+        if (vrow) {
+            jw->list->setCurrentItem(vrow);
+            off_first = jw->verify_box->isEnabled() && !jw->verify_box->isChecked() && vjob && vjob->verify.load() == 0;
+            jw->verify_box->setChecked(true);
+        }
+        bool turned_on = vjob && vjob->verify.load() == 1;
+        *held = false;   // (the copy waits for the holder's drive)
+        wait_for([&]() { return !h; });
+        if (vjob)
+            q->control(QString(), vjob->id, "resume");
+        bool ran = wait_for([&]() { return !vjob; }, 10000);
+        QString vlog;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == "Verified copy")
+                vlog = f.log;
+        check(holder_off && off_first && turned_on && ran && read_file(home_path("v2.bin")).size() == 300 * 1024 &&
+                  vlog.contains("Verify copies turned on") && vlog.contains("matches its original"),
+              "Verify copies in the Jobs window: off for a copy by default, turned on for a waiting one, which then reads "
+              "its copy back; not offered for a job that copies nothing");
+    }
     *held = false;
     wait_for([&]() { return !h; });
     if (jw)

@@ -10,12 +10,14 @@
 #include "undo.h"
 #include "stats.h"
 #include "tapebuf.h"
+#include "xattrs.h"
 #include "util.h"
 #include "windows.h"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QTime>
 #include <QHBoxLayout>
@@ -891,6 +893,7 @@ public:
     QList<Job> completed;   // jobs that succeeded (for undo)
     QStringList partial;    // new folders a copy left part-way (cancelled, or an error inside): undone like a copy
     bool kernel_copy = true;   // files cloned or copied by the kernel where it can (Preferences → Files → Copying)
+    bool keep_xattrs = false;  // extended attributes and ACLs copied too (Preferences → Files → Copying; xattrs.h)
     int cloned = 0, by_kernel = 0, by_kestrel = 0;   // how each file was copied, for the log
     QList<Job> touched;     // jobs that changed something (done, or begun): a tape among them gets its index written
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
@@ -991,6 +994,25 @@ public:
                 left_part_way();
                 throw;
             }
+        }
+        check_on_tape(0);   // copies onto a tape: read back now, in the order they lie on it
+        for (const QString &d : std::as_const(mismatched))
+            errors << tx("%1: the copy doesn't match the original (read back after copying). It's kept; copy it again.").arg(d);
+        if (verified || unverified_clones) {
+            QString line = mismatched.isEmpty() && !bad_moves
+                               ? txn("Verified %Ln copied file(s): each one read back matches its original (SHA-256).", verified)
+                               : txn("Verified %Ln copied file(s): %1 don't match their originals (listed above).", verified)
+                                     .arg(group_digits(mismatched.size() + bad_moves));
+            if (unverified_clones)
+                line += " " + txn("%Ln cloned file(s) share their original's data on the drive: nothing to read back.",
+                                  unverified_clones);
+            task->log(line);
+        }
+        if (xattr_items) {
+            QStringList names(xattrs_left_out.begin(), xattrs_left_out.end());
+            names.sort();
+            task->log(txn("Extended attributes left out on %Ln item(s), as the destination can't hold them: %1", xattr_items)
+                          .arg(names.join(", ")));
         }
         qint64 ms = stats::now_ms() - started;
         if (!by_count && done > 0 && ms > 0)
@@ -1265,7 +1287,19 @@ private:
             report_progress(basename(src));
             return;
         }
+        qsizetype pending = on_tape.size();
+        int bad_before = mismatched.size();
         copy(src, dst, merge, claim);
+        check_on_tape(pending);   // a move onto a tape: its copies read back before the original goes
+        if (mismatched.size() > bad_before) {
+            QStringList bad = mismatched.mid(bad_before);
+            mismatched = mismatched.mid(0, bad_before);   // (reported here, as this item's failure)
+            bad_moves += int(bad.size());
+            throw Error(txn("%Ln copied file(s) don't match their originals (read back after copying), so nothing was "
+                            "deleted from where it came from: %1",
+                            bad.size())
+                            .arg(bad.join(", ")));
+        }
         remove(src);
     }
 
@@ -1394,6 +1428,7 @@ private:
                     copy_at(in.fd, e, est, join(src, e), out, e, join(dst, e), merge);
                 }
                 copy_times_mode(out, st);
+                copy_xattrs(in.fd, out);
             };
             if (dst_exists && merge) {   // into the existing folder (each file in it still replaced whole)
                 if (!S_ISDIR(dst_st.st_mode))
@@ -1494,6 +1529,8 @@ private:
             }
         }
         Fd out(part_fd);
+        bool verify = task->verify.load() == 1, hashing = false, whole = false;
+        QCryptographicHash hash(QCryptographicHash::Sha256);
         if (drives::slow_kind(src) == drives::Slow::Tape)   // the first read waits while the drive winds to the file
             task->report(double(done), double(total), tx("Positioning the tape — %1").arg(name), true);
         qint64 written = 0;
@@ -1513,7 +1550,6 @@ private:
             }
             // the kernel's own copy first, where allowed (never onto a tape: the buffer and dd are for it): a clone,
             // else copy_file_range; what's left (all of it where neither works) by the loop below
-            bool whole = false;
             if (!to_tape && kernel_copy && dest_dev && qint64(now.st_size) >= dest_min) {
                 whole = kernel_copy_file(in.fd, out.fd, qint64(now.st_size), name, src, dst, written,
                                          qMakePair(quint64(now.st_dev), dest_dev));
@@ -1521,6 +1557,9 @@ private:
             }
             if (!to_tape)
                 ++(!whole ? by_kestrel : last_cloned ? cloned : by_kernel);
+            // verifying: the source hashed as it's read for the copy (from its start: not where the system copied a
+            // part of it, nor dd, which reads it itself; the source is then read again when it's checked)
+            hashing = verify && !whole && written == 0 && !(to_tape && dd_now);
             // from the tape buffer when it has it (read ahead by its thread), else straight from the file
             bool buffered = !whole && !dd_now && to_tape && buffer && buffer->begin(src, now.st_dev, now.st_ino);
             std::unique_ptr<char[]> buf(whole || buffered || (to_tape && dd_now) ? nullptr : new char[CHUNK]);
@@ -1539,6 +1578,8 @@ private:
                 }
                 if (n == 0)
                     break;
+                if (hashing)
+                    hash.addData(QByteArrayView(data, n));
                 QElapsedTimer writing;
                 writing.start();
                 for (ssize_t off = 0; off < n;) {
@@ -1564,6 +1605,7 @@ private:
                 report_progress(name);
             }
             copy_times_mode(out.fd, st);
+            copy_xattrs(in.fd, out.fd);
             // replacing something: on disk before the rename (a crash leaves the old or the new). Not on a tape: an fsync
             // there writes LTFS's index (the drive stops), and LTFS never overwrites data anyway: until the rename is in
             // the index, the old file is what the tape has
@@ -1583,6 +1625,142 @@ private:
                               .arg(human_size(written), name));
             throw;
         }
+        if (!verify)
+            return;
+        if (whole && last_cloned) {   // the clone is the original's own blocks: nothing to compare
+            ++unverified_clones;
+            return;
+        }
+        Check c{src, dst, hashing ? hash.result() : QByteArray(), qint64(now.st_size)};
+        if (to_tape)
+            on_tape << c;   // after the job (a move: after this item), in tape order
+        else
+            check_copy(c);
+    }
+
+    // ---- verifying copies (Task::verify, per job in the Jobs window; its default in Preferences → Files → Copying)
+    //
+    // Each file Kestrel copied is read back and its SHA-256 compared with the source's, which was hashed as it was read
+    // for the copy (it's read again only where the system copied it or dd did). On a disk, right after the file is
+    // written, its pages first written out and dropped from the memory cache (fdatasync, POSIX_FADV_DONTNEED), so what's
+    // read is what the drive has, not what Kestrel just handed it. Onto a tape, once the whole job is written (a move:
+    // after each item, before its original is deleted), in the order the files lie on the tape, so the drive doesn't
+    // wind back and forth; there no fdatasync, which would write LTFS's index each time. A copy that doesn't match is
+    // reported (the job's log, its list of failures), not deleted or copied again: the user decides; a move keeps its
+    // original. Copies made by the admin session aren't verified.
+    struct Check {
+        QString src, dst;
+        QByteArray hash;   // the source's, hashed while copying; empty: read it again
+        qint64 size = 0;
+    };
+    QList<Check> on_tape;   // copied onto a tape, not checked yet
+    int verified = 0, unverified_clones = 0, bad_moves = 0;
+    QStringList mismatched;   // copies that didn't match
+
+    // path's SHA-256, read through; bar: the job's bar shows *bar_done of bar_total (else its copy progress)
+    QByteArray hash_file(const QString &path, bool drop_cache, const QString &text, qint64 *bar_done, qint64 bar_total)
+    {
+        Fd fd(::open(enc(path).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (fd.fd < 0)
+            throw_errno(path);
+        if (drop_cache) {
+            ::fdatasync(fd.fd);   // (where the file system can't: read it anyway)
+            ::posix_fadvise(fd.fd, 0, 0, POSIX_FADV_DONTNEED);
+        }
+        QCryptographicHash h(QCryptographicHash::Sha256);
+        std::unique_ptr<char[]> buf(new char[CHUNK]);
+        for (;;) {
+            task->check();
+            ssize_t n = ::read(fd.fd, buf.get(), CHUNK);
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n < 0)
+                throw_errno(path);
+            if (n == 0)
+                break;
+            h.addData(QByteArrayView(buf.get(), n));
+            if (bar_done)
+                *bar_done += n;
+            if (task->due())
+                task->report(bar_done ? double(*bar_done) : double(done), bar_done ? double(bar_total) : double(total), text);
+        }
+        return h.result();
+    }
+
+    void check_copy(const Check &c, qint64 *bar_done = nullptr, qint64 bar_total = 0)
+    {
+        QString name = basename(c.dst);
+        bool tape = drives::slow_kind(c.dst) == drives::Slow::Tape;
+        bool same = false;
+        if (qEnvironmentVariable("KESTREL_TEST_CORRUPT_COPY") == name) {   // (tests: the drive gives back another byte)
+            int fd = ::open(enc(c.dst).constData(), O_WRONLY | O_CLOEXEC);
+            if (fd >= 0 && ::pwrite(fd, "!", 1, 0) == 1)
+                ::fsync(fd);
+            if (fd >= 0)
+                ::close(fd);
+        }
+        try {
+            QByteArray want = c.hash.isEmpty() ? hash_file(c.src, false, tx("Verifying — reading the original of %1").arg(name), nullptr, 0)
+                                               : c.hash;
+            same = hash_file(c.dst, !tape, tape ? tx("Verifying on the tape — %1").arg(name) : tx("Verifying — %1").arg(name),
+                             bar_done, bar_total) == want;
+        } catch (const Error &e) {   // (Cancelled goes through)
+            task->log(tx("  “%1” couldn't be read back to verify it: %2").arg(c.dst, e.message()));
+        }
+        ++verified;
+        if (same)
+            return;
+        mismatched << c.dst;
+        task->had_errors = true;
+        task->log(tx("  ✘ The copy “%1” doesn't match its original: their checksums (SHA-256) differ.").arg(c.dst));
+    }
+
+    // the copies onto a tape from on_tape[from] on, read back in the order they lie on it
+    void check_on_tape(qsizetype from)
+    {
+        QList<Check> todo = on_tape.mid(from);
+        on_tape = on_tape.mid(0, from);
+        if (todo.isEmpty())
+            return;
+        if (task->verify.load() != 1) {   // turned off in the Jobs window meanwhile
+            task->log(txn("Verifying was turned off: %Ln copied file(s) on the tape weren't read back.", todo.size()));
+            return;
+        }
+        QList<QPair<QPair<qint64, qint64>, int>> keyed;
+        qint64 bar_total = 0, bar_done = 0;
+        for (int i = 0; i < todo.size(); ++i) {
+            QPair<qint64, qint64> at = drives::tape_position(todo[i].dst);
+            keyed << qMakePair(at.first < 0 ? qMakePair(LLONG_MAX, LLONG_MAX) : at, i);
+            bar_total += todo[i].size;
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+        task->log(txn("Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them", todo.size()));
+        for (const auto &[at, i] : keyed)
+            check_copy(todo[i], &bar_done, std::max<qint64>(bar_total, 1));
+    }
+
+    // ---- extended attributes (keep_xattrs)
+    QSet<QString> xattrs_left_out;   // the names a destination couldn't hold, said once at the end
+    int xattr_items = 0;
+
+    void copy_xattrs(int from, int to)
+    {
+        if (!keep_xattrs)
+            return;
+        std::vector<std::string> left;
+        if (qEnvironmentVariableIntValue("KESTREL_TEST_XATTRS_UNSUPPORTED") == 1) {   // (tests: a destination without them)
+            char names[4096];
+            ssize_t n = ::flistxattr(from, names, sizeof names);
+            for (ssize_t i = 0; i < n; i += ssize_t(strlen(names + i)) + 1)
+                left.emplace_back(names + i);
+        } else {
+            left = xattrs::copy(from, to);
+        }
+        if (left.empty())
+            return;
+        ++xattr_items;
+        for (const std::string &n : left)
+            xattrs_left_out << QString::fromStdString(n);
     }
 
     bool last_cloned = false;   // the file kernel_copy_file finished was cloned
@@ -1811,22 +1989,37 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
     QString more = denied.size() > 10 ? "\n" + txn("…and %Ln more", denied.size() - 10) : QString();
     QString message = txn(messages.value(verbs.join(" or "), messages.value("copied or deleted or moved")), denied.size())
                           .arg(names.join('\n'), more);
-    auto work = [denied](Task *task) {
+    bool keep_xattrs = prefs::get("copy_xattrs").toBool();
+    auto work = [denied, keep_xattrs](Task *task) {
         QStringList errors;
+        QSet<QString> left_out;
+        int left_items = 0;
         for (const Job &j : denied) {
             task->check();
             try {
-                if (j.op == "delete")
+                if (j.op == "delete") {
                     admin::session().call(task, "delete", {{"path", j.src}});
-                else
-                    admin::session().call(task, j.op.contains("copy") ? "copy" : "move",
-                                          {{"src", j.src},
-                                           {"dst", j.dst},
-                                           {"merge", j.op.startsWith("merge")},
-                                           {"replace", j.replace}});
+                } else {
+                    QJsonObject r = admin::session().call(task, j.op.contains("copy") ? "copy" : "move",
+                                                          {{"src", j.src},
+                                                           {"dst", j.dst},
+                                                           {"merge", j.op.startsWith("merge")},
+                                                           {"replace", j.replace},
+                                                           {"xattrs", keep_xattrs}});
+                    QJsonArray names = r.value("xattrs_left_out").toArray();
+                    left_items += r.value("xattrs_items").toInt();
+                    for (const QJsonValue &n : names)
+                        left_out << n.toString();
+                }
             } catch (const admin::AdminError &e) {
                 errors << basename(j.src) + ": " + e.message();
             }
+        }
+        if (left_items) {   // (said once for the job, as Kestrel's own copy does)
+            QStringList names(left_out.begin(), left_out.end());
+            names.sort();
+            task->log(txn("Extended attributes left out on %Ln item(s), as the destination can't hold them: %1", left_items)
+                          .arg(names.join(", ")));
         }
         return errors;
     };
@@ -1957,7 +2150,12 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             on_done();
     };
     bool kernel = prefs::get("copy_kernel").toBool();   // (read here: prefs belong to the UI thread)
-    auto work = [ops, jobs, kernel](Task *task) {
+    bool keep_xattrs = prefs::get("copy_xattrs").toBool();
+    bool copies = std::any_of(jobs.begin(), jobs.end(), [](const Job &j) { return j.op != "delete"; });
+    int verify = copies ? int(prefs::get("copy_verify").toBool()) : -1;
+    auto work = [ops, jobs, kernel, keep_xattrs, verify](Task *task) {
+        int unset = -1;   // (the Jobs window may have set it already)
+        task->verify.compare_exchange_strong(unset, verify);
         // checked when its turn comes: one clear failure, not one "No such file or directory" for each item
         QStringList gone = missing_destinations(jobs);
         if (!gone.isEmpty()) {
@@ -1975,6 +2173,7 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
         }
         *ops = std::make_unique<Ops>(task, jobs);
         (*ops)->kernel_copy = kernel;
+        (*ops)->keep_xattrs = keep_xattrs;
         QStringList errors = (*ops)->run();
         if (!errors.isEmpty())   // (Task::run then says how it ended, and how long it took)
             task->log(txn("%Ln item(s) failed.", errors.size()));
@@ -1991,7 +2190,12 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
     }
     paths.removeAll(QString());
     // what it finishes (undo, the tape's index, what failed) doesn't need the window: it may have closed meanwhile
-    return queue_job(parent, title, paths, work, finished, true, steps, false, intro, true);
+    Task *t = queue_job(parent, title, paths, work, finished, true, steps, false, intro, true);
+    if (t) {   // (so the Jobs window can show and change it while the job waits)
+        int unset = -1;
+        t->verify.compare_exchange_strong(unset, verify);
+    }
+    return t;
 }
 
 namespace {

@@ -32,6 +32,7 @@
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <utime.h>
 
 #include <atomic>
@@ -318,6 +319,99 @@ int main(int argc, char **argv)
         } else {
             skip("copying by a clone (this drive can't share data between files: Btrfs, XFS or ZFS 2.2+ can)");
         }
+    }
+
+    // -- extended attributes and ACLs (Preferences → Files → Copying, off by default)
+    {
+        makedirs(P("xa/dir"), true);
+        make(P("xa/f.txt"), "attrs");
+        make(P("xa/dir/in.txt"), "inside");
+        auto xattr_of = [](const QString &path, const char *name) {
+            char buf[512];
+            ssize_t n = ::getxattr(enc(path).constData(), name, buf, sizeof buf);
+            return n < 0 ? QByteArray() : QByteArray(buf, n);
+        };
+        auto last_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        QByteArray url = "https://example.com/f.txt";
+        bool can = ::setxattr(enc(P("xa/f.txt")).constData(), "user.xdg.origin.url", url.constData(), size_t(url.size()), 0) == 0 &&
+                   ::setxattr(enc(P("xa/dir")).constData(), "user.xdg.tags", "red", 3, 0) == 0;
+        if (can) {
+            bool off_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/off.txt")}});
+            prefs::set("copy_xattrs", true);
+            bool on_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/on.txt")}, {"copy", P("xa/dir"), P("xa/dir2")}});
+            check(off_ok && xattr_of(P("xa/off.txt"), "user.xdg.origin.url").isEmpty() && on_ok &&
+                      xattr_of(P("xa/on.txt"), "user.xdg.origin.url") == url && xattr_of(P("xa/dir2"), "user.xdg.tags") == "red" &&
+                      text_of(P("xa/on.txt")) == "attrs" && exists(P("xa/dir2/in.txt")),
+                  "a copy keeps no extended attributes by default; with Keep extended attributes on, a file's (where it "
+                  "was downloaded from) and a folder's (its tags) are copied");
+            // an ACL, where the file system and setfacl allow one
+            make(P("xa/acl.txt"), "acl");
+            if (which("setfacl") && proc::run({"setfacl", "-m", "u:nobody:r", P("xa/acl.txt")}).rc == 0) {
+                bool acl_ok = run_ops(w, {{"copy", P("xa/acl.txt"), P("xa/acl2.txt")}});
+                check(acl_ok && !xattr_of(P("xa/acl2.txt"), "system.posix_acl_access").isEmpty() &&
+                          xattr_of(P("xa/acl2.txt"), "system.posix_acl_access") == xattr_of(P("xa/acl.txt"), "system.posix_acl_access"),
+                      "...and a file's ACL arrives too");
+            } else {
+                skip("copying an ACL (needs setfacl, and a file system with ACLs)");
+            }
+            // a destination that can't hold them: the copy goes on, and the log says once which were left out
+            qputenv("KESTREL_TEST_XATTRS_UNSUPPORTED", "1");
+            bool fat_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/fat.txt")}, {"copy", P("xa/dir"), P("xa/fat-dir")}});
+            qunsetenv("KESTREL_TEST_XATTRS_UNSUPPORTED");
+            QString log = last_log();
+            check(fat_ok && text_of(P("xa/fat.txt")) == "attrs" && exists(P("xa/fat-dir/in.txt")) &&
+                      log.count("Extended attributes left out") == 1 && log.contains("on 2 items") &&
+                      log.contains("user.xdg.origin.url") && log.contains("user.xdg.tags"),
+                  "...where the destination can't hold them, the copy is made all the same, and its log names what was "
+                  "left out, once for the job (" + log.section('\n', -3) + ")");
+            prefs::set("copy_xattrs", false);
+        } else {
+            skip("copying extended attributes (this file system takes no user.* attributes)");
+        }
+    }
+
+    // -- Verify copies (off by default; per job in the Jobs window): read back and compared with the original
+    {
+        makedirs(P("vf"), true);
+        QByteArray data(6 * 1024 * 1024, 'v');   // more than one 4 MB piece
+        data[5 * 1024 * 1024] = 'W';
+        make(P("vf/src.bin"), data);
+        auto last_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        Task *t0 = nullptr;
+        bool plain = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/plain.bin")}}, QString(), &t0);
+        QString plain_log = last_log();
+        prefs::set("copy_verify", true);
+        prefs::set("copy_kernel", false);
+        bool a = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/a.bin")}});
+        QString log_a = last_log();
+        prefs::set("copy_kernel", true);
+        qputenv("KESTREL_TEST_NO_CLONE", "1");
+        bool b = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/b.bin")}});
+        QString log_b = last_log();
+        qunsetenv("KESTREL_TEST_NO_CLONE");
+        check(plain && !plain_log.contains("Verified") && a && b && read_file(P("vf/a.bin")) == data &&
+                  read_file(P("vf/b.bin")) == data && log_a.contains("Verified 1 copied file") &&
+                  log_a.contains("matches its original") && log_b.contains("matches its original"),
+              "Verify copies: off by default; on, a copy is read back and matches its original, hashed while Kestrel "
+              "copied it, or read again where the system copied it (" + log_a.section('\n', -2, -2) + ")");
+        qputenv("KESTREL_TEST_CORRUPT_COPY", "c.bin");
+        boxes.clear();
+        bool c = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/c.bin")}});
+        qunsetenv("KESTREL_TEST_CORRUPT_COPY");
+        QString log_c = last_log();
+        spin(200);
+        check(c && exists(P("vf/c.bin")) && read_file(P("vf/c.bin")) != data && log_c.contains("doesn't match its original") &&
+                  log_c.contains("Verified 1 copied file") && log_c.contains("(listed above)") && boxes.join("\n").contains("doesn't match the original") &&
+                  read_file(P("vf/src.bin")) == data,
+              "...a copy that reads back different (a byte changed on the drive) is named in the job's log and its "
+              "failures, and kept as it is (" + boxes.join(" ").left(160) + ")");
+        prefs::set("copy_verify", false);
     }
 
     // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink

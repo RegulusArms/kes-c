@@ -53,29 +53,6 @@ into.
 
 ### Jobs
 
-- [ ] **Keep extended attributes and ACLs when copying (opt-in).** A copy now keeps only the file's times and permissions
-  (`futimens` / `fchmod` in src/fileops.cpp), so it silently drops its extended attributes: the address a browser
-  saved a download from (`user.xdg.origin.url`), tags other apps keep (`user.xdg.tags`, KDE's), ACLs
-  (`system.posix_acl_*`), security labels, and attributes backup tools rely on.
-  - Copy them onto the part file before the rename (`flistxattr` / `fgetxattr` / `fsetxattr`), for folders too, and
-    in the admin helper's copy.
-  - Off by default: a setting the user can turn on (src/prefs.cpp, so Preferences → Files). While it's on, where the
-    destination can't hold them (FAT, exFAT, some FUSE mounts, a tape), the copy goes on and its log says which
-    were left out, once per job rather than per file.
-  - Skip what the user can't set (`security.*`, `trusted.*` without root) quietly.
-  - A test that copies a file with a `user.` attribute (and an ACL where the test's file system allows) and checks
-    it arrived.
-
-- [ ] **Verify after copy (opt-in).** An option, off by default, to read each copied file back once it's written and
-  compare its checksum with the source's, as TeraCopy does; mismatches are listed in the job's log and its summary.
-  - Set per job in the Jobs window (and a default in Preferences → Files, off); most useful for tapes, where
-    checking really matters.
-  - Hash the source while copying (no second read of it), then read the copy back; on a tape, after the whole job,
-    in the order the files lie on it, so the drive doesn't wind back and forth.
-  - Maybe: write a `SHA256SUMS` (or the chosen algorithms, as Create Checksum File… does) beside the copy, so it can
-    be checked again later with Verify Checksums.
-  - Decide what a mismatch does: report only, or offer to copy that file again.
-
 ### Archives
 
 ### Drives, the sidebar and the Overview
@@ -223,6 +200,37 @@ into.
     ITP and a sponsor, and Debian's release pace: worth it after a stable 1.0, not during the alpha.
 
 ## Done
+
+- [x] **Keep extended attributes and ACLs when copying (opt-in).** A copy now keeps only the file's times and permissions
+  (`futimens` / `fchmod` in src/fileops.cpp), so it silently drops its extended attributes: the address a browser
+  saved a download from (`user.xdg.origin.url`), tags other apps keep (`user.xdg.tags`, KDE's), ACLs
+  (`system.posix_acl_*`), security labels, and attributes backup tools rely on.
+  - Copy them onto the part file before the rename (`flistxattr` / `fgetxattr` / `fsetxattr`), for folders too, and
+    in the admin helper's copy.
+  - Off by default: a setting the user can turn on (src/prefs.cpp, so Preferences → Files). While it's on, where the
+    destination can't hold them (FAT, exFAT, some FUSE mounts, a tape), the copy goes on and its log says which
+    were left out, once per job rather than per file.
+  - Skip what the user can't set (`security.*`, `trusted.*` without root) quietly.
+  - A test that copies a file with a `user.` attribute (and an ACL where the test's file system allows) and checks
+    it arrived.
+  Done in 0.3.3-alpha.9 (src/xattrs.h, used by src/fileops.cpp and src/admin_helper.cpp; "copy_xattrs"): set after the
+  times and mode (in the helper after the owner, which a chown would clear security.capability for); the helper tells
+  Kestrel what was left out in its answer. Not tested: a real FAT destination (a hook stands in for one).
+
+- [x] **Verify after copy (opt-in).** An option, off by default, to read each copied file back once it's written and
+  compare its checksum with the source's, as TeraCopy does; mismatches are listed in the job's log and its summary.
+  - Set per job in the Jobs window (and a default in Preferences → Files, off); most useful for tapes, where
+    checking really matters.
+  - Hash the source while copying (no second read of it), then read the copy back; on a tape, after the whole job,
+    in the order the files lie on it, so the drive doesn't wind back and forth.
+  - Maybe: write a `SHA256SUMS` (or the chosen algorithms, as Create Checksum File… does) beside the copy, so it can
+    be checked again later with Verify Checksums.
+  - Decide what a mismatch does: report only, or offer to copy that file again.
+  Done in 0.3.3-alpha.9 (src/fileops.cpp, Ops; "copy_verify", Task::verify, the Jobs window's Verify copies): SHA-256,
+  the copy's pages written out and dropped from the cache before it's read back (not on a tape: an fsync there writes
+  LTFS's index). A mismatch is reported only (the log, the job's failures; a move keeps its original), not copied
+  again. Not yet: the SHA256SUMS beside the copy; changing it for another Kestrel's job (would need a tower message);
+  verifying copies made as administrator; a test on a tape.
 
 - [x] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
   Done in 0.3.3-alpha.9 (src/pgp.cpp): right-click → Encrypt… (files, one or several) with a password or to keys from
