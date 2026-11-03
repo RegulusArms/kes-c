@@ -49,6 +49,32 @@ into.
   - The admin session (src/admin.cpp → kes-admin-helper) sends paths as JSON text, where a stray byte's lone
     surrogate doesn't survive: Retry as Administrator on such a name fails. Send the bytes (e.g. base64) instead.
 
+- [ ] **Verifying checksums stops when the Kestrel window that started it is closed.** It should be like any other
+  job: it carries on in the Jobs window after its window has gone, and its result is still there to see.
+  - Why: the Verify window (VerifyDialog, src/hashcheck.cpp) runs the check as one job per file, starting the next
+    when one finishes, and it's that window that keeps the list and moves on. It belongs to the Kestrel window it was
+    opened from, so closing that window deletes it, and its destructor (`stop()`) cancels the job that's running and
+    nothing starts the rest.
+  - Fix: one job for the whole checksum file (every entry, in order), not tied to any window (queue_job with
+    outlives_parent, as other jobs are), with each file's result in its log and its list of failures. The Verify
+    window then only shows that job's progress and results while it's open; closing it or its Kestrel window leaves
+    the job running.
+
+- [ ] **Check that every job runs on its own, whatever happens to the Kestrel window that started it.** Closing
+  that window (or the tool window it came from) mustn't stop a job, lose its result, or crash when it finishes. The
+  job goes on in the Jobs window, its log and failures are kept there, and it keeps Kestrel running until it ends, as
+  copies and moves already do. Found with Verify Checksums (above).
+  - Go through every `fileops::queue_job` / `run_job` / `run_task` / `start_ops` call: what it's parented to, whether
+    its `on_done` needs that window (and `outlives_parent`), and whether a window drives a series of jobs itself
+    (starting the next as one ends), as Verify Checksums does.
+  - Windows that cancel their job when closed or deleted, so they're deliberate choices to keep or change: Find
+    Duplicates (`DupesWindow`), Disk Usage (`DiskUsageWindow`) and Compare With… (`CompareWindow`) stop their scans,
+    whose results show only in that window; Sync To… (`SyncWindow`) stops only its preview, and a sync goes on. A scan
+    that's only useful in its window may be fine to stop, but closing the Kestrel window behind it shouldn't stop it
+    while the tool window stays open.
+  - Add a check for each kind of job in the tests (close the window that started it part-way, the job still ends
+    and its result is in the Jobs window).
+
 ## New features
 
 ### Jobs
