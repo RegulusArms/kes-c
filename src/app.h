@@ -87,6 +87,7 @@ public:
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
     void open_checksums(const QString &path);   // Verify Checksums, its signature first when one is beside it
+    void open_signed_or_encrypted(const QString &path);   // Verify Signature, or Decrypt
     bool open_file(const QString &path);
     void quick_view(Pane *pane, const QStringList &paths);
     ImageViewer *open_viewer(Pane *pane, const QStringList &images, int idx, bool whole_folder = false);   // whole_folder: follow it

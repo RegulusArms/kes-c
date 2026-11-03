@@ -31,7 +31,7 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+664"/>
+        <location filename="../src/app.cpp" line="+665"/>
         <location line="+589"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
@@ -252,11 +252,11 @@
     <message>
         <location line="+10"/>
         <location filename="../src/app.cpp" line="-733"/>
-        <location line="+961"/>
+        <location line="+969"/>
         <location filename="../src/diskusage.cpp" line="+1013"/>
         <location filename="../src/menus.cpp" line="-32"/>
-        <location line="+111"/>
-        <location filename="../src/opening.cpp" line="+259"/>
+        <location line="+115"/>
+        <location filename="../src/opening.cpp" line="+276"/>
         <location line="+4"/>
         <source>Move to Trash</source>
         <translation>移到回收站</translation>
@@ -324,14 +324,14 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-960"/>
+        <location filename="../src/app.cpp" line="-968"/>
         <location line="+653"/>
         <source>Delete Permanently</source>
         <translation>永久删除</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+517"/>
+        <location filename="../src/app.cpp" line="+525"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
@@ -468,7 +468,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+13"/>
-        <location filename="../src/app.cpp" line="-518"/>
+        <location filename="../src/app.cpp" line="-526"/>
         <source>Restore</source>
         <translation>还原</translation>
     </message>
@@ -481,7 +481,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+5"/>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
-        <location filename="../src/menus.cpp" line="-101"/>
+        <location filename="../src/menus.cpp" line="-105"/>
         <location filename="../src/widgets.cpp" line="+1798"/>
         <source>Empty Trash</source>
         <translation>清空回收站</translation>
@@ -704,6 +704,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+369"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
+        <location filename="../src/pgp.cpp" line="+444"/>
         <location filename="../src/prefs.cpp" line="+56"/>
         <location filename="../src/widgets.cpp" line="-1415"/>
         <source>Name</source>
@@ -712,7 +713,7 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+0"/>
         <location filename="../src/archivewin.cpp" line="+0"/>
-        <location filename="../src/compare.cpp" line="+801"/>
+        <location filename="../src/compare.cpp" line="+885"/>
         <location filename="../src/diskusage.cpp" line="+0"/>
         <location filename="../src/dupes.cpp" line="+0"/>
         <location filename="../src/pane.cpp" line="+889"/>
@@ -997,14 +998,14 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1336"/>
+        <location line="+1344"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>撤销</translation>
     </message>
     <message>
-        <location line="-1332"/>
+        <location line="-1340"/>
         <location line="+734"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
@@ -1013,8 +1014,8 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="-733"/>
         <location line="+734"/>
-        <location filename="../src/compare.cpp" line="-154"/>
-        <location line="+281"/>
+        <location filename="../src/compare.cpp" line="-176"/>
+        <location line="+373"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
         <location filename="../src/jobswin.cpp" line="-280"/>
         <location filename="../src/menus.cpp" line="+0"/>
@@ -1062,19 +1063,19 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+9"/>
         <location line="+616"/>
         <location line="+32"/>
-        <location line="+320"/>
+        <location line="+328"/>
         <location line="+239"/>
         <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
-        <location line="+105"/>
+        <location line="+109"/>
         <location filename="../src/overview.cpp" line="+1480"/>
         <source>Properties</source>
         <translation>属性</translation>
     </message>
     <message>
-        <location line="-1198"/>
-        <location filename="../src/menus.cpp" line="-183"/>
+        <location line="-1206"/>
+        <location filename="../src/menus.cpp" line="-187"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
         <location line="+2"/>
@@ -1139,13 +1140,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1192"/>
+        <location line="+1200"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>全屏</translation>
     </message>
     <message>
-        <location line="-1184"/>
+        <location line="-1192"/>
         <source>Reload</source>
         <translation>重新加载</translation>
     </message>
@@ -1236,12 +1237,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1175"/>
+        <location line="+1183"/>
         <source>Keyboard Shortcuts</source>
         <translation>键盘快捷键</translation>
     </message>
     <message>
-        <location line="-1174"/>
+        <location line="-1182"/>
         <source>About</source>
         <translation>关于</translation>
     </message>
@@ -1566,17 +1567,17 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+20"/>
-        <location line="+344"/>
+        <location line="+352"/>
         <location filename="../src/menus.cpp" line="+37"/>
-        <location line="+101"/>
+        <location line="+105"/>
         <location filename="../src/overview.cpp" line="-13"/>
         <location filename="../src/widgets.cpp" line="-458"/>
         <source>Open in Terminal</source>
         <translation>在终端中打开</translation>
     </message>
     <message>
-        <location line="-342"/>
-        <location filename="../src/menus.cpp" line="-101"/>
+        <location line="-350"/>
+        <location filename="../src/menus.cpp" line="-105"/>
         <source>Bookmark This Folder</source>
         <translation>为此文件夹添加书签</translation>
     </message>
@@ -1589,23 +1590,23 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+35"/>
-        <location line="+308"/>
-        <location filename="../src/menus.cpp" line="+101"/>
+        <location line="+316"/>
+        <location filename="../src/menus.cpp" line="+105"/>
         <source>Shred with BleachBit…</source>
         <translation>用 BleachBit 粉碎…</translation>
     </message>
     <message>
-        <location line="-294"/>
-        <location line="+534"/>
+        <location line="-302"/>
+        <location line="+542"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
         <location filename="../src/chooser.cpp" line="+185"/>
         <location filename="../src/diskusage.cpp" line="+117"/>
-        <location filename="../src/menus.cpp" line="-96"/>
-        <location filename="../src/opening.cpp" line="-185"/>
-        <location line="+64"/>
-        <location line="+37"/>
+        <location filename="../src/menus.cpp" line="-100"/>
+        <location filename="../src/opening.cpp" line="-201"/>
+        <location line="+20"/>
+        <location line="+97"/>
         <location line="+7"/>
         <location line="+13"/>
         <location filename="../src/overview.cpp" line="-2"/>
@@ -1619,7 +1620,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>打开</translation>
     </message>
     <message>
-        <location line="-531"/>
+        <location line="-539"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-193"/>
         <location line="+51"/>
@@ -1861,7 +1862,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+7"/>
-        <location filename="../src/diskimage.cpp" line="+701"/>
+        <location filename="../src/diskimage.cpp" line="+711"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <source>Mount Image</source>
         <translation type="unfinished"></translation>
@@ -1921,8 +1922,25 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location filename="../src/menus.cpp" line="-70"/>
-        <location line="+72"/>
+        <location filename="../src/menus.cpp" line="+2"/>
+        <source>Encrypt…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location filename="../src/menus.cpp" line="+2"/>
+        <location filename="../src/pgp.cpp" line="-139"/>
+        <location line="+32"/>
+        <location line="+12"/>
+        <location line="+27"/>
+        <location line="+4"/>
+        <source>Decrypt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location filename="../src/menus.cpp" line="-74"/>
+        <location line="+76"/>
         <location filename="../src/viewer.cpp" line="+55"/>
         <source>Add to Selected UWP Monitor</source>
         <translation>添加到所选 UWP 监视器</translation>
@@ -1930,13 +1948,13 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+8"/>
         <location filename="../src/dialogs.cpp" line="-944"/>
-        <location filename="../src/menus.cpp" line="-136"/>
+        <location filename="../src/menus.cpp" line="-140"/>
         <source>Image</source>
         <translation>图像</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+139"/>
+        <location filename="../src/menus.cpp" line="+143"/>
         <source>Use as Folder Cover</source>
         <translation>用作文件夹封面</translation>
     </message>
@@ -1957,13 +1975,13 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/convert.cpp" line="+93"/>
         <location line="+19"/>
         <location line="+18"/>
-        <location filename="../src/menus.cpp" line="-142"/>
+        <location filename="../src/menus.cpp" line="-146"/>
         <source>Rotate</source>
         <translation>旋转</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/menus.cpp" line="+147"/>
+        <location filename="../src/menus.cpp" line="+151"/>
         <source>Rotate 90° Clockwise</source>
         <translation>顺时针旋转 90°</translation>
     </message>
@@ -1981,8 +1999,8 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location filename="../src/menus.cpp" line="-93"/>
-        <location line="+93"/>
+        <location filename="../src/menus.cpp" line="-97"/>
+        <location line="+97"/>
         <source>Flip Horizontally</source>
         <translation>水平翻转</translation>
     </message>
@@ -2663,7 +2681,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+45"/>
         <location line="+750"/>
         <location line="+66"/>
-        <location filename="../src/diskimage.cpp" line="-538"/>
+        <location filename="../src/diskimage.cpp" line="-548"/>
         <source>%1 failed (exit code %2)</source>
         <translation>%1 失败（退出代码 %2）</translation>
     </message>
@@ -2728,7 +2746,8 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+59"/>
         <location filename="../src/archivewin.cpp" line="-258"/>
         <location filename="../src/hashcheck.cpp" line="-339"/>
-        <location filename="../src/opening.cpp" line="-127"/>
+        <location filename="../src/opening.cpp" line="-143"/>
+        <location filename="../src/pgp.cpp" line="-26"/>
         <source>Reading %1</source>
         <translation>正在读取 %1</translation>
     </message>
@@ -2765,6 +2784,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message>
         <location line="+21"/>
+        <location filename="../src/pgp.cpp" line="+73"/>
         <source>Show</source>
         <translation>显示</translation>
     </message>
@@ -2906,6 +2926,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
         <location line="+460"/>
         <location filename="../src/diskimage.cpp" line="+235"/>
         <location filename="../src/overview.cpp" line="-1123"/>
+        <location filename="../src/pgp.cpp" line="+5"/>
         <source>Password:</source>
         <translation>密码：</translation>
     </message>
@@ -2956,7 +2977,7 @@ They can go on without any Kestrel window: the Jobs window shows them, and Kestr
     </message>
     <message numerus="yes">
         <location line="+7"/>
-        <location filename="../src/util.cpp" line="+918"/>
+        <location filename="../src/util.cpp" line="+917"/>
         <source>%Ln byte(s)</source>
         <translation>
             <numerusform>%Ln 字节</numerusform>
@@ -3687,7 +3708,7 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="-147"/>
-        <location filename="../src/compare.cpp" line="-145"/>
+        <location filename="../src/compare.cpp" line="-215"/>
         <location filename="../src/convert.cpp" line="+3"/>
         <location filename="../src/dialogs.cpp" line="-250"/>
         <location line="+1171"/>
@@ -3739,7 +3760,7 @@ Install it with:  sudo apt install </source>
         <translation>文件夹“%1”不存在。</translation>
     </message>
     <message>
-        <location filename="../src/compare.cpp" line="-733"/>
+        <location filename="../src/compare.cpp" line="-815"/>
         <location line="+2"/>
         <source>Can&apos;t read %1</source>
         <translation>无法读取 %1</translation>
@@ -3779,12 +3800,12 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+296"/>
+        <location line="+356"/>
         <source>The same</source>
         <translation>相同</translation>
     </message>
     <message>
-        <location line="-294"/>
+        <location line="-354"/>
         <location line="+2"/>
         <source>Only in %1</source>
         <translation>仅在 %1 中</translation>
@@ -3797,12 +3818,12 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+288"/>
+        <location line="+348"/>
         <source>Different contents</source>
         <translation>内容不同</translation>
     </message>
     <message>
-        <location line="-207"/>
+        <location line="-267"/>
         <source>rsync: %1%</source>
         <translation>rsync：%1%</translation>
     </message>
@@ -3817,7 +3838,7 @@ Install it with:  sudo apt install </source>
         <translation>无消息</translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+153"/>
         <source>Compare “%1” With</source>
         <translation>将“%1”与…比较</translation>
     </message>
@@ -3857,14 +3878,14 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+319"/>
+        <location line="+332"/>
         <location filename="../src/convert.cpp" line="-298"/>
         <location filename="../src/diskimage.cpp" line="-6"/>
         <source>Choose…</source>
         <translation>选择…</translation>
     </message>
     <message>
-        <location line="-316"/>
+        <location line="-329"/>
         <location line="+23"/>
         <source>Compare</source>
         <translation>比较</translation>
@@ -3927,12 +3948,12 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+321"/>
+        <location line="+343"/>
         <source>Item</source>
         <translation>项目</translation>
     </message>
     <message>
-        <location line="-321"/>
+        <location line="-343"/>
         <source>Difference</source>
         <translation>差异</translation>
     </message>
@@ -4021,19 +4042,19 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+8"/>
-        <location line="+358"/>
+        <location line="+450"/>
         <source>Comparing…</source>
         <translation>正在比较…</translation>
     </message>
     <message>
-        <location line="-352"/>
-        <location line="+357"/>
+        <location line="-444"/>
+        <location line="+449"/>
         <source>Comparing %1 and %2</source>
         <translation>正在比较 %1 和 %2</translation>
     </message>
     <message>
-        <location line="-342"/>
-        <location line="+354"/>
+        <location line="-434"/>
+        <location line="+446"/>
         <location filename="../src/dialogs.cpp" line="-411"/>
         <location filename="../src/diskusage.cpp" line="+186"/>
         <location filename="../src/dupes.cpp" line="+147"/>
@@ -4041,7 +4062,7 @@ Install it with:  sudo apt install </source>
         <translation>已停止。</translation>
     </message>
     <message>
-        <location line="-344"/>
+        <location line="-436"/>
         <source>the left</source>
         <translation>左侧</translation>
     </message>
@@ -4123,7 +4144,17 @@ Install it with:  sudo apt install </source>
         <translation>移除</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+22"/>
+        <source>Last synced:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Syncs run before with this folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
         <source>Source folder</source>
         <translation>源文件夹</translation>
     </message>
@@ -4153,8 +4184,8 @@ Install it with:  sudo apt install </source>
         <translation>同步到</translation>
     </message>
     <message>
-        <location line="+10"/>
-        <location line="+47"/>
+        <location line="+14"/>
+        <location line="+52"/>
         <source>Preview to see what will be done.</source>
         <translation>预览以查看将执行的操作。</translation>
     </message>
@@ -4205,12 +4236,12 @@ Install it with:  sudo apt install </source>
     </message>
     <message>
         <location line="+3"/>
-        <location line="+75"/>
+        <location line="+145"/>
         <source>Save Sync Pair</source>
         <translation>保存同步对</translation>
     </message>
     <message>
-        <location line="-61"/>
+        <location line="-131"/>
         <source>What the sync will do</source>
         <translation>同步将执行的操作</translation>
     </message>
@@ -4225,7 +4256,7 @@ Install it with:  sudo apt install </source>
         <translation>立即同步</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+27"/>
         <source>%1  (%2 → %3, deleting)</source>
         <translation>%1  （%2 → %3，含删除）</translation>
     </message>
@@ -4235,7 +4266,37 @@ Install it with:  sudo apt install </source>
         <translation>尚无：请选择文件夹，然后点“保存同步对…”</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+9"/>
+        <source>Looking for syncs of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+29"/>
+        <source>%1 → %2  (%3, deleting)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1 → %2  (%3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Filled in as this was last synced, on %1: check the direction, then Preview.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>⚠ The source, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>⚠ The destination, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+48"/>
         <source>The source folder isn&apos;t there (a drive not connected?).</source>
         <translation>源文件夹不在（驱动器未连接？）。</translation>
     </message>
@@ -5788,7 +5849,7 @@ This can&apos;t be undone.</source>
     <message>
         <location line="+15"/>
         <location filename="../src/hashcheck.cpp" line="+50"/>
-        <location filename="../src/signature.cpp" line="+363"/>
+        <location filename="../src/signature.cpp" line="+381"/>
         <source>Checking…</source>
         <translation>正在检查…</translation>
     </message>
@@ -7604,6 +7665,7 @@ replaced. A merge can&apos;t be undone.</source>
     </message>
     <message>
         <location line="+11"/>
+        <location filename="../src/pgp.cpp" line="+3"/>
         <source>Again:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7656,6 +7718,7 @@ sudo apt install pkexec</source>
     </message>
     <message>
         <location line="+4"/>
+        <location filename="../src/pgp.cpp" line="+112"/>
         <source>The two passwords aren&apos;t the same.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7692,7 +7755,7 @@ Back up anyway?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+57"/>
+        <location line="+67"/>
         <location line="+426"/>
         <source>Detaching %1</source>
         <translation type="unfinished"></translation>
@@ -8753,7 +8816,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>这里安装的程序都无法写入 %1。</translation>
     </message>
     <message>
-        <location filename="../src/menus.cpp" line="-531"/>
+        <location filename="../src/menus.cpp" line="-535"/>
         <source>A folder</source>
         <translation>文件夹</translation>
     </message>
@@ -8945,14 +9008,14 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+74"/>
+        <location line="+78"/>
         <location line="+2"/>
         <location filename="../src/uwp.cpp" line="+27"/>
         <source>Set as Wallpaper</source>
         <translation>设为壁纸</translation>
     </message>
     <message>
-        <location line="-75"/>
+        <location line="-79"/>
         <source>while UWP&apos;s editor is open</source>
         <translation>UWP 编辑器打开时</translation>
     </message>
@@ -8990,26 +9053,26 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+96"/>
+        <location line="+100"/>
         <source>Scripts ▸</source>
         <translation>脚本 ▸</translation>
     </message>
     <message>
-        <location line="-96"/>
-        <location line="+96"/>
+        <location line="-100"/>
+        <location line="+100"/>
         <source>when you have scripts</source>
         <translation>有脚本时</translation>
     </message>
     <message>
-        <location line="-90"/>
+        <location line="-94"/>
         <location line="+46"/>
-        <location line="+35"/>
+        <location line="+39"/>
         <location line="+15"/>
         <source>when all are folders</source>
         <translation>全部是文件夹时</translation>
     </message>
     <message>
-        <location line="-92"/>
+        <location line="-96"/>
         <source>Open in (a code editor)</source>
         <translation>在（代码编辑器）中打开</translation>
     </message>
@@ -9084,6 +9147,16 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+2"/>
+        <source>when no folders are selected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>for encrypted files (.gpg, .pgp, .asc)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>images and videos, while UWP&apos;s editor is open</source>
         <translation>图像和视频，UWP 编辑器打开时</translation>
     </message>
@@ -9093,8 +9166,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>用于视频，配合 UWP</translation>
     </message>
     <message>
-        <location line="-48"/>
-        <location line="+52"/>
+        <location line="-52"/>
+        <location line="+56"/>
         <location line="+4"/>
         <location line="+17"/>
         <source>for images</source>
@@ -10003,8 +10076,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location filename="../src/opening.cpp" line="+6"/>
-        <location line="+64"/>
-        <location line="+37"/>
+        <location line="+20"/>
+        <location line="+97"/>
         <location line="+7"/>
         <source>Could not open %1</source>
         <translation>无法打开 %1</translation>
@@ -12011,12 +12084,232 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <translation>密钥服务器没有响应。</translation>
     </message>
     <message>
-        <location line="+0"/>
+        <location filename="../src/pgp.cpp" line="-503"/>
+        <source>decrypted</source>
+        <comment>the name of a decrypted file whose own name was only “.gpg”</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+144"/>
+        <location filename="../src/signature.cpp" line="+0"/>
         <source>gpg failed</source>
         <translation>gpg 失败</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+55"/>
+        <source>gpg couldn&apos;t encrypt “%1”: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>“%1” is encrypted to a key whose secret part isn&apos;t in your keyring.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>gpg couldn&apos;t decrypt “%1”: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>%1, by %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <location line="+187"/>
+        <source>Encrypt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-187"/>
+        <source>Encrypting needs gpg, which isn&apos;t installed. Install it with:
+
+sudo apt install gnupg</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Decrypting %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Decrypted into %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>The password is wrong.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>“%1” is decrypted into “%2”. What was in it was also signed:
+
+%3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Decrypting needs gpg, which isn&apos;t installed. Install it with:
+
+sudo apt install gnupg</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
+        <source>“%1” isn&apos;t encrypted: gpg finds no encrypted data in it (it may be a signature or a key).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>“%1” is encrypted to someone else&apos;s key (%2): your keyring doesn&apos;t have its secret part, so only they can open it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Encrypt “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>Encrypt %Ln File(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location line="+49"/>
+        <source>An encrypted copy is made beside it, as “%1”; the original stays as it is.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-47"/>
+        <location line="+51"/>
+        <source>An encrypted copy of each is made beside it (“name.gpg”); the originals stay as they are.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-45"/>
+        <source>With a password: anyone who has it can open it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Password</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>The password again</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>To people&apos;s keys: only they can open it, with no password to pass on</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Keys to encrypt to</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Key</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Verified</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Also to my own key, so I can open it too</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Looking for keys…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>As text (.asc), to paste into an email or a message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>An encrypted copy of each is made beside it (“name.asc”); the originals stay as they are.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Listing your keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>%1 (you)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Yes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>No</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <source>Your keyring has no keys to encrypt to. Import the public key of whoever it&apos;s for (for example in Passwords and Keys, or with gpg --import) and open Encrypt… again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>A key you haven&apos;t verified may not be theirs: anyone can make a key with any name. Compare its fingerprint (hover over its key) with the one they gave you.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>You have no key of your own, so you won&apos;t be able to open what&apos;s encrypted to other people&apos;s keys. Anyone can make a key with any name: compare a key&apos;s fingerprint (hover over it) with the one its owner gave you.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Type a password, twice.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Tick the keys of the people it&apos;s for.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Encrypting %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+0"/>
+        <source>Encrypting %Ln file(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Encrypted %1 into %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/signature.cpp" line="+15"/>
         <source>✔ Valid signature</source>
         <translation>✔ 签名有效</translation>
     </message>

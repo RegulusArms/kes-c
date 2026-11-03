@@ -9,9 +9,11 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QGridLayout>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -288,36 +290,96 @@ void run_rsync(Task *task, const QString &source, const QString &dest, bool dele
 
 QString pairs_file() { return join(CONFIG_DIR(), "sync-pairs.json"); }
 
-QList<Pair> pairs()
+static Pair pair_from(const QJsonObject &o)
+{
+    Pair p;
+    p.name = o.value("name").toString();
+    p.source = o.value("source").toString();
+    p.dest = o.value("dest").toString();
+    p.deletes = o.value("deletes").toBool();
+    p.rsync = o.value("rsync").toBool(true);
+    p.source_uuid = o.value("source_uuid").toString();
+    p.source_rel = o.value("source_rel").toString();
+    p.dest_uuid = o.value("dest_uuid").toString();
+    p.dest_rel = o.value("dest_rel").toString();
+    p.when = qint64(o.value("when").toDouble());
+    return p;
+}
+
+static QJsonObject pair_json(const Pair &p)
+{
+    QJsonObject o{{"source", p.source},           {"dest", p.dest},         {"deletes", p.deletes},
+                  {"rsync", p.rsync},             {"source_uuid", p.source_uuid}, {"source_rel", p.source_rel},
+                  {"dest_uuid", p.dest_uuid},     {"dest_rel", p.dest_rel}};
+    if (!p.name.isEmpty())
+        o["name"] = p.name;
+    if (p.when)
+        o["when"] = double(p.when);
+    return o;
+}
+
+static QList<Pair> read_pairs(const QString &file)
 {
     QList<Pair> out;
-    for (const QJsonValue &v : QJsonDocument::fromJson(read_file(pairs_file())).array()) {
-        QJsonObject o = v.toObject();
-        Pair p;
-        p.name = o.value("name").toString();
-        p.source = o.value("source").toString();
-        p.dest = o.value("dest").toString();
-        p.deletes = o.value("deletes").toBool();
-        p.rsync = o.value("rsync").toBool(true);
-        p.source_uuid = o.value("source_uuid").toString();
-        p.source_rel = o.value("source_rel").toString();
-        p.dest_uuid = o.value("dest_uuid").toString();
-        p.dest_rel = o.value("dest_rel").toString();
+    for (const QJsonValue &v : QJsonDocument::fromJson(read_file(file)).array()) {
+        Pair p = pair_from(v.toObject());
         if (!p.source.isEmpty() && !p.dest.isEmpty())
             out << p;
     }
     return out;
 }
 
-void save_pairs(const QList<Pair> &list)
+static void write_pairs(const QString &file, const QList<Pair> &list)
 {
     QJsonArray a;
     for (const Pair &p : list)
-        a << QJsonObject{{"name", p.name},           {"source", p.source},         {"dest", p.dest},
-                         {"deletes", p.deletes},     {"rsync", p.rsync},           {"source_uuid", p.source_uuid},
-                         {"source_rel", p.source_rel}, {"dest_uuid", p.dest_uuid}, {"dest_rel", p.dest_rel}};
+        a << pair_json(p);
     makedirs(CONFIG_DIR(), true);
-    write_atomic(pairs_file(), QJsonDocument(a).toJson());
+    write_atomic(file, QJsonDocument(a).toJson());
+}
+
+QList<Pair> pairs() { return read_pairs(pairs_file()); }
+
+void save_pairs(const QList<Pair> &list) { write_pairs(pairs_file(), list); }
+
+// ---- remembered syncs
+
+QString history_file() { return join(CONFIG_DIR(), "sync-history.json"); }
+
+QList<Pair> history() { return read_pairs(history_file()); }
+
+void remember(const QString &source, const QString &dest, bool deletes, bool rsync, qint64 when)
+{
+    Pair p = make_pair(QString(), source, dest, deletes, rsync);
+    p.when = when ? when : QDateTime::currentSecsSinceEpoch();
+    QList<Pair> l{p};
+    QHash<QString, int> per_folder{{source, 1}, {dest, 1}};
+    for (const Pair &x : history()) {
+        if ((x.source == source && x.dest == dest) || l.size() >= HISTORY_MAX)
+            continue;   // (the same pair: now on top)
+        if (per_folder.value(x.source) >= HISTORY_PER_FOLDER || per_folder.value(x.dest) >= HISTORY_PER_FOLDER)
+            continue;
+        ++per_folder[x.source];
+        ++per_folder[x.dest];
+        l << x;
+    }
+    write_pairs(history_file(), l);
+}
+
+QList<Pair> history_for(const QString &folder_in)
+{
+    QString folder = rstrip(folder_in, '/');
+    if (folder.isEmpty())
+        folder = "/";
+    QString rel, uuid = fs_uuid(folder, &rel);
+    QList<Pair> out;
+    for (const Pair &p : history()) {
+        bool src = p.source == folder || (!uuid.isEmpty() && p.source_uuid == uuid && p.source_rel == rel);
+        bool dst = p.dest == folder || (!uuid.isEmpty() && p.dest_uuid == uuid && p.dest_rel == rel);
+        if (src || dst)
+            out << p;
+    }
+    return out;
 }
 
 static QString by_uuid_dir() { return qEnvironmentVariable("KESTREL_TEST_BY_UUID", "/dev/disk/by-uuid"); }
@@ -382,7 +444,7 @@ void open_compare(MainWindow *win, const QString &left)
     });
 }
 
-void open_sync(MainWindow *win, const QString &source) { show_free(new SyncWindow(win, source, QString())); }
+void open_sync(MainWindow *win, const QString &folder) { show_free(new SyncWindow(win, folder, QString())); }
 
 }  // namespace compare
 
@@ -723,6 +785,19 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
     saved_row->addWidget(remove);
     lay->addLayout(saved_row);
 
+    // the remembered syncs of the folder it was opened on (look_up_past)
+    recent_row = new QWidget;
+    auto *rl = new QHBoxLayout(recent_row);
+    rl->setContentsMargins(0, 0, 0, 0);
+    rl->addWidget(new QLabel(tx("Last synced:")));
+    recent = new QComboBox;
+    recent->setAccessibleName(tx("Syncs run before with this folder"));
+    recent->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    connect(recent, &QComboBox::activated, this, &SyncWindow::use_past);
+    rl->addWidget(recent, 1);
+    recent_row->hide();
+    lay->addWidget(recent_row);
+
     auto *grid = new QGridLayout;
     source_edit = new QLineEdit(source);
     source_edit->setAccessibleName(tx("Source folder"));
@@ -743,6 +818,10 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
         });
         grid->addWidget(choose, row, 2);
         connect(e, &QLineEdit::textChanged, this, [this]() {   // what the preview showed is for other folders
+            if (!filling) {
+                touched = true;
+                past_note->hide();   // (it was about the folders filled in)
+            }
             steps.clear();
             list->clear();
             summary->setText(tx("Preview to see what will be done."));
@@ -751,6 +830,11 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
         ++row;
     }
     lay->addLayout(grid);
+    past_note = new QLabel;
+    past_note->setWordWrap(true);
+    past_note->setTextFormat(Qt::PlainText);
+    past_note->hide();
+    lay->addWidget(past_note);
     deletes = new QCheckBox(tx("Also delete what's on the destination but not in the source (asks again)"));
     deletes->setToolTip(tx("Off: the destination keeps files you've deleted from the source"));
     lay->addWidget(deletes);
@@ -816,6 +900,8 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::close);
     lay->addWidget(bb);
     fill_saved();
+    if (!source.isEmpty() && dest.isEmpty())
+        look_up_past(source);
 }
 
 SyncWindow::~SyncWindow()
@@ -840,6 +926,74 @@ void SyncWindow::fill_saved()
     if (!saved->count())
         saved->addItem(tx("None yet: choose the folders, then Save Pair…"));
     saved->setEnabled(!pairs().isEmpty());
+}
+
+// On a worker: where the remembered folders are now, and whether they're there (a drive may be slow, or gone)
+void SyncWindow::look_up_past(const QString &folder)
+{
+    QPointer<SyncWindow> self(this);
+    fileops::run_task(
+        this, tx("Looking for syncs of %1").arg(basename(folder)),
+        [folder]() {
+            QVariantList out;
+            for (Pair p : history_for(folder)) {
+                p.source = resolve(p.source, p.source_uuid, p.source_rel);
+                p.dest = resolve(p.dest, p.dest_uuid, p.dest_rel);
+                out << QVariantMap{{"source", p.source},  {"dest", p.dest},           {"deletes", p.deletes},
+                                   {"rsync", p.rsync},    {"when", p.when},           {"source_there", isdir(p.source)},
+                                   {"dest_there", isdir(p.dest)}};
+            }
+            return QVariant(out);
+        },
+        [self](const QVariant &res) {
+            if (!self)
+                return;
+            self->past.clear();
+            self->past_there.clear();
+            self->recent->clear();
+            for (const QVariant &v : res.toList()) {
+                QVariantMap m = v.toMap();
+                Pair p;
+                p.source = m.value("source").toString();
+                p.dest = m.value("dest").toString();
+                p.deletes = m.value("deletes").toBool();
+                p.rsync = m.value("rsync").toBool();
+                p.when = m.value("when").toLongLong();
+                self->past << p;
+                self->past_there << qMakePair(m.value("source_there").toBool(), m.value("dest_there").toBool());
+                QString when = i18n::date_time(QDateTime::fromSecsSinceEpoch(p.when));
+                self->recent->addItem(p.deletes ? tx("%1 → %2  (%3, deleting)").arg(p.source, p.dest, when)
+                                                : tx("%1 → %2  (%3)").arg(p.source, p.dest, when));
+            }
+            self->recent_row->setVisible(!self->past.isEmpty());
+            if (!self->past.isEmpty() && !self->touched)   // (folders chosen meanwhile are kept)
+                self->use_past(0);
+            Q_EMIT self->past_found();
+        },
+        true);
+}
+
+void SyncWindow::use_past(int i)
+{
+    if (i < 0 || i >= past.size())
+        return;
+    const Pair &p = past[i];
+    filling = true;
+    source_edit->setText(p.source);
+    dest_edit->setText(p.dest);
+    filling = false;
+    deletes->setChecked(p.deletes);
+    (p.rsync && use_rsync->isEnabled() ? use_rsync : use_kestrel)->setChecked(true);
+    recent->setCurrentIndex(i);
+    QString when = i18n::date_time(QDateTime::fromSecsSinceEpoch(p.when));
+    QStringList note{tx("Filled in as this was last synced, on %1: check the direction, then Preview.").arg(when)};
+    // a folder that isn't there now is said, not just filled in (Preview would then only say it isn't there)
+    if (!past_there[i].first)
+        note << tx("⚠ The source, “%1”, isn't there now: it was deleted or moved, or its drive isn't connected.").arg(p.source);
+    if (!past_there[i].second)
+        note << tx("⚠ The destination, “%1”, isn't there now: it was deleted or moved, or its drive isn't connected.").arg(p.dest);
+    past_note->setText(note.join('\n'));
+    past_note->show();
 }
 
 void SyncWindow::save_pair(const QString &name)
@@ -990,6 +1144,10 @@ void SyncWindow::start(const QString &source, const QString &dest, const QList<S
     QPointer<SyncWindow> self(this);
     QString title = rsync ? tx("Syncing %1 to %2 (with rsync)").arg(basename(source), basename(dest))
                           : tx("Syncing %1 to %2").arg(basename(source), basename(dest));
+    try {   // remembered for Sync To… on either folder next time (only a convenience: the sync goes on without it)
+        remember(source, dest, planned_deletes, use_rsync->isChecked());
+    } catch (const Error &) {
+    }
     auto after = [self]() {
         if (!self)
             return;

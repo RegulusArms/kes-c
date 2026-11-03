@@ -169,8 +169,9 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
   </option>
   <option id="history">
     <label>History</label>
-    <description>Delete the list of recently connected servers, the folder the last Open or Save dialog was left in, the image viewer's recent Copy To / Move To folders, and the count of the folders opened most (the Overview's Frequent Folders)</description>
+    <description>Delete the list of recently connected servers, the folder the last Open or Save dialog was left in, the image viewer's recent Copy To / Move To folders, the count of the folders opened most (the Overview's Frequent Folders), and the folders synced lately (which Sync Folders fills itself in from; the saved sync pairs are their own option)</description>
     <action command="delete" search="file" path="$conf/frequent.json"/>
+    <action command="delete" search="file" path="$conf/sync-history.json"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="recent_servers"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="chooser_folder"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="viewer_recent_folders"/>

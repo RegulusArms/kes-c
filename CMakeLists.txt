@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.3-alpha.8")
+set(KES_VERSION "0.3.3-alpha.9")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -67,6 +67,7 @@ add_library(kes_objs OBJECT
     src/dupes.cpp
     src/diskusage.cpp
     src/compare.cpp
+    src/pgp.cpp
     src/signature.cpp
     src/links.cpp
     src/linkwin.cpp

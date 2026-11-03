@@ -8,6 +8,7 @@
 #include "diskusage.h"
 #include "dupes.h"
 #include "overview.h"
+#include "pgp.h"
 #include "hashcheck.h"
 #include "signature.h"
 
@@ -548,6 +549,88 @@ int main(int argc, char **argv)
             sw->close();
         }
 
+        // remembered syncs: each sync that ran is kept (sync-history.json), and Sync To… on either folder fills itself in
+        spin(100);
+        QList<compare::Pair> past = compare::history();
+        check(opened && past.size() == 1 && past.first().source == S && past.first().dest == D && past.first().deletes &&
+                  past.first().when > 0 && compare::history_for(S).size() == 1 && compare::history_for(D + "/").size() == 1 &&
+                  compare::history_for(home_path("sync")).isEmpty() && exists(compare::history_file()),
+              "Sync To… remembers each sync that ran, unnamed, once per pair (sync-history.json), found from either "
+              "folder and only from them");
+        // opened on folder: the window once it has looked up its past syncs
+        auto open_on = [&](const QString &folder) -> SyncWindow * {
+            compare::open_sync(w, folder);
+            SyncWindow *x = nullptr;
+            if (!wait_for([&]() { return (x = shown_window<SyncWindow>()) != nullptr; }))
+                return nullptr;
+            bool found = false;
+            QObject::connect(x, &SyncWindow::past_found, [&]() { found = true; });
+            return wait_for([&]() { return found; }, 10000) ? x : nullptr;
+        };
+        auto close_it = [](SyncWindow *x) {
+            if (x)
+                x->close();
+            spin(100);
+        };
+        SyncWindow *from_src = open_on(S);
+        check(from_src && from_src->source_edit->text() == S && from_src->dest_edit->text() == D &&
+                  from_src->deletes->isChecked() && from_src->use_kestrel->isChecked() && !from_src->past_note->isHidden() &&
+                  !from_src->recent_row->isHidden() && from_src->recent->count() == 1,
+              "...opened on the source again, it's filled in as last run: the destination, deleting, Kestrel's copy, and "
+              "says it was filled in");
+        close_it(from_src);
+        SyncWindow *from_dst = open_on(D);
+        check(from_dst && from_dst->source_edit->text() == S && from_dst->dest_edit->text() == D &&
+                  from_dst->past_note->text().contains("isn't there") == false,
+              "...opened on the destination, the right way round: that folder as To:, the source as From: (not swapped)");
+        close_it(from_dst);
+        QString other = home_path("sync/other"), gone = home_path("sync/gone");
+        makedirs(other, true);
+        SyncWindow *never = open_on(other);
+        check(never && never->source_edit->text() == other && never->dest_edit->text().isEmpty() &&
+                  never->recent_row->isHidden() && never->past_note->isHidden(),
+              "...a folder never synced opens as before: it as the source, the destination to choose");
+        close_it(never);
+        // the latest partner is gone: filled in, but said; the older ones a click away
+        makedirs(gone, true);
+        compare::remember(S, gone, false, true);
+        rmtree(gone);
+        SyncWindow *missing = open_on(S);
+        bool said = missing && missing->dest_edit->text() == gone && missing->past_note->text().contains(gone) &&
+                    missing->past_note->text().contains("isn't there now") && !missing->deletes->isChecked() &&
+                    missing->recent->count() == 2;
+        if (missing)
+            missing->use_past(1);
+        check(said && missing->dest_edit->text() == D && missing->deletes->isChecked() &&
+                  !missing->past_note->text().contains("isn't there now"),
+              "...a remembered folder that isn't there now is filled in with a warning naming it, and the sync before "
+              "it is under Last synced, a click away");
+        close_it(missing);
+        // folders changed by hand before the lookup ends are kept (changed at once: the lookup's answer needs the event loop)
+        compare::open_sync(w, S);
+        SyncWindow *typed = shown_window<SyncWindow>();
+        bool typed_found = false;
+        if (typed) {
+            QObject::connect(typed, &SyncWindow::past_found, [&]() { typed_found = true; });
+            typed->dest_edit->setText(other);
+            wait_for([&]() { return typed_found; }, 10000);
+        }
+        check(typed && typed_found && typed->dest_edit->text() == other && typed->recent->count() == 2,
+              "...a destination chosen before the past syncs are found is kept, not overwritten");
+        close_it(typed);
+        // the last few per folder; the same pair run again moves to the top, not listed twice
+        QString many = home_path("sync/many");
+        for (int i = 0; i < compare::HISTORY_PER_FOLDER + 2; ++i)
+            compare::remember(many, join(many + "-to", QString::number(i)), false, true, 1700000000 + i);
+        compare::remember(many, join(many + "-to", "4"), true, true, 1800000000);
+        QList<compare::Pair> kept = compare::history_for(many);
+        check(kept.size() == compare::HISTORY_PER_FOLDER && kept.first().dest == join(many + "-to", "4") &&
+                  kept.first().deletes && kept.value(1).dest == join(many + "-to", "6") &&
+                  std::count_if(kept.begin(), kept.end(), [&](const compare::Pair &x) { return x.dest.endsWith("-to/4"); }) == 1 &&
+                  compare::history_for(S).size() == 2 && compare::pairs().size() == 1,
+              "...only the last " + QString::number(compare::HISTORY_PER_FOLDER) + " per folder are kept, newest first; the same "
+              "pair run again moves to the top; the saved pairs stay as they were");
+
         // rsync: the same, and a write that fails part-way leaves the destination's old file as it was
         if (compare::have_rsync()) {
             QString S2 = home_path("rsync/src"), D2 = home_path("rsync/dst");
@@ -683,6 +766,222 @@ int main(int argc, char **argv)
                   "...Verify Signature is in a signature's right-click menu, not other files'");
         } else {
             skip("checking signatures with gpg (gpg isn't installed)");
+        }
+    }
+    // ================================================================ Encrypt… / Decrypt (pgp.h)
+    {
+        // gpg's key listing: the keys that can encrypt (not a sign-only, revoked or disabled one), your own first, a
+        // user ID's escaped ":" read back
+        QByteArray pub = "tru:o:1:1793724092:1:3:1:5\n"
+                         "pub:-:255:22:1111111111111111:1793724092:::-:::scESC:::::ed25519:::0:\n"
+                         "fpr:::::::::AAAA0000000000000000000000001111111111111111:\n"
+                         "uid:-::::1793724092::H1::Someone Else <else@example.com>::::::::::0:\n"
+                         "sub:-:255:18:2222222222222222:1793724092::::::e:::::cv25519::\n"
+                         "fpr:::::::::BBBB0000000000000000000000002222222222222222:\n"
+                         "pub:u:255:22:3333333333333333:1793724092:::u:::scESC:::::ed25519:::0:\n"
+                         "fpr:::::::::CCCC0000000000000000000000003333333333333333:\n"
+                         "uid:r::::1793724092::H2::Old Name <old@example.com>::::::::::0:\n"
+                         "uid:u::::1793724092::H3::Me\\x3a Myself <me@example.com>::::::::::0:\n"
+                         "sub:u:255:18:4444444444444444:1793724092::::::e:::::cv25519::\n"
+                         "pub:u:255:22:5555555555555555:1793724092:::u:::scSC:::::ed25519:::0:\n"
+                         "fpr:::::::::DDDD0000000000000000000000005555555555555555:\n"
+                         "uid:u::::1793724092::H4::Signing Only <s@example.com>::::::::::0:\n"
+                         "pub:r:255:22:6666666666666666:1793724092:::-:::sc:::::ed25519:::0:\n"
+                         "fpr:::::::::EEEE0000000000000000000000006666666666666666:\n"
+                         "uid:r::::1793724092::H5::Revoked <r@example.com>::::::::::0:\n";
+        QByteArray sec = "sec:u:255:22:3333333333333333:1793724092:::u:::scESC:::+::ed25519:::0:\n"
+                         "fpr:::::::::CCCC0000000000000000000000003333333333333333:\n"
+                         "ssb:u:255:18:4444444444444444:1793724092::::::e:::+::cv25519::\n"
+                         "fpr:::::::::FFFF0000000000000000000000004444444444444444:\n";
+        QStringList own_ids;
+        QList<pgp::Key> ks = pgp::parse_keys(pub, sec, &own_ids);
+        check(ks.size() == 2 && ks[0].own && ks[0].verified && ks[0].user_id == "Me: Myself <me@example.com>" &&
+                  ks[0].fingerprint.endsWith("3333333333333333") && !ks[1].own && !ks[1].verified &&
+                  ks[1].user_id == "Someone Else <else@example.com>" && own_ids.contains("4444444444444444"),
+              "Encrypt…: gpg's key list read as the keys that can encrypt, yours first and verified, another's not; a "
+              "sign-only and a revoked key left out");
+        pgp::Packets sym = pgp::parse_packets(":symkey enc packet: version 4, cipher 9, aead 0, s2k 3, hash 10\n"
+                                              "\tsalt 7EF82EF6CAF1B739, count 65011712 (255)\n:encrypted data packet:\n");
+        pgp::Packets to = pgp::parse_packets(":pubkey enc packet: version 3, algo 18, keyid 4444444444444444\n"
+                                             "\tdata: [263 bits]\n:encrypted data packet:\n\tlength: 70\n");
+        pgp::Packets others = pgp::parse_packets(":pubkey enc packet: version 3, algo 18, keyid 2222222222222222\n");
+        pgp::Packets signature_only = pgp::parse_packets(":signature packet: algo 22, keyid 1289F2A90176A555\n");
+        check(pgp::way_for(sym, own_ids) == pgp::PASSWORD && pgp::way_for(to, own_ids) == pgp::OWN_KEY &&
+                  pgp::way_for(others, own_ids) == pgp::OTHERS_KEYS && others.to_keys == QStringList{"2222222222222222"} &&
+                  pgp::way_for(signature_only, own_ids) == pgp::NOT_ENCRYPTED,
+              "Decrypt: what gpg lists in a file says how it opens: with a password, with your key, only with someone "
+              "else's, or not encrypted (a signature)");
+        check(pgp::decrypted_name("/x/notes.txt.gpg") == "notes.txt" && pgp::decrypted_name("/x/msg.asc") == "msg" &&
+                  pgp::is_encrypted_name("/x/a.PGP") && !pgp::is_encrypted_name("/x/a.txt"),
+              "...a decrypted copy is named without the .gpg / .pgp / .asc");
+
+        if (pgp::have_gpg()) {
+            QString g4 = home_path("gnupg4"), e = home_path("crypt");
+            makedirs(g4, true);
+            ::chmod(enc(g4).constData(), 0700);
+            makedirs(e, true);
+            proc::Result mine = gpg({"--quick-gen-key", "Kestrel Recipient <recipient@example.com>", "default", "default", "never"});
+            gpg({"--quick-gen-key", "Someone Else <else@example.com>", "default", "default", "never"}, g4);
+            gpg({"--armor", "--export", "-o", join(e, "else.key"), "else@example.com"}, g4);
+            gpg({"--import", join(e, "else.key")});
+            ::unlink(enc(join(e, "else.key")).constData());
+            QList<pgp::Key> found = pgp::keys();
+            QString my_fpr, else_fpr;
+            for (const pgp::Key &k : found) {
+                if (k.user_id.contains("recipient@"))
+                    my_fpr = k.fingerprint;
+                else if (k.user_id.contains("else@"))
+                    else_fpr = k.fingerprint;
+            }
+            bool listed_ok = mine.rc == 0 && !my_fpr.isEmpty() && !else_fpr.isEmpty() &&
+                             std::none_of(found.begin(), found.end(), [](const pgp::Key &k) { return k.user_id.contains("Kestrel Test"); }) &&
+                             found.value(0).fingerprint == my_fpr && found.value(0).own;
+            check(listed_ok, "...with gpg: your own key and an imported one are listed to encrypt to, yours first; a "
+                             "sign-only key isn't");
+
+            // each in a job, as the windows run them: what it returned, or the error
+            auto in_job = [&](std::function<QString(Task *)> fn) {
+                auto out = std::make_shared<QString>();
+                QPointer<Task> t = fileops::queue_job(w, "pgp test", {e}, [fn, out](Task *task) {
+                    try {
+                        *out = fn(task);
+                    } catch (const archive::WrongPassword &) {
+                        *out = "WRONG";
+                    } catch (const Error &err) {
+                        *out = "ERROR " + err.message();
+                    }
+                    return QVariant(true);
+                });
+                wait_for([&]() { return !t; }, 60000);
+                return *out;
+            };
+            auto no_parts = [&]() {
+                QStringList l = listdir(e);
+                return std::none_of(l.begin(), l.end(), [](const QString &n) { return n.endsWith(".part"); });
+            };
+            QByteArray secret = "the secret plans\n";
+            write_text(join(e, "plans.txt"), secret);
+            pgp::Spec by_pw;
+            by_pw.password = "correct horse";
+            QString made = in_job([&](Task *t) { return pgp::encrypt_file(t, join(e, "plans.txt"), by_pw); });
+            pgp::Packets p = pgp::packets(made);
+            check(made == join(e, "plans.txt.gpg") && exists(made) && !read_file(made).contains("secret plans") &&
+                      read_file(join(e, "plans.txt")) == secret && pgp::way_for(p, {}) == pgp::PASSWORD,
+                  "...Encrypt with a password makes plans.txt.gpg beside it (not readable), the original left as it is (" + made + ")");
+            ::rename(enc(join(e, "plans.txt")).constData(), enc(join(e, "plans.orig")).constData());
+            QString wrong = in_job([&](Task *t) { return pgp::decrypt_file(t, made, "wrong horse"); });
+            bool nothing = !exists(join(e, "plans.txt")) && no_parts();
+            QString right = in_job([&](Task *t) { return pgp::decrypt_file(t, made, "correct horse"); });
+            check(wrong == "WRONG" && nothing && right == join(e, "plans.txt") && read_file(right) == secret,
+                  "...Decrypt: a wrong password is said as such and leaves nothing; the right one makes plans.txt (" + wrong + ")");
+            QString again = in_job([&](Task *t) { return pgp::decrypt_file(t, made, "correct horse"); });
+            check(again == join(e, "plans (2).txt") && read_file(join(e, "plans.txt")) == secret,
+                  "...decrypted again, it takes the next free name: nothing is replaced (" + again + ")");
+
+            pgp::Spec to_me;
+            to_me.recipients = {my_fpr};
+            to_me.armor = true;
+            QString asc = in_job([&](Task *t) { return pgp::encrypt_file(t, join(e, "plans.txt"), to_me); });
+            QStringList own;
+            pgp::parse_keys(QByteArray(), proc::run({"gpg", "--batch", "--with-colons", "--list-secret-keys"}).out, &own);
+            bool to_own = pgp::way_for(pgp::packets(asc), own) == pgp::OWN_KEY && read_file(asc).startsWith("-----BEGIN PGP MESSAGE");
+            ::unlink(enc(join(e, "plans.txt")).constData());
+            QString opened = in_job([&](Task *t) { return pgp::decrypt_file(t, asc, QString()); });
+            check(asc == join(e, "plans.txt.asc") && to_own && opened == join(e, "plans.txt") && read_file(opened) == secret,
+                  "...Encrypt to your key as text makes plans.txt.asc, which Decrypt opens with your key (" + opened + ")");
+            pgp::Spec to_else;
+            to_else.recipients = {else_fpr};
+            write_text(join(e, "for-else.txt"), "for someone else");
+            QString theirs = in_job([&](Task *t) { return pgp::encrypt_file(t, join(e, "for-else.txt"), to_else); });
+            QString cant = in_job([&](Task *t) { return pgp::decrypt_file(t, theirs, QString()); });
+            check(pgp::way_for(pgp::packets(theirs), own) == pgp::OTHERS_KEYS && cant.startsWith("ERROR") &&
+                      !exists(join(e, "for-else (2).txt")) && no_parts(),
+                  "...encrypted to someone else's key: it's seen as theirs, and decrypting it fails leaving nothing (" + cant + ")");
+
+            // failing part-way (a file-size limit): nothing under a real name, no part left
+            QByteArray noise(3 * 1024 * 1024, 0);
+            quint32 x = 12345;
+            for (char &c : noise)
+                c = char((x = x * 1103515245 + 12345) >> 24);   // (gpg can't compress it below the limit)
+            write_text(join(e, "big.bin"), noise);
+            struct rlimit old_lim, lim;
+            ::getrlimit(RLIMIT_FSIZE, &old_lim);
+            lim = old_lim;
+            lim.rlim_cur = 1024 * 1024;
+            auto old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);   // (gpg inherits it)
+            QString failed = in_job([&](Task *t) { return pgp::encrypt_file(t, join(e, "big.bin"), by_pw); });
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+            check(failed.startsWith("ERROR") && !exists(join(e, "big.bin.gpg")) && no_parts() && read_file(join(e, "big.bin")) == noise,
+                  "...an encryption that fails part-way (a file-size limit) leaves no file and no part behind (" + failed + ")");
+            // a cancel: the same
+            QPointer<Task> ct = fileops::queue_job(w, "pgp cancel", {e}, [&](Task *task) {
+                task->cancel();
+                return QVariant(pgp::encrypt_file(task, join(e, "big.bin"), by_pw));
+            });
+            wait_for([&]() { return !ct; }, 60000);
+            check(!exists(join(e, "big.bin.gpg")) && no_parts(), "...and so does a cancelled one");
+
+            // the menu, and opening an encrypted file: its password asked for, then decrypted beside it
+            QStringList file_menu = menu_texts(w, {join(e, "for-else.txt")}), gpg_menu = menu_texts(w, {made});
+            check(file_menu.contains("Encrypt…") && !file_menu.contains("Decrypt") && gpg_menu.contains("Decrypt") &&
+                      !menu_texts(w, {e}).contains("Encrypt…") &&
+                      menu_texts(w, {join(e, "for-else.txt"), join(e, "big.bin")}).contains("Encrypt…"),
+                  "...Encrypt… is in files' right-click menus (one or several, not folders), Decrypt in encrypted files'");
+            for (const QString &n : listdir(e))
+                if (n.startsWith("plans") && n != "plans.txt.gpg" && n != "plans.orig")
+                    ::unlink(enc(join(e, n)).constData());
+            w->open_paths(w->pane(), {made});
+            QDialog *ask_pw = nullptr;
+            bool asked = wait_for([&]() {
+                for (QWidget *x : QApplication::topLevelWidgets())
+                    if (x->objectName() == "archive_password" && x->isVisible())
+                        ask_pw = qobject_cast<QDialog *>(x);
+                return ask_pw != nullptr;
+            }, 20000);
+            bool free_pw = asked && is_free_window(ask_pw);
+            if (asked) {
+                ask_pw->findChild<QLineEdit *>()->setText("correct horse");
+                ask_pw->accept();
+            }
+            bool decrypted = wait_for([&]() { return read_file(join(e, "plans.txt")) == secret; }, 20000);
+            check(asked && free_pw && decrypted && shown_window<SignatureWindow>() == nullptr,
+                  "...double-clicking an encrypted .gpg asks for its password (not Verify Signature) and decrypts it beside it");
+
+            // the window: the keys listed, the passwords must match, then a job makes the copy
+            pgp::encrypt_dialog(w, {join(e, "for-else.txt")});
+            EncryptWindow *ew = shown_window<EncryptWindow>();
+            bool keys_in = false;
+            if (ew) {
+                QObject::connect(ew, &EncryptWindow::keys_listed, [&]() { keys_in = true; });
+                wait_for([&]() { return keys_in; }, 20000);
+            }
+            check(ew && is_free_window(ew) && keys_in && ew->key_list->topLevelItemCount() == 2 &&
+                      ew->key_list->topLevelItem(0)->text(0).contains("(you)"),
+                  "...the Encrypt window opens free and lists the keys to encrypt to, yours marked");
+            if (ew) {
+                QStringList before = listdir(e);
+                ew->password->setText("one");
+                ew->again->setText("two");
+                ew->encrypt();
+                spin(500);
+                bool refused = ew->isVisible() && !ew->problem->isHidden() && listdir(e) == before;
+                ew->by_key->setChecked(true);
+                for (int i = 0; i < ew->key_list->topLevelItemCount(); ++i)
+                    if (!ew->key_list->topLevelItem(i)->text(0).contains("(you)"))
+                        ew->key_list->topLevelItem(i)->setCheckState(0, Qt::Checked);
+                ew->encrypt();
+                QString out = join(e, "for-else (2).txt.gpg");   // (for-else.txt.gpg is there: numbered before the .gpg)
+                bool made2 = wait_for([&]() { return exists(out); }, 20000);
+                spin(300);
+                pgp::Packets two = pgp::packets(out);
+                check(refused && made2 && two.to_keys.size() == 2,
+                      "...two passwords that differ are refused; to a key it's encrypted to it and to your own, under the "
+                      "next free name");
+            }
+        } else {
+            skip("encrypting and decrypting with gpg (gpg isn't installed)");
         }
     }
     // ================================================================ disk images (diskimage.h)

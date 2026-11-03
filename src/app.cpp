@@ -28,6 +28,7 @@
 #include "metadata.h"
 #include "prefs.h"
 #include "sharing.h"
+#include "pgp.h"
 #include "signature.h"
 #include "undo.h"
 #include "proc.h"
@@ -1545,6 +1546,14 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(m->addAction(icon({"security-high", "emblem-ok-symbolic"}), tx("Verify Signature"), this,
                        [this, single]() { signature::open_window(this, single); }),
           "verify_signature");
+    if (!paths.isEmpty() && std::none_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); }))
+        T(m->addAction(icon({"document-encrypt", "dialog-password"}), tx("Encrypt…"), this,
+                       [this, paths]() { pgp::encrypt_dialog(this, paths); }),
+          "encrypt");
+    if (!is_dir && !single.isEmpty() && pgp::is_encrypted_name(single) && !archive::opens_as_archive(single))
+        T(m->addAction(icon({"document-decrypt", "dialog-password"}), tx("Decrypt"), this,
+                       [this, single]() { pgp::decrypt(this, single); }),
+          "decrypt");
     if (!single.isEmpty() && (is_image(single) || is_video(single)) && uwp::editor_open())
         T(m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), tx("Add to Selected UWP Monitor"), this,
                        [this, single]() { uwp_add(single); }),

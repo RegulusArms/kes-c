@@ -47,7 +47,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
 | [`viewer`](#viewer) | 89 | The image viewer and saving its changes |
-| [`tools`](#tools) | 54 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature, disk images |
+| [`tools`](#tools) | 76 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature, Encrypt / Decrypt, disk images |
 | [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 59 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 9 | Translations |
@@ -638,10 +638,16 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a map at once from the sizes remembered; on a tape, counting only when asked; the Overview card's button.
 - **Compare:** each kind of difference, a deep compare, the window and Copy to Right.
 - **Sync:** the plan, a preview and sync with Kestrel's copy, deleting asked again, saved pairs, and rsync (a part-way failure leaves the old file; run again it completes).
+- **Remembered syncs:** each sync that ran kept once per pair and found from either folder; Sync To… on the source or the destination filled in as last run, the right way round; a folder never synced as before; a remembered folder that's gone filled in with a warning, the older sync a click away; folders chosen before the lookup ends kept; the last five per folder, the same pair moved to the top, the saved pairs untouched.
 - **Verify Signature:**
   - gpg's status lines and the plain words;
   - real keys: detached, clearsigned, trusted or not, no key, a changed or missing file;
   - opening a signature, and a signed SHA256SUMS checked and then its files.
+- **Encrypt / Decrypt:**
+  - gpg's key list (the keys that can encrypt, yours first) and packet list (a password, your key, someone else's, not encrypted), and the decrypted names;
+  - real keys: with a password (a wrong one leaves nothing; decrypted again, the next free name), to your key as text, to someone else's (theirs, and failing leaves nothing);
+  - failing part-way (a file-size limit) or cancelled: no file and no part left;
+  - the menus, double-clicking an encrypted file (its password asked, then decrypted), and the Encrypt window (keys listed, differing passwords refused, to a key and your own).
 
 ### overview
 
@@ -737,7 +743,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **`kes-setup --bleachbit`** writes BleachBit's cleaner:
   - only the user can change it (also run under umask 000: BleachBit ignores a world-writable cleaner), with no part file left, and it says BleachBit will ask once whether to trust it;
   - well-formed, following BleachBit's CleanerML schema (needs `xmllint`);
-  - only naming Kestrel's cache, its lists, the three history keys (with the image viewer's recent folders) and the save locations in its settings;
+  - only naming Kestrel's cache, its lists (the remembered syncs too), the three history keys (with the image viewer's recent folders) and the save locations in its settings;
   - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; the Cache option alone keeps the saved job logs and the Job logs option alone deletes only them; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
   - `--undo` removes the cleaner and leaves the user's own.
 - **`kes-setup --install-optional`** (stub `dpkg`, `apt-cache` and `sudo`) asks apt to install exactly the optional packages that are missing and available, names the unavailable ones, and installs nothing when they're all there.

@@ -4,7 +4,28 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.8
+## 0.3.3-alpha.9
+
+- **Encrypt and decrypt files with gpg.** Right-click one or more files → **Encrypt…**: an encrypted copy beside each
+  (`name.gpg`, or `name.asc` as text to paste into an email), the original left as it is, either with a password
+  (typed twice) or to people's public keys from your keyring, so only they can open it and there's no password to pass
+  on. Each key says whether you've verified it's really theirs, and your own key is added so you can open it too.
+- **Decrypt** (right-click, or double-click an encrypted `.gpg`, `.pgp` or `.asc`): asks for the password when it was
+  encrypted with one (trying one saved in the keyring first, and offering to save it), lets gpg ask for your key's
+  passphrase when it was encrypted to your key, and says so when it's encrypted only to someone else's. The decrypted
+  copy goes beside it, and it says who signed what was inside, if anyone. Double-clicking an encrypted file used to
+  open Verify Signature, which then said it couldn't check it.
+- Both run as jobs, and the new file appears only once gpg has finished: a wrong password, a cancel or a failure
+  leaves nothing behind, and no file is ever replaced (a second copy takes the next free name).
+- **Sync To… remembers past syncs.** Every sync that runs is remembered, without having to name it: Sync To… on a
+  folder synced before, from either end, opens already filled in as it was last run (From, To, deleting or not, rsync
+  or Kestrel's copy), so only Preview → Sync Now is left. Opened on the destination, it's filled in the right way
+  round, so a sync can't be run backwards by accident. Other past syncs of that folder are under **Last synced**, and a
+  remembered folder that isn't there now (deleted, or its drive not connected) is said, not just filled in. Saved
+  pairs work as before. The list (`sync-history.json`, the last five syncs per folder) is cleaned by
+  `kes-setup --bleachbit`'s History option.
+
+## 0.3.3-alpha.8 (2026-11-02)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha8).
 

@@ -602,7 +602,7 @@ static const QStringList GPG_ENCRYPT = {"--symmetric", "--cipher-algo", "AES256"
 
 static bool gpg_spec(const Spec &spec) { return is_tar(spec.format) && !spec.password.isEmpty(); }
 
-static std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
+std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
 {
     int p[2];
     if (::pipe2(p, O_CLOEXEC) != 0)

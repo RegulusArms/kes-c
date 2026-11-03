@@ -173,6 +173,8 @@ bool link_escapes(int depth, const QByteArray &target);
 // also for disk images (diskimage.h): encrypting stdin to stdout with AES-256, or decrypting path to stdout.
 // check_gpg after it exits: raises WrongPassword or Error if it failed.
 std::unique_ptr<proc::Process> spawn_gpg_encrypt(const QString &password, proc::Options o);
+// gpg with args and the password that way (Encrypt / Decrypt: pgp.h)
+std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o);
 std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, const QString &password);
 void check_gpg(proc::Process *g);
 

@@ -6,6 +6,28 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.9
+
+Added:
+- `tools`: Encrypt… and Decrypt (new): gpg's key list read as the keys that can encrypt (yours first, a sign-only,
+  revoked or disabled key left out) and its packet list as how a file opens (a password, your key, only someone
+  else's, not encrypted); with real keys, encrypting with a password and decrypting it (a wrong password says so and
+  leaves nothing; again, the next free name, nothing replaced), to your own key as text, and to someone else's (seen as
+  theirs; decrypting fails, leaving nothing); an encryption failing part-way (RLIMIT_FSIZE) or cancelled leaves no file
+  and no part; Encrypt… in files' menus (one or several, not folders), Decrypt in encrypted files'; double-clicking an
+  encrypted `.gpg` asks for its password, not Verify Signature; the Encrypt window lists the keys, refuses two
+  passwords that differ, and encrypts to a key and your own under the next free name.
+- `tools`: remembered syncs (new): each sync that ran is kept once per pair and found from either folder; Sync To… on
+  the source or the destination opens filled in as last run, the right way round (so a sync can't be run backwards by
+  accident); a folder never synced opens as before; a remembered folder that's gone is filled in with a warning naming
+  it, the older sync a click away; folders chosen before the lookup ends aren't overwritten; only the last five per
+  folder are kept, the same pair run again moves to the top, and the saved pairs stay as they were.
+
+Changed:
+- `ui` (`ui_actions.txt`): Encrypt… in the file and two-file menus.
+- `installer`: the BleachBit cleaner's History option also deletes the remembered syncs (`sync-history.json`): in the
+  expected actions (14 now), the dry run's list and the clean.
+
 ## 0.3.3-alpha.8
 
 Changed:

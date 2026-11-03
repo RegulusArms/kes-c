@@ -116,21 +116,6 @@ into.
   quality, not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates
   window.~~ *Struck for now.*
 
-- [ ] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
-
-- [ ] **Sync To… remembers past syncs and fills itself in.** Once a folder has been synced, Sync To… on that folder
-  again (from either end: the source or the destination) opens with the other folder and the choices used last time
-  (delete what's not in the source, rsync or Kestrel's copy) already filled in, so only Preview → Sync Now is left.
-  - Today a pair is only kept if you press Save Pair… and give it a name, and the window doesn't look at the saved
-    pairs when it opens: it starts with just the folder you right-clicked.
-  - Remember each sync that ran (or the last few per folder) automatically, without naming it; the saved pairs
-    stay as they are. Several past partners for one folder → fill in the latest, the others a click away.
-  - Opened from the destination end: fill it in the right way round (that folder as To:, the source as From:), not
-    swapped, so a sync can't be run backwards by accident.
-  - A remembered folder that's gone (deleted, drive not mounted) isn't filled in silently: say so.
-  - It's a new list of paths kept in the config folder: add it to kes-setup's BleachBit cleaner, and to prefs.cpp's
-    STATE list if it's kept that way.
-
 ### Images, video and audio
 
 - [ ] ~~**Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen
@@ -153,27 +138,6 @@ into.
 ### Translations
 
 ### Packaging
-
-- [ ] **Show Kestrel in the software centres (AppStream).** Once a user has added Kestrel's apt repo, Kestrel should
-  appear as a proper app (name, icon, summary, screenshots, Install button, updates) in GNOME Software, KDE Discover
-  (Kubuntu), Ubuntu's App Center (search with the "Debian packages" filter) and Mint's Software Manager. Today
-  Discover and GNOME Software don't show it at all (no AppStream data), and Mint's Software Manager lists it as a bare
-  package. Users who haven't added the repo still won't see it; that would need Debian/universe (below).
-  - **data/kestrel-explorer.metainfo.xml**, installed to `/usr/share/metainfo/` (CMakeLists.txt, also by
-    install.sh): id `kestrel-explorer`, name, summary, description, license, `<launchable>` →
-    `kestrel-explorer.desktop`, screenshot URLs (hosted on gh-pages), `<releases>`. Kept valid with
-    `appstreamcli validate` (a check in the tests), and in tests/check_package.sh (the .deb ships it).
-  - **DEP-11 metadata in the apt repo:** reprepro doesn't make it. CI's apt job generates
-    `dists/<suite>/main/dep11/Components-amd64.yml.gz` and the icon tarballs for every suite (appstream-generator or
-    a small script) and lists them in the signed `Release` file. apt only downloads them where a software centre asks,
-    so nothing changes for other users.
-  - Check on Kubuntu (the kes-kubuntu image or a VM: Discover), Ubuntu (App Center, GNOME Software) and Mint 22
-    (Software Manager: how much of the AppStream data it uses).
-  - **Not chosen for now:** a strictly confined snap (no hidden files at the top of `~`, no files outside `~` and
-    the removable-media mounts, no admin helper, no host tools, no portal or FileManager1 role, settings under
-    `~/snap/`): a crippled Kestrel. A classic-confinement snap needs the Snap Store's approval, which file managers
-    may not get. Debian (→ Ubuntu universe, so every user sees it with no setup) needs Debian policy packaging, an
-    ITP and a sponsor, and Debian's release pace: worth it after a stable 1.0, not during the alpha.
 
 ### Tests and CI — beta release blocker
 
@@ -237,7 +201,50 @@ into.
   - Also: the helper exits when stdin closes, and an admin session can't be driven by another process.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
+- [ ] **Show Kestrel in the software centres (AppStream).** Once a user has added Kestrel's apt repo, Kestrel should
+  appear as a proper app (name, icon, summary, screenshots, Install button, updates) in GNOME Software, KDE Discover
+  (Kubuntu), Ubuntu's App Center (search with the "Debian packages" filter) and Mint's Software Manager. Today
+  Discover and GNOME Software don't show it at all (no AppStream data), and Mint's Software Manager lists it as a bare
+  package. Users who haven't added the repo still won't see it; that would need Debian/universe (below).
+  - **data/kestrel-explorer.metainfo.xml**, installed to `/usr/share/metainfo/` (CMakeLists.txt, also by
+    install.sh): id `kestrel-explorer`, name, summary, description, license, `<launchable>` →
+    `kestrel-explorer.desktop`, screenshot URLs (hosted on gh-pages), `<releases>`. Kept valid with
+    `appstreamcli validate` (a check in the tests), and in tests/check_package.sh (the .deb ships it).
+  - **DEP-11 metadata in the apt repo:** reprepro doesn't make it. CI's apt job generates
+    `dists/<suite>/main/dep11/Components-amd64.yml.gz` and the icon tarballs for every suite (appstream-generator or
+    a small script) and lists them in the signed `Release` file. apt only downloads them where a software centre asks,
+    so nothing changes for other users.
+  - Check on Kubuntu (the kes-kubuntu image or a VM: Discover), Ubuntu (App Center, GNOME Software) and Mint 22
+    (Software Manager: how much of the AppStream data it uses).
+  - **Not chosen for now:** a strictly confined snap (no hidden files at the top of `~`, no files outside `~` and
+    the removable-media mounts, no admin helper, no host tools, no portal or FileManager1 role, settings under
+    `~/snap/`): a crippled Kestrel. A classic-confinement snap needs the Snap Store's approval, which file managers
+    may not get. Debian (→ Ubuntu universe, so every user sees it with no setup) needs Debian policy packaging, an
+    ITP and a sponsor, and Debian's release pace: worth it after a stable 1.0, not during the alpha.
+
 ## Done
+
+- [x] **Encrypt / Decrypt with gpg** (left for later from Verify Signature): to a recipient's key or with a password.
+  Done in 0.3.3-alpha.9 (src/pgp.cpp): right-click → Encrypt… (files, one or several) with a password or to keys from
+  the keyring (each marked verified or not, your own added), as .gpg or .asc; Decrypt (and double-clicking an
+  encrypted .gpg, .pgp or .asc) asks for the password (the keyring's first), or lets gpg's agent use your key, or says
+  it's someone else's. Not yet: encrypting folders (Compress… with a password does that), signing while encrypting,
+  and Back Up Drive to Image to a recipient's key.
+
+- [x] **Sync To… remembers past syncs and fills itself in.** Once a folder has been synced, Sync To… on that folder
+  again (from either end: the source or the destination) opens with the other folder and the choices used last time
+  (delete what's not in the source, rsync or Kestrel's copy) already filled in, so only Preview → Sync Now is left.
+  - Today a pair is only kept if you press Save Pair… and give it a name, and the window doesn't look at the saved
+    pairs when it opens: it starts with just the folder you right-clicked.
+  - Remember each sync that ran (or the last few per folder) automatically, without naming it; the saved pairs
+    stay as they are. Several past partners for one folder → fill in the latest, the others a click away.
+  - Opened from the destination end: fill it in the right way round (that folder as To:, the source as From:), not
+    swapped, so a sync can't be run backwards by accident.
+  - A remembered folder that's gone (deleted, drive not mounted) isn't filled in silently: say so.
+  - It's a new list of paths kept in the config folder: add it to kes-setup's BleachBit cleaner, and to prefs.cpp's
+    STATE list if it's kept that way.
+  Done in 0.3.3-alpha.9 (src/compare.cpp): sync-history.json, the last five per folder, kept when a sync starts;
+  Last synced lists the folder's others. Not in Preferences' STATE list: it's a file of its own, not a setting.
 
 - [x] **Back up a whole drive to an image file (dd), optionally encrypted with gpg.** Right-click a drive (sidebar
   Devices, Overview card) → Back Up Drive to Image…: pick where to save it, then a job copies the raw device

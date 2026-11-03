@@ -199,6 +199,10 @@ QList<Entry> defaults(Kind k)
           << item("sync_to", tx("Sync To…"));
     if (file)
         l << item("verify_signature", tx("Verify Signature"), tx("for signatures (.sig, .asc, .gpg, .sign)"));
+    if (file || arc || several)
+        l << item("encrypt", tx("Encrypt…"), several ? tx("when no folders are selected") : QString());
+    if (file)
+        l << item("decrypt", tx("Decrypt"), tx("for encrypted files (.gpg, .pgp, .asc)"));
     if (file)
         l << item("uwp_add", tx("Add to Selected UWP Monitor"), tx("images and videos, while UWP's editor is open"))
           << item("wallpaper", tx("Set as Wallpaper"), tx("for videos, with UWP"))

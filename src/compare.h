@@ -8,7 +8,9 @@
 // half-copied is ever left over a good file: rsync writes each file under a temporary name and renames it into place
 // (an interrupted one waits in .kes-rsync-partial, for the next run), Kestrel's copy writes a part file. Deleting on
 // the destination is off by default, and asks again. Sync pairs can be saved ("Pictures → Backup HDD") to run again
-// in one click; a pair on a removable drive is found by its file system's UUID wherever the drive is mounted.
+// in one click; a pair on a removable drive is found by its file system's UUID wherever the drive is mounted. Every
+// sync that runs is also remembered, unnamed (the last few per folder): Sync To… on either of its folders opens filled
+// in as it was last run, the right way round.
 #pragma once
 
 #include "fileops.h"
@@ -83,6 +85,7 @@ struct Pair {
     bool deletes = false;
     bool rsync = true;
     QString source_uuid, source_rel, dest_uuid, dest_rel;   // the file system's UUID and the path inside it, if any
+    qint64 when = 0;   // a remembered sync: when it was last run (seconds since the epoch)
 };
 QString pairs_file();
 QList<Pair> pairs();
@@ -91,6 +94,16 @@ Pair make_pair(const QString &name, const QString &source, const QString &dest, 
 // The file system's UUID path is on (from /dev/disk/by-uuid: no drive is asked), and *rel the path inside it; empty
 // when it has none (a network share, a file system without a UUID)
 QString fs_uuid(const QString &path, QString *rel = nullptr);
+// Remembered syncs: ~/.config/kestrel-explorer/sync-history.json, newest first, unnamed. Each sync that runs is
+// remembered (one entry per source and destination, the same pair run again moves to the top), at most
+// HISTORY_PER_FOLDER for any one folder and HISTORY_MAX in all.
+static const int HISTORY_PER_FOLDER = 5, HISTORY_MAX = 100;
+QString history_file();
+QList<Pair> history();
+void remember(const QString &source, const QString &dest, bool deletes, bool rsync, qint64 when = 0);   // 0: now
+// The remembered syncs folder took part in, as the source or the destination (by its path, or the same place on its
+// file system wherever that's mounted now), newest first
+QList<Pair> history_for(const QString &folder);
 // Where a saved path is now: the path, if it's there on the same file system; else the same place on the file system
 // with that UUID wherever it's mounted now; else the path as saved
 QString resolve(const QString &path, const QString &uuid, const QString &rel);
@@ -132,7 +145,9 @@ private:
 };
 
 // Sync To…: source and destination, deleting (off), rsync or Kestrel's copy, Preview (the steps listed), Sync Now;
-// the saved pairs, Save Pair…, Run (preview and run in one click) and Remove
+// the saved pairs, Save Pair…, Run (preview and run in one click) and Remove. Opened on a folder that has been synced
+// before, it fills itself in as the latest of those syncs was run (that folder at its end, From: or To:), the others
+// under Last synced; a remembered folder that isn't there now is said.
 class SyncWindow : public QDialog {
     Q_OBJECT
 public:
@@ -142,17 +157,21 @@ public:
     void sync_now();
     void run_pair(int i);   // a saved pair: preview, and run (asking first when it deletes)
     void save_pair(const QString &name);
+    void use_past(int i);   // fill in a remembered sync (Last synced), as it was run
     bool busy() const { return task != nullptr; }
+    QList<compare::Pair> past;   // the remembered syncs of the folder it was opened on, newest first
     QList<compare::Step> steps;
     QLineEdit *source_edit, *dest_edit;
     QCheckBox *deletes;
     QRadioButton *use_rsync, *use_kestrel;
     QTreeWidget *list;
-    QComboBox *saved;
-    QLabel *summary;
+    QComboBox *saved, *recent;
+    QLabel *summary, *past_note;
+    QWidget *recent_row;   // Last synced: shown when the folder was synced before
     QPushButton *preview_btn, *sync_btn;
 
 Q_SIGNALS:
+    void past_found();  // the remembered syncs are looked up (and the latest filled in)
     void previewed();   // the steps are listed
     void synced();      // a sync has finished (also failed or stopped)
 
@@ -161,15 +180,21 @@ protected:
 
 private:
     void fill_saved();
+    void look_up_past(const QString &folder);
     void start(const QString &source, const QString &dest, const QList<compare::Step> &steps, bool del, bool rsync);
     QPointer<MainWindow> win;
     QPointer<Task> task;
     QString planned_source, planned_dest;   // what the steps are for
     bool planned_deletes = false;
     QProgressBar *bar;
+    QList<QPair<bool, bool>> past_there;   // each remembered sync's source and destination: there now
+    bool touched = false;   // the folders were changed (by hand, or a saved pair) before the remembered syncs were found
+    bool filling = false;   // use_past() is setting them
 };
 
 namespace compare {
 void open_compare(MainWindow *win, const QString &left);   // asks for the other folder first
-void open_sync(MainWindow *win, const QString &source);    // the destination is chosen in the window
+// Sync To… on folder: filled in from its latest remembered sync (folder as the source or the destination, as it was),
+// else folder as the source and the destination to choose
+void open_sync(MainWindow *win, const QString &folder);
 }

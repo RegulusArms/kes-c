@@ -1299,5 +1299,19 @@ This can&apos;t be undone.</numerusform>
             <numerusform>Mounted %Ln file systems from “%1”</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>Encrypt %Ln File(s)</source>
+        <translation>
+            <numerusform>Encrypt %Ln File</numerusform>
+            <numerusform>Encrypt %Ln Files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Encrypting %Ln file(s)</source>
+        <translation>
+            <numerusform>Encrypting %Ln file</numerusform>
+            <numerusform>Encrypting %Ln files</numerusform>
+        </translation>
+    </message>
 </context>
 </TS>

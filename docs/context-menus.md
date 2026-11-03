@@ -77,6 +77,8 @@ The shared entries, plus:
 | **Mount Image** | Sets the disk image up as a drive (through udisks) and mounts its file systems read-only, so they show in the sidebar and on the Overview; a LUKS-encrypted one asks for its password. A compressed (`.img.zst`, `.xz`, `.gz`) or encrypted (`.img.gpg`) image is first expanded into a copy in the cache (asked first), deleted once unmounted. Unmounting the last of its file systems detaches it. Double-clicking an `.img` does the same | Disk images (`.img`, `.iso`, `.raw`; compressed or `.gpg` too) |
 | **Mount Image for Writing** | The same, mounted so it can be changed | Plain `.img` and `.raw` images you can write to |
 | **Verify Signature** | Checks the signature with `gpg` against the file it signs (the same name without the extension; a clearsigned file against itself) and says plainly what it means: valid and by whom (and whether that's a key you've verified), a bad signature, or the signer's key missing (with **Fetch Key…**, asking first). A signed checksum file's files are checked next | Signatures (`.sig`, `.asc`, `.gpg`, `.sign`), not encrypted archives |
+| **Encrypt…** | Makes an encrypted copy beside the file with `gpg` (`name.gpg`, or `name.asc` as text), the original left as it is: with a password (typed twice; AES-256) or to people's public keys picked from your keyring (each one marked verified or not; your own key too, if you have one, so you can open it). Runs as a job; a cancel or failure leaves no file behind (see [Features](features.md#encrypting-and-decrypting)) | Files (archives too), not folders |
+| **Decrypt** | Decrypts it with `gpg` into a copy beside it, under its name without the extension (or the next free one): asks for the password when it was encrypted with one (one saved in the keyring for it is tried first, and it can be saved there), or lets gpg ask for your key's passphrase when it was encrypted to your key; one encrypted only to other people's keys says so. Says who signed what was inside, if anyone. Double-clicking an encrypted `.gpg`, `.pgp` or `.asc` does the same | `.gpg`, `.pgp` and `.asc` files (not encrypted tar archives, which Extract opens) |
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
 | **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
@@ -101,7 +103,7 @@ The shared entries, plus:
 | **Find Duplicates…** | Finds the files with the same contents in the folder (and its subfolders), to keep some and move the others to the trash or replace them with hard links (see [Features](features.md)) | Always |
 | **Disk Usage…** | Shows what fills the folder as a map: each subfolder a block sized by what it holds, its biggest files and subfolders inside it (see [Features](features.md)) | Always |
 | **Compare With…** | Asks for another folder and lists what differs between the two: only on one side, newer on one side, other contents; copy across or trash from the list | Always |
-| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again | Always |
+| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again. A folder synced before (as the source or the destination) opens filled in as its last sync was run, the right way round, with the other syncs it took part in under **Last synced**; a remembered folder that isn't there now is said | Always |
 | **Folder Colour ▸** | Gives the folder's icon one of 10 colours, or **Default** | Always |
 | **Show Image Previews** | Turns the mosaic of images on the folder's icon on or off for this folder | Always |
 | **Reset Folder Cover** | Removes the cover image you chose, back to the automatic mosaic | When it has a chosen cover |
@@ -142,6 +144,7 @@ menu's entries, with these after Links & Shortcuts:
 | **Open as Archive** | Opens a window listing what's inside, to open or extract single items (see [below](#open-as-archive-window)) | When its program can list it |
 | **Test Archive** | Checks the archive for damage without extracting | Always |
 | **Extract (install …)** | Greyed out in place of the above, naming the package that extracts this format | When that program is missing |
+| **Encrypt…** | As for a file | Always |
 | **Mount Image** | As for a file: an `.iso`, or a compressed disk image (`.img.xz`…), set up as a drive and mounted (an `.iso` still opens as an archive when double-clicked) | Disk images |
 
 See [Archives](archives.md) for formats, passwords and limits.
@@ -164,6 +167,7 @@ The shared entries, plus:
 | **Convert Audio…** | As for one audio file or one folder, for all of them | When all are audio files or all are folders, with ffmpeg installed |
 | **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
 | **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
+| **Encrypt…** | As for a file: an encrypted copy beside each, all with the same password or to the same keys, as one job | No folders selected |
 | **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
 
 ## Empty space in a folder

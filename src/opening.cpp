@@ -11,6 +11,7 @@
 #include "dialogs.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "pgp.h"
 #include "signature.h"
 #include "places.h"
 #include "proc.h"
@@ -88,6 +89,25 @@ void MainWindow::open_checksums(const QString &f)
         true);
 }
 
+// A signature (.sig, .asc, .gpg, .sign) opens Verify Signature; an encrypted file (.gpg, .pgp, .asc) Decrypt; a key or
+// anything else with those names opens as usual
+void MainWindow::open_signed_or_encrypted(const QString &f)
+{
+    QPointer<MainWindow> self(this);
+    auto plain = [self, f]() {
+        if (self && !self->open_file(f))
+            warn(self, tx("Open"), tx("Could not open %1").arg(f));
+    };
+    auto decrypt = [self, f, plain]() {
+        if (self)
+            pgp::decrypt(self, f, plain);
+    };
+    if (signature::is_signature_name(f))
+        signature::open_window(this, f, pgp::is_encrypted_name(f) ? std::function<void()>(decrypt) : std::function<void()>(plain));
+    else
+        decrypt();
+}
+
 void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
 {
     QStringList paths;
@@ -136,11 +156,8 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
             diskimage::mount_image(this, f);
         else if (archive::opens_as_archive(f))
             archive_ui::open_archive(this, f);   // Kestrel's own extraction, not the system's archive app
-        else if (signature::is_signature_name(f))   // Verify Signature (a key or an encrypted file opens as usual)
-            signature::open_window(this, f, [self = QPointer<MainWindow>(this), f]() {
-                if (self && !self->open_file(f))
-                    warn(self, tx("Open"), tx("Could not open %1").arg(f));
-            });
+        else if (signature::is_signature_name(f) || pgp::is_encrypted_name(f))
+            open_signed_or_encrypted(f);
         else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
             open_checksums(f);
         else if (is_image(f))
