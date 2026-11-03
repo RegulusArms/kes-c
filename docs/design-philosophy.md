@@ -24,11 +24,13 @@ Kestrel doesn't make its own version of things Linux already does well. When a f
 | Lossless **Rotate** and **Straighten** of JPEGs | `jpegtran` |
 | Searching inside files | `localsearch` (the desktop's index), else `rg` (ripgrep), else `grep` |
 | Writing files onto a tape with dd | `dd` |
+| **Back Up Drive to Image…**: compressing and encrypting the image | `zstd`, `gpg` |
+| **Mount Image** (and unlocking LUKS inside one); expanding a compressed image to mount it | `udisksctl` (loop devices); `zstd`, `xz`, `gzip`, `gpg` |
 | **Network Sharing…**, **Send To** | `net` (Samba), `xdg-email`, `bluetooth-sendto` |
 | ZFS pools on the Overview | `zfs`, `zpool` |
 | Thumbnails of PDFs, fonts and other files | The system's thumbnailers (as GNOME Files uses) |
 | **Shred with BleachBit…** | `bleachbit` |
-| The admin session | `pkexec` |
+| The admin session, and reading a drive for Back Up Drive to Image | `pkexec` |
 | Drives, trash, network locations, default apps | GIO, gvfs, udisks |
 | Remembered archive passwords | The desktop's keyring (libsecret) |
 
@@ -74,7 +76,7 @@ Kestrel depends on programs it doesn't control. A tool update can change its out
 Kestrel writes its own code only where a tool can't do the job well inside a file manager:
 
 - **Speed while browsing.** Thumbnails and list columns need a photo's date, size and orientation for thousands of files at once. Running ExifTool per file would be far too slow, so Kestrel reads basic EXIF and PNG data itself and uses ExifTool for the full Metadata tab and for editing.
-- **Safety a tool can't give.** Copying and moving are Kestrel's own, because Kestrel's copy can be failure-atomic: each file is written under a part name and renamed into place when it's whole, with progress, a cancel that loses nothing, and the job queue. `rsync` is used where its strengths matter (Sync To…).
+- **Safety a tool can't give.** Copying and moving are Kestrel's own, because Kestrel's copy can be failure-atomic: each file is written under a part name and renamed into place when it's whole, with progress, a cancel that loses nothing, and the job queue. The bytes themselves are moved by the kernel where it can (a clone on Btrfs or XFS, a server-side copy on an SMB3 or NFS 4.2 share, `copy_file_range` elsewhere), so this costs no speed. `rsync` is used where its strengths matter (Sync To…).
 - **Fitting into the desktop.** Where the standard is a library rather than a command, Kestrel uses the library: GIO for the trash, mounting and default apps, libsecret for the keyring, udisks for drives.
 
 ## What the wrapper adds

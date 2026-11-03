@@ -22,8 +22,9 @@ A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jo
 **Terminal jobs, in the window:**
 - **Archives:** create and extract 7z, zip, rar, zpaq and every tar format, with the options the command-line tools offer (level, method, threads, passwords, split volumes), and a preview of the exact command that will run. Double-click an archive to extract it.
 - **Admin rights only when needed:** when an everyday file operation fails with "permission denied", choose **Retry as Administrator** and enter your password once per session, instead of running a file manager as root. It's for simple copies, moves, renames and deletes, not a replacement for the terminal for system administration.
-- **Permissions and links:** permissions, including setuid, setgid and the sticky bit; symbolic, relative and hard links; and MD5/SHA checksums with verification. Double-click a checksum file (`.sfv`, `.md5`, `.sha256`, `SHA256SUMS`…) to check every file it lists. Right-click files or folders and choose **Create Checksum File…** to make one.
+- **Permissions and links:** permissions, including setuid, setgid and the sticky bit; symbolic, relative and hard links, made and changed in batches in the **Link** window; and MD5/SHA checksums with verification. Double-click a checksum file (`.sfv`, `.md5`, `.sha256`, `SHA256SUMS`…) to check every file it lists. Right-click files or folders and choose **Create Checksum File…** to make one.
 - **Metadata:** view and edit EXIF, XMP and other metadata with `exiftool`, from a searchable list of tags.
+- **Drives and disk images:** back up a drive or partition to an image file, byte for byte, optionally compressed and encrypted; mount `.img` and `.iso` images (also compressed or encrypted ones) like a plugged-in drive; and see what fills a folder or drive with **Disk Usage**, a map of its biggest folders and files.
 - **Search and rename:** search subfolders with wildcards or inside files, and batch rename with templates or regular expressions.
 - **Shortcuts out:** Open in Terminal or VS Code, your Nautilus scripts, and Samba network sharing.
 - **Secure deletion:** with [BleachBit](https://www.bleachbit.org) installed, shred files and folders or empty the trash so they can't be recovered, from the right-click menu; `kes-setup --bleachbit` also adds a cleaner for Kestrel's own cache and history to BleachBit.
@@ -86,7 +87,7 @@ BleachBit and uninstalling.
 | [Install guide](docs/install.md) | apt channels, building from source, making Kestrel the default file manager, the file chooser, BleachBit, Linux Mint, Ubuntu 24.04 and Kubuntu notes |
 | [Dependencies](docs/dependencies.md) | The packages needed to build, the recommended ones and the optional ones, and what each is used for |
 | [Compared with other file managers](docs/comparison.md) | What Kestrel adds over GNOME Files, Nemo and Dolphin, what it doesn't have yet, and how it installs alongside them |
-| [Features](docs/features.md) | File management, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files |
+| [Features](docs/features.md) | File management, the Link window, jobs, tapes, galleries and folder previews, the Overview page, phones and cameras, the image viewer, checksum files, Find Duplicates, Disk Usage, drive images, Compare and Sync |
 | [Right-click menus](docs/context-menus.md) | Every right-click menu, what each entry does and what it works on |
 | [Archives](docs/archives.md) | Extracting and compressing, formats, progress and cancelling, passwords and security, known limitations |
 | [Translations](docs/translations.md) | The languages Kestrel is shown in, and how to report a wrong translation |

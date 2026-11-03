@@ -41,6 +41,8 @@ remove, reconfigure or disrupt them: they keep working as before, and you can us
   or taken (from photos' and videos' metadata), with each group still sorted by name, size or type.
 - Follows the desktop's theme and accent colour, also when you change them while it's open.
 - Other apps' Open and Save dialogs, such as a browser's "Save image as", can open in Kestrel.
+- In the right-click menu: Disk Usage (a map of what fills a folder or drive), Find Duplicates, Compare With… / Sync
+  To…, backing up a drive to an image file, and a Link window for making and changing links in batches.
 - Several windows that stay in sync.
 - Faster in most measurements (see [Performance: Kestrel vs GNOME Files](performance.md#performance-kestrel-vs-gnome-files)).
 
@@ -68,8 +70,8 @@ every drive). Kestrel adds:
   Wipe Metadata.
 - Checksum files: double-click one (`SHA256SUMS`, `.md5`, `.sfv`…) to check every file it lists, and Create Checksum
   File…; Verify Signature for `.sig` / `.asc` files.
-- Converting images, videos and audio, Find Duplicates, and Compare With… / Sync To… for folders, in the right-click
-  menu.
+- Converting images, videos and audio, Find Duplicates, Compare With… / Sync To… for folders, backing up a drive to an
+  image file, and a Link window for making and changing links in batches, in the right-click menu.
 - One Jobs window that queues copies by drive, so two jobs never fight over one disk, with pause, reorder and each
   job's log.
 - Admin rights for just the operation that failed, offered when it fails.
