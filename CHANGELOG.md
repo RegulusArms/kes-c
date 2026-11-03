@@ -4,7 +4,12 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.10
+## 0.3.3-alpha.11
+
+- **Fixed: cancelling a RAM disk's save while a file was being copied left a hidden part file** (`.kes-….part`) in
+  the folder on disk. It's now removed, and the saved file stays as it was.
+
+## 0.3.3-alpha.10 (2026-11-03)
 
 - **RAM disks.** ☰ → **New RAM Disk…** makes a folder whose files are kept in memory. Without a size limit it needs no
   password (a folder in `/dev/shm`, only yours); with a size limit of its own it's a tmpfs mounted on a folder you

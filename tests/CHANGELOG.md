@@ -6,6 +6,18 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.11
+
+Added:
+- `tools`: a RAM disk save cancelled in the middle of a file (the cancel is asked once its part file exists) leaves
+  no part file and the saved file as it was. The cancelled-save check that was there only cut into a file when the
+  folder listed its files in a certain order, so it failed in CI only some of the time; this one does it every time.
+
+Changed:
+- `tools`: in the RAM disk saving check, the saved `a.txt` is dated an hour back. It's the same size as the RAM
+  disk's, so when both were written within one timestamp tick it looked already saved and wasn't copied (it failed
+  on CI's 26.04 runner).
+
 ## 0.3.3-alpha.10
 
 Added:

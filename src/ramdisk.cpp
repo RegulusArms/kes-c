@@ -276,7 +276,12 @@ struct Mirror {
         int err = 0;
         qint64 left = ss.st_size;
         while (ok && left > 0) {
-            check();
+            if (cancelled && cancelled()) {   // cancelled mid-file: the part goes, what was saved before stays
+                ::close(in);
+                ::close(out);
+                ::unlink(enc(part_path).constData());
+                throw Cancelled();
+            }
             ssize_t n = ::copy_file_range(in, nullptr, out, nullptr, size_t(std::min<qint64>(left, 8 << 20)), 0);
             if (n < 0 && (errno == EXDEV || errno == ENOSYS || errno == EINVAL || errno == EOPNOTSUPP)) {
                 char buf[1 << 16];

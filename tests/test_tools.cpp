@@ -1160,6 +1160,7 @@ int main(int argc, char **argv)
         write_text(join(r, ".kes-00000000.part"), "half-made");   // a copy into the RAM disk still running
         (void)!::symlink("a.txt", enc(join(r, "link")).constData());
         write_text(join(disk, "a.txt"), "old a");
+        set_mtime(join(disk, "a.txt"), time(nullptr) - 3600);   // (the same size: written in the same tick, it'd look saved)
         write_text(join(disk, "only-on-disk.txt"), "x");
         write_text(join(disk, "gone/c.txt"), "c");
         QStringList errors;
@@ -1216,6 +1217,22 @@ int main(int argc, char **argv)
                 parts << n;
         check(stopped && (a == "new a" || a == "newer a") && (b == "b" || b == "newer b") && parts.isEmpty(),
               "a cancelled save leaves each file whole, old or new, and no part file");
+        // ...and one cancelled in the middle of a file (asked once its part is there): that part goes too
+        write_text(join(r, "big.bin"), QByteArray((3 << 20) + 1, 'm'));
+        auto part_in_disk = [&]() {
+            for (const QString &n : listdir(disk) + listdir(join(disk, "sub")))
+                if (n.startsWith(".kes-"))
+                    return true;
+            return false;
+        };
+        stopped = false;
+        try {
+            ramdisk::mirror(r, disk, true, &errors, part_in_disk);
+        } catch (const Cancelled &) {
+            stopped = true;
+        }
+        check(stopped && !part_in_disk() && read_file(join(disk, "big.bin")).size() != (3 << 20) + 1,
+              "a save cancelled in the middle of a file leaves no part file, and the saved one as it was");
         ::unlink(enc(join(r, "big.bin")).constData());
 
         // -- a persistent RAM disk is saved only once it has been loaded
