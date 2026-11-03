@@ -38,6 +38,11 @@ Added:
 
 Changed:
 - `ui` (`ui_actions.txt`): Encrypt… in the file and two-file menus.
+- `viewer`: the check that several images open in the folder's order waits until the folder shows them sorted (a
+  before d) before opening them, picked as d, a. It waited only for d to be listed: a folder's listing arrives in the
+  order the drive reads it and is sorted a moment later, so now and then (2 runs in 5 under the sanitizers) the
+  viewer rightly followed an unsorted d, a, and the check failed, taking the viewer's Move to Trash check with it.
+  Its message now names the order the viewer got and the folder's.
 - `installer`: the BleachBit cleaner's History option also deletes the remembered syncs (`sync-history.json`): in the
   expected actions (14 now), the dry run's list and the clean.
 

@@ -803,10 +803,19 @@ int main(int argc, char **argv)
     // the selection's order, from a window
     settings().setValue("image_opener", "builtin");
     MainWindow *w = open_window({vdir});
-    wait_for([&]() { return w->pane()->all_paths().contains(d); });
+    // until the folder shows a before d (by name): both listed, and sorted (the listing arrives in the order the drive
+    // reads it and is sorted a moment later; the viewer follows whatever the folder shows)
+    wait_for([&]() {
+        const QStringList all = w->pane()->all_paths();
+        return all.contains(a) && all.contains(d) && all.indexOf(a) < all.indexOf(d);
+    });
     w->open_paths(w->pane(), {d, a}, false);
     ImageViewer *v3 = shown_window<ImageViewer>();
-    check(v3 && v3->paths == QStringList({a, d}), "several images selected open in the order the folder shows them, not the order they were picked in");
+    QStringList listed = w->pane()->all_paths();
+    check(v3 && v3->paths == QStringList({a, d}),
+          "several images selected open in the order the folder shows them, not the order they were picked in (viewer: " +
+              (v3 ? QStringList(v3->paths).replaceInStrings(vdir + "/", "").join(", ") : QString("none")) + "; folder: " +
+              QStringList(listed).replaceInStrings(vdir + "/", "").join(", ") + ")");
     if (v3) {
         v3->go_to(1);
         v3->delete_current();
