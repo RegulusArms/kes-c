@@ -4,7 +4,15 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.13
+## 0.3.3-alpha.14
+
+- **Fixed: a folder of files with long names and emoji could freeze the window in the grid view.** Each name was
+  measured again, a character at a time, on every repaint and every mouse movement over the grid to find where its
+  first line ends, and a colour emoji is slow to measure, so moving the mouse over such a folder (or thumbnails
+  arriving) kept the window busy until it stopped responding. Each name is now wrapped once and remembered, and
+  wrapping no longer splits a joined emoji (such as a family) between the two lines.
+
+## 0.3.3-alpha.13 (2026-11-05)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha13).
 

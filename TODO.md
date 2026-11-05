@@ -41,6 +41,24 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
+- [ ] **Startup is about 50 ms behind GNOME Files in the Ubuntu benchmark.** The 2026-11-05 benchmark shows startup at
+  0.50 s against GNOME Files' 0.44 s, where the one before showed 0.37 s for both. Investigated (2026-11-05):
+  - Not a regression in Kestrel. 0.3.2-alpha.34 (the version behind the 0.37 s) and 0.3.3-alpha.13, both timed with
+    the same bench.py in the benchmark's own image: 0.485 / 0.496 s against 0.499 / 0.493 s (two rounds of 11 launches
+    each). Launched straight on an Xvfb on the host: 0.226 s against 0.223 s (25 launches each).
+  - The jump comes from the benchmark itself: it now runs in an Ubuntu 26.04 container instead of on the host, and
+    every app got slower there (GNOME Files 0.37 → 0.44 s, Dolphin 0.40 → 0.64, Thunar 0.44 → 0.59, Krusader 0.93 →
+    1.27, PCManFM 0.41 → 0.51). The new run is the one to compare against from now on.
+  - What's left is the gap to GNOME Files, which only shows under the benchmark's conditions: in the same image on a
+    full session bus (portals, accessibility bus) both started in 0.46–0.47 s.
+  - About half the gap is Qt's GTK integration (the benchmark's desktop is set to GNOME, so Qt loads it): with
+    `QT_QPA_PLATFORMTHEME=gnome`, Kestrel starts in 0.46–0.47 s instead of 0.49 s. A trace shows the main thread
+    reading Yaru's gtk.css and gdk-pixbuf's loaders, then waiting until Pango has set up fontconfig in a background
+    thread before it can draw any text. GNOME Files does the same font work, so the wait itself isn't the gap.
+  - Next: time Kestrel's own steps from main() to the first window shown under the benchmark's conditions (the private
+    bus with only dconf and gvfs, gvfs already running, `GTK_A11Y=none`/`NO_AT_BRIDGE=1`), to find the rest of the
+    gap. Also check whether anything the GTK integration loads can wait until after the window is shown.
+
 ## New features
 
 ### Jobs

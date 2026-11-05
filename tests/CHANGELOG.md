@@ -6,6 +6,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.14
+
+Added:
+- `ui`: hit tests over the grid (as a mouse moving over its items makes) don't measure an item's name again once it's
+  been wrapped, in a folder of long names with a colour emoji; and a long name's first line is the longest start that
+  fits, never cut inside a character, at widths a pixel apart around an emoji and a joined family emoji. Covers the
+  fix for a folder of long emoji names freezing the window: each name was measured anew, a character at a time, on
+  every paint and mouse movement.
+
 ## 0.3.3-alpha.13
 
 Changed:

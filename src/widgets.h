@@ -8,6 +8,7 @@
 #include <QDate>
 #include <QFileSystemModel>
 #include <QFormLayout>
+#include <QHash>
 #include <QLabel>
 #include <QPointer>
 #include <QLineEdit>
@@ -177,6 +178,15 @@ public:
     // and each header this width
     QSize cell;
     int header_width = 0;
+    // A name wrapped into its lines (at most two: the first broken at a natural boundary if it can be, never inside a
+    // character; the rest elided), with each line's width. Kept per font, width and text (widgets.cpp says why);
+    // names_measured counts the names actually measured (not found kept).
+    struct Wrapped {
+        QStringList lines;
+        QList<int> widths;
+    };
+    const Wrapped &wrap(const QFont &font, const QString &text, int width) const;
+    mutable int names_measured = 0;
 
 private:
     struct Layout {
@@ -186,11 +196,13 @@ private:
         QPixmap anim;                    // (the frame, when one plays)
         QFont font;
         QStringList lines;
+        QList<int> widths;   // each line's (horizontalAdvance)
     };
     // paint: the animation's frame too (asking for it starts it playing); a hit test goes by the thumbnail
     Layout layout(const QStyleOptionViewItem &option, const QModelIndex &index, bool paint) const;
     QPainterPath shape(const Layout &l) const;
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
+    mutable QHash<QString, Wrapped> wrapped;
     static void play_badge(QPainter *p, const QRectF &rect);
     static void star_badge(QPainter *p, const QRectF &rect);
     static void pin_badge(QPainter *p, const QRectF &rect);

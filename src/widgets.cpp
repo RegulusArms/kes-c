@@ -40,6 +40,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QTextBoundaryFinder>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -755,14 +756,46 @@ void ListDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         QStyledItemDelegate::paint(p, option, index);
 }
 
+const GridDelegate::Wrapped &GridDelegate::wrap(const QFont &font, const QString &text, int width) const
+{
+    // Every paint and every hit test (a mouse move's indexAt, the rubber band) lays out the name again, and measuring
+    // can be slow: a colour emoji's glyph is a PNG that FreeType decodes on each measure (~15x a plain name's cost),
+    // which froze the window on a folder of long emoji names. So each wrap is kept (bounded; cleared when full).
+    QString key = font.key() + QChar(0x1f) + QString::number(width) + QChar(0x1f) + text;
+    auto it = wrapped.constFind(key);
+    if (it != wrapped.constEnd())
+        return *it;
+    if (wrapped.size() >= 4096)
+        wrapped.clear();
+    QFontMetrics fm(font);
+    ++names_measured;
+    Wrapped w;
+    w.lines = lines(fm, text, width);
+    for (const QString &line : w.lines)
+        w.widths << fm.horizontalAdvance(line);
+    return *wrapped.insert(key, w);
+}
+
 QStringList GridDelegate::lines(const QFontMetrics &fm, const QString &text, int width) const
 {
     if (fm.horizontalAdvance(text) <= width)
         return {text};
+    // the longest start that fits (a binary search: measuring each shorter start in turn took a measure per character)
+    int lo = 1, hi = text.size() - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (fm.horizontalAdvance(text.left(mid)) <= width)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    int cut = lo;
+    // not inside a character (an emoji's surrogate pair, a joined emoji, an accent on its letter)
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, text);
+    graphemes.setPosition(cut);
+    if (!graphemes.isAtBoundary() && graphemes.toPreviousBoundary() > 0)
+        cut = graphemes.position();
     // break the first line at a natural boundary if possible
-    int cut = text.size();
-    while (cut > 1 && fm.horizontalAdvance(text.left(cut)) > width)
-        --cut;
     int brk = -1;
     for (QChar c : {QChar(' '), QChar('_'), QChar('-'), QChar('.')})
         brk = std::max<int>(brk, text.left(cut).lastIndexOf(c));
@@ -794,7 +827,9 @@ GridDelegate::Layout GridDelegate::layout(const QStyleOptionViewItem &option, co
     QFontMetrics fm(l.font);
     l.text_rect = QRect(l.r.x() + 4, l.icon_rect.bottom() + 6, l.r.width() - 8, fm.height() * 2 + 2);
     QString name = index.data(Qt::DisplayRole).toString();
-    l.lines = lines(fm, name.isEmpty() ? basename(path) : name, l.text_rect.width());
+    const Wrapped &w = wrap(l.font, name.isEmpty() ? basename(path) : name, l.text_rect.width());
+    l.lines = w.lines;
+    l.widths = w.widths;
     return l;
 }
 
@@ -805,7 +840,7 @@ QPainterPath GridDelegate::shape(const Layout &l) const
     out.addRoundedRect(l.drawn.adjusted(-4, -4, 4, 4), 6, 6);
     QFontMetrics fm(l.font);
     for (int i = 0; i < l.lines.size(); ++i) {   // each line as wide as its text, joining the one above
-        double w = std::min<double>(fm.horizontalAdvance(l.lines[i]) + 12, l.r.width());
+        double w = std::min<double>(l.widths.value(i) + 12, l.r.width());
         double y = l.text_rect.y() + i * fm.height();
         out.addRoundedRect(QRectF(l.r.x() + (l.r.width() - w) / 2, y - 2, w, fm.height() + 4), 6, 6);
     }

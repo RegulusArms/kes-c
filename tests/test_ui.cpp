@@ -22,6 +22,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QTabBar>
+#include <QTextBoundaryFinder>
 #include <QTreeWidget>
 
 using namespace test;
@@ -823,6 +824,74 @@ int main(int argc, char **argv)
         w->resize(old);
         check(bad.isEmpty(), "the grid packs its items (no empty cell, as many columns as fit), also after zooming and at "
                              "every window width" + (bad.isEmpty() ? QString() : " (" + bad + ")"));
+        w->close_tab(w->tabs->indexOf(own));
+    }
+
+    // -- the grid's long names: each is measured and wrapped once, not again on every hit test and paint (a folder of
+    // long names with colour emoji, which are slow to measure, froze the window while the mouse moved over it); the
+    // first line is the longest start that fits, and a line never ends inside a character (an emoji's surrogate pair,
+    // a joined emoji)
+    {
+        QString dir = home_path("longnames");
+        makedirs(dir, true);
+        const QString emoji = QString::fromUtf8("\xF0\x9F\xA4\xB8\xE2\x80\x8D\xE2\x99\x80\xEF\xB8\x8F");   // woman cartwheeling
+        QStringList names;
+        for (int i = 0; i < 40; ++i)
+            names << QString(i, QChar('g')) + emoji + " Gymnastics NCAA Balance Beam Classic Enhanced 4K HD #sports " +
+                         QString::number(i) + ".webm";
+        for (const QString &n : names)
+            write_text(join(dir, n), "x");
+        Pane *own = w->new_tab(dir);
+        w->set_view("grid");
+        QListView *g = own->grid;
+        wait_for([&]() { return own->all_paths().size() == names.size(); });
+        spin(300);
+        auto *del = qobject_cast<GridDelegate *>(g->itemDelegate());
+        auto hover_all = [&]() {   // every item's name, as a mouse over it would
+            QAbstractItemModel *m = g->model();
+            for (int r = 0; r < m->rowCount(g->rootIndex()); ++r) {
+                QRect vr = g->visualRect(m->index(r, 0, g->rootIndex()));
+                if (vr.intersects(g->viewport()->rect()))
+                    g->indexAt(QPoint(vr.center().x(), vr.bottom() - 8));
+            }
+        };
+        hover_all();
+        int before = del ? del->names_measured : -1;
+        hover_all();
+        hover_all();
+        int again = del ? del->names_measured - before : -1;
+        check(del && before > 0 && again == 0,
+              QString("hit tests over the grid don't measure a name again (%1 names measured on the second and third "
+                      "rounds)").arg(again));
+
+        // the wrap itself, at widths a pixel apart, so the cut falls at every place in and around the emoji
+        QString bad;
+        QFont f = g->font();
+        QFontMetrics fm(f);
+        int width = fm.horizontalAdvance(QString(20, QChar('g')));
+        // 20 g's, then the emoji; and a family (man, woman, girl, boy joined), whose first parts alone are wider than
+        // the whole (drawn as separate people), so measuring longer and longer starts isn't steadily wider
+        const QString family = QString::fromUtf8("\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7"
+                                                 "\xE2\x80\x8D\xF0\x9F\x91\xA6");
+        for (const QString &n : {names.value(20), QString(20, QChar('g')) + family + " Gymnastics family meet.webm"})
+        for (int px = width - fm.horizontalAdvance("g"); px <= width + 3 * fm.horizontalAdvance(n.mid(20, 11)) && del;
+             ++px) {
+            const GridDelegate::Wrapped &wr = del->wrap(f, n, px);
+            QString first = wr.lines.value(0);
+            QTextBoundaryFinder gb(QTextBoundaryFinder::Grapheme, n);
+            gb.setPosition(first.size());
+            if (!n.startsWith(first) || first.isEmpty() || !gb.isAtBoundary())
+                bad = QString("in %1 pixels, \"%2\" cut after %3 of its characters")
+                          .arg(QString::number(px), n, QString::number(first.size()));
+        }
+        QString plain(80, QChar('k'));   // no natural boundary: the first line takes as much as fits
+        const GridDelegate::Wrapped &wp = del->wrap(f, plain, width);
+        int cut = wp.lines.value(0).size();
+        if (fm.horizontalAdvance(plain.left(cut)) > width || fm.horizontalAdvance(plain.left(cut + 1)) <= width ||
+            wp.widths.value(0) != fm.horizontalAdvance(plain.left(cut)))
+            bad = QString("an 80-letter name's first line is %1 letters in a width of %2 letters").arg(cut).arg(20);
+        check(bad.isEmpty(), "a long name's first line is the longest start that fits, never cut inside a character" +
+                                 (bad.isEmpty() ? QString() : " (" + bad + ")"));
         w->close_tab(w->tabs->indexOf(own));
     }
 
