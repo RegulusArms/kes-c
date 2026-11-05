@@ -464,30 +464,33 @@ void MainWindow::trash_paths(const QStringList &selected, std::function<void(con
         }
         return task->cancelled ? QVariant() : QVariant(failed);
     };
-    auto done = [this, paths, trashed, after](const QVariant &res) {
+    // also when this window has closed meanwhile: what was trashed can still be undone, and what couldn't be is asked
+    QPointer<MainWindow> self(this);
+    auto done = [self, paths, trashed, after](const QVariant &res) {
         undo::record_paths("trash", TX_NOOP("Move to Trash"), *trashed);
         fileops::dirsizes::drop_with_parents(*trashed);   // the folders they left are smaller now
-        sidebar->refresh();
+        if (self)
+            self->sidebar->refresh();
         if (after)
             after(*trashed);
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
-            ask_yes(this, tx("Cannot move to trash"),
+            ask_yes(self, tx("Cannot move to trash"),
                     txn("%Ln item(s) could not be moved to the trash:\n%1\n\nDelete them permanently?", failed.size())
                         .arg(failed.first().toStringList().value(1)),
-                    [this, failed]() {
+                    [self, failed]() {
                         QList<fileops::Job> jobs;
                         for (const QVariant &f : failed)
                             jobs << fileops::Job{"delete", f.toStringList().value(0), QString()};
-                        fileops::start_ops(this, jobs, tx("Deleting"));
+                        fileops::start_ops(self, jobs, tx("Deleting"));
                     });
-        } else if (res.isValid()) {
-            statusBar()->showMessage(txn("Moved %Ln item(s) to the trash", paths.size()), 4000);
-        } else {
-            statusBar()->showMessage(tx("Move to trash cancelled; items already moved stay in the trash"), 6000);
+        } else if (self && res.isValid()) {
+            self->statusBar()->showMessage(txn("Moved %Ln item(s) to the trash", paths.size()), 4000);
+        } else if (self) {
+            self->statusBar()->showMessage(tx("Move to trash cancelled; items already moved stay in the trash"), 6000);
         }
     };
-    fileops::run_job(this, tx("Moving to trash"), work, done);
+    fileops::run_job(this, tx("Moving to trash"), work, done, true, false, true);
 }
 
 void MainWindow::delete_paths(const QStringList &paths)
@@ -646,13 +649,15 @@ void MainWindow::restore(const QStringList &paths)
         }
         return errors;
     };
-    auto done = [this](const QVariant &res) {
-        sidebar->refresh();
+    QPointer<MainWindow> self(this);
+    auto done = [self](const QVariant &res) {   // (also when this window has closed: the errors are still told)
+        if (self)
+            self->sidebar->refresh();
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            warn(this, tx("Restore"), errors.mid(0, 20).join('\n'));
+            warn(self, tx("Restore"), errors.mid(0, 20).join('\n'));
     };
-    fileops::run_job(this, tx("Restoring"), work, done);
+    fileops::run_job(this, tx("Restoring"), work, done, true, false, true);
 }
 
 void MainWindow::empty_trash()

@@ -300,7 +300,7 @@ void undo(MainWindow *win, std::function<void()> after)
             task->had_errors = true;
         return errors;
     };
-    fileops::run_job(win, title, work, done);
+    fileops::run_job(win, title, work, done, true, false, true);   // (done needs no window: w may have gone)
 }
 
 }  // namespace undo

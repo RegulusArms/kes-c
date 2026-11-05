@@ -305,7 +305,8 @@ using namespace dupes;
 
 enum { DupGroupRole = Qt::UserRole + 40, DupFileRole };
 
-DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(win), win(win), roots(roots)
+// A window of its own (no parent): closing the Kestrel window it came from doesn't close it or stop its search
+DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(nullptr), win(win), roots(roots)
 {
     QStringList shown;
     for (const QString &r : roots)
@@ -681,11 +682,11 @@ void DupesWindow::link_others()
                 n)
                 .arg(no_keeper ? "\n\n" + tx("Groups with no file kept are left as they are.") : QString()),
             [self, work, all]() {
-                if (!self || !self->win)
+                if (!self)
                     return;
                 auto replaced = std::make_shared<QStringList>();
                 fileops::queue_job(
-                    self->win, tx("Replacing duplicates with hard links"), all,
+                    self->win ? static_cast<QWidget *>(self->win) : self.data(), tx("Replacing duplicates with hard links"), all,
                     [work, replaced](Task *t) {
                         QStringList errors;
                         for (int i = 0; i < work.size(); ++i) {

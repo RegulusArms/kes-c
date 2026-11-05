@@ -591,14 +591,16 @@ void MainWindow::sort_subfolders(Pane *p)
         task->log(txn("%Ln folder(s) found: each gets this folder's sort once the job ends", found.size()));
         return found;
     };
-    auto done = [this, root, sort](const QVariant &v) {
+    QPointer<MainWindow> self(this);
+    auto done = [self, root, sort](const QVariant &v) {   // (also when this window has closed meanwhile)
         if (!v.isValid())
             return;   // cancelled
         QStringList dirs = v.toStringList();
         places::set_folder_sort(dirs + QStringList{root}, sort);
-        statusBar()->showMessage(txn("Sort applied to %Ln subfolder(s)", dirs.size()), 5000);
+        if (self)
+            self->statusBar()->showMessage(txn("Sort applied to %Ln subfolder(s)", dirs.size()), 5000);
     };
-    fileops::run_job(this, tx("Applying sort to subfolders"), work, done);
+    fileops::run_job(this, tx("Applying sort to subfolders"), work, done, true, false, true);
 }
 
 void MainWindow::set_pinned_first(bool on)
@@ -1134,7 +1136,8 @@ Task *MainWindow::build_previews(const QString &root, bool folders_only, int dep
                                         .arg(text, name, group_digits(m["done"].toInt())),
                                     8000);
     };
-    return fileops::queue_job(this, tx("%1: %2").arg(what, name), {root}, work, done);
+    // done runs also when this window has closed (the cache and the other windows still need to know)
+    return fileops::queue_job(this, tx("%1: %2").arg(what, name), {root}, work, done, true, {}, false, {}, true);
 }
 
 void MainWindow::on_thumb_progress(int done, int total)
@@ -1911,15 +1914,17 @@ void MainWindow::purge_now(bool include)
             auto [files, size] = thumbs::purge_thumbnails(include);
             return QVariant(QVariantList{files, size});
         },
-        [this](const QVariant &res) {
+        [self = QPointer<MainWindow>(this)](const QVariant &res) {   // (also when this window has closed meanwhile)
             QVariantList r = res.toList();
-            thumbs->clear_memory();
+            g_thumbs->clear_memory();
             repaint_all();
             atc::announce("thumbs_cleared");
-            statusBar()->showMessage(txn("Deleted %Ln thumbnail(s) (%1)", r.value(0).toLongLong())
-                                         .arg(human_size(r.value(1).toLongLong())),
-                                     6000);
-        });
+            if (self)
+                self->statusBar()->showMessage(txn("Deleted %Ln thumbnail(s) (%1)", r.value(0).toLongLong())
+                                                   .arg(human_size(r.value(1).toLongLong())),
+                                               6000);
+        },
+        false, true);
 }
 
 void MainWindow::show_shortcuts()

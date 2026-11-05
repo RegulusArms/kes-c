@@ -6,6 +6,27 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.12
+
+Added:
+- `fileops`: the folder view opens a folder whose name isn't valid UTF-8 and lists what's in it byte for byte
+  (folders first, a stray byte shown as U+FFFD), follows a file made and one deleted in it, and opens its subfolder.
+  Qt's QFileSystemModel, which the view used before, listed nothing there.
+- `admin_helper`: names that aren't valid UTF-8 (a folder, a file, a symlink's target) reach the helper byte for byte
+  through Kestrel's request (rename, mkdir, symlink); sent only as JSON text they don't survive; a path holding a NUL
+  byte is refused.
+- `jobs`: jobs go on when the Kestrel window that started them closes part-way, and what they do at their end still
+  happens: Verify Checksums (one job for the whole checksum file, each file's result in its log and the ones that
+  didn't pass at its end; also when only the Verify window closes), Find Duplicates, Disk Usage, Compare With… and
+  Sync To… (their windows stay open and get their results), Move to Trash (still undoable) and Apply Sort to
+  Subfolders (the subfolders get the sort). Verify Checksums used to stop with its window, the tool windows closed
+  with theirs, and the other two dropped what they did at their end.
+
+Changed:
+- `viewer`: the drop into a folder asks the folder model for that folder's own index, with the model showing the
+  folder above it. Kestrel's new folder model knows only the folder it shows and its items (Qt's made an index for
+  any path).
+
 ## 0.3.3-alpha.11
 
 Added:

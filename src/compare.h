@@ -184,6 +184,7 @@ private:
     void start(const QString &source, const QString &dest, const QList<compare::Step> &steps, bool del, bool rsync);
     QPointer<MainWindow> win;
     QPointer<Task> task;
+    bool previewing = false;   // task is the preview (closing the window stops it), not the sync
     QString planned_source, planned_dest;   // what the steps are for
     bool planned_deletes = false;
     QProgressBar *bar;

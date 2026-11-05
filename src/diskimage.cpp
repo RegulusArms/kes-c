@@ -694,10 +694,13 @@ void tidy()
     }
 }
 
-// One Mount Image, step by step (each step that waits for the system on a worker, each question in a free window)
+// One Mount Image, step by step (each step that waits for the system on a worker, each question in a free window).
+// Not a child of its Kestrel window: closing that window part-way mustn't leave a loop device set up and never
+// mounted or detached, so it goes on (each step's result comes to it, not through the window) and deletes itself
+// when it's done.
 class Mounter : public QObject {
 public:
-    Mounter(MainWindow *w, const QString &path, bool writable) : QObject(w), win(w), path(path), writable(writable) {}
+    Mounter(MainWindow *w, const QString &path, bool writable) : QObject(nullptr), win(w), path(path), writable(writable) {}
     void start();
 
 private:
@@ -737,7 +740,7 @@ void Mounter::look_up(std::function<void()> then)
             self->saved = res.toList().value(1).toString();
             then();
         },
-        true);
+        true, true);   // (quiet; its answer comes to the Mounter also when win has closed)
 }
 
 void Mounter::start()
@@ -772,7 +775,8 @@ void Mounter::start()
                             "free there; it may need several times the %3 it takes now). The copy is mounted read-only "
                             "and deleted once unmounted.").arg(basename(path), human_size(free), human_size(size));
     QPointer<Mounter> self(this);
-    auto *box = ask(win, QMessageBox::Question, title(), text, QMessageBox::Ok | QMessageBox::Cancel,
+    // (no parent: a question deleted with its Kestrel window would never be answered, and the Mounter never done)
+    auto *box = ask(nullptr, QMessageBox::Question, title(), text, QMessageBox::Ok | QMessageBox::Cancel,
                     [self, gpg](QMessageBox::StandardButton b) {
                         if (!self)
                             return;
@@ -796,7 +800,7 @@ void Mounter::password(archive_ui::Ask reason)
 {
     QPointer<Mounter> self(this);
     archive_ui::ask_password(
-        win, path, reason, keyring_ok,
+        nullptr, path, reason, keyring_ok,   // (no parent: deleted with its Kestrel window, it would never be answered)
         [self](const QString &pw, bool remember) {
             if (self)
                 self->expand(pw, remember, false);
@@ -971,7 +975,7 @@ void Mounter::setup()
                     self->blocks << qMakePair(b.toList().value(0).toString(), fs);
             }
             self->next();
-        });
+        }, false, true);
 }
 
 void Mounter::next()
@@ -986,7 +990,7 @@ void Mounter::next()
         if (!self)
             return;
         archive_ui::ask_password(
-            self->win, self->path, reason, self->keyring_ok,
+            nullptr, self->path, reason, self->keyring_ok,   // (no parent: see Mounter::password)
             [self, dev](const QString &pw, bool remember) {
                 if (self)
                     self->unlock(dev, pw, remember, false);
@@ -1061,7 +1065,7 @@ void Mounter::unlock(const QString &dev, const QString &pw, bool remember, bool 
                 return self->next();
             }
             self->mount(m.value("dev").toString());
-        });
+        }, false, true);
 }
 
 void Mounter::mount(const QString &dev)
@@ -1091,7 +1095,7 @@ void Mounter::mount(const QString &dev)
                 self->errors << dev + ": " + m.value("error").toString();
             self->at++;
             self->next();
-        });
+        }, false, true);
 }
 
 void Mounter::finish()

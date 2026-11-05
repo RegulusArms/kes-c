@@ -1091,6 +1091,13 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>Checked %Ln file(s): %1.</source>
+        <translation>
+            <numerusform>Checked %Ln file: %1.</numerusform>
+            <numerusform>Checked %Ln files: %1.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Stopped after %1 of %Ln file(s).</source>
         <translation>
             <numerusform>Stopped after %1 of %Ln file.</numerusform>

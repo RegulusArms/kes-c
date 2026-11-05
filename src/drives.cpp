@@ -547,10 +547,11 @@ void sync_tape_job(QWidget *parent, const QString &root)
                 t->log(err.isEmpty() ? tx("The index of the tape in %1 is written").arg(root) : tx("Failed: %1").arg(err));
             return QVariant(err);
         },
-        [p, root](const QVariant &err) {
+        [p, root](const QVariant &err) {   // (told also when p has closed meanwhile)
             if (!err.toString().isEmpty())
                 warn(p, tx("Write Tape Index"), tx("The tape's index couldn't be written: %1").arg(err.toString()));
-        });
+        },
+        false, true);
 }
 
 // ---------------------------------------------------------------- sizes

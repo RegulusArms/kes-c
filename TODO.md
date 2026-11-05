@@ -41,40 +41,6 @@ into.
   - While LTFS holds the drive's SCSI generic node, its logs can be read through the drive's /dev/bsg node instead
     (sg_logs gets EBUSY on the sg one).
 
-- [ ] **A folder whose own name isn't valid UTF-8 shows empty, and admin jobs lose such names.** Since
-  0.3.3-alpha.1 Kestrel's own file code keeps such names byte for byte, but two places still go through text:
-  - The folder view is Qt's QFileSystemModel, which decodes names lossily (U+FFFD) and opens folders by its own
-    encoding of them: going into a folder whose name has a stray byte lists nothing. Files with such names inside an
-    ordinary folder work (`enc()` finds them). Fixing it means a model that lists through `dec()`.
-  - The admin session (src/admin.cpp → kes-admin-helper) sends paths as JSON text, where a stray byte's lone
-    surrogate doesn't survive: Retry as Administrator on such a name fails. Send the bytes (e.g. base64) instead.
-
-- [ ] **Verifying checksums stops when the Kestrel window that started it is closed.** It should be like any other
-  job: it carries on in the Jobs window after its window has gone, and its result is still there to see.
-  - Why: the Verify window (VerifyDialog, src/hashcheck.cpp) runs the check as one job per file, starting the next
-    when one finishes, and it's that window that keeps the list and moves on. It belongs to the Kestrel window it was
-    opened from, so closing that window deletes it, and its destructor (`stop()`) cancels the job that's running and
-    nothing starts the rest.
-  - Fix: one job for the whole checksum file (every entry, in order), not tied to any window (queue_job with
-    outlives_parent, as other jobs are), with each file's result in its log and its list of failures. The Verify
-    window then only shows that job's progress and results while it's open; closing it or its Kestrel window leaves
-    the job running.
-
-- [ ] **Check that every job runs on its own, whatever happens to the Kestrel window that started it.** Closing
-  that window (or the tool window it came from) mustn't stop a job, lose its result, or crash when it finishes. The
-  job goes on in the Jobs window, its log and failures are kept there, and it keeps Kestrel running until it ends, as
-  copies and moves already do. Found with Verify Checksums (above).
-  - Go through every `fileops::queue_job` / `run_job` / `run_task` / `start_ops` call: what it's parented to, whether
-    its `on_done` needs that window (and `outlives_parent`), and whether a window drives a series of jobs itself
-    (starting the next as one ends), as Verify Checksums does.
-  - Windows that cancel their job when closed or deleted, so they're deliberate choices to keep or change: Find
-    Duplicates (`DupesWindow`), Disk Usage (`DiskUsageWindow`) and Compare With… (`CompareWindow`) stop their scans,
-    whose results show only in that window; Sync To… (`SyncWindow`) stops only its preview, and a sync goes on. A scan
-    that's only useful in its window may be fine to stop, but closing the Kestrel window behind it shouldn't stop it
-    while the tool window stays open.
-  - Add a check for each kind of job in the tests (close the window that started it part-way, the job still ends
-    and its result is in the Jobs window).
-
 ## New features
 
 ### Jobs
@@ -226,6 +192,63 @@ into.
     ITP and a sponsor, and Debian's release pace: worth it after a stable 1.0, not during the alpha.
 
 ## Done
+
+- [x] **A folder whose own name isn't valid UTF-8 shows empty, and admin jobs lose such names.** Since
+  0.3.3-alpha.1 Kestrel's own file code keeps such names byte for byte, but two places still go through text:
+  - The folder view is Qt's QFileSystemModel, which decodes names lossily (U+FFFD) and opens folders by its own
+    encoding of them: going into a folder whose name has a stray byte lists nothing. Files with such names inside an
+    ordinary folder work (`enc()` finds them). Fixing it means a model that lists through `dec()`.
+  - The admin session (src/admin.cpp → kes-admin-helper) sends paths as JSON text, where a stray byte's lone
+    surrogate doesn't survive: Retry as Administrator on such a name fails. Send the bytes (e.g. base64) instead.
+  Done in 0.3.3-alpha.12: the folder view's model is Kestrel's own (src/fsmodel.cpp, FSModel): one top-level row,
+  the folder, with its items as children, listed by bytes on a thread in batches, changes through one shared inotify
+  instance (only the names that changed are looked at again), sorted as QFileSystemModel did (folders first, natural
+  order, mirrored when descending). The admin session sends each path as `<key>_b64` beside the text (and a
+  symlink's target); the helper uses the bytes and refuses a NUL in them. A drag out of a folder view carries the
+  bytes in its URLs and a drop onto one reads them byte for byte. Left: other drop targets (the sidebar, the window)
+  still use QUrl::toLocalFile(), and the location bar's completer is still Qt's QFileSystemModel: both give such a
+  name with U+FFFD, which enc() finds when it's the only one in its folder that reads that way.
+
+- [x] **Verifying checksums stops when the Kestrel window that started it is closed.** It should be like any other
+  job: it carries on in the Jobs window after its window has gone, and its result is still there to see.
+  - Why: the Verify window (VerifyDialog, src/hashcheck.cpp) runs the check as one job per file, starting the next
+    when one finishes, and it's that window that keeps the list and moves on. It belongs to the Kestrel window it was
+    opened from, so closing that window deletes it, and its destructor (`stop()`) cancels the job that's running and
+    nothing starts the rest.
+  - Fix: one job for the whole checksum file (every entry, in order), not tied to any window (queue_job with
+    outlives_parent, as other jobs are), with each file's result in its log and its list of failures. The Verify
+    window then only shows that job's progress and results while it's open; closing it or its Kestrel window leaves
+    the job running.
+  Done in 0.3.3-alpha.12: hashcheck::verify_job (one queued job, outlives_parent, steps per file, failures listed at
+  the end of its log and "done with errors"); VerifyDialog only shows its progress and results, and no longer stops it
+  when it's closed or hidden.
+
+- [x] **Check that every job runs on its own, whatever happens to the Kestrel window that started it.** Closing
+  that window (or the tool window it came from) mustn't stop a job, lose its result, or crash when it finishes. The
+  job goes on in the Jobs window, its log and failures are kept there, and it keeps Kestrel running until it ends, as
+  copies and moves already do. Found with Verify Checksums (above).
+  - Go through every `fileops::queue_job` / `run_job` / `run_task` / `start_ops` call: what it's parented to, whether
+    its `on_done` needs that window (and `outlives_parent`), and whether a window drives a series of jobs itself
+    (starting the next as one ends), as Verify Checksums does.
+  - Windows that cancel their job when closed or deleted, so they're deliberate choices to keep or change: Find
+    Duplicates (`DupesWindow`), Disk Usage (`DiskUsageWindow`) and Compare With… (`CompareWindow`) stop their scans,
+    whose results show only in that window; Sync To… (`SyncWindow`) stops only its preview, and a sync goes on. A scan
+    that's only useful in its window may be fine to stop, but closing the Kestrel window behind it shouldn't stop it
+    while the tool window stays open.
+  - Add a check for each kind of job in the tests (close the window that started it part-way, the job still ends
+    and its result is in the Jobs window).
+  Done in 0.3.3-alpha.12. Changed: run_job and run_task got outlives_parent too; Move to Trash, Restore, Apply Sort to
+  Subfolders, Undo, Delete Thumbnails, making thumbnails (MainWindow's thumbnail job), Write Tape Index, Start Admin
+  Session and the admin retry now finish what they do after the job (undo entries, settings, caches, messages) also
+  when their window has gone. Find Duplicates, Disk Usage, Compare With… and Sync To… have no parent now (they stay
+  open when their Kestrel window closes; closing the tool window itself still stops its scan, by choice; a sync
+  starts also without its Kestrel window). Mount Image's Mounter has no parent (it drove a series of tasks and was
+  deleted with its window part-way, leaving a loop device set up), its tasks deliver to it with outlives_parent and
+  its questions have no parent. Left as they are: on_done callbacks that only tell their window (a status-bar
+  message, selecting what was made, a result shown in a window that has gone): the job's log in the Jobs window has
+  the result; Extract / Test (say_one/say_all) show their summary only while the window is open. Tests (`jobs`):
+  Verify, the four tool windows, Trash, Apply Sort to Subfolders; not tested: Mount Image (needs udisks and a loop
+  device), the admin retry (pkexec), Delete Thumbnails, Write Tape Index.
 
 - [x] **Keep extended attributes and ACLs when copying (opt-in).** A copy now keeps only the file's times and permissions
   (`futimens` / `fchmod` in src/fileops.cpp), so it silently drops its extended attributes: the address a browser

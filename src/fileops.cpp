@@ -720,10 +720,11 @@ static void tell_errors(Task *t, QWidget *parent, const QString &title)
     t->keeps_running = std::make_unique<QEventLoopLocker>();
 }
 
-Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, bool cancellable, bool quiet)
+Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done, bool cancellable, bool quiet,
+              bool outlives_parent)
 {
     auto *t = new Task(title, std::move(fn), cancellable);
-    QObject *ctx = parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
+    QObject *ctx = parent && !outlives_parent ? static_cast<QObject *>(parent) : static_cast<QObject *>(t);
     if (on_done)
         QObject::connect(t, &Task::result, ctx, [on_done](const QVariant &res) { on_done(res); });
     if (!quiet) {
@@ -762,9 +763,10 @@ Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths,
     return t;
 }
 
-Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done, bool quiet)
+Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done, bool quiet,
+               bool outlives_parent)
 {
-    return run_job(parent, title, [fn](Task *) { return fn(); }, std::move(on_done), false, quiet);
+    return run_job(parent, title, [fn](Task *) { return fn(); }, std::move(on_done), false, quiet, outlives_parent);
 }
 
 // ---------------------------------------------------------------- copy / move / delete

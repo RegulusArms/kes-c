@@ -680,7 +680,8 @@ static Node *node_of(QTreeWidgetItem *it)
     return it ? reinterpret_cast<Node *>(it->data(0, NodeRole).value<quintptr>()) : nullptr;
 }
 
-DiskUsageWindow::DiskUsageWindow(MainWindow *win, const QString &root_) : QDialog(win), win(win), root(root_)
+// A window of its own (no parent): closing the Kestrel window it came from doesn't close it or stop its count
+DiskUsageWindow::DiskUsageWindow(MainWindow *win, const QString &root_) : QDialog(nullptr), win(win), root(root_)
 {
     QString name = basename(root).isEmpty() ? root : basename(root);
     setWindowTitle(tx("Disk Usage — %1").arg(name));

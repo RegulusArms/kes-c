@@ -4,7 +4,30 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.11
+## 0.3.3-alpha.12
+
+- **Fixed: Verify Checksums stopped when the Kestrel window it was opened from was closed**, and closing the Verify
+  window stopped it too. The whole checksum file is now checked as one job in the Jobs window, which goes on whichever
+  window closes: its log has each file's result and lists the files that didn't pass at its end, and it ends "done
+  with errors" when any didn't.
+- **Fixed: closing a Kestrel window could undo what its jobs did after they ended.** A Move to Trash still running
+  when its window closed couldn't be undone afterwards; Apply Sort to Subfolders left the subfolders unsorted; Delete
+  Thumbnails, making thumbnails anew and Write Tape Index didn't finish their work or report their errors; a retry
+  as administrator didn't say what failed. These now finish as if the window were still open.
+- **Fixed: closing the Kestrel window behind Find Duplicates, Disk Usage, Compare With… or Sync To… closed the tool
+  window too and stopped its scan.** They're now windows of their own: they stay open, their scans and syncs go on,
+  and a sync can still be started from them.
+- **Fixed: a folder whose name isn't valid UTF-8 showed empty.** Old archives and other systems leave names in
+  Latin-1 or DOS encodings; Kestrel's own file code has kept them byte for byte since 0.3.3-alpha.1, but the folder
+  view used Qt's folder model, which reads names as text and couldn't open such a folder. The folder view now has a
+  model of Kestrel's own that lists by the names' bytes, so these folders open and list like any other, and changes
+  in them show up. A stray byte in a name is shown as �.
+- **Fixed: Retry as Administrator failed on a name that isn't valid UTF-8.** The admin session now sends each path as
+  its exact bytes, so renaming, deleting, copying or linking such a file as administrator works.
+- **Fixed: closing a Kestrel window while Mount Image was setting an image up** could leave it attached as a loop
+  device, never mounted or detached. Mount Image now carries on to the end (its questions are windows of their own).
+
+## 0.3.3-alpha.11 (2026-11-03)
 
 - **Fixed: cancelling a RAM disk's save while a file was being copied left a hidden part file** (`.kes-….part`) in
   the folder on disk. It's now removed, and the saved file stays as it was.

@@ -269,7 +269,7 @@ QString hash_file(const QString &path, const QString &algo, const std::function<
     return hash_files(path, {algo}, progress, check).first();
 }
 
-Result verify(const Entry &e, Task *task)
+Result verify(const Entry &e, Task *task, qint64 before, qint64 total)
 {
     if (!lexists(e.path)) {
         if (task)
@@ -279,10 +279,11 @@ Result verify(const Entry &e, Task *task)
     try {
         QString actual = hash_file(
             e.path, e.algo,
-            [task, &e](qint64 done, qint64 size) {
+            [task, &e, before, total](qint64 done, qint64 size) {
                 if (task && task->due())
-                    task->report(done, size, tx("Verifying %1 · %2 of %3 · %4")
-                                                 .arg(e.name, human_size(done), human_size(size), task->speed(done)));
+                    task->report(before + done, total > 0 ? total : size,
+                                 tx("Verifying %1 · %2 of %3 · %4")
+                                     .arg(e.name, human_size(done), human_size(size), task->speed(before + done)));
             },
             [task]() {
                 if (task)
@@ -298,6 +299,103 @@ Result verify(const Entry &e, Task *task)
             task->log(tx("Couldn't be read: %1: %2").arg(e.path, QString::fromLocal8Bit(strerror(err.code))));
         return {"error", {}, QString::fromLocal8Bit(strerror(err.code))};
     }
+}
+
+namespace {
+
+struct Counts {
+    int ok = 0, failed = 0, missing = 0, errors = 0, checked = 0;
+    QStringList parts;   // "1 doesn't match", "2 missing", "3 OK"
+};
+
+Counts count_results(const QList<Result> &results)
+{
+    Counts c;
+    for (const Result &r : results) {
+        c.checked += !r.status.isEmpty();
+        c.ok += r.status == "ok";
+        c.failed += r.status == "failed";
+        c.missing += r.status == "missing";
+        c.errors += r.status == "error";
+    }
+    if (c.failed)
+        c.parts << txn("%Ln doesn't match", c.failed);   // (English: "1 doesn't match", "2 don't match")
+    if (c.missing)
+        c.parts << txn("%Ln missing", c.missing);
+    if (c.errors)
+        c.parts << txn("%Ln couldn't be read", c.errors);
+    if (c.ok)
+        c.parts << txn("%Ln OK", c.ok);
+    return c;
+}
+
+}   // namespace
+
+Task *verify_job(QWidget *parent, const QString &path, const QList<Entry> &entries, std::shared_ptr<VerifyState> state,
+                 std::function<void(const QVariant &)> on_done)
+{
+    if (!state)
+        state = std::make_shared<VerifyState>();
+    {
+        QMutexLocker lock(&state->mtx);
+        state->results = QList<Result>(entries.size());
+    }
+    QStringList paths, steps;
+    for (const Entry &e : entries) {
+        paths << e.path;
+        steps << e.name;
+    }
+    paths.removeDuplicates();
+    auto work = [entries, state](Task *t) -> QVariant {
+        QList<qint64> sizes;   // for the progress over all of them (read with the checksum file, or here)
+        qint64 total = 0, before = 0;
+        for (const Entry &e : entries) {
+            struct stat st;
+            sizes << (e.size >= 0 ? e.size : stat_(e.path, st) ? qint64(st.st_size) : 0);
+            total += sizes.last();
+        }
+        QList<Result> results(entries.size());
+        for (int i = 0; i < entries.size(); ++i) {
+            t->check();
+            t->step = i;
+            const Entry &e = entries[i];
+            Result r;
+            try {
+                r = verify(e, t, before, total);
+            } catch (const Cancelled &) {
+                throw;
+            } catch (const std::exception &err) {   // (an unexpected one: this file's result, the others still checked)
+                r = {"error", {}, QString::fromStdString(err.what())};
+                t->log(tx("Couldn't be read: %1: %2").arg(e.path, r.error));
+            }
+            results[i] = r;
+            {
+                QMutexLocker lock(&state->mtx);
+                state->results[i] = r;
+            }
+            before += sizes[i];
+            t->report(before, total, tx("Checked %1 of %2: %3").arg(group_digits(i + 1), group_digits(entries.size()), e.name));
+        }
+        Counts c = count_results(results);
+        t->log(txn("Checked %Ln file(s): %1.", entries.size()).arg(c.parts.join(", ")));
+        if (c.ok < entries.size()) {
+            t->had_errors = true;
+            t->log(tx("These didn't pass:"));
+            for (int i = 0; i < entries.size(); ++i) {
+                const Result &r = results[i];
+                if (r.status == "failed")
+                    t->log(tx("  ✘ Doesn't match: %1").arg(entries[i].path));
+                else if (r.status == "missing")
+                    t->log(tx("  ✘ Missing: %1").arg(entries[i].path));
+                else if (r.status == "error")
+                    t->log(tx("  ✘ Couldn't be read: %1: %2").arg(entries[i].path, r.error));
+            }
+        }
+        return QVariant(true);
+    };
+    return fileops::queue_job(parent, tx("Verifying checksums in %1").arg(basename(path)), paths, work,
+                              std::move(on_done), true, entries.size() > 1 ? steps : QStringList(), false,
+                              {tx("Checking the files listed in %1").arg(path)}, true);
 }
 
 // ---------------------------------------------------------------- the dialog
@@ -332,112 +430,82 @@ VerifyDialog::VerifyDialog(QWidget *parent, const QString &path, const QList<Ent
     status->setWordWrap(true);
     status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     lay->addWidget(status);
+    auto *note = new QLabel(tx("Closing this window doesn't stop the check: it goes on in the Jobs window."));
+    note->setWordWrap(true);
+    note->setEnabled(false);
+    lay->addWidget(note);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
     again = bb->addButton(tx("Verify Again"), QDialogButtonBox::ActionRole);
     stop_btn = bb->addButton(tx("Stop"), QDialogButtonBox::ActionRole);
     connect(again, &QPushButton::clicked, this, &VerifyDialog::start);
     connect(stop_btn, &QPushButton::clicked, this, [this]() {
-        stop();
-        summary();
+        if (task)
+            task->cancel();   // (its on_done says where it stopped)
     });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     lay->addWidget(bb);
     start();
 }
 
-VerifyDialog::~VerifyDialog() { stop(); }
-
-void VerifyDialog::hideEvent(QHideEvent *ev)
-{
-    stop();   // closed: nothing more to read
-    QDialog::hideEvent(ev);
-}
-
 void VerifyDialog::start()
 {
-    stop();
+    if (task)   // (Verify Again is off while it runs)
+        return;
+    finished = false;
+    state = std::make_shared<VerifyState>();
     results = QList<Result>(entries.size());
-    sizes.clear();
-    total = before = 0;
-    for (const Entry &e : entries) {   // read in the background with the checksum file (a busy tape answers late)
-        struct stat st;
-        sizes << (e.size >= 0                                         ? e.size
-                  : drives::slow_kind(e.path) != drives::Slow::None   ? 0
-                  : stat_(e.path, st)                                 ? qint64(st.st_size)
-                                                                      : 0);
-        total += sizes.last();
-    }
     for (int i = 0; i < entries.size(); i++)
         show_row(i);
-    next = 0;
     bar->setValue(0);
-    step();
-}
-
-void VerifyDialog::step()
-{
     again->setEnabled(false);
     stop_btn->setEnabled(true);
-    if (next >= entries.size()) {
-        summary();
-        return;
-    }
-    int i = next, g = gen;
-    QTreeWidgetItem *it = tree->topLevelItem(i);
-    it->setText(2, tx("Checking…"));
-    tree->scrollToItem(it);
     status->setStyleSheet(QString());
-    status->setText(tx("Checking %1 of %2: %3").arg(QString::number(i + 1), QString::number(entries.size()),
-                                                          entries[i].name));
-    Entry e = entries[i];
-    // no parent: closing the dialog mustn't destroy a thread that is still reading. The result comes through
-    // on_done, not a connection made afterwards, which a quick file could finish before.
+    status->setText(tx("Waiting for the drive…"));
     QPointer<VerifyDialog> self(this);
-    task = fileops::queue_job(
-        nullptr, tx("Verifying %1").arg(e.name), {e.path},
-        [e](Task *t) -> QVariant {
-            try {
-                Result r = verify(e, t);
-                return QVariantList{r.status, r.actual, r.error};
-            } catch (const Cancelled &) {
-                throw;
-            } catch (const std::exception &err) {   // as a result: run_job connects on_done before the thread starts
-                return QVariantList{"error", "", QString::fromStdString(err.what())};
-            }
-        },
-        [self, g](const QVariant &res) {
-            if (self && g == self->gen)
-                self->on_result(res);
-        },
-        true, {}, true);
-    connect(task, &Task::progress, this, [this, g, i](double f, const QString &) {
-        if (g != gen)
+    std::shared_ptr<VerifyState> st = state;
+    // the job doesn't need this window: it goes on when it closes, and the result comes here only while it's open
+    // (through on_done, not a connection made afterwards, which a quick check could finish before)
+    task = verify_job(this, path, entries, st, [self, st](const QVariant &res) {
+        if (self && self->state == st)
+            self->on_done(res);
+    });
+    connect(task, &Task::progress, this, [this, st](double f, const QString &text) {
+        if (st != state)
             return;
-        qint64 here = before + qint64(std::max(f, 0.0) * sizes[i]);
-        bar->setValue(total ? int(1000 * here / total) : 1000 * i / entries.size());
+        if (f >= 0)
+            bar->setValue(int(f * 1000));
+        if (!text.isEmpty())
+            status->setText(text);
+        update_rows();
     });
 }
 
-void VerifyDialog::on_result(const QVariant &res)
+void VerifyDialog::update_rows()
 {
-    task = nullptr;
-    if (!res.isValid())   // stopped
-        return;
-    QVariantList r = res.toList();
-    results[next] = {r.value(0).toString(), r.value(1).toString(), r.value(2).toString()};
-    show_row(next);
-    before += sizes[next];
-    next++;
-    bar->setValue(total ? int(1000 * before / total) : 1000 * next / entries.size());
-    step();
+    QList<Result> now;
+    {
+        QMutexLocker lock(&state->mtx);
+        now = state->results;
+    }
+    QTreeWidgetItem *last = nullptr;
+    for (int i = 0; i < std::min(now.size(), results.size()); ++i)
+        if (now[i].status != results[i].status) {
+            results[i] = now[i];
+            show_row(i);
+            last = tree->topLevelItem(i);
+        }
+    if (last)
+        tree->scrollToItem(last);
 }
 
-void VerifyDialog::stop()
+void VerifyDialog::on_done(const QVariant &res)
 {
-    gen++;   // results still on their way are for the old run
-    if (task)
-        task->cancel();
     task = nullptr;
+    update_rows();
+    finished = res.isValid();
+    if (finished)
+        bar->setValue(1000);
+    summary();
 }
 
 void VerifyDialog::show_row(int i)
@@ -469,33 +537,17 @@ void VerifyDialog::summary()
 {
     again->setEnabled(true);
     stop_btn->setEnabled(false);
-    int ok = 0, failed = 0, missing = 0, errors = 0, checked = 0;
-    for (const Result &r : results) {
-        checked += !r.status.isEmpty();
-        ok += r.status == "ok";
-        failed += r.status == "failed";
-        missing += r.status == "missing";
-        errors += r.status == "error";
-    }
-    QStringList parts;
-    if (failed)
-        parts << txn("%Ln doesn't match", failed);   // (English: "1 doesn't match", "2 don't match")
-    if (missing)
-        parts << txn("%Ln missing", missing);
-    if (errors)
-        parts << txn("%Ln couldn't be read", errors);
-    if (ok)
-        parts << txn("%Ln OK", ok);
+    Counts c = count_results(results);
     QString text;
-    if (checked < entries.size())
-        text = parts.isEmpty() ? txn("Stopped after %1 of %Ln file(s).", entries.size()).arg(group_digits(checked))
-                               : txn("Stopped after %1 of %Ln file(s): %2.", entries.size()).arg(group_digits(checked), parts.join(", "));
-    else if (ok == entries.size())
-        text = entries.size() == 1 ? tx("✔ The file is OK.") : txn("✔ All %Ln files are OK.", ok);
+    if (c.checked < entries.size())
+        text = c.parts.isEmpty() ? txn("Stopped after %1 of %Ln file(s).", entries.size()).arg(group_digits(c.checked))
+                                 : txn("Stopped after %1 of %Ln file(s): %2.", entries.size()).arg(group_digits(c.checked), c.parts.join(", "));
+    else if (c.ok == entries.size())
+        text = entries.size() == 1 ? tx("✔ The file is OK.") : txn("✔ All %Ln files are OK.", c.ok);
     else
-        text = tx("✘ %1.").arg(parts.join(", "));
-    bool good = checked == entries.size() && ok == entries.size();
-    bool bad = failed || missing || errors;
+        text = tx("✘ %1.").arg(c.parts.join(", "));
+    bool good = c.checked == entries.size() && c.ok == entries.size();
+    bool bad = c.failed || c.missing || c.errors;
     status->setText(text);
     status->setStyleSheet(good  ? QString("color: %1").arg(ok_color().name())
                           : bad ? QString("color: %1").arg(error_color().name())

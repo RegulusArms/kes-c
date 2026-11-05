@@ -703,6 +703,53 @@ int main(int argc, char **argv)
               "...so deleting it from a folder view deletes that file, and only it");
         boxes.clear();
 
+        // the folder view lists by the names' bytes: a folder whose own name isn't UTF-8 opens and lists what's in it
+        // (Qt's QFileSystemModel, used before, listed nothing there), and follows changes in it
+        {
+            QByteArray ob = enc(P("oddview")) + "/odd\xff dir";
+            ::mkdir(enc(P("oddview")).constData(), 0755);
+            ::mkdir(ob.constData(), 0755);
+            raw_make(ob + "/plain.txt");
+            raw_make(ob + "/caf\xe9.txt");
+            ::mkdir((ob + "/sub\xb3").constData(), 0755);
+            auto q = [](const QByteArray &b) { return dec(b.constData()); };
+            Pane *p = w->pane();
+            auto listed = [&]() {
+                QStringList out;
+                QAbstractItemModel *m = p->view()->model();
+                QModelIndex root = p->view()->rootIndex();
+                for (int r = 0; r < m->rowCount(root); ++r)
+                    out << m->index(r, 0, root).data(PathRole).toString();
+                return out;
+            };
+            auto shown_as = [&](const QString &path) {
+                QAbstractItemModel *m = p->view()->model();
+                QModelIndex root = p->view()->rootIndex();
+                for (int r = 0; r < m->rowCount(root); ++r)
+                    if (m->index(r, 0, root).data(PathRole).toString() == path)
+                        return m->index(r, 0, root).data().toString();
+                return QString();
+            };
+            p->set_path(q(ob));
+            QStringList want{q(ob + "/sub\xb3"), q(ob + "/caf\xe9.txt"), q(ob + "/plain.txt")};
+            bool got = wait_for([&]() { return listed() == want; });
+            check(got && p->path == q(ob) && shown_as(q(ob + "/caf\xe9.txt")) == QString::fromUtf8("caf\xef\xbf\xbd.txt"),
+                  "the folder view opens a folder whose name isn't UTF-8 and lists what's in it, each path byte for byte "
+                  "(folders first; a stray byte shown as U+FFFD) (" + QStringList(listed()).join(" | ") + ")");
+            raw_make(ob + "/new\xfe.txt");
+            bool came = wait_for([&]() { return listed().contains(q(ob + "/new\xfe.txt")); });
+            ::unlink((ob + "/plain.txt").constData());
+            bool went = wait_for([&]() { return !listed().contains(q(ob + "/plain.txt")); });
+            check(came && went, "...a file made in it shows up, one deleted goes");
+            raw_make(ob + "/sub\xb3/inner\xfd");
+            p->set_path(q(ob + "/sub\xb3"));
+            check(wait_for([&]() { return listed() == QStringList{q(ob + "/sub\xb3/inner\xfd")}; }),
+                  "...and its subfolder (also not UTF-8) opens too");
+            p->set_path(P("oddview"));
+            wait_for([&]() { return !listed().isEmpty(); });
+            p->set_path(HOME());
+        }
+
         // in the trash: Delete Permanently, from its question box
         auto delete_permanently = [&](const QStringList &paths, bool cancel) {
             closer.stop();

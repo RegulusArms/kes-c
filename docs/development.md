@@ -187,7 +187,8 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/windiag.cpp` | Window diagnostics: each window's size, limits, state and recent changes (the Tower window's Windows tab) |
 | `src/towerwin.cpp` | The Tower window (developer tools, `kes --tower-monitor`): what the tower is doing, live |
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
-| `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
+| `src/widgets.cpp` | Grid delegate, path bar, sidebar, info panel, search |
+| `src/fsmodel.cpp` | The folder views' model: lists a folder by its names' bytes on a thread (so names that aren't valid UTF-8 work), follows changes through inotify, sorts and filters as the views need |
 | `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
 | `src/viewer.cpp` | Image viewer: decoding ahead at screen size, zoom, the filmstrip, the info panel, compare, quick actions, dragging an image out and Ctrl+C |
 | `src/imgedit.cpp` | Saving the viewer's changes to image files: rotations through the orientation tag, Straighten, crop and resize; turning files from the menu (Rotate ▸: jpegtran, lossless formats); keeping metadata in an image made from another |
@@ -202,7 +203,7 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/chooser.cpp` | The system's file chooser: the portal backend (`kes --file-chooser`) and the Save/Open bar of chooser windows |
 | `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`), on KDE Plasma on Wayland through a KWin script loaded for each drop |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
-| `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
+| `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations (paths come as their bytes, base64, beside the JSON text, so names that aren't valid UTF-8 survive) |
 | `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
 | `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark |
 | `src/links.cpp` | Making and changing links as a batch: the checks on each link to make or change, and the job that does them all (failure-atomic, undone as one step) |

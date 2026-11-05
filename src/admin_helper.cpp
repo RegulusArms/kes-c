@@ -331,10 +331,26 @@ static uid_t session_uid()
     return uid >= 0 && end && *end == 0 ? uid_t(uid) : getuid();
 }
 
+// A string argument's bytes: "<key>_b64" (base64) where Kestrel sent it, which keeps a name that isn't valid UTF-8 as
+// it is; else the text (an older Kestrel's request)
+static std::string bytes_arg(const QJsonObject &req, const char *key)
+{
+    QJsonValue b64 = req.value(QString::fromLatin1(key) + "_b64");
+    if (b64.isString()) {
+        auto r = QByteArray::fromBase64Encoding(b64.toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
+        if (!r)
+            throw Failure(std::string("not base64: ") + key + "_b64");
+        if (r.decoded.contains('\0'))   // (a path or name never holds one: it would cut the name short)
+            throw Failure(std::string("a NUL byte in ") + key);
+        return r.decoded.toStdString();
+    }
+    QJsonValue v = req.value(key);
+    return v.isString() ? v.toString().toStdString() : std::string();
+}
+
 static std::string path_arg(const QJsonObject &req, const char *key)
 {
-    QJsonValue v = req.value(key);
-    std::string p = v.isString() ? v.toString().toStdString() : std::string();
+    std::string p = bytes_arg(req, key);
     if (p.empty() || p[0] != '/')
         throw Failure("not an absolute path: " + p);
     return p;
@@ -1170,7 +1186,7 @@ static void handle(const QJsonObject &req, QJsonObject &reply)
             throw;
         }
     } else if (op == "symlink") {
-        std::string target = req.value("target").toString().toStdString();
+        std::string target = bytes_arg(req, "target");
         const Walk &link = w.at("link");
         if (symlinkat(target.c_str(), link.dir.get(), link.name.c_str()) != 0)
             fail_errno();

@@ -890,7 +890,8 @@ int main(int argc, char **argv)
             told_copy = copy_only && paths == QStringList{pic} && target == into;
             w->handle_drop(paths, target, copy_only);
         };
-        folder_model.setRootPath(vdir);
+        folder_model.setRootPath(dirname(into));   // (the model knows the folder it shows and its items)
+        wait_for([&]() { return folder_model.index(into).isValid(); });
         folder_model.dropMimeData(drop, Qt::CopyAction, -1, -1, folder_model.index(into));
         delete drop;
         check(wait_for([&]() { return lexists(join(into, "drag.jpg")); }) && lexists(pic) && calls == 1 && told_copy,

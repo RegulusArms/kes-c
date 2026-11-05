@@ -3,8 +3,8 @@
 
 #include "overview.h"
 #include "search.h"
+#include "fsmodel.h"
 
-#include <QAbstractFileIconProvider>
 #include <QDate>
 #include <QFileSystemModel>
 #include <QFormLayout>
@@ -42,22 +42,6 @@ enum Kind { KIND_DIR = 1, KIND_LINK = 2 };
 
 // ---------------------------------------------------------------- models
 
-// Type/icon lookup without touching the disk.
-//
-// The default provider sniffs file contents (opens every file) to name its type, and QFileSystemModel calls it on
-// the UI thread - thousands of opens on a slow disk freezes the window. Icons are drawn by FSModel::data(), so
-// return none here.
-class FastIconProvider : public QAbstractFileIconProvider {
-public:
-    QIcon icon(IconType) const override { return QIcon(); }
-    QIcon icon(const QFileInfo &) const override { return QIcon(); }
-    QString type(const QFileInfo &fi) const override;
-
-private:
-    mutable QHash<QString, QString> types;
-    mutable QMutex mutex;
-};
-
 // The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
 // drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
 // over any of its windows, following the drag events Qt delivers to them (watched on the whole application). Made for
@@ -76,29 +60,7 @@ private:
     QPointer<QLabel> label;
 };
 
-// QFileSystemModel that serves thumbnails and folder previews.
-class FSModel : public QFileSystemModel {
-    Q_OBJECT
-public:
-    explicit FSModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
-                      const QModelIndex &parent) override;
-    QStringList mimeTypes() const override;   // files, and items dragged out of Open as Archive (archive::MEMBERS_MIME)
-
-    int thumb_size = 128;
-    bool folder_previews = true;
-    std::function<void(const QStringList &, const QString &, bool)> drop_handler;   // (paths, folder, copy only)
-    // items dragged out of Open as Archive, dropped into target (ArchiveWindow::drop_members)
-    std::function<void(const QMimeData *, const QString &)> members_handler;
-
-private:
-    QPixmap thumb(const QModelIndex &index) const;
-    QIcon plain_icon(const QModelIndex &index) const;
-    void thumb_ready(const QString &path);
-    ThumbnailManager *thumbs;
-    mutable QHash<QString, QIcon> suffix_icons;
-};
+// FSModel, the views' folder model: fsmodel.h
 
 // Between FSModel and the views: keeps the folder model's own order, or with "Pinned & Starred First" on puts the
 // pinned and starred items first, each group still in that order. The views' sort() goes on to the folder model.

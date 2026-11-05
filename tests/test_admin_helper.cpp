@@ -513,6 +513,37 @@ int main(int argc, char **argv)
               whole.value("path").toString() == join(victim, "keep") && whole.value("mode").toInt() == 0600,
           "Kestrel resolves the user's own symlinked folders first (chmod: the whole path; a link itself otherwise)");
 
+    // -- names that aren't valid UTF-8 go through as their bytes (base64 beside the text), not as lossy JSON text
+    {
+        QByteArray dir = util::enc(W) + "/odd\xff dir", file = dir + "/f\xfe.txt";
+        ::mkdir(dir.constData(), 0755);
+        write_text(util::dec(file.constData()), "x");
+        QString file_q = util::dec(file.constData());
+        auto send = [&](const QString &op, const QVariantMap &args) {
+            QJsonObject req = QJsonObject::fromVariantMap(admin::resolve_paths(op, args));
+            req["op"] = op;
+            return h.call(req);
+        };
+        auto q = [](const QByteArray &bytes) { return util::dec(bytes.constData()); };
+        QByteArray moved = dir + "/g\xfd.txt";
+        QJsonObject renamed = send("rename", {{"src", file_q}, {"dst", q(moved)}});
+        QJsonObject made = send("mkdir", {{"path", q(dir + "/sub\xfc")}});
+        QJsonObject linked = send("symlink", {{"link", q(dir + "/ln")}, {"target", q("t\xfb")}});
+        char target[64] = {};
+        ssize_t tn = ::readlink((dir + "/ln").constData(), target, sizeof target - 1);
+        struct stat st;
+        check(ok(renamed) && ::lstat(moved.constData(), &st) == 0 && ::lstat(file.constData(), &st) != 0 && ok(made) &&
+                  ::lstat((dir + "/sub\xfc").constData(), &st) == 0 && S_ISDIR(st.st_mode) && ok(linked) &&
+                  QByteArray(target, int(std::max<ssize_t>(tn, 0))) == "t\xfb",
+              "names that aren't valid UTF-8 (a folder, a file, a symlink's target) reach the helper byte for byte: "
+              "rename, mkdir and symlink work on them (" + renamed.value("error").toString() + ")");
+        QJsonObject as_text{{"op", "delete"}, {"path", q(moved)}};
+        check(!ok(h.call(as_text)) && ::lstat(moved.constData(), &st) == 0,
+              "...sent only as JSON text, such a name doesn't survive (so the bytes are needed)");
+        QJsonObject nul{{"op", "mkdir"}, {"path", "/x"}, {"path_b64", QString::fromLatin1(QByteArray("/tmp/a\0b", 8).toBase64())}};
+        check(!ok(h.call(nul)), "...a path with a NUL byte in it is refused");
+    }
+
     // -- a folder swapped for a symlink while a delete runs: renameat2(RENAME_EXCHANGE) trades a folder in the tree
     // for a symlink to the victim (kept outside the tree) and back, in one step each, so the path always exists
     // (a race: the old helper loses it in some rounds, not all, so rounds run for a few seconds)

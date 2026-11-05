@@ -681,8 +681,7 @@ FSModel *Pane::make_model()
     if (win->show_hidden)
         f |= QDir::Hidden;
     m->setFilter(f);
-    m->setNameFilterDisables(false);
-    connect(m, &QFileSystemModel::directoryLoaded, this, &Pane::dir_loaded);
+    connect(m, &FSModel::directoryLoaded, this, &Pane::dir_loaded);
     connect(m, &QAbstractItemModel::rowsInserted, this, &Pane::update_empty);
     connect(m, &QAbstractItemModel::rowsRemoved, this, &Pane::update_empty);
     m->thumb_size = grid_size;

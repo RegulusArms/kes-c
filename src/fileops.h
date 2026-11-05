@@ -236,9 +236,10 @@ using Done = std::function<void(const QVariant &)>;
 QString state_label(const QString &state);
 
 // Run fn(task) on a thread, shown in the status bar unless quiet. on_done(result) runs on the UI thread (also
-// after a cancel, with an invalid QVariant) while `parent` exists. Errors are shown in a message box unless quiet.
+// after a cancel, with an invalid QVariant) while `parent` exists, or always with outlives_parent (it must then not
+// need parent). Errors are shown in a message box unless quiet.
 Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done = nullptr, bool cancellable = true,
-              bool quiet = false);
+              bool quiet = false, bool outlives_parent = false);
 // The same for a job that reads or writes drives: it waits in the job queue (jobs.h) for lanes on the drives of
 // `paths` before its thread starts, so it doesn't compete with other jobs on them (in any Kestrel). `steps`: what it's
 // going to do, listed in the Jobs window (it sets task->step as it goes).
@@ -248,9 +249,10 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done =
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done = nullptr,
                 bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false,
                 const QStringList &intro = QStringList(), bool outlives_parent = false);
-// Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet.
+// Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet. outlives_parent: as
+// run_job's.
 Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done = nullptr,
-               bool quiet = false);
+               bool quiet = false, bool outlives_parent = false);
 
 // op is "copy", "move", "merge_copy", "merge_move" or "delete"
 struct Job {

@@ -459,7 +459,8 @@ static QString side_text(bool there, bool dir, qint64 size, qint64 mtime)
 
 // ---------------------------------------------------------------- Compare With…
 
-CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString &right) : QDialog(win), win(win)
+// A window of its own (no parent): closing the Kestrel window it came from doesn't close it or stop its comparison
+CompareWindow::CompareWindow(MainWindow *win, const QString &left, const QString &right) : QDialog(nullptr), win(win)
 {
     setWindowTitle(tx("Compare Folders"));
     setAttribute(Qt::WA_DeleteOnClose);
@@ -751,7 +752,8 @@ void CompareWindow::trash_side(bool right)
 
 // ---------------------------------------------------------------- Sync To…
 
-SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &dest) : QDialog(win), win(win)
+// A window of its own (no parent): closing the Kestrel window it came from doesn't close it or stop its preview
+SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &dest) : QDialog(nullptr), win(win)
 {
     setWindowTitle(tx("Sync Folders"));
     setAttribute(Qt::WA_DeleteOnClose);
@@ -906,13 +908,13 @@ SyncWindow::SyncWindow(MainWindow *win, const QString &source, const QString &de
 
 SyncWindow::~SyncWindow()
 {
-    if (task && task->title.startsWith("Comparing"))   // a preview isn't needed any more; a sync goes on
+    if (task && previewing)   // a preview isn't needed any more; a sync goes on
         task->cancel();
 }
 
 void SyncWindow::closeEvent(QCloseEvent *ev)
 {
-    if (task && task->title.startsWith("Comparing"))
+    if (task && previewing)
         task->cancel();
     QDialog::closeEvent(ev);
 }
@@ -1056,6 +1058,7 @@ void SyncWindow::preview(bool then_run)
     auto found = std::make_shared<QList<Item>>();
     QPointer<SyncWindow> self(this);
     QWidget *parent = win ? static_cast<QWidget *>(win) : this;
+    previewing = true;
     task = fileops::queue_job(
         parent, tx("Comparing %1 and %2").arg(basename(src), basename(dst)), {src, dst},
         [src, dst, found](Task *t) {
@@ -1066,6 +1069,7 @@ void SyncWindow::preview(bool then_run)
             if (!self)
                 return;
             self->task = nullptr;
+            self->previewing = false;
             self->preview_btn->setEnabled(true);
             self->bar->hide();
             if (!res.isValid()) {
@@ -1139,8 +1143,8 @@ void SyncWindow::sync_now()
 
 void SyncWindow::start(const QString &source, const QString &dest, const QList<Step> &st, bool del, bool rsync)
 {
-    if (!win)
-        return;
+    // its Kestrel window may have closed: the sync is shown in this one's status bar then, or only in the Jobs window
+    QWidget *parent = win ? static_cast<QWidget *>(win) : this;
     QPointer<SyncWindow> self(this);
     QString title = rsync ? tx("Syncing %1 to %2 (with rsync)").arg(basename(source), basename(dest))
                           : tx("Syncing %1 to %2").arg(basename(source), basename(dest));
@@ -1162,14 +1166,14 @@ void SyncWindow::start(const QString &source, const QString &dest, const QList<S
     bar->show();
     if (rsync) {
         task = fileops::queue_job(
-            win, title, {source, dest},
+            parent, title, {source, dest},
             [source, dest, del](Task *t) {
                 run_rsync(t, source, dest, del);
                 return QVariant(true);
             },
             [after](const QVariant &) { after(); }, true, {}, false, {}, true);
     } else {
-        task = fileops::start_ops(win, jobs_for(source, dest, st), title, after);
+        task = fileops::start_ops(parent, jobs_for(source, dest, st), title, after);
     }
     if (task)
         connect(task, &Task::progress, this, [this](double f, const QString &) { bar->setValue(f < 0 ? 0 : int(f * 1000)); });

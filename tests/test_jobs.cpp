@@ -51,6 +51,24 @@ static char proc_state(qint64 pid)
 
 static QJsonObject json(const QString &s) { return QJsonDocument::fromJson(s.toUtf8()).object(); }
 
+// Closes a Kestrel window and deletes it at once, as closing it does (before a job's result can come in meanwhile)
+static void close_now(MainWindow *m)
+{
+    QPointer<MainWindow> p(m);
+    m->close();
+    delete p.data();
+}
+
+// The newest finished job with this title (an empty one if there's none)
+static FinishedTask finished_job(const QString &title)
+{
+    const QList<FinishedTask> &done = TaskBoard::instance()->finished;
+    for (int i = done.size() - 1; i >= 0; --i)
+        if (done[i].title == title)
+            return done[i];
+    return FinishedTask();
+}
+
 int main(int argc, char **argv)
 {
     int rc;
@@ -657,6 +675,165 @@ int main(int argc, char **argv)
         if (auto *b = qobject_cast<QMessageBox *>(x); b && b->isVisible())
             b->close();
     tw->close();
+
+    // ---- every kind of job goes on when the Kestrel window that started it closes part-way: it ends, its result is
+    // in the Jobs window, and what it does after (an undo entry, a setting, a tool window's results) still happens
+    {
+        jobs::set_mode("drive");
+        auto held = std::make_shared<std::atomic<bool>>(false);
+        QPointer<Task> hold;
+        auto hold_lane = [&](const QString &title) {   // the jobs started next wait on the home folder's drive
+            *held = true;
+            hold = holder(w, title, home_path("x"), held);
+            wait_for([&]() { return hold && !hold->queued; });
+        };
+        auto release = [&]() {
+            *held = false;
+            wait_for([&]() { return !hold; });
+        };
+
+        // Verify Checksums: one job for the whole checksum file, not the Verify window's (closed with its Kestrel window)
+        makedirs(home_path("vsum"), true);
+        write_text(home_path("vsum/a.txt"), "alpha\n");
+        write_text(home_path("vsum/b.txt"), "beta\n");
+        QString sha_a = hashcheck::hash_file(home_path("vsum/a.txt"), "sha256");
+        write_text(home_path("vsum/SHA256SUMS"), (sha_a + "  a.txt\n" + QString(64, '0') + "  b.txt\n" + sha_a +
+                                                  "  gone.txt\n").toUtf8());
+        hold_lane("Holding for Verify");
+        MainWindow *vw = open_window({home_path("vsum")});
+        auto *vd = new hashcheck::VerifyDialog(vw, home_path("vsum/SHA256SUMS"), hashcheck::parse(home_path("vsum/SHA256SUMS")));
+        show_free(vd);
+        QPointer<hashcheck::VerifyDialog> vdp(vd);
+        QPointer<Task> check_job = vd->job();
+        bool waiting = check_job && check_job->queued;
+        close_now(vw);
+        bool with_it = !vdp && check_job;
+        release();
+        bool ended = wait_for([&]() { return !check_job; }, 10000);
+        FinishedTask vf = finished_job("Verifying checksums in SHA256SUMS");
+        check(waiting && with_it && ended && vf.state == "done with errors" &&
+                  vf.log.contains("OK: " + home_path("vsum/a.txt")) && vf.log.contains("Doesn't match: " + home_path("vsum/b.txt")) &&
+                  vf.log.contains("Missing: " + home_path("vsum/gone.txt")) &&
+                  vf.log.contains("These didn't pass:\n  ✘ Doesn't match: " + home_path("vsum/b.txt") + "\n  ✘ Missing: " +
+                                  home_path("vsum/gone.txt")),
+              "Verify Checksums goes on when the Kestrel window it was opened from closes (and the Verify window with it): "
+              "one job checks every file listed, each one's result in its log and the ones that didn't pass at its end (" +
+                  vf.state + ")");
+        // closing the Verify window alone doesn't stop it either
+        hold_lane("Holding for Verify again");
+        vd = new hashcheck::VerifyDialog(w, home_path("vsum/SHA256SUMS"), hashcheck::parse(home_path("vsum/SHA256SUMS")));
+        show_free(vd);
+        check_job = vd->job();
+        vd->close();
+        spin(50);
+        release();
+        ended = wait_for([&]() { return !check_job; }, 10000);
+        int checks = 0;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            checks += f.title == "Verifying checksums in SHA256SUMS" && f.state == "done with errors";
+        check(ended && checks == 2, "...closing the Verify window doesn't stop it either: the check ends in the Jobs window");
+
+        // Find Duplicates, Disk Usage, Compare With…, Sync To…: windows of their own, kept when their Kestrel window
+        // closes; their scans go on and their results show there
+        makedirs(home_path("dupe"), true);
+        write_text(home_path("dupe/one.bin"), QByteArray(5000, 'd'));
+        write_text(home_path("dupe/two.bin"), QByteArray(5000, 'd'));
+        write_text(home_path("dupe/other.bin"), QByteArray(5000, 'e'));
+        hold_lane("Holding for Find Duplicates");
+        vw = open_window({HOME()});
+        dupes::open_window(vw, {home_path("dupe")});
+        QPointer<DupesWindow> dw = shown_window<DupesWindow>();
+        bool dw_waiting = dw && dw->searching();
+        close_now(vw);
+        release();
+        wait_for([&]() { return !dw || !dw->searching(); }, 10000);
+        check(dw_waiting && dw && dw->isVisible() && dw->groups.size() == 1,
+              "Find Duplicates stays open when its Kestrel window closes, and its search ends there with what it found");
+        if (dw)
+            dw->close();
+
+        makedirs(home_path("du/sub"), true);
+        write_text(home_path("du/sub/big.bin"), QByteArray(300000, 'u'));
+        hold_lane("Holding for Disk Usage");
+        vw = open_window({HOME()});
+        diskusage::open_window(vw, home_path("du"));
+        QPointer<DiskUsageWindow> uw = shown_window<DiskUsageWindow>();
+        bool uw_waiting = uw && uw->counting();
+        close_now(vw);
+        release();
+        wait_for([&]() { return !uw || !uw->counting(); }, 10000);
+        check(uw_waiting && uw && uw->isVisible() && uw->tree && uw->tree->size >= 300000,
+              "Disk Usage stays open when its Kestrel window closes, and its count ends there");
+        if (uw)
+            uw->close();
+
+        makedirs(home_path("cmp-l"), true);
+        makedirs(home_path("cmp-r"), true);
+        write_text(home_path("cmp-l/only-left.txt"), "l");
+        hold_lane("Holding for Compare");
+        vw = open_window({HOME()});
+        QPointer<CompareWindow> cw = new CompareWindow(vw, home_path("cmp-l"), home_path("cmp-r"));
+        show_free(cw);
+        cw->run();
+        bool cw_waiting = cw->running();
+        close_now(vw);
+        release();
+        wait_for([&]() { return !cw || !cw->running(); }, 10000);
+        check(cw_waiting && cw && cw->isVisible() && cw->items.size() == 1,
+              "Compare With… stays open when its Kestrel window closes, and its comparison ends there");
+        if (cw)
+            cw->close();
+
+        makedirs(home_path("sync-to"), true);
+        vw = open_window({HOME()});
+        QPointer<SyncWindow> sw = new SyncWindow(vw, home_path("cmp-l"), home_path("sync-to"));
+        show_free(sw);
+        close_now(vw);
+        bool sw_kept = sw && sw->isVisible();
+        bool synced = false;
+        if (sw) {
+            QObject::connect(sw.data(), &SyncWindow::synced, [&]() { synced = true; });
+            sw->preview(true);
+        }
+        wait_for([&]() { return synced; }, 10000);
+        check(sw_kept && synced && exists(home_path("sync-to/only-left.txt")),
+              "Sync To… stays open when its Kestrel window closes, and still previews and syncs");
+        if (sw)
+            sw->close();
+
+        // Move to Trash: what was trashed can still be undone
+        makedirs(home_path("bin-me"), true);
+        QStringList trash_these;
+        for (int i = 0; i < 3; ++i) {
+            trash_these << home_path("bin-me/t" + QString::number(i) + ".txt");
+            write_text(trash_these.last(), "t");
+        }
+        undo::record_paths("create", TX_NOOP("New Folder"), {home_path("bin-me")});
+        auto trash_jobs = []() {
+            int n = 0;
+            for (const FinishedTask &f : TaskBoard::instance()->finished)
+                n += f.title == "Moving to trash";
+            return n;
+        };
+        int trash_before = trash_jobs();
+        vw = open_window({home_path("bin-me")});
+        vw->trash_paths(trash_these);
+        close_now(vw);
+        bool trashed = wait_for([&]() { return trash_jobs() > trash_before; });
+        wait_for([&]() { return undo::label() == "Move to Trash"; }, 2000);   // (its result comes once it has ended)
+        check(trashed && !exists(trash_these.first()) && undo::label() == "Move to Trash",
+              "Move to Trash goes on when its Kestrel window closes, and can still be undone (Ctrl+Z would undo: " +
+                  undo::label() + ")");
+
+        // Sort → Apply to Subfolders: the sort is still given to them
+        makedirs(home_path("sorted/inner"), true);
+        vw = open_window({home_path("sorted")});
+        wait_for([&]() { return vw->pane()->dir() == home_path("sorted"); });
+        vw->sort_subfolders(vw->pane());
+        close_now(vw);
+        bool sorted = wait_for([&]() { return places::folder_sort(home_path("sorted/inner")).has_value(); });
+        check(sorted, "Apply Sort to Subfolders goes on when its Kestrel window closes, and the subfolders get the sort");
+    }
 
     // ---- jobs belong to Kestrel, not to a window: closing the window that started one doesn't stop it (nor ask);
     // the last window asks; with every window closed Kestrel runs on until its jobs have ended
