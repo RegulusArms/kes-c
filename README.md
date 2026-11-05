@@ -76,7 +76,7 @@ BleachBit and uninstalling.
 ## Supported systems
 
 - **Ubuntu 26.04 (GNOME):** the main platform; everything is tested here.
-- **Linux Mint 22 (Cinnamon):** supported since 0.2.0. Kestrel builds and runs there, and the [benchmark against Nemo](docs/performance.md#performance-kestrel-vs-nemo) was run there.
+- **Linux Mint 22 (Cinnamon):** supported since 0.2.0. Kestrel builds and runs there, and the [benchmark against Nemo](docs/performance.md#performance-kestrel-vs-nemo) runs in a container of Linux Mint 22.3.
 - **Ubuntu 24.04 (GNOME):** tested; Kestrel installs and runs there (from the apt repository too). It has the same base as Linux Mint 22.
 - **Kubuntu 26.04 (KDE Plasma):** supported since 0.3.2-alpha.33; Kestrel follows Plasma's look and settings (see the [install guide](docs/install.md#kubuntu-2604-kde-plasma)). Some parts are still to be tried in a full Plasma session: passwords in KWallet, network shares and phones, and drop focus on Wayland.
 

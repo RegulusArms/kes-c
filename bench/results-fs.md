@@ -47,12 +47,12 @@ Both apps are measured in the same way:
 
 | Copy 20,000 small files + 5 × 50 MB | Kestrel, its own copy (before) | Kestrel, the system's copy (now) | GNOME Files |
 |---|---|---|---|
-| Within one Btrfs drive (a clone) | 2.34 s | 1.80 s | 2.69 s |
-| Within one XFS drive (a clone) | 1.61 s | 1.60 s | 3.45 s |
-| Within one SMB share (the server copies it) | 62.69 s | 61.58 s | 108.34 s |
-| …its 5 × 50 MB alone, within one Btrfs drive (a clone) | 0.34 s | 0.006 s | 0.22 s |
-| …its 5 × 50 MB alone, within one XFS drive (a clone) | 0.086 s | 0.046 s | 0.26 s |
-| …its 5 × 50 MB alone, within one SMB share (the server copies it) | 0.45 s | 0.24 s | 0.38 s |
+| Within one Btrfs drive (a clone) | 2.45 s | 1.95 s | 3.05 s |
+| Within one XFS drive (a clone) | 1.75 s | 1.72 s | 3.75 s |
+| Within one SMB share (the server copies it) | 65.17 s | 64.52 s | 120.22 s |
+| …its 5 × 50 MB alone, within one Btrfs drive (a clone) | 0.32 s | 0.006 s | 0.22 s |
+| …its 5 × 50 MB alone, within one XFS drive (a clone) | 0.086 s | 0.046 s | 0.32 s |
+| …its 5 × 50 MB alone, within one SMB share (the server copies it) | 0.44 s | 0.22 s | 0.38 s |
 
 Kestrel compared with GNOME Files:
 

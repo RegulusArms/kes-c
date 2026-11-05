@@ -55,7 +55,7 @@ remove, reconfigure or disrupt them: they keep working as before, and you can us
 - Metadata viewing and editing (EXIF, XMP, and the prompts image generators such as Stable Diffusion save in the file)
   and checksums in Properties.
 - Phones: thumbnails from the phone's own previews, and iPhone videos copied once so they play smoothly.
-- Faster file operations in the benchmark: copying about 20× faster, moving to another drive 5.4× faster, and emptying
+- Faster file operations in the benchmark: copying about 14× faster, moving to another drive 3.4× faster, and emptying
   the trash several hundred times faster (see [Performance: Kestrel vs Nemo](performance.md#performance-kestrel-vs-nemo)).
 
 ## Compared with Dolphin (Kubuntu)
@@ -75,8 +75,8 @@ every drive). Kestrel adds:
 - One Jobs window that queues copies by drive, so two jobs never fight over one disk, with pause, reorder and each
   job's log.
 - Admin rights for just the operation that failed, offered when it fails.
-- Faster file operations on Kubuntu in the benchmark: copying about 24× faster, moving to another drive about 25×
-  faster, moving 10,000 files to the trash about 130× faster, and emptying it about 12× faster (see
+- Faster file operations on Kubuntu in the benchmark: copying about 26× faster, moving to another drive about 28×
+  faster, moving 10,000 files to the trash about 130× faster, and emptying it about 13× faster (see
   [Performance: Kestrel vs Dolphin on Kubuntu](performance.md#performance-kestrel-vs-dolphin-on-kubuntu)).
 
 Kestrel follows Plasma's look and settings there (see the [install guide](install.md#kubuntu-2604-kde-plasma)).
@@ -87,7 +87,7 @@ Kestrel follows Plasma's look and settings there (see the [install guide](instal
 - **A terminal panel** inside the window, and **tags**, which Dolphin has.
 - **On Kubuntu:** PDF thumbnails (Kestrel uses the thumbnailer programs GNOME's PDF viewers install, which Kubuntu
   doesn't have), and KDE's search index (Baloo): Kestrel uses its own content search there. Going to a small folder in
-  an open window is slower than Dolphin (0.14 s against 0.03 s).
+  an open window is slower than Dolphin (0.16 s against 0.04 s).
 
 ## Where Kestrel came from
 

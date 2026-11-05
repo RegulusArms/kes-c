@@ -177,6 +177,30 @@ def launch(app, folder):
                             start_new_session=True, preexec_fn=no_crash_report)
 
 
+def launch_window(app, args):
+    """For tests that don't time the launch: the app started with ARGS (after its command), and its first window.
+    Krusader now and then exits at once, before any window (seen in about one full run in two): it's started again,
+    up to 3 times, with its exit code and the end of what it printed noted on stderr, so the run goes on and the
+    cause is in the log. Returns (process, window)."""
+    for attempt in range(3):
+        err = tempfile.TemporaryFile()
+        p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=err,
+                             start_new_session=True, preexec_fn=no_crash_report)
+        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, f"{app}: no window")
+        ids = window_ids(p.pid)
+        if ids:
+            err.close()
+            return p, ids[0]
+        err.seek(0)
+        tail = err.read()[-800:].decode(errors="replace").strip()
+        err.close()
+        stop(p)
+        print(f"{app} exited (code {p.returncode}) before its window (attempt {attempt + 1}/3): {tail}",
+              file=sys.stderr, flush=True)
+        time.sleep(1)
+    raise RuntimeError(f"{app}: exited before its window, 3 times")
+
+
 def stop(p):
     try:
         os.killpg(p.pid, signal.SIGTERM)
@@ -384,10 +408,8 @@ def measure_navigate(app):
     """A window already open (on the small folder) taken to the folder of 10,000 files, then to a small one (100 files),
     through its location bar, as a user goes from folder to folder. Each is timed from the Return key until the window
     has stopped changing, as for the folder of 10,000 files (settle); typing the path isn't counted."""
-    p = launch(app, f"{DATA}/small")
+    p, win = launch_window(app, [f"{DATA}/small"])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         settle(win, time.monotonic(), f"{app} on the small folder", 60, quiet=1.0)
         r = {"rss_mb": None}
         for key, folder in (("s", f"{DATA}/flat"), ("small_s", f"{DATA}/windows/folder0")):
@@ -447,10 +469,8 @@ def measure_live(app):
     where the app shows one), and the CPU time the run used meanwhile (run_cpu)."""
     folder = os.path.join(home(), "incoming")
     os.makedirs(folder)
-    p = launch(app, folder)
+    p, win = launch_window(app, [folder])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         settle(win, time.monotonic(), f"{app} on an empty folder", 60, quiet=1.0)
         before = run_cpu()
         t0 = time.monotonic()
@@ -479,10 +499,8 @@ def measure_responsive(app):
     to = os.path.join(home(), "to")
     os.makedirs(to)
     dst = os.path.join(to, os.path.basename(src))
-    p = launch(app, os.path.dirname(src))
+    p, win = launch_window(app, [os.path.dirname(src)])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         time.sleep(UI_SETTLE)
         title_from = window_title(win)
         press(win, "ctrl+a")
@@ -678,10 +696,7 @@ class UiOps:
 
     def __init__(self, app, args):
         self.app = app
-        self.p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  start_new_session=True, preexec_fn=no_crash_report)
-        wait_for(lambda: window_ids(self.p.pid) or self.p.poll() is not None, 60, f"{app}: no window")
-        self.win = window_ids(self.p.pid)[0]
+        self.p, self.win = launch_window(app, args)
         time.sleep(UI_SETTLE)
 
     def keys(self, *keys):
