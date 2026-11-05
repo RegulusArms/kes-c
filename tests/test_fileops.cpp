@@ -1132,7 +1132,9 @@ int main(int argc, char **argv)
             prefs::set("metadata_wipe", "copy");
             QString copy = P("wm/gen (no metadata).png");
             w->wipe_metadata({txt, png});
-            check(wait_for([&]() { return exists(copy); }, 20000) && wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
+            // the copy is renamed into place by the job's thread; its Undo is recorded when the job ends, after that
+            check(wait_for([&]() { return exists(copy) && undo::label() == "Wipe Metadata"; }, 20000) &&
+                      wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
                       QImage(png).text("parameters") == "a prompt" && text_of(txt) == "t" && !lexists(P("wm/notes (no metadata).txt")),
                   "with \"make a copy\" (the default), Wipe Metadata… writes a copy without the metadata beside the "
                   "image, leaving the original and the files that aren't images as they were");

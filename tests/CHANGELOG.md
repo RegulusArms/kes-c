@@ -6,6 +6,14 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.13
+
+Changed:
+- `fileops`: the Wipe Metadata check waits for the job's Undo to be recorded, not only for the copy to appear,
+  before it presses Undo. The copy is renamed into place by the job's thread and Undo is recorded once the job has
+  ended, so on a fast runner Undo came first and found nothing to undo; the next check ("wipe the original") then
+  failed too, as the copy was still there (it failed on CI's 24.04 runner).
+
 ## 0.3.3-alpha.12
 
 Added:

@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.12
+## 0.3.3-alpha.13
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha13).
+
+## 0.3.3-alpha.12 (2026-11-05)
 
 - **Fixed: Verify Checksums stopped when the Kestrel window it was opened from was closed**, and closing the Verify
   window stopped it too. The whole checksum file is now checked as one job in the Jobs window, which goes on whichever
