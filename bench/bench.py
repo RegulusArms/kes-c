@@ -2,7 +2,10 @@
 """Benchmark Kestrel Explorer (C++) against GNOME Files, Nemo (on Linux Mint), Dolphin, Thunar, Krusader and PCManFM,
 whichever are installed. See bench/README.md; the results go in docs/performance.md.
 
-  bench/run.sh                      build, generate the data (first time), run everything, print the tables
+It runs only in the clean container its wrappers make (bench/container.sh: bench/run.sh for Ubuntu, mint.sh,
+kubuntu.sh, fs.sh), which holds nothing of the machine's but the source, never on the machine itself.
+
+  bench/run.sh                      build, generate the data, run everything, print the tables
   bench/run.sh --runs 5             more runs per measurement (medians are reported)
   bench/run.sh --only startup,copy  re-run only some measurements (the rest are kept from the last run)
   bench/run.sh --apps thunar        measure only these apps (the others' results are kept from the last run)
@@ -34,9 +37,12 @@ ROOT = os.path.realpath(os.path.dirname(HERE))
 DATA = os.environ.get("KESTREL_BENCH_DATA", "/tmp/kestrel-bench-data")
 CMAKE = "/usr/bin/cmake" if os.access("/usr/bin/cmake", os.X_OK) else "cmake"
 BUILD = os.environ.get("KESTREL_BUILD_DIR", "build")  # build folder name (another machine sharing these folders)
-# set by a wrapper that runs the benchmark in a container of another desktop's distribution ("Kubuntu": bench/kubuntu.sh),
-# whose report gets sections of its own ("Kestrel vs Dolphin on Kubuntu")
+# set by a wrapper that runs the benchmark in a container of another desktop's distribution ("Kubuntu": bench/kubuntu.sh,
+# "Mint": bench/mint.sh), whose report gets sections of its own ("Kestrel vs Dolphin on Kubuntu"), but for the app that
+# is only measured there ("home": Nemo on Mint, whose section is "Kestrel vs Nemo")
 PLATFORM = os.environ.get("KESTREL_BENCH_PLATFORM", "")
+# the "Test machine" line's system, from a wrapper whose image's /etc/os-release doesn't name it (Mint's says Ubuntu)
+DISTRO = os.environ.get("KESTREL_BENCH_DISTRO", "")
 # The file managers Kestrel is compared with; the ones installed are measured (GNOME Files on Ubuntu, Nemo on Linux
 # Mint, Dolphin, Thunar, Krusader and PCManFM where they're installed). File operations go through each one's D-Bus
 # file-operations service, as other apps use it: "service" starts it, "ops" is (bus name, object path, {operation:
@@ -67,7 +73,7 @@ OTHERS = {
                       (("copy", "CopyURIs"), ("move", "MoveURIs"), ("trash", "TrashURIs"), ("empty", "EmptyTrash"))}),
              "settings": [("org.nemo.preferences", "confirm-trash", "false")],   # Empty Trash would ask first
              "files": dict(NO_BLINK), "skip": {},
-             "heading": "## Performance: Kestrel vs Nemo", "intro": "the file manager it replaces", "gtk": True,
+             "heading": "## Performance: Kestrel vs Nemo", "intro": "the file manager it replaces", "gtk": True, "home": "Mint",
              "helpers": "separate helper processes", "search": "", "whole_folder": False,
              "thumbnails": False, "no_thumbs_why": "makes no thumbnails in this setup (a fresh home folder with its default "
                                                    "settings)"},
@@ -1272,7 +1278,9 @@ def machine(other):
             distro = next((ln.split("=", 1)[1].strip().strip('"') for ln in f if ln.startswith("PRETTY_NAME=")), "")
     except OSError:
         pass
-    if PLATFORM:   # the container is Ubuntu's image with the desktop's packages added
+    if DISTRO:
+        distro = DISTRO
+    elif PLATFORM:   # the container is Ubuntu's image with the desktop's packages added
         distro = (f"{distro.replace('Ubuntu', PLATFORM, 1)}, in a Docker container (Ubuntu's image with the {PLATFORM} "
                   f"packages the apps use)")
     return cpu, os.cpu_count(), version or OTHERS[other]["label"], distro
@@ -1287,11 +1295,14 @@ def section(t1, t2, summary, runs, other):
         "own copy on SMB).\n\n" + "\n".join(summary["fs_table"]) + "\n")
     cpu, threads, version, distro = machine(other)
     label = OTHERS[other]["label"]
-    heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if PLATFORM else "")
-    intro = OTHERS[other]["intro"] + (f", which it replaces on {PLATFORM}" if PLATFORM else "")
+    away = PLATFORM and OTHERS[other].get("home") != PLATFORM   # Nemo on Mint is its own section, as it was
+    heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if away else "")
+    intro = OTHERS[other]["intro"] + (f", which it replaces on {PLATFORM}" if away else "")
     run_with = f"`bench/{PLATFORM.lower()}.sh`" if PLATFORM else "`bench/run.sh`"
     kde = (" The desktop was set to KDE's, so both apps used Plasma's Qt integration and the Breeze style, as on a "
-           "Plasma desktop." if os.environ.get("XDG_CURRENT_DESKTOP") == "KDE" else "")
+           "Plasma desktop." if os.environ.get("XDG_CURRENT_DESKTOP") == "KDE" else
+           " The desktop was set to Cinnamon's, so Kestrel used Qt's GTK integration and both apps Mint's Mint-Y theme "
+           "and icons, as on Linux Mint." if os.environ.get("XDG_CURRENT_DESKTOP") == "X-Cinnamon" else "")
     bench_link = "https://github.com/RegulusArms/kes-c/tree/main/bench"
     owns = label + ("'" if label.endswith("s") else "'s")   # GNOME Files', Nemo's
     ui = OTHERS[other]["ops"] is None   # Dolphin, Krusader, PCManFM: no file-operations service, keys in its window
@@ -1426,7 +1437,7 @@ These are measured inside the app, because {features}.
 
 def write_results(sections):
     """bench/results.md: a Performance section (docs/performance.md) for each app compared with ("Kestrel vs GNOME Files", and/or
-    "Kestrel vs Nemo" from a run on Linux Mint, "Kestrel vs Dolphin on Kubuntu" from bench/kubuntu.sh), to paste into
+    "Kestrel vs Nemo" from bench/mint.sh or a run on Linux Mint, "Kestrel vs Dolphin on Kubuntu" from bench/kubuntu.sh), to paste into
     docs/performance.md."""
     path = os.path.join(HERE, "results.md")
     with open(path, "w") as f:
@@ -1482,6 +1493,9 @@ def main():
     ap.add_argument("--report", action="store_true", help="rebuild the tables from results.json without running")
     ap.add_argument("--measure", nargs=2, metavar=("APP", "TEST"), help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if os.environ.get("KESTREL_BENCH_CONTAINER") != "1":
+        sys.exit("The benchmark runs in a clean container, never on this machine itself: bench/run.sh (Ubuntu), "
+                 "bench/mint.sh, bench/kubuntu.sh or bench/fs.sh")
     if args.measure:
         print(json.dumps(measure(*args.measure)), flush=True)
         os._exit(0)

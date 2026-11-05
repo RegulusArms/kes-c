@@ -2,18 +2,31 @@
 
 ← Back to [the README](../README.md) · [Development](../docs/development.md)
 
-Compares Kestrel Explorer (this C++ version) with GNOME Files, Nemo (on Linux Mint), Dolphin (on Ubuntu, and on Kubuntu in a container: `bench/kubuntu.sh`), Thunar, Krusader and PCManFM, whichever are installed, on the same data and in the same conditions. The results are the sections of [docs/performance.md](../docs/performance.md). Each run writes them to `bench/results.md`: a "Kestrel vs …" section for each one installed, ready to paste into docs/performance.md in place of the old section (a run on Mint gives the Nemo section; the GNOME one stays as it is). docs/performance.md is never changed by the benchmark itself.
+Compares Kestrel Explorer (this C++ version) with GNOME Files, Nemo, Dolphin, Thunar, Krusader and PCManFM on the same data and in the same conditions. Every run is in a clean Docker container that holds nothing of this machine's but the project's source (see [Clean, sterile containers](#clean-sterile-containers)): the benchmark never runs on the machine itself. There are four runs, each with its own container and results:
+
+| Run | In a container of | Measures | Writes | In docs/performance.md |
+|---|---|---|---|---|
+| `bench/run.sh` | Ubuntu 26.04 | Kestrel, GNOME Files, Dolphin, Thunar, Krusader, PCManFM | `bench/results.md` | the "Kestrel vs …" sections of each (GNOME Files, Dolphin, Thunar, Krusader, PCManFM) |
+| `bench/mint.sh` | Linux Mint 22.3 | Kestrel, Nemo | `bench/results-mint.md` | "Kestrel vs Nemo" |
+| `bench/kubuntu.sh` | Kubuntu 26.04 | Kestrel, Dolphin with Plasma's integration | `bench/results-kubuntu.md` | "Kestrel vs Dolphin on Kubuntu" |
+| `bench/fs.sh` | Ubuntu 26.04, privileged | copies on Btrfs, XFS and SMB | `bench/results-fs.md` | "Copying with the system's help" |
+
+Each `.md` has sections ready to paste into [docs/performance.md](../docs/performance.md) in place of the old ones, and its `.json` the raw results; docs/performance.md (and its "At a glance" table) is never changed by the benchmark itself. Run them one at a time, on an otherwise idle machine: run side by side, they'd slow each other down. Each takes the same options:
 
 ```bash
-bench/run.sh                       # build, generate the data the first time, run everything, print the tables
-                                   # and write them to bench/results.md
+bench/run.sh                       # build the image afresh, build Kestrel and make the data in it, run everything,
+                                   # print the tables and write them to bench/results.md
 bench/run.sh --runs 5              # more runs per measurement (default 3; startup gets 2 extra)
 bench/run.sh --only startup,copy   # re-run some measurements and keep the rest from the last run
 bench/run.sh --apps thunar,pcmanfm # measure only these apps and keep the others' results from the last run
 bench/run.sh --report             # rebuild the tables (and results.md) from the last results without running anything
 ```
 
-A full run takes about 12 minutes (about 7 more with Nemo, whose Empty Trash is slow, and about 12 more with Dolphin, whose copies and Move to Trash are slow), plus about a minute and a half the first time to generate the data. The four tests in an open window (going to a folder, jumping to the end, files arriving, answering while copying) add a few minutes per app, more for one that copies slowly, since the last one lasts as long as its paste. Raw results are saved in `bench/results.json`, and the docs/performance.md sections in `bench/results.md`.
+`bench/run.sh` takes about 30–40 minutes with all six apps (12 for the tests every app gets, about 12 more for Dolphin, whose copies and Move to Trash are slow, and a few minutes per app for the four tests in an open window, more for one that copies slowly, since the last one lasts as long as its paste). Each run also builds its image (about 5 minutes), builds Kestrel and makes the data (about a minute and a half), since nothing is kept from one run to the next. The `.json` of the last run goes back in with the source, so `--only` and `--apps` can keep its other results.
+
+## On Ubuntu (Kestrel vs GNOME Files, Dolphin, Thunar, Krusader and PCManFM)
+
+`bench/run.sh` builds its image from `bench/ubuntu/Dockerfile` as `kes-bench-ubuntu`: Ubuntu 26.04's image with what a standard Ubuntu desktop (`ubuntu-desktop`) gives the apps (GNOME Files; its thumbnailers: Papers for PDFs, GStreamer's for videos, glycin's for images; the Yaru theme and icons), the other file managers with what each one recommends, as `apt install` gives them (KIO and its thumbnailers, `ktrash6`, `tumbler`…), and the packages Kestrel recommends that change what it shows (Qt's image formats, its GTK integration). The desktop is set to Ubuntu's GNOME (`XDG_CURRENT_DESKTOP=ubuntu:GNOME`), as in an Ubuntu session.
 
 ## On Kubuntu (Kestrel vs Dolphin)
 
@@ -23,7 +36,18 @@ bench/kubuntu.sh --only startup,copy   # takes run.sh's options; re-runs keep th
 bench/kubuntu.sh --report              # rebuild bench/results-kubuntu.md from the last results
 ```
 
-This runs the same benchmark in a Docker container of Kubuntu 26.04: Ubuntu 26.04's image with the parts of Kubuntu's desktop Dolphin uses (KIO and its thumbnailers for images, videos and PDFs, `ktrash6`, Plasma's Qt integration and Breeze), built from `bench/kubuntu/Dockerfile` as `kes-bench-kubuntu`. It needs only Docker on the machine. The desktop is set to KDE's (`XDG_CURRENT_DESKTOP=KDE`, `KDE_FULL_SESSION`), so both apps load Plasma's integration as on Kubuntu. The source is copied into the container without its build folders, and Kestrel is built there. The data and the throwaway homes are on a RAM disk in the container (`/tmp`), and the move between drives goes to its `/dev/shm`, so the data is made again each run (about a minute and a half). It measures Kestrel and Dolphin unless `--apps` names others. The results are copied out to `bench/results-kubuntu.json` and `bench/results-kubuntu.md`, whose section is "Kestrel vs Dolphin on Kubuntu", beside the Dolphin section of a run on Ubuntu. Each run is in a clean new container, destroyed once it's done: any left from an earlier run is destroyed first (`kes-bench-kubuntu-*`), and the image is built again from a freshly pulled Ubuntu image, with nothing cached, so no state or old package carries over (`bench/fs.sh` does the same with `kes-bench-fs-*`). A container Docker refuses to remove (the snap's AppArmor profile can) is named; `sudo snap restart docker` frees it.
+This runs the same benchmark in a Docker container of Kubuntu 26.04: Ubuntu 26.04's image with the parts of Kubuntu's desktop Dolphin uses (KIO and its thumbnailers for images, videos and PDFs, `ktrash6`, Plasma's Qt integration and Breeze), built from `bench/kubuntu/Dockerfile` as `kes-bench-kubuntu`. The desktop is set to KDE's (`XDG_CURRENT_DESKTOP=KDE`, `KDE_FULL_SESSION`), so both apps load Plasma's integration as on Kubuntu. It measures Kestrel and Dolphin unless `--apps` names others. Its section is "Kestrel vs Dolphin on Kubuntu", beside the Dolphin section of `bench/run.sh`.
+
+## On Linux Mint (Kestrel vs Nemo)
+
+```bash
+bench/mint.sh                       # build the image afresh, run Kestrel and Nemo on Mint 22.3, write bench/results-mint.md
+bench/mint.sh --release 23          # on Linux Mint 23 (Ubuntu 26.04's base) instead
+bench/mint.sh --only startup,copy   # takes run.sh's options; re-runs keep the other results from the last run
+bench/mint.sh --report              # rebuild bench/results-mint.md from the last results
+```
+
+This runs the same benchmark in a Docker container of Linux Mint, so Nemo can be measured without a Mint machine or virtual machine. The image is built from `bench/mint/Dockerfile` as `kes-bench-mint`, on Linux Mint's own image (`linuxmintd/mint22.3-amd64`, or the `--release` given: Ubuntu's base with Mint's repository, so Nemo, Cinnamon's libraries and the XApp packages are Mint's builds). On it go the parts of Mint's Cinnamon desktop that the two apps use: Nemo, the thumbnailers Mint installs (`ffmpegthumbnailer`, Xreader's for PDFs, HEIF's), Qt's GTK integration and the Mint-Y theme and icons. The desktop is set to Cinnamon's (`XDG_CURRENT_DESKTOP=X-Cinnamon`), so Kestrel loads Qt's GTK integration as on Mint. Mint's theme and icons are its gsettings defaults, which Cinnamon's settings daemon hands to every app; with no such daemon on the bare X server, the image writes them to `/etc/gtk-3.0/settings.ini` instead (Mint-Y-Aqua, Mint-Y-Sand). Mint 22.3's Qt is 6.4, as on a real Mint 22.3. It measures Kestrel and Nemo unless `--apps` names others. Mint's image keeps Ubuntu's `/etc/os-release`, so the script tells the report which Mint it was (`KESTREL_BENCH_DISTRO`). Its section is "Kestrel vs Nemo", to paste in place of the one from the Mint virtual machine.
 
 ## Copying on Btrfs, XFS and SMB
 
@@ -32,16 +56,16 @@ bench/fs.sh                 # build the image afresh, run the three copy tests, 
 bench/fs.sh --runs 5        # takes run.sh's options (--only, --apps, --report…)
 ```
 
-Kestrel lets the system copy files (Preferences → Files → Copying): a clone where the drive can share data between files, the server's own copy on a network share. These copies are measured in a privileged Docker container, built from `bench/fs/Dockerfile` as `kes-bench-fs` (Ubuntu 26.04 with GNOME Files, the Btrfs and XFS tools, Samba and the kernel SMB client's mount helper). In its RAM disk it makes a 4 GB Btrfs and a 4 GB XFS file system on loop images, and a Samba share mounted with the kernel's SMB client (SMB 3.1.1, to the same machine); all of it goes with the container. It then runs `run.sh` with `KESTREL_BENCH_BTRFS`, `KESTREL_BENCH_XFS` and `KESTREL_BENCH_SMB` naming them, which turns on three tests (`copy_btrfs`, `copy_xfs`, `copy_smb`): the copy test's 20,000 small files and 250 MB copied within the one folder, source and copy both there, then its 5 × 50 MB alone (the sources are put there once, not timed). Kestrel is timed with the setting off (its own read/write loop, as before the setting) and on; GNOME Files through its D-Bus service, as in the copy test. An app driven through its window (Dolphin, PCManFM, Krusader) isn't timed there. The three tests run in any `run.sh` given those variables (a folder on a Btrfs, XFS or ZFS drive, or a mounted SMB or NFS share), and are skipped otherwise. The results go to `bench/results-fs.json` and `bench/results-fs.md`, whose table is the "Copying with the system's help" part of docs/performance.md.
+Kestrel lets the system copy files (Preferences → Files → Copying): a clone where the drive can share data between files, the server's own copy on a network share. These copies are measured in a privileged Docker container, built from `bench/fs/Dockerfile` as `kes-bench-fs` (Ubuntu 26.04 with GNOME Files, the Btrfs and XFS tools, Samba and the kernel SMB client's mount helper). In its RAM disk it makes a 4 GB Btrfs and a 4 GB XFS file system on loop images, and a Samba share mounted with the kernel's SMB client (SMB 3.1.1, to the same machine); all of it goes with the container. It then runs the benchmark with `KESTREL_BENCH_BTRFS`, `KESTREL_BENCH_XFS` and `KESTREL_BENCH_SMB` naming them, which turns on three tests (`copy_btrfs`, `copy_xfs`, `copy_smb`): the copy test's 20,000 small files and 250 MB copied within the one folder, source and copy both there, then its 5 × 50 MB alone (the sources are put there once, not timed). Kestrel is timed with the setting off (its own read/write loop, as before the setting) and on; GNOME Files through its D-Bus service, as in the copy test. An app driven through its window (Dolphin, PCManFM, Krusader) isn't timed there. The three tests are skipped in the other runs, which don't set those variables. The results go to `bench/results-fs.json` and `bench/results-fs.md`, whose table is the "Copying with the system's help" part of docs/performance.md.
 
-## Requirements
+## Clean, sterile containers
 
-- `xvfb` and `xdotool` (`sudo apt install xvfb xdotool`);
-- `ffmpeg`, for the video test data;
-- `dbus-run-session`;
-- the build tools, since Kestrel and its benchmark harness are built Release;
-- `x11-apps`, for `xwd` (the file-list test captures the app's window);
-- `nautilus`, `nemo`, `dolphin`, `thunar`, `krusader` and/or `pcmanfm`: each one installed is measured and gets its own table. Without any, only Kestrel's own tables are made. Dolphin and Krusader also need `ktrash6` (part of KDE's KIO, installed with them) for Empty Trash; Thunar makes its thumbnails with `tumbler`, which is installed with it.
+Every run is made the same way (`bench/container.sh`, which the four scripts share), so that what's measured is the apps on a known system, and nothing of this machine:
+
+- **Clean:** any container left from an earlier run of that kind (`kes-bench-ubuntu-*`, `kes-bench-mint-*`, `kes-bench-kubuntu-*`, `kes-bench-fs-*`) is destroyed first, the image is built again from a freshly pulled base image with nothing cached (`docker build --pull --no-cache`), so no state or old package carries over, and the run's container is destroyed once it's done, failed or interrupted. A container Docker refuses to remove (the snap's AppArmor profile can) is named; `sudo snap restart docker` frees it.
+- **Sterile:** nothing of the machine is mounted in the container. The source goes in as a tar on its standard input: only the files git has (tracked, and new ones not yet added, which are named as they're sent), never files git ignores (local notes and settings, build folders, logs) and not `.git` (its history, names and emails), with no owner names, extended attributes or ACLs. The one other file sent is the last results' `.json` (measurements only), so `--only` and `--apps` can keep the others. The container gets no variables but the ones its script sets, and no network (`--network none`; loopback still works, for the SMB share), so nothing outside reaches or slows it. Kestrel is built inside, Release, and the data made there. The container may make the sandboxes desktop apps put their helpers in, as an Ubuntu session allows: GNOME's thumbnailers and glycin's image loaders run under `bwrap`, which makes user namespaces and mounts its own `/proc`. So Docker's seccomp profile and its masking of `/proc` are off (`--security-opt seccomp=unconfined,systempaths=unconfined`), and AppArmor confines it with the benchmark's own profile, `bench/apparmor/kes-bench`, instead of Docker's (which denies mounts). That profile allows everything inside the container; what it's for is that every program there stays in it, so this machine's own AppArmor profiles for programs of the same name (Papers, Evince, Nautilus, glycin, bwrap…) never attach to the container's copies. Unconfined, they would (and Papers' then can't even start there), so the results would depend on this machine's AppArmor setup. The scripts load it with `sudo` into `/etc/apparmor.d/kes-bench` the first time, and again whenever `bench/apparmor/kes-bench` changes (`sudo apparmor_parser -R /etc/apparmor.d/kes-bench`, then deleting the file, takes it away); on a machine without AppArmor it isn't needed. Without these, GNOME Files makes no thumbnails in a container. They change what the container may do inside itself, not what it can see.
+- **The benchmark itself** (`bench.py`) refuses to run outside such a container (it checks `KESTREL_BENCH_CONTAINER`, which only they set).
+- **Requirements:** only Docker on the machine; every other tool is in the images.
 
 ## How it's measured
 
@@ -50,9 +74,9 @@ Kestrel lets the system copy files (Preferences → Files → Copying): a clone 
 - **Headless display:** every app runs on an Xvfb X server with software rendering: Qt's raster engine, and GTK with `GSK_RENDERER=cairo`. No windows appear on your screen.
 - **Fresh home folder:** each run gets a new one, so the thumbnail cache is empty and settings are defaults.
 - **Private session bus:** only the services every GNOME desktop runs can be started on it: settings (dconf) and the virtual file system (gvfs, which provides `trash:///`, the drive list and file metadata). Both are started before each measurement, because on a desktop they are already running when an app starts. Thunar's runs also allow the two Xfce services it needs, which an Xfce desktop runs: its settings store (xfconf) and its thumbnail service (tumbler). No file indexer, portal or online-accounts service runs in the background, and your own running apps never see the benchmark.
-- **RAM disk:** the data is in `/tmp/kestrel-bench-data`, so disk speed doesn't count. Set `KESTREL_BENCH_DATA` to use another place. `KESTREL_BUILD_DIR` builds Kestrel and the harness into another folder name than `build` (for a machine that shares these folders with another).
+- **RAM disk:** the data is in `/tmp/kestrel-bench-data`, on the container's RAM disk (`/tmp`), so disk speed doesn't count; the move between drives goes to its `/dev/shm`, another one.
 - **Medians:** each measurement runs several times, and the tables show the median.
-- **No crash reports:** the apps run with a core size limit of 1, which the kernel takes as "don't hand this crash to the crash reporter", so a crash (PCManFM sometimes crashes as it's closed) doesn't pop up Ubuntu's "internal error" window on your screen.
+- **No crash reports:** the apps run with a core size limit of 1, which the kernel takes as "don't hand this crash to the crash reporter", so a crash (PCManFM sometimes crashes as it's closed) doesn't hand anything to a crash reporter.
 
 ### Compared with the other file managers (measured from outside)
 
@@ -113,8 +137,10 @@ Each one prints its time and peak memory. GNOME Files has no equivalent of these
 
 | File | Purpose |
 |---|---|
-| `run.sh` | Entry point |
+| `run.sh`, `ubuntu/Dockerfile` | The run on Ubuntu, in a container |
+| `container.sh` | What the four runs share: the clean container, the source sent in, the results fetched |
 | `kubuntu.sh`, `kubuntu/Dockerfile` | The run on Kubuntu, in a container |
+| `mint.sh`, `mint/Dockerfile` | The run on Linux Mint, in a container |
 | `fs.sh`, `fs/Dockerfile` | The copies on Btrfs, XFS and SMB, in a privileged container |
 | `bench.py` | Builds what's needed, runs every measurement in the sandbox, prints the tables, writes `results.md` |
 | `make_data.py` | Generates the test data |

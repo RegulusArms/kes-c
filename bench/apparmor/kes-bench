@@ -1,0 +1,30 @@
+# AppArmor profile for the benchmark's containers (bench/container.sh loads it, with sudo, into
+# /etc/apparmor.d/kes-bench when it isn't loaded or has changed; `sudo apparmor_parser -R /etc/apparmor.d/kes-bench`
+# and deleting the file take it away).
+#
+# Everything is allowed inside the container, as on a desktop: the sandboxes desktop apps put their helpers in (GNOME's
+# thumbnailers and glycin's image loaders run under bwrap, which makes user namespaces and mounts its own /proc).
+# What it's for is what it keeps out: a program in the container stays in this profile (inherits it), so the host's
+# own profiles for programs of the same name (Papers, Evince, Nautilus, glycin, bwrap…) never attach to the
+# container's copies, which they can't follow anyway (its files are on overlay paths they don't know). Unconfined,
+# they would, and the results would depend on the host's AppArmor setup.
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile kes-bench flags=(attach_disconnected, mediate_deleted) {
+  file,
+  network,
+  capability,
+  mount,
+  remount,
+  umount,
+  pivot_root,
+  userns,
+  ptrace,
+  signal,
+  unix,
+  dbus,
+  mqueue,
+  io_uring,
+}
