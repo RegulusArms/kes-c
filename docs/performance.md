@@ -12,29 +12,30 @@ Kestrel, GNOME Files, Dolphin, Thunar, Krusader and PCManFM were measured in the
 Dolphin in a container of Kubuntu 26.04, with KDE's Qt integration loaded as on a Plasma desktop. All on the same
 machine; compare each pair after a divider with each other, not with the other columns. "—" is a test that couldn't be
 run on that app (see its section): Krusader, PCManFM and Nemo make no thumbnails the benchmark can time, so the folder
-of 10,000 files compares how fast they open a folder. Lower is better throughout.
+of 10,000 files compares how fast they open a folder. Lower is better throughout; the best figure of each group (the
+six apps on Ubuntu, each pair after a divider) is in bold and underlined.
 
 | Test | Kestrel | GNOME Files | Dolphin | Thunar | Krusader | PCManFM | │ | Kestrel (Mint) | Nemo (Mint) | │ | Kestrel (Kubuntu) | Dolphin (Kubuntu) |
 | --- | --- | --- | --- | --- | --- | --- | :-: | --- | --- | :-: | --- | --- |
-| Startup (launch to window shown) | 0.50 s | 0.44 s | 0.64 s | 0.59 s | 1.27 s | 0.51 s | │ | 0.37 s | 0.28 s | │ | 0.63 s | 0.69 s |
-| Open a 600-image folder (launch to the first 12 thumbnails) | 0.52 s | 1.20 s | 0.99 s | 1.35 s | — | — | │ | 0.49 s | — | │ | 0.66 s | 1.14 s |
-| Open a folder of 40 videos (launch to the first 12 thumbnails) | 1.38 s | 1.76 s | — | 2.10 s | — | — | │ | 1.34 s | — | │ | 1.53 s | — |
-| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | 0.73 s | 0.84 s | 1.33 s | 1.40 s | — | — | │ | 0.68 s | — | │ | — | 1.48 s |
-| Open a folder of 10,000 files (launch to the full list shown) | 0.55 s | 1.37 s | 1.17 s | 1.76 s | 1.51 s | 0.55 s | │ | 0.49 s | 3.11 s | │ | 0.69 s | 1.19 s |
-| Go to the folder of 10,000 files in an open window (Enter to the list shown) | 0.089 s | 0.83 s | 0.30 s | 2.02 s | 0.16 s | 0.22 s | │ | 0.16 s | 2.50 s | │ | 0.16 s | 0.44 s |
-| Go to a folder of 100 files in an open window (Enter to the list shown) | 0.053 s | 0.36 s | 0.065 s | 0.21 s | 0.064 s | 0.22 s | │ | 0.13 s | 1.51 s | │ | 0.16 s | 0.036 s |
-| Jump to the end of the 600-image folder (End to its last 6 thumbnails) | 0.088 s | 7.99 s | 0.30 s | 0.29 s | — | — | │ | 0.089 s | — | │ | 0.088 s | 0.23 s |
-| 5,000 files arriving in an open folder (until all shown) | 0.20 s | 0.43 s | 0.88 s | 1.16 s | 0.58 s | 0.57 s | │ | 0.22 s | 1.01 s | │ | 0.20 s | 0.92 s |
-| Copy 20,000 small files + 5 × 50 MB | 1.16 s | 2.57 s | 29.87 s | 7.66 s | 6.86 s | 3.57 s | │ | 1.15 s | 15.68 s | │ | 1.14 s | 29.77 s |
-| Move the same to another drive | 1.47 s | 5.07 s | 42.59 s | 9.30 s | 17.21 s | 6.26 s | │ | 1.46 s | 4.90 s | │ | 1.47 s | 41.58 s |
-| Move 10,000 files to the trash (all selected in one folder) | 2.19 s | 2.39 s | 271.24 s | 3.26 s | 283.31 s | 14.05 s | │ | 1.89 s | — | │ | 2.14 s | 274.10 s |
-| Empty the trash (those 10,000 files) | 0.48 s | 8.82 s | 6.98 s | 172.64 s | 6.88 s | 23.96 s | │ | 0.48 s | 183.50 s | │ | 0.48 s | 6.44 s |
-| Longest wait for the window to answer while it copies (Back/Forward) | 0.037 s | 0.041 s | 0.036 s | 0.037 s | — | 0.037 s | │ | 0.037 s | — | │ | 0.036 s | 0.036 s |
-| CPU time to open the 600-image folder and jump to its end (app and helpers) | 1390 ms | 18450 ms | 6310 ms | 2000 ms | — | — | │ | 1150 ms | — | │ | 1430 ms | 6740 ms |
-| CPU time for 5,000 files arriving in an open folder (app and helpers) | 180 ms | 1550 ms | 1350 ms | 1470 ms | 190 ms | 970 ms | │ | 180 ms | 1890 ms | │ | 160 ms | 1360 ms |
-| Peak memory (startup / 600-image folder open) | 129 / 142 MB | 156 / 269 MB | 169 / 183 MB | 96 / 98 MB | 151 / — MB | 94 / — MB | │ | 118 / 127 MB | 102 / — MB | │ | 179 / 189 MB | 184 / 194 MB |
-| Memory with 5 folders opened from other apps | 80 MB (71 MB as tabs) | 129 MB | 111 MB | 51 MB | 100 MB | 45 MB (as tabs) | │ | 64 MB (54 MB as tabs) | 64 MB | │ | 152 MB (109 MB as tabs) | 163 MB |
-| CPU time used in 30 s with a folder open, idle | 5 ms | 0 ms | 0 ms | 5 ms | 0 ms | 5 ms | │ | 5 ms | 0 ms | │ | 0 ms | 0 ms |
+| Startup (launch to window shown) | 0.50 s | <ins>**0.44 s**</ins> | 0.64 s | 0.59 s | 1.27 s | 0.51 s | │ | 0.37 s | <ins>**0.28 s**</ins> | │ | <ins>**0.63 s**</ins> | 0.69 s |
+| Open a 600-image folder (launch to the first 12 thumbnails) | <ins>**0.52 s**</ins> | 1.20 s | 0.99 s | 1.35 s | — | — | │ | 0.49 s | — | │ | <ins>**0.66 s**</ins> | 1.14 s |
+| Open a folder of 40 videos (launch to the first 12 thumbnails) | <ins>**1.38 s**</ins> | 1.76 s | — | 2.10 s | — | — | │ | 1.34 s | — | │ | 1.53 s | — |
+| Open a folder of 40 PDFs (launch to the first 12 thumbnails) | <ins>**0.73 s**</ins> | 0.84 s | 1.33 s | 1.40 s | — | — | │ | 0.68 s | — | │ | — | 1.48 s |
+| Open a folder of 10,000 files (launch to the full list shown) | <ins>**0.55 s**</ins> | 1.37 s | 1.17 s | 1.76 s | 1.51 s | <ins>**0.55 s**</ins> | │ | <ins>**0.49 s**</ins> | 3.11 s | │ | <ins>**0.69 s**</ins> | 1.19 s |
+| Go to the folder of 10,000 files in an open window (Enter to the list shown) | <ins>**0.089 s**</ins> | 0.83 s | 0.30 s | 2.02 s | 0.16 s | 0.22 s | │ | <ins>**0.16 s**</ins> | 2.50 s | │ | <ins>**0.16 s**</ins> | 0.44 s |
+| Go to a folder of 100 files in an open window (Enter to the list shown) | <ins>**0.053 s**</ins> | 0.36 s | 0.065 s | 0.21 s | 0.064 s | 0.22 s | │ | <ins>**0.13 s**</ins> | 1.51 s | │ | 0.16 s | <ins>**0.036 s**</ins> |
+| Jump to the end of the 600-image folder (End to its last 6 thumbnails) | <ins>**0.088 s**</ins> | 7.99 s | 0.30 s | 0.29 s | — | — | │ | 0.089 s | — | │ | <ins>**0.088 s**</ins> | 0.23 s |
+| 5,000 files arriving in an open folder (until all shown) | <ins>**0.20 s**</ins> | 0.43 s | 0.88 s | 1.16 s | 0.58 s | 0.57 s | │ | <ins>**0.22 s**</ins> | 1.01 s | │ | <ins>**0.20 s**</ins> | 0.92 s |
+| Copy 20,000 small files + 5 × 50 MB | <ins>**1.16 s**</ins> | 2.57 s | 29.87 s | 7.66 s | 6.86 s | 3.57 s | │ | <ins>**1.15 s**</ins> | 15.68 s | │ | <ins>**1.14 s**</ins> | 29.77 s |
+| Move the same to another drive | <ins>**1.47 s**</ins> | 5.07 s | 42.59 s | 9.30 s | 17.21 s | 6.26 s | │ | <ins>**1.46 s**</ins> | 4.90 s | │ | <ins>**1.47 s**</ins> | 41.58 s |
+| Move 10,000 files to the trash (all selected in one folder) | <ins>**2.19 s**</ins> | 2.39 s | 271.24 s | 3.26 s | 283.31 s | 14.05 s | │ | 1.89 s | — | │ | <ins>**2.14 s**</ins> | 274.10 s |
+| Empty the trash (those 10,000 files) | <ins>**0.48 s**</ins> | 8.82 s | 6.98 s | 172.64 s | 6.88 s | 23.96 s | │ | <ins>**0.48 s**</ins> | 183.50 s | │ | <ins>**0.48 s**</ins> | 6.44 s |
+| Longest wait for the window to answer while it copies (Back/Forward) | 0.037 s | 0.041 s | <ins>**0.036 s**</ins> | 0.037 s | — | 0.037 s | │ | 0.037 s | — | │ | <ins>**0.036 s**</ins> | <ins>**0.036 s**</ins> |
+| CPU time to open the 600-image folder and jump to its end (app and helpers) | <ins>**1390 ms**</ins> | 18450 ms | 6310 ms | 2000 ms | — | — | │ | 1150 ms | — | │ | <ins>**1430 ms**</ins> | 6740 ms |
+| CPU time for 5,000 files arriving in an open folder (app and helpers) | <ins>**180 ms**</ins> | 1550 ms | 1350 ms | 1470 ms | 190 ms | 970 ms | │ | <ins>**180 ms**</ins> | 1890 ms | │ | <ins>**160 ms**</ins> | 1360 ms |
+| Peak memory (startup / 600-image folder open) | 129 / 142 MB | 156 / 269 MB | 169 / 183 MB | 96 / 98 MB | 151 / — MB | <ins>**94 / — MB**</ins> | │ | 118 / 127 MB | <ins>**102 / — MB**</ins> | │ | <ins>**179 / 189 MB**</ins> | 184 / 194 MB |
+| Memory with 5 folders opened from other apps | 80 MB (71 MB as tabs) | 129 MB | 111 MB | 51 MB | 100 MB | <ins>**45 MB (as tabs)**</ins> | │ | <ins>**64 MB (54 MB as tabs)**</ins> | <ins>**64 MB**</ins> | │ | <ins>**152 MB (109 MB as tabs)**</ins> | 163 MB |
+| CPU time used in 30 s with a folder open, idle | 5 ms | <ins>**0 ms**</ins> | <ins>**0 ms**</ins> | 5 ms | <ins>**0 ms**</ins> | 5 ms | │ | 5 ms | <ins>**0 ms**</ins> | │ | <ins>**0 ms**</ins> | <ins>**0 ms**</ins> |
 
 ## Performance: Kestrel vs GNOME Files
 
