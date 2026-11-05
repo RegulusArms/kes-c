@@ -1596,6 +1596,7 @@ private:
                     buffer->wrote(n, writing.nsecsElapsed());
                 done += n;
                 written += n;
+                test_hold(written - n, written);
                 log_tape_rate();
                 if (buffer && !told_slow && buffer->source_too_slow()) {
                     told_slow = true;
@@ -1797,6 +1798,17 @@ private:
     // copied all of it; false when it couldn't (EXDEV, EOPNOTSUPP, EINVAL…: not on these file systems), having copied
     // `written` bytes so far, so the read/write loop goes on from there (both files' offsets are where it stopped).
     // An error that isn't "not supported here" (a full disk, EFBIG, EIO) is thrown, as the loop would.
+    // (tests: KESTREL_TEST_COPY_HOLD_AT=n pauses the job once a file's copy has passed n bytes, as the user's Pause
+    // would: held at its next piece, its part file open, so a test can act part-way however fast the disk is)
+    void test_hold(qint64 before, qint64 after)
+    {
+        if (!qEnvironmentVariableIsSet("KESTREL_TEST_COPY_HOLD_AT"))
+            return;
+        qint64 at = qEnvironmentVariable("KESTREL_TEST_COPY_HOLD_AT").toLongLong();
+        if (before < at && after >= at)
+            task->set_paused(true);
+    }
+
     bool kernel_copy_file(int in, int out, qint64 size, const QString &name, const QString &src, const QString &dst,
                           qint64 &written, const QPair<quint64, quint64> &drives)
     {
@@ -1841,6 +1853,7 @@ private:
             done += n;
             if (test_fail_at >= 0 && written >= test_fail_at)   // (tests: an error part-way)
                 throw_errno(dst, EIO);
+            test_hold(written - n, written);
             report_progress(name);
         }
     }

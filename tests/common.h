@@ -127,8 +127,12 @@ inline void spin(int ms)
     loop.exec();
 }
 
-inline bool wait_for(const std::function<bool()> &f, int ms = 5000)
+// Waits until f() is true, or gives up. The limit is only how long a failing check takes to say so: a slow runner
+// (the sanitizers, 2 CPUs, a loaded machine) must never fail a check that's merely taking its time, so no wait gives
+// up before 30 s, whatever it asks for. A check of how fast something happens doesn't belong here (or anywhere).
+inline bool wait_for(const std::function<bool()> &f, int ms = 30000)
 {
+    ms = std::max(ms, 30000);
     for (int t = 0; t < ms; t += 50) {
         if (f())
             return true;
@@ -196,6 +200,20 @@ struct DirWatch {
     }
 };
 
+// The newest finished job titled `title` (with `with` in its log), once it's in the finished list: it gets there
+// through the event loop after the job ends, so it's waited for. Empty (no title) if none comes.
+inline FinishedTask finished_task(const QString &title, const QString &with = QString())
+{
+    FinishedTask last;
+    wait_for([&]() {
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == title && (with.isEmpty() || f.log.contains(with)))
+                last = f;
+        return !last.title.isEmpty();
+    });
+    return last;
+}
+
 template <typename T> T *shown_window()
 {
     for (QWidget *w : QApplication::topLevelWidgets())
@@ -261,6 +279,33 @@ public:
         }
         g_variant_unref(r);
         return out;
+    }
+
+    // Waits until the tower is up and this Kestrel's radio has caught up with it (its own CheckIn answered: until
+    // then its reports aren't sent, atc::announce), then checks in. Seeing the tower on the bus isn't enough: the
+    // Kestrel hears of it a moment later, through its own name watch.
+    bool join()
+    {
+        bool up = wait_for([&]() { return tower_pid() != 0 && atc::radio()->caught_up(); });
+        check_in();
+        return up;
+    }
+
+    // Waits until this Kestrel has heard everything the tower passed on before now: a marker reported here comes to
+    // its radio after them (one tower, answering in turn; signals arrive in order). A "nothing came" check needs this,
+    // not a wait of some length that a slow runner might outlast.
+    bool sync()
+    {
+        static int n = 0;
+        QString mark = QString("sync-%1").arg(++n);
+        bool got = false;
+        QMetaObject::Connection c = QObject::connect(atc::radio(), &atc::Radio::heard, [&](const QJsonObject &m) {
+            got = got || m.value("marker").toString() == mark;
+        });
+        report({{"type", "starred"}, {"marker", mark}});   // (a harmless message: the lists are read again)
+        bool ok = wait_for([&]() { return got; });
+        QObject::disconnect(c);
+        return ok;
     }
 
     void check_in() { call("CheckIn", QString(R"({"pid":1,"impl":"fake","protocol":%1})").arg(atc::PROTOCOL).toUtf8()); }

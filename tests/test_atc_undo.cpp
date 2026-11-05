@@ -30,7 +30,7 @@ int main(int argc, char **argv)
     util::rename(P("a"), P("b"));
     undo::record("rename", "Rename", {qMakePair(P("a"), P("b"))});
     push("rename", "Their Rename", QJsonArray{QJsonArray{P("c"), P("d")}});
-    spin(300);
+    fake.sync();   // this Kestrel has heard of it
     check(undo::label() == "Rename", "off: Ctrl+Z offers our own action, not theirs (" + undo::label() + ")");
     undo::undo(w);
     check(wait_for([&]() { return exists(P("a")) && !exists(P("b")); }), "off: Ctrl+Z undoes our rename");
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
     settings().setValue("shared_undo", true);
     settings().sync();
     fake.report({{"type", "settings"}});   // as if another window's Preferences turned it on
-    spin(300);
+    wait_for([]() { return undo::label() == "Their Rename"; });
     check(undo::label() == "Their Rename", "on: Ctrl+Z offers the newest action from any Kestrel (" + undo::label() + ")");
     undo::undo(w);
     check(wait_for([&]() { return exists(P("c")) && !exists(P("d")); }), "on: Ctrl+Z here undoes their rename");
@@ -83,7 +83,8 @@ int main(int argc, char **argv)
     util::symlink("new-target", P("lnk"));
     push("links", "Change Links", QJsonArray{QJsonArray{P("lnk"), "->old-target"}});
     push("rename", "Not Valid", QJsonArray{QJsonArray{P("q"), "->x"}});
-    spin(300);
+    // (each push is answered before push() returns: a "Not Valid" the tower took would be heard before the sync)
+    fake.sync();
     check(undo::label() == "Change Links",
           "the tower takes a links batch holding a link's old contents, and refuses \"->\" in other kinds (" + undo::label() + ")");
     undo::undo(w);
@@ -92,7 +93,7 @@ int main(int argc, char **argv)
 
     // ---- no tower: falls back to this Kestrel's own history
     push("rename", "Stale", QJsonArray{QJsonArray{P("q"), P("r")}});
-    spin(200);
+    fake.sync();
     ::kill(fake.tower_pid(), SIGKILL);
     check(wait_for([&]() { return !atc::radio()->tower_up(); }, 3000), "tower down");
     write_text(P("e"), "e");
@@ -100,7 +101,7 @@ int main(int argc, char **argv)
     undo::record("rename", "Rename", {qMakePair(P("e"), P("f"))});
     check(undo::label() == "Rename", "no tower: the action is kept here");
     check(wait_for([&]() { return atc::radio()->tower_up(); }, 8000), "a new tower is started");
-    spin(300);
+    wait_for([]() { return atc::radio()->caught_up(); });   // (and its history heard)
     check(undo::label() == "Rename", "the new tower's empty history doesn't hide ours (" + undo::label() + ")");
     undo::undo(w);
     check(wait_for([&]() { return exists(P("e")); }), "...and Ctrl+Z still undoes it");

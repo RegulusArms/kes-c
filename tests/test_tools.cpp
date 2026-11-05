@@ -969,7 +969,8 @@ int main(int argc, char **argv)
                 ew->password->setText("one");
                 ew->again->setText("two");
                 ew->encrypt();
-                spin(500);
+                wait_for([&]() { return !ew->problem->isHidden(); });
+                spin(300);   // (a file made anyway would be started by now: encrypt() starts it at once)
                 bool refused = ew->isVisible() && !ew->problem->isHidden() && listdir(e) == before;
                 ew->by_key->setChecked(true);
                 for (int i = 0; i < ew->key_list->topLevelItemCount(); ++i)

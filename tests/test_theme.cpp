@@ -458,7 +458,7 @@ int main(int argc, char **argv)
             return ThumbJob();
         };
         QString many_dir = home_path("own/many"), few_dir = home_path("own/few");
-        spin(300);
+        wait_for([&]() { return job_of(many_dir).id && job_of(few_dir).id; });
         ThumbJob mj = job_of(many_dir);
         check(mj.id && mj.title() == "Thumbnails: own/many" && mj.total == 300 && mj.window == w1->windowTitle() &&
                   mj.state() == "Running" && job_of(few_dir).id,
@@ -528,14 +528,23 @@ int main(int argc, char **argv)
         // Stop: nothing more, and the view drawing the folder again doesn't start it again
         QStringList many3 = make_tree(home_path("own/many3"), 300);
         QString many3_dir = home_path("own/many3");
+        // stopped as its first preview comes (on the UI thread, before anything more is handed out): part-way however
+        // fast the machine makes them
+        bool stopped = false;
+        QMetaObject::Connection first = QObject::connect(g_thumbs, &ThumbnailManager::updated, [&](const QString &path) {
+            if (!stopped && path.startsWith(many3_dir + "/") && job_of(many3_dir).id) {
+                stopped = true;
+                g_thumbs->stop_job(job_of(many3_dir).id);
+            }
+        });
         ask(many3, w1->pane()->thumb_owner());
-        spin(200);
-        g_thumbs->stop_job(job_of(many3_dir).id);
-        spin(300);
+        wait_for([&]() { return stopped && !job_of(many3_dir).id; });
+        QObject::disconnect(first);
+        spin(300);   // (the previews already being made when it stopped)
         int stop_at = made(many3);
         ask(many3, w1->pane()->thumb_owner());
         spin(800);
-        check(stop_at < 250 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
+        check(stopped && stop_at < 300 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
               QString("Stop ends a thumbnail job: the view drawing the folder again doesn't start it again (%1 made at "
                       "the stop, %2 now)").arg(stop_at).arg(made(many3)));
 
@@ -557,11 +566,13 @@ int main(int argc, char **argv)
             prefs::set("thumb_mode", "paused");
             bool shown = jw->thumb_mode->currentData().toString() == "paused";
             ask(m1, w1->pane()->thumb_owner());
-            spin(1000);
+            wait_for([&]() { return job_of(m1_dir).state() == "Paused (all thumbnailing)"; });
+            spin(1000);   // (and stays so: nothing made meanwhile)
             check(shown && made(m1) == 0 && job_of(m1_dir).state() == "Paused (all thumbnailing)",
                   "thumbnailing paused: a thumbnail job makes nothing and is listed as paused (" +
                       job_of(m1_dir).state() + ", " + QString::number(made(m1)) + " made)");
             prefs::set("thumb_mode", "wait");
+            wait_for([&]() { return job_of(m1_dir).state() == "Waiting for the drive"; });
             spin(1000);
             check(made(m1) == 0 && job_of(m1_dir).state() == "Waiting for the drive",
                   "thumbnailing waits for the drive: a job on a drive another job uses waits (" + job_of(m1_dir).state() + ")");
@@ -570,6 +581,7 @@ int main(int argc, char **argv)
                       jw->thumb_mode->currentData().toString() == "drive",
                   "one thumbnail job per drive: it runs beside the job using its drive");
             ask(m2, w2->pane()->thumb_owner());
+            wait_for([&]() { return job_of(m2_dir).state() == "Waiting for another thumbnail job on its drive"; });
             spin(800);
             bool behind = job_of(m2_dir).state() == "Waiting for another thumbnail job on its drive" && made(m2) == 0 &&
                           job_of(m1_dir).id;

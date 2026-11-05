@@ -11,6 +11,7 @@ bool enabled();
 void enable();   // as if KESTREL_STATS=1 (tests)
 void sample(const char *what, double value);   // a timing or a rate: how many, average, largest
 void count(const char *what, qint64 n = 1);
+qint64 counted(const char *what);               // so far (0 if never, or not enabled)
 void peak(const char *what, qint64 value);      // the largest seen
 qint64 now_ms();                                 // for timings
 QString summary();                               // the report (empty if nothing was counted)

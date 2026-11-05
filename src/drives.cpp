@@ -364,8 +364,10 @@ bool statfs_(const QString &path, qint64 *total, qint64 *free)
 {
     // tests: a slow drive's statfs taking this long, as a busy tape's does
     int delay = qEnvironmentVariableIntValue("KESTREL_TEST_STATFS_DELAY_MS");
-    if (delay > 0 && slow_kind(path) != Slow::None)
+    if (delay > 0 && slow_kind(path) != Slow::None) {
+        util::note_test_wait();
         QThread::msleep(delay);
+    }
     struct statvfs sv;
     if (::statvfs(enc(path).constData(), &sv) != 0)
         return false;

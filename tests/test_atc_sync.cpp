@@ -141,7 +141,14 @@ int main(int argc, char **argv)
     other.report({{"type", "starred"}});
     older.call("CheckIn", R"({"pid":3,"impl":"fake"})");   // names no protocol: speaks 1
     older.report({{"type", "starred"}});
-    spin(500);
+    // then a good message: the tower answers each in turn, so anything passed on from those two comes before it
+    fake.report({{"type", "starred"}, {"marker", "after"}});
+    wait_for([&]() {
+        for (const auto &[f, m] : fake.heard)
+            if (f == fake.name() && m.value("marker") == "after")
+                return true;
+        return false;
+    });
     bool from_other = false, from_older = false;
     for (const auto &[f, m] : fake.heard) {
         from_other = from_other || f == other.name();

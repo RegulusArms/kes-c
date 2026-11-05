@@ -50,7 +50,7 @@ while (( $# )); do
     shift
 done
 [[ "$CPUS" =~ ^[1-9][0-9]*$ && "$REPEAT" =~ ^[1-9][0-9]*$ ]] || { echo "--cpus and --repeat take a number" >&2; exit 2; }
-[[ "$ONLY" =~ ^[a-z_\ ]*$ ]] || { echo "--only takes test names (as tests/run.sh does)" >&2; exit 2; }
+[[ "$ONLY" =~ ^[a-z0-9_\ ]*$ ]] || { echo "--only takes test names (as tests/run.sh does)" >&2; exit 2; }
 command -v docker >/dev/null || { echo "docker isn't installed" >&2; exit 1; }
 python3 -c 'import yaml' 2>/dev/null || { echo "needs python3-yaml (sudo apt install python3-yaml)" >&2; exit 1; }
 
@@ -215,6 +215,9 @@ run_job() {
         name=$(cat "${s%.sh}.name") sh=$(cat "${s%.sh}.shell")
         # a sysctl the job sets on its VM: a container can't, so this machine must have it already
         sed -i -E 's#sudo sysctl -w ([a-z0-9_.]+)=([0-9]+)#[ "$(sudo sysctl -n \1)" = \2 ] || { echo "This machine needs \1=\2 (CI sets it on the runner): sudo sysctl -w \1=\2" >\&2; exit 1; }#' "$s"
+        # --repeat runs the tests' step again in the same container: a user it made the first time is there already
+        [[ $sh == bash* ]] &&
+            sed -i '1i useradd() { id -u "${@: -1}" >/dev/null 2>\&1 || command useradd "$@"; }' "$s"
         docker cp "$s" "$C:/ci-steps/$(basename "$s")" >/dev/null
         run_n=1
         [[ $s == "$last" ]] && run_n=$REPEAT

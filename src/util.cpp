@@ -436,10 +436,22 @@ void set_test_busy(const QString &prefix, int ms)
     busy_on = !prefix.isEmpty() && ms > 0;
 }
 
+static std::atomic<int> ui_waits{0};
+
+void note_test_wait()
+{
+    if (QCoreApplication *app = QCoreApplication::instance(); app && QThread::currentThread() == app->thread())
+        ++ui_waits;
+}
+
+int test_ui_waits() { return ui_waits.load(); }
+
 static void busy_wait(const QString &p)
 {
-    if (busy_on.load(std::memory_order_relaxed) && (p + "/").startsWith(busy_prefix))
+    if (busy_on.load(std::memory_order_relaxed) && (p + "/").startsWith(busy_prefix)) {
+        note_test_wait();
         QThread::msleep(busy_ms);
+    }
 }
 
 bool stat_(const QString &p, struct stat &st)

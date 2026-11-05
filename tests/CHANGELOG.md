@@ -6,6 +6,73 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.15
+
+Every test now checks the code, never how fast the machine running it is: CI's `sanitizers-noble` failed "a pin is
+reported to other Kestrels", and a search of the whole suite found the same kind of check elsewhere. A check that
+waited a fixed time for something that happens later (a slow runner can need longer), compared a time with a limit
+(a slow runner takes longer; a fast one finishes before a cancel), or caught work part-way by its being big enough,
+now waits for what it checks, counts instead of timing, or holds the work at a known point.
+
+Added:
+- `fileops`, `admin_helper`: a copy held part-way by the code itself, however fast the disk. Kestrel's copy pauses
+  itself once a file has passed `KESTREL_TEST_COPY_HOLD_AT` bytes (as Pause does: before its next piece), and the
+  admin helper (not as root) holds after a copy's first piece while `KESTREL_TEST_COPY_HOLD`'s file is there, still
+  answering a cancel. The "another program saves the name meanwhile" checks, and the helper's cancel, ending the
+  session and "replace: false" checks, act there; they used to watch for the part file (a fast disk could copy
+  32 MB between two looks), or count on a 2 GB or 256 MB copy not finishing first.
+- `slow`: "doesn't hold the window" is now a count: how many of the busy drive's simulated waits (and the slow
+  `statfs`'s) ran on the UI thread (`util::test_ui_waits`), which must be none. It was the window's longest pause
+  under 0.6 or 1 s, which the sanitizers' slower painting could pass. The pauses are still shown in the check's text.
+- `ui`: 1,500 folders dropped into a sibling: what would hold the window is counted against the time the move took:
+  the view's row removals (at most one per 150 ms, as the folder's changes are looked at together, each a run of
+  rows) and the status line's updates (`stats::counted`, at most one per 30 ms), both far fewer than one per folder
+  (the freeze was one of each per folder: with rows taken out one at a time, it fails with 1,500 of each). It was
+  "the window is never held more than 2.5 s".
+- `common.h`: `FakeFlight::join()` (waits until this Kestrel has caught up with the tower, then checks the fake in)
+  and `FakeFlight::sync()` (waits until this Kestrel has heard everything passed on before it: a marker sent after),
+  `finished_task()` (waits for a finished job's record).
+
+Changed:
+- `common.h`: `wait_for` never gives up before 30 s (it gave up at 5 s by default, some checks 2 to 4 s). The limit
+  is only how long a failing check takes to say so; a slow runner made some checks fail that were only taking their
+  time.
+- `pinned`, `sidebar`: they wait for `join()`, not for the tower to be on the bus: this Kestrel only sends its
+  reports once its own name watch has seen the tower, a moment later, so "a pin is reported to other Kestrels" failed
+  when the pin came first (CI's `sanitizers-noble`, 0.3.3-alpha.14).
+- `atc_tabs`: a launched Kestrel "kept its own window" when it tells the tower it has one, not when it's still running
+  after 2.5 s (a slow start that would have handed its folder over counted as its own window); the window waits until
+  it has checked in before the hand-offs.
+- `atc_undo`: "on: Ctrl+Z offers the newest action" and the links batch wait for the label instead of 300 ms; "off",
+  "refuses \"->\"" and the push before the tower is stopped wait for `sync()`, so they can fail when the wrong label
+  comes late; after the new tower is up, they wait until it's caught up.
+- `atc_sync`: "isn't passed on" for another protocol's flights waits for a good message sent after theirs.
+- `atc_tasks`: the progress reports' throttle is measured against the time that actually passed (at most one per
+  500 ms of it), not "at most 6 in 2 s" of a sleep a loaded runner stretches.
+- `fileops`: Shred's ✕ waits until BleachBit has started (it was 500 ms), with no 5 s limit; a program's timeout is
+  told by `timed_out` (the program sleeps 60 s), not by its ending within 2 s; a move failing part-way waits for the
+  job to end before the folder's permission is put back (500 ms could be before it tried, and then it moved); the
+  Verify copies message, Recalculate's held drive: waited for.
+- `jobs`: a job holding a drive is waited for until it runs before the next is queued (it was 150 ms); Exit and Open
+  the Jobs Window waits for the Jobs window.
+- `slow`: opening a checksum file "doesn't wait for it to be read" is told by order (the FIFO is written only once
+  opening has returned), not by opening in under 500 ms; finished jobs' logs are waited for (`finished_task`), not
+  read 300 ms later; the cancelled tape copy's file is waited for until gone; the paused buffer's reading is
+  measured once reading has stopped (a piece being read when it paused may take longer than 300 ms), and reading
+  again after the resume is waited for; the info panel's "not read from this tape", waited for.
+- `sidebar`: "no drive is asked anything over 7 seconds" starts once two seconds pass with no answers (it was 2 s
+  after the mounts went, however long the first answers took); a drive mounted while other mounts keep changing must
+  show, the changes going on until it does, with no 1 s limit.
+- `theme`: Stop ends a thumbnail job at its first preview (on the UI thread), not 200 ms after it was asked for (a
+  fast machine made more than the 250 allowed by then); the jobs and their states are waited for before they're read.
+- `search`: the grep a stopped search ran is waited for until gone (it was 300 ms).
+- `overview`, `tools`: a mount's password and question windows, and Encrypt's refusal, are waited for.
+- `archives`: GIO is waited for until it has the test's default application (it was 500 ms); `chooser`: until the
+  portal's bus name is the chooser's (500 ms).
+- `admin_helper`: the cancel's "within 2 s" is gone: `cancelled`, with the file kept, says it stopped part-way.
+- `ci-local.sh`: `--only` takes `i18n` (test names with digits were refused); `--repeat` works for the 26.04 jobs (their
+  second run stopped at `useradd`: the user made by the first run was there already).
+
 ## 0.3.3-alpha.14
 
 Added:

@@ -689,6 +689,7 @@ public:
     void copy_bytes(int in, int out, const std::string &label)
     {
         std::vector<char> buf(1 << 20);
+        bool held = false;
         for (;;) {
             check_cancel();
             ssize_t n = read(in, buf.data(), buf.size());
@@ -708,6 +709,28 @@ public:
             }
             done += double(n);
             report(label);
+            if (!held) {
+                held = true;
+                test_hold();
+            }
+        }
+    }
+
+    // Tests (never as root, as KESTREL_TEST_SLOW): KESTREL_TEST_COPY_HOLD=<file> holds a copy after its first piece,
+    // part-way, while that file exists (making <file>.reached when it gets there), still answering a cancel; so a test
+    // can act part-way through a copy however fast the disk is
+    void test_hold()
+    {
+        const char *hold = geteuid() != 0 ? getenv("KESTREL_TEST_COPY_HOLD") : nullptr;
+        if (!hold || !*hold)
+            return;
+        std::string reached = std::string(hold) + ".reached";
+        int fd = ::open(reached.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
+        if (fd >= 0)
+            ::close(fd);
+        while (::access(hold, F_OK) == 0) {
+            check_cancel();
+            usleep(10000);
         }
     }
 

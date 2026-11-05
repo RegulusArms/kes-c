@@ -405,7 +405,7 @@ int main(int argc, char **argv)
         bool c = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/c.bin")}});
         qunsetenv("KESTREL_TEST_CORRUPT_COPY");
         QString log_c = last_log();
-        spin(200);
+        wait_for([]() { return boxes.join("\n").contains("doesn't match the original"); });   // (closed by a timer)
         check(c && exists(P("vf/c.bin")) && read_file(P("vf/c.bin")) != data && log_c.contains("doesn't match its original") &&
                   log_c.contains("Verified 1 copied file") && log_c.contains("(listed above)") && boxes.join("\n").contains("doesn't match the original") &&
                   read_file(P("vf/src.bin")) == data,
@@ -547,32 +547,25 @@ int main(int argc, char **argv)
         ::truncate(enc(P("race/big.bin")).constData(), qint64(32) << 20);   // sparse: several chunks, so one to pause at
         make(P("race/dir/inner.bin"), "i");
         ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(32) << 20);
-        // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
-        // is still to come), the job is paused (held at its next chunk) and "another program" saves the destination.
-        // Watched here, not through progress reports, which come at most every 80 ms: a fast disk can copy the file
-        // before the first one. Paused, not raced: on a slow runner the copy could otherwise finish first.
+        // part-way through the copy (its hidden part beside the destination, its final rename still to come), the job
+        // holds itself at its next piece (KESTREL_TEST_COPY_HOLD_AT, as Pause does) and "another program" saves the
+        // destination; then it goes on. Held by the copy itself, not caught by watching for its part: a fast disk can
+        // copy the file between two looks, and a slow one can still be inside a piece after any fixed wait.
         auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
             boxes.clear();
-            bool stepped = false;
+            qputenv("KESTREL_TEST_NO_CLONE", "1");   // (a clone is one call: nothing part-way to step into)
+            qputenv("KESTREL_TEST_COPY_HOLD_AT", QByteArray::number(4 << 20));
             Task *t = fileops::start_ops(w, {job}, "Test", []() {});
             QPointer<Task> tp(t);   // not deleted before events are processed
-            QElapsedTimer clock;
-            clock.start();
-            while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
-                if (!leftovers().isEmpty()) {
-                    tp->set_paused(true);
-                    QThread::msleep(100);   // the chunk it's on finished
-                    if (!leftovers().isEmpty()) {
-                        intrude();
-                        stepped = true;
-                    }
-                    tp->set_paused(false);
-                    break;
-                }
-                QThread::usleep(200);
-            }
+            bool stepped = wait_for([&]() { return !tp || tp->paused(); }) && tp && !leftovers().isEmpty();
+            if (stepped)
+                intrude();
+            qunsetenv("KESTREL_TEST_COPY_HOLD_AT");
+            qunsetenv("KESTREL_TEST_NO_CLONE");
+            if (tp)
+                tp->set_paused(false);
             wait_for([&]() { return !tp; }, 60000);
-            wait_for([]() { return !boxes.isEmpty(); }, 3000);
+            wait_for([]() { return !boxes.isEmpty(); });
             return stepped;
         };
         // what went wrong, for the check's text
@@ -1901,14 +1894,13 @@ int main(int argc, char **argv)
 
         make(P("shred/slow.txt"));
         called = false;
+        ::unlink(enc(P("bleachbit-args")).constData());
         Task *t = fileops::shred(w, {P("shred/slow.txt")}, "Test", [&](const QStringList &) { called = true; });
         QPointer<Task> tp(t);
-        spin(500);
+        bool running = wait_for([&]() { return exists(P("bleachbit-args")); });   // it has started (and sleeps 30 s)
         t->cancel();
-        QElapsedTimer clock;
-        clock.start();
-        bool stopped = wait_for([&]() { return !tp; }, 5000);
-        check(stopped && clock.elapsed() < 5000 && lexists(P("shred/slow.txt")) && !called,
+        bool stopped = wait_for([&]() { return !tp; }, 20000);   // (before the stand-in's 30 s would end it)
+        check(running && stopped && lexists(P("shred/slow.txt")) && !called,
               "✕ stops a shred: BleachBit is stopped, and nothing is reported as left");
         qputenv("PATH", old_path);
     }
@@ -1923,15 +1915,12 @@ int main(int argc, char **argv)
     proc::Options quiet;
     quiet.out = proc::DEVNULL;
     quiet.err = proc::DEVNULL;
-    QElapsedTimer clock;
-    clock.start();
-    auto r = proc::run({"sh", "-c", "echo $$ > \"$0\"; exec sleep 5", P("sleeper.pid")}, 300, quiet);
+    // (timed_out says the timeout ended it: a program left to finish its sleep ends on its own, not timed out)
+    auto r = proc::run({"sh", "-c", "echo $$ > \"$0\"; exec sleep 60", P("sleeper.pid")}, 300, quiet);
     pid_t pid = pid_t(QString::fromUtf8(read_file(P("sleeper.pid"))).trimmed().toInt());
-    check(r.timed_out && clock.elapsed() < 2000 && pid > 0 && ::kill(pid, 0) != 0,
-          "a program's timeout holds without pipes, and it's stopped");
-    clock.restart();
-    r = proc::run({"sh", "-c", "exec >&- 2>&-; sleep 5"}, 300);
-    check(r.timed_out && clock.elapsed() < 2000, "a program's timeout holds after it closes its output");
+    check(r.timed_out && pid > 0 && ::kill(pid, 0) != 0, "a program's timeout holds without pipes, and it's stopped");
+    r = proc::run({"sh", "-c", "exec >&- 2>&-; sleep 60"}, 300);
+    check(r.timed_out, "a program's timeout holds after it closes its output");
     r = proc::run({"sh", "-c", "echo hi"}, 5000);
     check(!r.timed_out && r.rc == 0 && r.out == "hi\n", "a program that finishes in time isn't affected");
     ::unlink(P("left.pid").toLocal8Bit().constData());
@@ -2068,7 +2057,7 @@ int main(int argc, char **argv)
             }
             return QVariant();
         });
-        spin(150);
+        wait_for([&]() { return holder && !holder->queued; });   // it has the drive
         d->recalc->click();
         QPointer<Task> count;
         wait_for([&]() {
@@ -2147,7 +2136,7 @@ int main(int argc, char **argv)
         w->move_into_new(items, nf, "Part");
         QString part = join(nf, "Part");
         bool partway = wait_for([&]() { return isfile(join(part, "a.txt")) && isfile(join(part, "b.txt")); }, 10000);
-        spin(500);
+        wait_for([]() { return TaskBoard::instance()->mine().isEmpty(); });   // it has tried sub too, and ended
         ::chmod(enc(join(nf, "sub")).constData(), 0755);
         check(partway && isdir(join(nf, "sub")) && isfile(join(nf, "sub/in.txt")) && !lexists(join(part, "sub")) &&
                   isdir(part),

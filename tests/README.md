@@ -23,6 +23,27 @@ Each test runs:
 
 The installer test also uses a keyfile GSettings backend, so your real dock isn't changed. It replaces `pgrep` and `sudo` with stubs, so it can't close a running GNOME Files or install packages.
 
+## Fast or slow, the same result
+
+A check tests the code, not the machine: it passes on a fast desktop and on a slow runner (the sanitizers, 2 CPUs, a
+busy machine) alike, and fails on either when the code is wrong.
+
+- **Wait for what you check**, never a fixed time: `wait_for` (it never gives up before 30 s, so a slow runner only
+  makes a passing check take longer), `finished_task()` for a job's record, `FakeFlight::join()` before anything this
+  Kestrel reports to the tower.
+- **"Nothing happened"** needs a point after which it would have: `FakeFlight::sync()` (everything the tower passed
+  on before it has been heard), the job having ended, a later message.
+- **No time limits**: not "took under 500 ms", not "held the window under 1 s". Count what the code did instead: the
+  UI thread's waits on a busy drive (`util::test_ui_waits`), the status line's updates (`stats::counted`). A rate is
+  measured against the time that actually passed.
+- **Part-way is held, not raced**: not "a file big enough that the cancel comes first". Hold the work where the check
+  needs it: `KESTREL_TEST_COPY_HOLD_AT` (Kestrel's copy pauses itself), `KESTREL_TEST_COPY_HOLD` (the admin helper's
+  copy waits), a `Task::progress` handler on the job's own thread, a FIFO written when the test says, a job holding
+  a drive.
+
+`tests/ci-local.sh --cpus 2 --repeat 3` runs the suite slower, several times: what passes here once and fails there
+is a check that times the machine.
+
 ## What's tested
 
 | Test | Checks | Covers |
@@ -307,11 +328,11 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - saves a mount moved within it, and collapses;
   - Remove from Recent Servers takes a server out of it and the saved list, and tells other Kestrels.
 - **Drives aren't polled:**
-  - left alone for 7 seconds, no drive is asked anything;
+  - left alone for 7 seconds (once the first answers are in), no drive is asked anything;
   - a drive mounted shows and one unmounted goes as soon as the mount table changes;
   - a disk's size from /sys is lsblk's (skipped where no disk is mounted);
   - when a job ends, the free space is asked again;
-  - a mount that's in the mount table only after the sidebar's refresh, with no other event, still shows; one mounted while mount changes keep coming every 100 ms shows within a second.
+  - a mount that's in the mount table only after the sidebar's refresh, with no other event, still shows; one mounted while mount changes keep coming every 100 ms still shows (a refresh put off by each change never would).
 
 ### pinned
 
@@ -509,7 +530,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - moving a file onto a hard link to it keeps the file.
 - **A replacement keeps what it replaces until the new one is complete:**
   - a write that fails part-way (a helper whose writes fail past 1 MB, as on a full disk) keeps the old file or folder as it was and leaves no half-made copy;
-  - a cancel stops a large file's copy part-way at once (its progress counts bytes), and ending the session part-way does the same;
+  - a cancel stops a file's copy part-way (its progress counts bytes; the copy held there by `KESTREL_TEST_COPY_HOLD`), and ending the session part-way does the same;
   - copying or moving a folder onto another replaces it whole.
 - **New names:** a copy or move to a new name keeps a file another program saves there meanwhile (or already had).
 - **Symlinks** inside a copied or deleted tree are handled as links.

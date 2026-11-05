@@ -129,6 +129,10 @@ QString ext_of(const QString &p);        // lower-cased extension with the dot
 
 // tests: every stat_/lstat_ under prefix waits ms, as on a tape busy seeking (empty prefix: off)
 void set_test_busy(const QString &prefix, int ms);
+// tests: how many of those waits (and KESTREL_TEST_STATFS_DELAY_MS's) were on the UI thread: each would hold the
+// window. A count, not a time, so a check of it is the same on a fast or a slow machine
+int test_ui_waits();
+void note_test_wait();   // (a test delay is about to wait: counted if it's on the UI thread)
 bool stat_(const QString &p, struct stat &st);    // follows links; false on error
 bool lstat_(const QString &p, struct stat &st);
 bool exists(const QString &p);

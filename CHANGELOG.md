@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.14
+## 0.3.3-alpha.15
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha15).
+
+## 0.3.3-alpha.14 (2026-11-05)
 
 - **Fixed: a folder of files with long names and emoji could freeze the window in the grid view.** Each name was
   measured again, a character at a time, on every repaint and every mouse movement over the grid to find where its

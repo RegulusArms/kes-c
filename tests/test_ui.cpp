@@ -648,7 +648,10 @@ int main(int argc, char **argv)
 
     // -- many selected folders dropped into a sibling don't hold the window. Each one leaving the view deselects it, and
     // the status line counted the whole selection again for each (with a list search for duplicates in it): 800
-    // folders froze the window for seconds. A timer ticking every 10 ms measures the longest the window was held.
+    // folders froze the window for seconds. Now the folder's changes are looked at together (every 150 ms), what goes
+    // leaves the view in runs, and the status line is worked out once for a burst (every 30 ms at most): counted here
+    // against the time the move took (counts: the same on any machine), with the longest the window was held (a timer
+    // ticking every 10 ms) shown beside them.
     {
         QString dir = home_path("many");
         const int n = 1500;
@@ -702,16 +705,24 @@ int main(int argc, char **argv)
             QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
             QApplication::sendEvent(dropw, &move);
             QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+            int removals = 0;   // the view's rows taken out: one run each
+            QMetaObject::Connection gone = QObject::connect(v->model(), &QAbstractItemModel::rowsRemoved, [&]() { ++removals; });
+            stats::enable();   // (counts the status line's updates)
+            qint64 updates_before = stats::counted("status line updates");
             clock.start();
             tick.start(10);
             QApplication::sendEvent(dropw, &drop);
             bool moved = wait_for([&]() { return w->pane()->all_paths().size() == 1; }, 60000);
             spin(300);   // the status line's update after the burst
             tick.stop();
+            qint64 updates = stats::counted("status line updates") - updates_before, took = clock.elapsed();
+            QObject::disconnect(gone);
+            // (one per folder, either of them, was the freeze)
             if (!moved || !exists(join(dir, "aa-target/d1499")))
                 r = "not moved";
-            else if (longest > 2500)
-                r = QString("the window was held for %1 ms").arg(longest);
+            else if (removals > took / 150 + 5 || removals > n / 2 || updates > took / 30 + 5 || updates > n / 2)
+                r = QString("for %1 folders in %2 ms: %3 removals from the view, %4 status line updates (the window "
+                            "held for up to %5 ms)").arg(n).arg(took).arg(removals).arg(updates).arg(longest);
         }
         check(r.isEmpty(), QString::number(n) + " selected folders dropped into a sibling move without holding the window" +
                                (r.isEmpty() ? QString() : " (" + r + ")"));

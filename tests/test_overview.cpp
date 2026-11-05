@@ -99,8 +99,8 @@ int main(int argc, char **argv)
         };
         g_signal_emit_by_name(op, "ask-password", "Enter a passphrase to unlock the volume", "", "",
                               GAskPasswordFlags(G_ASK_PASSWORD_NEED_PASSWORD | G_ASK_PASSWORD_SAVING_SUPPORTED));
-        spin(300);
-        QDialog *dlg = open_dialog("Authentication Required");
+        QDialog *dlg = nullptr;
+        wait_for([&]() { return (dlg = open_dialog("Authentication Required")) != nullptr; });
         check(dlg && is_free_window(dlg) && replies.isEmpty(),
               QString("an encrypted drive's password is asked in a free window, with no reply until it's answered "
                       "(replies so far: %1)").arg(replies.size()));
@@ -109,19 +109,21 @@ int main(int argc, char **argv)
                 pw->setText("sesame");
             dlg->accept();
         }
-        spin(100);
+        wait_for([&]() { return !replies.isEmpty(); });
+        spin(100);   // (a second reply, if one came, is already here: both would come from the same answer)
         check(replies == QList<int>{G_MOUNT_OPERATION_HANDLED} &&
                   QString::fromUtf8(g_mount_operation_get_password(op)) == "sesame",
               "...and Connect replies once, handled, with the password typed");
         replies.clear();
         const char *choices[] = {"Unlock", "Cancel", nullptr};
         g_signal_emit_by_name(op, "ask-question", "Unlock anyway?", choices);
-        spin(300);
-        QDialog *q = open_dialog("Question");
+        QDialog *q = nullptr;
+        wait_for([&]() { return (q = open_dialog("Question")) != nullptr; });
         bool waited = q && replies.isEmpty();
         if (auto *box = qobject_cast<QMessageBox *>(q); box && !box->buttons().isEmpty())
             box->buttons().first()->click();
-        spin(100);
+        wait_for([&]() { return !replies.isEmpty(); });
+        spin(100);   // (as above)
         check(waited && replies == QList<int>{G_MOUNT_OPERATION_HANDLED},
               "a mount's question also waits for its answer, then replies once, handled");
         g_object_unref(op);

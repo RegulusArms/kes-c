@@ -1173,6 +1173,7 @@ void MainWindow::update_status()
     Pane *p = pane();
     if (!p)
         return;
+    stats::count("status line updates");
     if (p->is_overview()) {
         status_label->setText(tx("Drives, network locations and bookmarks"));
         if (info->isVisible())

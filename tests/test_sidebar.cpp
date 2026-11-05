@@ -24,8 +24,7 @@ int main(int argc, char **argv)
     Sidebar *s = w->sidebar;
     FakeFlight fake;
     QString me = QString::fromUtf8(g_dbus_connection_get_unique_name(g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr)));
-    wait_for([&]() { return fake.tower_pid() != 0; });
-    fake.check_in();
+    fake.join();   // (until this Kestrel has the tower too, its reports aren't sent)
     QString trash = join(TRASH_DIR(), "files");
 
     // -- the order helpers
@@ -164,10 +163,16 @@ int main(int argc, char **argv)
     // total is asked once, the free space when a folder is opened or a job has ended
     drives::MountWatch::instance()->mounts_changed();   // (the test's mounts gone)
     wait_for([&]() { return !s->entry_keys("mounts").contains(home_path("data")); });
-    spin(2000);   // (the answers to the first questions)
+    // the answers to the first questions, however long they take: until two seconds pass with none (at most 30 s: a
+    // drive asked again and again is what the check below is for)
     int answers = 0;
     QMetaObject::Connection counted =
         QObject::connect(drives::Sizes::instance(), &drives::Sizes::changed, [&](const QString &) { answers += 1; });
+    for (int seen = -1, rounds = 0; seen != answers && rounds < 15; ++rounds) {
+        seen = answers;
+        spin(2000);
+    }
+    answers = 0;
     QStringList devices_before = s->entry_keys("devices");
     spin(7000);
     check(answers == 0 && s->entry_keys("devices") == devices_before,
@@ -194,23 +199,22 @@ int main(int argc, char **argv)
     wait_for([&]() { return !s->entry_keys("devices").contains(late); }, 3000);
     check(not_yet && late_shows, "a mount that's in the table only a moment after the event still shows, with no other "
                                  "event");
-    // mount changes coming faster than the refresh's 300 ms (containers, an automounter) don't hold it off
+    // mount changes coming faster than the refresh's 300 ms (containers, an automounter) don't hold it off: the
+    // changes go on every 100 ms until the drive shows (a refresh put off by each change would never show it)
     QString busy = "/media/" + user + "/kestrel-busy";
     qputenv("KESTREL_TEST_MOUNTS", (busy + "|vfat|/dev/kestrel-busy").toUtf8());
-    QElapsedTimer stream;
-    stream.start();
     bool during = false;
-    while (stream.elapsed() < 2500 && !during) {
+    int changes = 0;
+    for (; changes < 300 && !during; ++changes) {
         drives::MountWatch::instance()->mounts_changed();
         spin(100);
         during = s->entry_keys("devices").contains(busy);
     }
-    qint64 took = stream.elapsed();
     qunsetenv("KESTREL_TEST_MOUNTS");
     drives::MountWatch::instance()->mounts_changed();
     wait_for([&]() { return !s->entry_keys("devices").contains(busy); }, 3000);
-    check(during && took < 1000, QString("a drive mounted shows within a second while other mounts keep changing (%1 ms)")
-                                     .arg(took));
+    check(during, QString("a drive mounted shows while other mounts keep changing, faster than the refresh (after %1 "
+                          "changes)").arg(changes));
     QString disk;   // a real block device, if this machine has one mounted
     for (const drives::Mount &mt : drives::mounts())
         if ((mt.source.startsWith("/dev/sd") || mt.source.startsWith("/dev/nvme") || mt.source.startsWith("/dev/vd")) &&

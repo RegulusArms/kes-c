@@ -1018,7 +1018,13 @@ int main(int argc, char **argv)
                    ("[Desktop Entry]\nType=Application\nName=Note\nExec=" + script + " %f\nMimeType=text/plain;\n").toUtf8());
         makedirs(home_path(".config"), true);
         write_text(home_path(".config/mimeapps.list"), "[Default Applications]\ntext/plain=kes-test-open.desktop\n");
-        spin(500);   // (GIO notices new applications by watching their folders)
+        wait_for([]() {   // (GIO notices new applications by watching their folders: in its own time)
+            GAppInfo *ai = g_app_info_get_default_for_type("text/plain", FALSE);
+            bool ours = ai && QByteArray(g_app_info_get_id(ai)) == "kes-test-open.desktop";
+            if (ai)
+                g_object_unref(ai);
+            return ours;
+        });
         bool made_plain = make7("plain.7z", "");
         ArchiveWindow *pw = ArchiveWindow::open(w, join(base, "plain.7z"));
         wait_for([&]() { return pw->loaded(); });

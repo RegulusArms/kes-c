@@ -118,6 +118,7 @@ int main(int argc, char **argv)
     // reads another program makes: the whole window froze every 4 s)
     qputenv("KESTREL_TEST_STATFS_DELAY_MS", "2500");
     write_text(join(tape, "notes.txt"), "x");
+    int ui_before = util::test_ui_waits();
     qint64 pause = longest_pause(
         [&]() {
             w->sidebar->refresh();
@@ -126,9 +127,10 @@ int main(int argc, char **argv)
             w->pane()->set_path(OVERVIEW);
         },
         600);
-    check(pause < 1500, QString("asking a busy tape for its size (2.5 s) doesn't hold the window: the sidebar, the "
-                                "status bar, Properties and the Overview get it in the background (longest pause %1 ms)")
-                            .arg(pause));
+    int ui_asked = util::test_ui_waits() - ui_before;
+    check(ui_asked == 0, QString("asking a busy tape for its size (2.5 s) doesn't hold the window: the sidebar, the "
+                                 "status bar, Properties and the Overview get it in the background (waits on the UI "
+                                 "thread: %1; longest pause %2 ms)").arg(ui_asked).arg(pause));
     check(wait_for([&]() { return drives::Sizes::instance()->get(tape).total > 0; }, 8000),
           "...and the size comes when the drive answers");
     qputenv("KESTREL_TEST_STATFS_DELAY_MS", "0");
@@ -138,20 +140,24 @@ int main(int argc, char **argv)
         QString fifo = join(tape, "slow.sha256");   // a read that waits until something is written, as a seeking tape
         ::mkfifo(enc(fifo).constData(), 0600);
         write_text(join(tape, "data.bin"), "hello");
-        std::thread writer([fifo]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        // the file is written only once opening it has returned (or after 20 s, so a read that waits ends): opening
+        // that waited for the read would come back only after the write
+        std::atomic<bool> returned{false}, written{false};
+        std::thread writer([fifo, &returned, &written]() {
+            for (int i = 0; i < 2000 && !returned; ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            written = true;
             QFile f(fifo);
             if (f.open(QIODevice::WriteOnly))
                 f.write("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  data.bin\n");
         });
-        QElapsedTimer clock;
-        clock.start();
         w->open_paths(w->pane(), {fifo});
-        qint64 took = clock.elapsed();
-        bool shown = wait_for([]() { return shown_window<hashcheck::VerifyDialog>() != nullptr; }, 6000);
+        bool before_read = !written;
+        returned = true;
+        bool shown = wait_for([]() { return shown_window<hashcheck::VerifyDialog>() != nullptr; });
         writer.join();
-        check(took < 500 && shown, QString("opening a checksum file doesn't wait for it to be read (%1 ms), and Verify "
-                                           "Checksums opens once it has been").arg(took));
+        check(before_read && shown, "opening a checksum file doesn't wait for it to be read, and Verify Checksums opens "
+                                    "once it has been");
         if (auto *d = shown_window<hashcheck::VerifyDialog>())
             d->close();
     }
@@ -173,7 +179,8 @@ int main(int argc, char **argv)
     w->pane()->set_path(tape);
     w->info->setVisible(true);
     w->info->show_path(img);
-    spin(400);
+    wait_for([&]() { return labels_in(w->info).join("|").contains("not read from this tape"); });
+    spin(400);   // (details read anyway would come with it, from the same look)
     QStringList info = labels_in(w->info);
     check(!info.join("|").contains("64 × 48") && info.join("|").contains("not read from this tape"),
           "the info panel doesn't read an image's details from a tape, and says why");
@@ -237,7 +244,7 @@ int main(int argc, char **argv)
             return QVariant();
         });
         QPointer<Task> hp(holder);
-        spin(100);
+        wait_for([&]() { return hp && !hp->queued; });   // it has the tape
         Task *t = fileops::start_ops(w, {{"copy", home_path("one.txt"), join(tape, "one.txt")}}, "Test", []() {});
         QPointer<Task> tp(t);
         spin(800);
@@ -303,28 +310,43 @@ int main(int argc, char **argv)
             write_text(join(disk, QString("f%1.txt").arg(i)), "x");
         w->pane()->set_path(HOME());
         spin(300);
+        // (each check: no stat of the busy drive on the UI thread, which would hold the window; the pauses are shown)
+        auto ui_waits = [](int &before) {
+            int n = util::test_ui_waits() - before;
+            before = util::test_ui_waits();
+            return n;
+        };
+        int mark = util::test_ui_waits();
         util::set_test_busy(disk, 1500);
         qint64 opening = longest_pause([&]() { w->pane()->set_path(disk); }, 300);
+        int opening_w = ui_waits(mark);
         util::set_test_busy(QString(), 0);
         wait_for([&]() { return w->pane()->all_paths().size() == 41; });
         util::set_test_busy(disk, 1500);
         qint64 refreshing = longest_pause([&]() { w->pane()->refresh(); }, 300);
+        int refreshing_w = ui_waits(mark);
         util::set_test_busy(QString(), 0);
         wait_for([&]() { return w->pane()->all_paths().size() == 41; });
         w->pane()->select_paths({join(disk, "f1.txt")});
         spin(300);
         util::set_test_busy(disk, 1500);
+        mark = util::test_ui_waits();
         qint64 menu = longest_pause([&]() { delete w->build_menu(w->pane(), {join(disk, "f1.txt")}); }, 300);
+        int menu_w = ui_waits(mark);
         qint64 to_file = longest_pause([&]() { w->pane()->set_path(join(disk, "sub/../f2.txt")); }, 300);
+        int to_file_w = ui_waits(mark);
         util::set_test_busy(QString(), 0);
         bool file_selected = wait_for([&]() {
             return w->pane()->path == disk && w->pane()->selected_paths() == QStringList{join(disk, "f2.txt")};
         }, 5000);
-        check(opening < 1000 && refreshing < 1000 && menu < 1000 && to_file < 1000 && file_selected,
-              QString("a drive kept busy by another program doesn't hold the window: opening a folder there (%1 ms), "
-                      "refreshing it (%2 ms), an item's right-click menu (%3 ms), opening a file's path (%4 ms), which "
-                      "shows its folder with it selected once the drive answers")
-                  .arg(opening).arg(refreshing).arg(menu).arg(to_file));
+        check(opening_w == 0 && refreshing_w == 0 && menu_w == 0 && to_file_w == 0 && file_selected,
+              QString("a drive kept busy by another program doesn't hold the window (waits on the UI thread, longest "
+                      "pause): opening a folder there (%1, %2 ms), refreshing it (%3, %4 ms), an item's right-click "
+                      "menu (%5, %6 ms), opening a file's path (%7, %8 ms), which shows its folder with it selected once "
+                      "the drive answers")
+                  .arg(QString::number(opening_w), QString::number(opening), QString::number(refreshing_w),
+                       QString::number(refreshing), QString::number(menu_w), QString::number(menu),
+                       QString::number(to_file_w), QString::number(to_file)));
         util::set_test_busy(disk, 1500);
         w->pane()->set_path(join(disk, "missing"));
         util::set_test_busy(QString(), 0);
@@ -352,11 +374,15 @@ int main(int argc, char **argv)
                 a->trigger();
         w->pane()->select_paths({join(busy, "a.bin")});
         spin(500);   // (the info panel has read it, the tape idle)
+        int mark = util::test_ui_waits();
         util::set_test_busy(tape, 1500);
         qint64 selecting = longest_pause([&]() { w->pane()->select_paths({join(busy, "b.bin")}); }, 800);
+        int selecting_w = util::test_ui_waits() - mark;
+        mark = util::test_ui_waits();
         w->pane()->select_paths({join(busy, "sums.sha256")});
         // (long enough to cover the Verify window opening, once the background read has waited on the tape too)
         qint64 opening = longest_pause([&]() { w->open_paths(w->pane(), {join(busy, "sums.sha256")}); }, 4500);
+        int opening_w = util::test_ui_waits() - mark;
         bool info_later = wait_for([&]() { return labels_in(w->info).join("|").contains("Size:"); }, 8000);
         util::set_test_busy(QString(), 0);
         QWidget *verify = nullptr;
@@ -371,11 +397,12 @@ int main(int argc, char **argv)
         for (QAction *a : w->findChildren<QAction *>())
             if (a->text() == "Info Panel" && a->isChecked())
                 a->trigger();
-        check(selecting < 600 && opening < 600 && info_later && verify,
-              QString("while the tape is busy seeking, selecting files on it (%1 ms) and opening a checksum file there "
-                      "(%2 ms) don't hold the window: the info panel fills in when the tape answers, and Verify Checksums "
-                      "opens once the file is read")
-                  .arg(selecting).arg(opening));
+        check(selecting_w == 0 && opening_w == 0 && info_later && verify,
+              QString("while the tape is busy seeking, selecting files on it (waits on the UI thread: %1; longest pause "
+                      "%2 ms) and opening a checksum file there (%3; %4 ms) don't hold the window: the info panel fills "
+                      "in when the tape answers, and Verify Checksums opens once the file is read")
+                  .arg(QString::number(selecting_w), QString::number(selecting), QString::number(opening_w),
+                       QString::number(opening)));
     }
 
     // ---- copies onto a tape go through a RAM buffer (tapebuf.h), so the drive keeps streaming
@@ -544,11 +571,8 @@ int main(int argc, char **argv)
         appeared.sort();
         QStringList expected = src_order;
         expected.sort();
-        spin(300);   // (the job's end reaches the task list through the event loop)
-        FinishedTask last;   // the copy's (the tape's index is written by a job of its own after it)
-        for (const FinishedTask &f : TaskBoard::instance()->finished)
-            if (f.title == "Test" && f.log.contains("bigcopy"))
-                last = f;
+        // the copy's (the tape's index is written by a job of its own after it)
+        FinishedTask last = finished_task("Test", "bigcopy");
         check(filling && !early && appeared == expected && in_order && intact,
               "a copy onto a tape fills the buffer first (saying so), writes nothing meanwhile, and then writes every "
               "file whole and in order (" + appeared.join(", ") + ")");
@@ -570,14 +594,19 @@ int main(int argc, char **argv)
         spin(300);
         if (t2)
             t2->set_paused(true);
-        spin(300);
+        // the piece being read when it paused is let finish, however long that takes here: until reading stops
+        // (at most 30 s; a buffer that doesn't pause never stops, and is caught below)
+        for (qint64 before = -1, rounds = 0; rchar() != before && rounds < 100; ++rounds) {
+            before = rchar();
+            spin(300);
+        }
         qint64 r0 = rchar();
         spin(800);
         qint64 paused_read = rchar() - r0;
         if (t2)
             t2->set_paused(false);
         qint64 r1 = rchar();
-        spin(800);
+        wait_for([&]() { return rchar() - r1 > 8 * 1024 * 1024; });   // reading again
         qint64 running_read = rchar() - r1;
         if (t2)
             t2->cancel();
@@ -677,12 +706,7 @@ int main(int argc, char **argv)
                 spin(20);
             }
             qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
-            spin(300);
-            QString log;
-            for (const FinishedTask &f : TaskBoard::instance()->finished)
-                if (f.title == "Quiet" && f.log.contains(name))
-                    log = f.log;
-            return log;
+            return finished_task("Quiet", name).log;
         };
         if (!gnome) {
             skip("GNOME's low-disk-space check skips a tape while a job writes to it (GNOME's settings aren't installed)");
@@ -772,11 +796,7 @@ int main(int argc, char **argv)
         job.dd = true;
         QPointer<Task> t = fileops::start_ops(w, {job}, "With dd", []() {});
         wait_for([&]() { return !t; }, 20000);
-        spin(300);
-        QString log;
-        for (const FinishedTask &f : TaskBoard::instance()->finished)
-            if (f.title == "With dd")
-                log = f.log;
+        QString log = finished_task("With dd").log;
         check(read_file(join(tape, "dd1.bin")) == payload && log.contains("dd bs=512K iflag=fullblock status=progress") &&
                   log.contains("records out") && !log.contains("Tape buffer:"),
               "with dd, the file is written whole by dd (512 KB blocks), with no buffer of Kestrel's, and the job's log "
@@ -920,7 +940,7 @@ int main(int argc, char **argv)
             wait_for([&]() { return !t; }, 30000);
         }
         qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
-        spin(200);
+        wait_for([&]() { return !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(); });
         check(writing && !lexists(join(tape, "cancel.bin")) && leftovers().isEmpty(),
               "cancelling a copy onto a tape while it writes deletes the half-written file");
 
@@ -940,11 +960,7 @@ int main(int argc, char **argv)
             qunsetenv("KESTREL_TEST_TAPEBUF_DELAY_MS");
             qunsetenv("KESTREL_TEST_MEMINFO");
             settings().remove("tape_min_speed");
-            spin(300);
-            QString log;
-            for (const FinishedTask &f : TaskBoard::instance()->finished)
-                if (f.title == "Rated")
-                    log = f.log;
+            QString log = finished_task("Rated").log;
             static const QRegularExpression line(
                 R"(^  \d\d:\d\d:\d\d  tape (waiting for the buffer|[\d.]+ [kMG]?B/s) · source \S+ \S+ · buffer .+ of .+ \(\d+%\) · .+ of .+ written$)");
             QStringList lines, waiting, rated;

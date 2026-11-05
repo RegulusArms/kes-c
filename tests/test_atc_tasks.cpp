@@ -65,10 +65,14 @@ int main(int argc, char **argv)
           "a task here is reported (kept state)");
     check(wait_for([&]() { return label_of(w).startsWith("Test job") && label_of(w).contains("+1 in other windows"); }),
           "this window's task comes first, the other is counted: " + label_of(w));
+    // one every 500 ms at most (and one at least, while it moves): counted against the time that actually passed
     int before = fake.count_type("tasks", me);
+    QElapsedTimer span;
+    span.start();
     spin(2000);
     int n = fake.count_type("tasks", me) - before;
-    check(n >= 2 && n <= 6, QString("progress reports are throttled (%1 in 2 s)").arg(n));
+    qint64 ms = span.elapsed();
+    check(n >= 2 && n <= ms / 500 + 2, QString("progress reports are throttled (%1 in %2 ms)").arg(n).arg(ms));
 
     MainWindow *w2 = open_window({HOME()});
     check(wait_for([&]() {

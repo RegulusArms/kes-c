@@ -132,7 +132,7 @@ int main(int argc, char **argv)
     write_text(home_path("a.txt"), "a");
     auto held = std::make_shared<std::atomic<bool>>(true);
     QPointer<Task> h = holder(w, "Holding the home drive", HOME(), held);
-    spin(150);
+    wait_for([&]() { return h && !h->queued; });   // it has the drive
     QPointer<Task> copy = fileops::start_ops(w, {{"copy", home_path("a.txt"), home_path("a2.txt")}}, "Copy on the same drive");
     QPointer<Task> other = holder(w, "On the tape", tape, std::make_shared<std::atomic<bool>>(false));
     spin(600);
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
     jobs::set_mode("one");
     *held = true;
     h = holder(w, "Holding again", HOME(), held);
-    spin(150);
+    wait_for([&]() { return h && !h->queued; });   // it has the drive
     other = holder(w, "On the tape, one at a time", tape, std::make_shared<std::atomic<bool>>(false));
     spin(500);
     bool waited_one = other && other->queued;
@@ -159,7 +159,7 @@ int main(int argc, char **argv)
           "all at once is kept as the queue's mode");
     *held = true;
     h = holder(w, "Holding, all at once", HOME(), held);
-    spin(150);
+    wait_for([&]() { return h && !h->queued; });   // it has the drive
     QPointer<Task> same = fileops::start_ops(w, {{"copy", home_path("a.txt"), home_path("a-rip.txt")}}, "Copy, all at once");
     bool rip = wait_for([&]() { return !same && exists(home_path("a-rip.txt")); }) && h && !h->queued;
     *held = false;
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
     // cancel, start now, reorder, start paused
     *held = true;
     h = holder(w, "Holding", HOME(), held);
-    spin(150);
+    wait_for([&]() { return h && !h->queued; });   // it has the drive
     auto ran = std::make_shared<std::atomic<bool>>(false);
     QPointer<Task> cancelled = fileops::queue_job(w, "Never runs", {HOME()}, [ran](Task *) {
         *ran = true;
@@ -446,7 +446,7 @@ int main(int argc, char **argv)
         QGuiApplication::clipboard()->setMimeData(md);
         *held = true;
         h = holder(w, "Holding the drive", HOME(), held);
-        spin(150);
+        wait_for([&]() { return h && !h->queued; });   // it has the drive
         w->paste(home_path("pq-dest"));   // Paste Into Folder on it
         QPointer<Task> pq;
         wait_for([&]() {
@@ -490,7 +490,7 @@ int main(int argc, char **argv)
     // ---- the Jobs window: opened from the status bar's job panel, every job, its log, Delete cancels
     *held = true;
     h = holder(w, "Holding for the window", HOME(), held);
-    spin(150);
+    wait_for([&]() { return h && !h->queued; });   // it has the drive
     QPointer<Task> waiting = fileops::start_ops(w, {{"copy", home_path("a.txt"), home_path("a3.txt")}}, "Waiting copy");
     spin(200);
     QMouseEvent click(QEvent::MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
@@ -872,7 +872,7 @@ int main(int argc, char **argv)
                   buttons.join(", ") + ")");
         if (keep)
             keep->click();
-        spin(300);
+        wait_for([&]() { return (!last || !last->isVisible()) && JobsWindow::is_open(); });
         check((!last || !last->isVisible()) && JobsWindow::is_open() && job && !job->isFinished() && !shown_window<JobsWindow>()->parentWidget(),
               "...Exit and Open the Jobs Window: the window closes, the Jobs window (a window of its own) opens, and the "
               "job goes on");

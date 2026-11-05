@@ -358,28 +358,47 @@ int main(int argc, char **argv)
         check(!dir_r.isEmpty() && !ok(dir_r) && contents(join(W, "olddir")) == old_before && leftovers().isEmpty(),
               "replacing a folder: a failure part-way keeps the old folder as it was, and leaves no half-made copy");
     }
+    // part-way, however fast the disk: a helper started with KESTREL_TEST_COPY_HOLD holds each copy after its first
+    // piece while the hold file is there (and says so with <hold>.reached), still answering a cancel
     write_file(join(W, "huge"), "x");
-    ::truncate(enc(join(W, "huge")).constData(), qint64(2) << 30);   // 2 GB (sparse): long enough to stop part-way
+    ::truncate(enc(join(W, "huge")).constData(), qint64(16) << 20);   // (sparse) more than the helper's 1 MB piece
+    QString hold = home_path("copy-hold");
+    auto hold_next = [&]() {
+        write_file(hold, "h");
+        QFile::remove(hold + ".reached");
+    };
+    auto reached = [&]() { return wait_for([&]() { return exists(hold + ".reached"); }); };
+    auto holding = [&](Helper &x) {
+        qputenv("KESTREL_TEST_COPY_HOLD", enc(hold));
+        bool up = x.start();
+        qunsetenv("KESTREL_TEST_COPY_HOLD");
+        return up;
+    };
+    Helper held;
+    bool held_up = holding(held);
     {
-        qint64 id = h.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
-        QJsonObject m = h.next(id);
+        hold_next();
+        qint64 id = held.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject m = held.next(id);
         QJsonArray pr = m.value("progress").toArray();
         bool partway = !pr.isEmpty() && pr[0].toDouble() > 0 && pr[0].toDouble() < pr[1].toDouble() / 2;
-        QElapsedTimer clock;
-        clock.start();
-        h.cancel(id);
-        QJsonObject r = h.reply(id);
-        check(partway && r.value("cancelled").toBool() && clock.elapsed() < 2000 &&
-                  read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
-              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way at once, keeping "
-              "the file it was replacing and no half-made copy");
+        bool at = reached();
+        held.cancel(id);
+        QJsonObject r = held.reply(id);
+        QFile::remove(hold);
+        check(held_up && at && partway && r.value("cancelled").toBool() && read_file(join(W, "conf.txt")) == "original" &&
+                  leftovers().isEmpty(),
+              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way, keeping the file it "
+              "was replacing and no half-made copy");
     }
     {
+        hold_next();
         Helper ending;
-        bool started = ending.start();
+        bool started = holding(ending);
         qint64 id = ending.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
-        bool partway = !ending.next(id).value("progress").toArray().isEmpty();
+        bool partway = !ending.next(id).value("progress").toArray().isEmpty() && reached();
         bool exited = ending.stop();
+        QFile::remove(hold);
         check(started && partway && exited && read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
               "ending the admin session part-way through a copy stops it, keeping the file it was replacing and no "
               "half-made copy");
@@ -389,20 +408,24 @@ int main(int argc, char **argv)
         // meanwhile is kept and the copy fails with a conflict; one that's there already is never replaced
         QString fresh = join(W, "fresh.bin"), mid = join(W, "mid.bin");
         write_file(mid, "m");
-        ::truncate(enc(mid).constData(), qint64(256) << 20);   // sparse; the first progress report comes at once
-        qint64 id = h.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
-        bool partway = !h.next(id).value("progress").toArray().isEmpty();
+        ::truncate(enc(mid).constData(), qint64(16) << 20);   // (sparse)
+        hold_next();
+        qint64 id = held.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
+        bool partway = !held.next(id).value("progress").toArray().isEmpty() && reached();
         write_file(fresh, "theirs");
-        QJsonObject r = h.reply(id, 60000);
+        QFile::remove(hold);
+        QJsonObject r = held.reply(id, 60000);
         QJsonObject taken = h.call({{"op", "copy"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
         QJsonObject moved = h.call({{"op", "move"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
-        check(partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
+        check(held_up && partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
                   read_file(fresh) == "theirs" && !ok(taken) && !ok(moved) && read_file(join(W, "conf.txt")) == "original" &&
                   read_file(join(W, "w.txt")) == "hello" && leftovers().isEmpty(),
               "a copy or move to a new name keeps a file another program saves there meanwhile (or had saved), and says so");
         QFile::remove(fresh);
         QFile::remove(mid);
     }
+    held.stop();
+    QFile::remove(hold + ".reached");
     QFile::remove(join(W, "huge"));
     QDir().mkpath(join(W, "mvsrc"));
     write_file(join(W, "mvsrc/moved.txt"), "moved");

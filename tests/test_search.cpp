@@ -231,7 +231,8 @@ int main(int argc, char **argv)
     bool busy = p->search_busy_shown() && p->searching() && p->view_message() == "Searching…";
     p->stop_search();
     bool stopped = wait_for([&]() { return !p->searching(); }, 5000);
-    spin(300);
+    auto left = [&]() { return proc::run({"pgrep", "-f", "-e", "needle.*" + many}).out.trimmed(); };
+    wait_for([&]() { return left().isEmpty(); });   // (a stopped grep ends in its own time)
     auto r = proc::run({"pgrep", "-f", "-e", "needle.*" + many});
     check(busy, "while a search runs, a progress bar shows, and the view says “Searching…” until something is found");
     check(stopped && r.out.trimmed().isEmpty() && !p->search_busy_shown(),

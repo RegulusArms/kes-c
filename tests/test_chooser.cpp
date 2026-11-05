@@ -126,7 +126,18 @@ int main(int argc, char **argv)
         }
     });
     boxes.start(50);
-    spin(500);   // own the name
+    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+    wait_for([bus]() {   // the portal's name is ours (asked for on the bus: it comes in its own time)
+        GVariant *v = g_dbus_connection_call_sync(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                                  "NameHasOwner", g_variant_new("(s)", "org.freedesktop.impl.portal.desktop.kestrel"),
+                                                  G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, nullptr);
+        gboolean has = FALSE;
+        if (v) {
+            g_variant_get(v, "(b)", &has);
+            g_variant_unref(v);
+        }
+        return bool(has);
+    });
     Reply r;
 
     // -- the request
