@@ -14,6 +14,12 @@ Added:
   fits, never cut inside a character, at widths a pixel apart around an emoji and a joined family emoji. Covers the
   fix for a folder of long emoji names freezing the window: each name was measured anew, a character at a time, on
   every paint and mouse movement.
+- `ci-local.sh`: runs CI's test jobs on this machine as a GitHub runner runs them: each job's own steps read from
+  `deb.yml`, 4 CPUs and 16 GB per job (a runner's size), the 24.04 jobs as the runner's user with the runner image's
+  tools and their files on a real disk rather than overlayfs, fresh containers each time, and a warning about changes
+  not committed yet. Local runs passed while CI failed, mostly on timing: they had all of this machine's cores, the
+  24.04 jobs ran in a container unlike the runner's VM, and each run was set up by hand, differently each time.
+  `--cpus` and `--repeat` help bring out timing races before a push.
 
 ## 0.3.3-alpha.13
 

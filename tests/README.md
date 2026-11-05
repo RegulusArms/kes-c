@@ -787,6 +787,26 @@ either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or 
   ubuntu:24.04 or 26.04 system, and `stable` or `dev`. A release Kestrel no longer supports keeps its frozen suites,
   checked on that release's system whenever the repository is updated.
 
+## Running CI's tests here
+
+`tests/ci-local.sh` runs CI's four test jobs (`test-noble`, `test-resolute`, `sanitizers-noble`, `sanitizers-resolute`) in Docker the way a GitHub runner runs them, all at once, and prints each job's result, failures and skipped checks. A pass on this machine's own `tests/run.sh` says little about CI: most of what has failed only in CI was timing, and this machine has many more and faster cores than a runner.
+
+```bash
+tests/ci-local.sh                        # every test job, on the working tree
+tests/ci-local.sh test-noble             # only some
+tests/ci-local.sh --head                 # the last commit, as CI checks it out
+tests/ci-local.sh --cpus 2 --repeat 3    # a slower machine, three runs of the tests: brings out timing races
+tests/ci-local.sh --print                # what each job would run
+```
+
+- **The jobs come from `deb.yml`:** every job with a step that runs `tests/run.sh`, and its own `run:` steps, shells and packages, so the script follows the workflow without being edited. `uses:` steps are left out (the checkout is a copy of the tree; the cache only saves compile time).
+- **A runner's size:** each job gets 4 CPUs of its own (whole cores with their second threads, as Azure's vCPUs are) and 16 GB, like a GitHub runner for a public repository, so the build's `-j` and the timing of the tests' threads are a runner's.
+- **A job on the runner's VM** (no `container:`) runs in a fresh `ubuntu:<release>` container with what the runner image has that the tests use (sudo, setfacl, zstd, zip…), as the user `runner` (uid 1001, passwordless sudo), its workspace and `/tmp` on Docker volumes (a real disk, as the VM's, not overlayfs). A job with `container:` runs in that image as root, its workspace (`/__w`) on a volume as Actions mounts it.
+- **`sudo sysctl -w`** in a step can't be done in a container: it becomes a check that this machine already has that value (the 24.04 sanitizer job needs `vm.mmap_rnd_bits=28`).
+- **The tree:** by default the working tree (git's files and new ones not ignored); at the end it lists what isn't committed, which CI won't have until it's pushed. `--head` tests the last commit instead.
+- **Fresh each time:** base images are pulled again, and each job's container and volumes (`kes-ci-<job>`) are removed before it starts and when the script ends. Logs stay in a temporary folder it names (or `--logs DIR`).
+- **What it can't copy:** the runner's kernel (a container has this machine's) and the VM's block devices, so the checks needing a mounted disk or partition (in `tools` and `devices`) may still skip here and run in CI. It needs Docker and `python3-yaml`.
+
 ## How the tests work
 
 Each test is one small program in `tests/`, built from `test_<name>.cpp`:
