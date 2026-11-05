@@ -53,10 +53,15 @@ for t in "${TESTS[@]}"; do
     else
         cmd=("$ROOT/$B/tests/test_$t")
     fi
+    # A test that hangs is stopped after 10 minutes. The installer test gets 30: it runs install.sh, which configures
+    # this build folder as install.sh's own (Release, no tests) and builds the app again, all of it when the compiler
+    # cache is empty (a sanitizer build on a 4-CPU runner took over 8 minutes).
+    limit=600
+    [[ $t == installer ]] && limit=1800
     started=$SECONDS
     env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u CONDA_DEFAULT_ENV \
         HOME="$work/home" KESTREL_SHM_DIR="$work/shm" QT_QPA_PLATFORM=offscreen \
-        timeout 600 dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
+        timeout "$limit" dbus-run-session -- "${cmd[@]}" >"$work/log" 2>&1
     rc=$?
     took=$(( SECONDS - started ))
     # (with a failed check's indented lines under it: what it found)

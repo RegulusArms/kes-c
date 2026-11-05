@@ -19,7 +19,11 @@ Added:
   tools and their files on a real disk rather than overlayfs, fresh containers each time, and a warning about changes
   not committed yet. Local runs passed while CI failed, mostly on timing: they had all of this machine's cores, the
   24.04 jobs ran in a container unlike the runner's VM, and each run was set up by hand, differently each time.
-  `--cpus` and `--repeat` help bring out timing races before a push.
+  `--cpus` and `--repeat` help bring out timing races before a push, and `--only` runs some of the tests.
+- `run.sh`: the installer test may take 30 minutes before it's stopped (other tests still 10). It runs `install.sh`,
+  which builds the app again in the test's build folder, all of it when the compiler cache is empty: with the
+  sanitizers on a 4-CPU runner that took 502 of the 600 s limit (CI's first run with a compiler cache), and over 600
+  on a fresh `ci-local.sh` run, which then failed both sanitizer jobs though nothing was wrong.
 
 ## 0.3.3-alpha.13
 

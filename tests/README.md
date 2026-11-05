@@ -9,7 +9,7 @@ tests/run.sh                     # build, then run every test
 tests/run.sh fileops atc_undo    # only some of them
 ```
 
-`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`build/tests/`) in one build, through ccache when it's installed. It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines, how long it took, and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build.
+`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`build/tests/`) in one build, through ccache when it's installed. It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines, how long it took, and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build. A test still running after 10 minutes is stopped and counts as failed (the installer test after 30: it runs `install.sh`, which builds the app again in the same build folder, all of it when the compiler cache is empty).
 
 To build into other folders, set `KESTREL_BUILD_DIR` (for example `KESTREL_BUILD_DIR=build-mint tests/run.sh` builds into `build-mint/`, the tests in `build-mint/tests/`). That keeps two machines' builds apart when they share this folder, such as a virtual machine with an older Qt.
 
@@ -796,12 +796,13 @@ tests/ci-local.sh                        # every test job, on the working tree
 tests/ci-local.sh test-noble             # only some
 tests/ci-local.sh --head                 # the last commit, as CI checks it out
 tests/ci-local.sh --cpus 2 --repeat 3    # a slower machine, three runs of the tests: brings out timing races
+tests/ci-local.sh --only installer       # each job runs only these tests (after its usual build)
 tests/ci-local.sh --print                # what each job would run
 ```
 
 - **The jobs come from `deb.yml`:** every job with a step that runs `tests/run.sh`, and its own `run:` steps, shells and packages, so the script follows the workflow without being edited. `uses:` steps are left out (the checkout is a copy of the tree; the cache only saves compile time).
 - **A runner's size:** each job gets 4 CPUs of its own (whole cores with their second threads, as Azure's vCPUs are) and 16 GB, like a GitHub runner for a public repository, so the build's `-j` and the timing of the tests' threads are a runner's.
-- **A job on the runner's VM** (no `container:`) runs in a fresh `ubuntu:<release>` container with what the runner image has that the tests use (sudo, setfacl, zstd, zip…), as the user `runner` (uid 1001, passwordless sudo), its workspace and `/tmp` on Docker volumes (a real disk, as the VM's, not overlayfs). A job with `container:` runs in that image as root, its workspace (`/__w`) on a volume as Actions mounts it.
+- **A job on the runner's VM** (no `container:`) runs in a fresh `ubuntu:<release>` container with what the runner image has that the tests use (sudo, setfacl, zstd, zip…, and `/usr/share/doc`, which Docker's minimal image leaves out), as the user `runner` (uid 1001, passwordless sudo), its workspace and `/tmp` on Docker volumes (a real disk, as the VM's, not overlayfs). A job with `container:` runs in that image as root, its workspace (`/__w`) on a volume as Actions mounts it.
 - **`sudo sysctl -w`** in a step can't be done in a container: it becomes a check that this machine already has that value (the 24.04 sanitizer job needs `vm.mmap_rnd_bits=28`).
 - **The tree:** by default the working tree (git's files and new ones not ignored); at the end it lists what isn't committed, which CI won't have until it's pushed. `--head` tests the last commit instead.
 - **Fresh each time:** base images are pulled again, and each job's container and volumes (`kes-ci-<job>`) are removed before it starts and when the script ends. Logs stay in a temporary folder it names (or `--logs DIR`).

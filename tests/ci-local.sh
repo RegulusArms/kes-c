@@ -4,6 +4,7 @@
 #   tests/ci-local.sh test-noble           only these jobs
 #   tests/ci-local.sh --head               test the last commit, as CI checks it out (default: the working tree)
 #   tests/ci-local.sh --cpus 2 --repeat 3  fewer CPUs and three runs of the tests, to bring out timing races
+#   tests/ci-local.sh --only "fileops ui"  each job runs only these of run.sh's tests (after its usual build)
 #   tests/ci-local.sh --print              show what each job would run, and stop
 #
 # Each job's own steps are read from deb.yml and run as they are there (its `run:` blocks, its shell, its user), so a
@@ -12,8 +13,9 @@
 #     with their second threads, as Azure's vCPUs are) and 16 GB, so nproc, the build's -j and the timing of the
 #     tests' threads are a runner's, not this machine's;
 #   - a job without `container:` runs on the runner's VM: here in a fresh ubuntu:<runs-on> container with what the
-#     runner image has that the tests use, as the user "runner" (uid 1001, passwordless sudo), its workspace and /tmp
-#     on Docker volumes (this machine's disk, as the VM's ext4) rather than the container's overlayfs;
+#     runner image has that the tests use (and /usr/share/doc, which Docker's image leaves out), as the user "runner"
+#     (uid 1001, passwordless sudo), its workspace and /tmp on Docker volumes (this machine's disk, as the VM's ext4)
+#     rather than the container's overlayfs;
 #   - a job with `container:` runs in that image as root, with its workspace (/__w) on a volume, as Actions mounts it
 #     from the VM's disk, and /tmp in the container;
 #   - `uses:` steps are left out: actions/checkout is the copy of the tree, actions/cache only saves compile time;
@@ -31,14 +33,15 @@ RUNNER_CPUS=4 RUNNER_MEM=16g
 # gnupg, git, curl, python3, file, sysctl (procps); tzdata, so that no install stops to ask for a time zone.
 RUNNER_IMAGE_PACKAGES="acl bzip2 ca-certificates curl file git gnupg procps python3 sudo tzdata unzip xz-utils zip zstd"
 
-usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
-TREE=worktree CPUS=$RUNNER_CPUS REPEAT=1 PRINT=0 LOGS="" JOBS=()
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+TREE=worktree CPUS=$RUNNER_CPUS REPEAT=1 PRINT=0 LOGS="" ONLY="" JOBS=()
 while (( $# )); do
     case "$1" in
         --head) TREE=head ;;
         --cpus) CPUS="$2"; shift ;;
         --repeat) REPEAT="$2"; shift ;;
         --print) PRINT=1 ;;
+        --only) ONLY="$2"; shift ;;
         --logs) LOGS="$2"; shift ;;
         -h|--help) usage ;;
         -*) echo "Unknown option: $1" >&2; usage 2 ;;
@@ -47,6 +50,7 @@ while (( $# )); do
     shift
 done
 [[ "$CPUS" =~ ^[1-9][0-9]*$ && "$REPEAT" =~ ^[1-9][0-9]*$ ]] || { echo "--cpus and --repeat take a number" >&2; exit 2; }
+[[ "$ONLY" =~ ^[a-z_\ ]*$ ]] || { echo "--only takes test names (as tests/run.sh does)" >&2; exit 2; }
 command -v docker >/dev/null || { echo "docker isn't installed" >&2; exit 1; }
 python3 -c 'import yaml' 2>/dev/null || { echo "needs python3-yaml (sudo apt install python3-yaml)" >&2; exit 1; }
 
@@ -55,9 +59,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/kes-ci-local.XXXXXX")"
 mkdir -p "$LOGS"
 
 # --- the jobs, from deb.yml: every job with a step that runs tests/run.sh, one folder each with its steps
-python3 -I - "$WORKFLOW" "$WORK/jobs" "${JOBS[@]}" <<'EOF' || exit 2
+python3 -I - "$WORKFLOW" "$WORK/jobs" "$ONLY" "${JOBS[@]}" <<'EOF' || exit 2
 import os, re, sys, yaml
-wf, out, wanted = sys.argv[1], sys.argv[2], sys.argv[3:]
+wf, out, only, wanted = sys.argv[1], sys.argv[2], sys.argv[3].strip(), sys.argv[4:]
 jobs = yaml.safe_load(open(wf))["jobs"]
 testing = [n for n, j in jobs.items() if any("tests/run.sh" in (s.get("run") or "") for s in j.get("steps", []))]
 for n in wanted:
@@ -87,6 +91,8 @@ for n in wanted or testing:
             print(f"{n}: leaving out {s['uses']}", file=sys.stderr)
             continue
         run = s["run"].replace("${{ github.job }}", n)
+        if only:   # --only: the tests named, where the step runs them all
+            run = re.sub(r"tests/run\.sh(?=[\s\"']|$)", "tests/run.sh " + only, run, flags=re.M)
         if "${{" in run:
             sys.exit(f"{n}, step \"{name}\": an expression this script can't fill in")
         i += 1
@@ -194,6 +200,7 @@ run_job() {
         # the runner image: its packages, its user, the checkout in its workspace
         docker exec -u root "$C" bash -c "
             umask 022; export DEBIAN_FRONTEND=noninteractive
+            rm -f /etc/dpkg/dpkg.cfg.d/excludes   # a full system, not Docker's minimal one (/usr/share/doc kept)
             apt-get update -qq && apt-get install -y -qq $RUNNER_IMAGE_PACKAGES >/dev/null &&
             useradd -m -u 1001 -G adm,users -s /bin/bash runner &&
             echo 'runner ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/runner && chmod 0440 /etc/sudoers.d/runner &&
