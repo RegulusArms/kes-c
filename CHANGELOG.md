@@ -4,7 +4,13 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.16
+## 0.3.3-alpha.17
+
+- **BleachBit: folder covers, folder colours and folder sorts are three options**, so each can be cleaned without
+  the others (they used to be one, "Folder covers, colours and sorts"). Run `kes-setup --bleachbit` again to update
+  the cleaner.
+
+## 0.3.3-alpha.16 (2026-11-06)
 
 - **Double-clicking an encrypted archive extracts it also when its password was saved for another archive.** Kestrel
   already tried every saved password when extracting, but only skipped the Extract dialog for a password saved for

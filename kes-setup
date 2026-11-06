@@ -200,12 +200,22 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <warning>Sync Folders no longer lists them.</warning>
     <action command="delete" search="file" path="$conf/sync-pairs.json"/>
   </option>
-  <option id="folder_looks">
-    <label>Folder covers, colours and sorts</label>
-    <description>Delete the list of folders given a cover image, a colour, no image previews, or a sort of their own</description>
-    <warning>Those folders go back to their usual look and the default sort.</warning>
+  <option id="folder_covers">
+    <label>Folder covers</label>
+    <description>Delete the list of folders given a cover image</description>
+    <warning>Those folders show their usual preview again.</warning>
     <action command="delete" search="file" path="$conf/covers.json"/>
+  </option>
+  <option id="folder_colours">
+    <label>Folder colours</label>
+    <description>Delete the list of folders given a colour or no image previews</description>
+    <warning>Those folders go back to the usual colour, with image previews.</warning>
     <action command="delete" search="file" path="$conf/folder_styles.json"/>
+  </option>
+  <option id="folder_sorts">
+    <label>Folder sorts</label>
+    <description>Delete the list of folders given a sort or grouping of their own</description>
+    <warning>Those folders go back to the default sort.</warning>
     <action command="delete" search="file" path="$conf/sorts.json"/>
   </option>
 </cleaner>
@@ -448,7 +458,7 @@ if (( BLEACHBIT )); then
             { rm -f "$part"; exit 1; }
     ) || { echo "Couldn't write BleachBit's cleaner ($BLEACHBIT_CLEANER)." >&2; exit 1; }
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder, frequent" \
-         "folders), Starred, pinned items, and folder covers, colours and sorts. The first time BleachBit opens" \
+         "folders), Starred, pinned items, and folder covers, folder colours and folder sorts. The first time BleachBit opens" \
          "afterwards, it asks whether to trust the new cleaner (a check it makes for every cleaner you add): choose OK."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

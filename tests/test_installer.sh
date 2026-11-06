@@ -252,7 +252,8 @@ else
     echo "SKIP the cleaner follows BleachBit's CleanerML schema (needs xmllint and BleachBit's schema)"
 fi
 BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.job_logs kestrel_explorer.history kestrel_explorer.starred
-            kestrel_explorer.pinned kestrel_explorer.save_places kestrel_explorer.folder_looks kestrel_explorer.sync_pairs)
+            kestrel_explorer.pinned kestrel_explorer.save_places kestrel_explorer.folder_covers
+            kestrel_explorer.folder_colours kestrel_explorer.folder_sorts kestrel_explorer.sync_pairs)
 # BleachBit's command line, started without its launcher: BleachBit 4.6's (Ubuntu 24.04) asks loginctl about the
 # login session first, and fails when there is none (CI, containers)
 bleachbit_cli() {

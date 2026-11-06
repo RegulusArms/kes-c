@@ -6,6 +6,13 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.17
+
+### Changed
+
+- `installer`: the BleachBit checks preview and clean the new Folder covers, Folder colours and Folder sorts options
+  (one option before), so all three are checked to delete their own file and nothing else.
+
 ## 0.3.3-alpha.16
 
 No test changes.
