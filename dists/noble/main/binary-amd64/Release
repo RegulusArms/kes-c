@@ -1,0 +1,5 @@
+Component: main
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Architecture: amd64
+Description: Kestrel Explorer releases for Ubuntu 24.04 (noble) and systems based on it, such as Linux Mint 22

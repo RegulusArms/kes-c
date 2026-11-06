@@ -1,0 +1,38 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: dev
+Date: Fri, 06 Nov 2026 18:42:42 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer development builds (the DEV branch)
+MD5Sum:
+ 7a9964161e92cec21609b6fc69340b7c 1381 main/binary-amd64/Packages
+ a0dd2686e6e80d867d820889d6bdbd58 794 main/binary-amd64/Packages.gz
+ da476341b9ecabc545244ab00b966731 151 main/binary-amd64/Release
+SHA1:
+ 275876c3d699456aa99d24789c61177780bce82b 1381 main/binary-amd64/Packages
+ 3611b2f1f53c10f1b4d873cac9738ceb6f15a1f5 794 main/binary-amd64/Packages.gz
+ 7b46a07416eb821f79a003d15fa665c53ed261dd 151 main/binary-amd64/Release
+SHA256:
+ a497eb5c601ea1d4b8fcaeefe074a323252237b33002b56e452ee6d218bd6d9d 1381 main/binary-amd64/Packages
+ 7029444d3bfe01d1cd550acc867b5bbd5523bdc378c6544e0e124d316ef4d73c 794 main/binary-amd64/Packages.gz
+ 5bf834a9daa365366c7b52dc9fb3f9f38e1e6d71437a40a91a192829a80f23ef 151 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEQPAla0OYKoWytqRpkl2syCFqQh8FAmruH6IACgkQkl2syCFq
+Qh9BtA/9H8hdgorOPTbIsDN2D2XcOKoWx9i221FIVEfHFwI0sVqOHB26TR2YeJu/
+HbQ9SUkENNZCfrM70zqvyGTHlkAkWXjG+mPDcTHpGDLRcggIbyQ/AXnJI7vOeGwi
+mwvYwxhu0c9Bct8CdGLX2R6OvFUsghmXflUaUToJ6lQ+dDnhYLH9af3lFQRVXTra
++ZMrHRmLI9tKmrzYOVJ7oseIWWH2sJ8ePed0bkfq/ILyZe+5i9WnZO00wPh2PNlM
+ivGvTQ6VR3hurPas2xVYduYlqtTxCGRSTh791mLKl+a22ik5h9F8loQOyp0P0+xU
+vk4nvBjN87dVbRrUZf1/b1gMeSWOhcZFZzCE+TmHLaYrdMSBCv0jryGuCfQer+hB
+KNTydhM8FmgjXg+Vq0R3IXHcaPIvPNMNgwrxzs0awHuYim7JSX7tbtrka7cIW3an
+qlPt8UzNtFXM0Ms6UuGeOU+tSQNj2Lfr6McwNqcwWDLZhUQQJ2wzELIIUsbPFUmZ
+BKUSkldYLhkMeAVdELMUPWzmwG3r5FYhIeh341ae6atdWNbmft39xpOJ+g8qOhTH
+2LEvwCTyuBKOf6fJAe9x0F1XfLmnthKYsCc1nJqF4wymEhx05AAPbJI+3jqSp/aE
+9vnEN7iql37S6x8/lcenKCdlvKUYBFNWq+UQ96vkLMVNplNSMrc=
+=XzfC
+-----END PGP SIGNATURE-----

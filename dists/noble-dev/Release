@@ -1,0 +1,19 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: noble-dev
+Date: Fri, 06 Nov 2026 18:42:42 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer development builds for Ubuntu 24.04 (noble) and systems based on it
+MD5Sum:
+ 7a9964161e92cec21609b6fc69340b7c 1381 main/binary-amd64/Packages
+ a0dd2686e6e80d867d820889d6bdbd58 794 main/binary-amd64/Packages.gz
+ 01e72d9b84498e3ca1fce35f2c059c0d 183 main/binary-amd64/Release
+SHA1:
+ 275876c3d699456aa99d24789c61177780bce82b 1381 main/binary-amd64/Packages
+ 3611b2f1f53c10f1b4d873cac9738ceb6f15a1f5 794 main/binary-amd64/Packages.gz
+ 64dcad888ae407b339d282e704a8e59928be117f 183 main/binary-amd64/Release
+SHA256:
+ a497eb5c601ea1d4b8fcaeefe074a323252237b33002b56e452ee6d218bd6d9d 1381 main/binary-amd64/Packages
+ 7029444d3bfe01d1cd550acc867b5bbd5523bdc378c6544e0e124d316ef4d73c 794 main/binary-amd64/Packages.gz
+ 1632088008400d095d38225a972bafeee067633e0fcb8574e557fa5bce747b89 183 main/binary-amd64/Release

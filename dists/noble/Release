@@ -1,0 +1,19 @@
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: noble
+Date: Fri, 06 Nov 2026 19:37:46 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer releases for Ubuntu 24.04 (noble) and systems based on it, such as Linux Mint 22
+MD5Sum:
+ b2052240292eb54895f3a65ebdb947ae 1349 main/binary-amd64/Packages
+ 3e8149a641d0a585bc22f33a2fd37775 779 main/binary-amd64/Packages.gz
+ 6418a64b755c8ae032b2a4662aea3009 196 main/binary-amd64/Release
+SHA1:
+ 59deab5d096cbf946cbd610dffd623649f0ec062 1349 main/binary-amd64/Packages
+ 116a2a32bf3a154313a9d7cb7b699b33c4d6ab57 779 main/binary-amd64/Packages.gz
+ 3ec69c2e37d4c18a2b5f8d434358187b7a926136 196 main/binary-amd64/Release
+SHA256:
+ c112f61a16989877e3ba84db9324719bacea1502b6564abd41700146821453f1 1349 main/binary-amd64/Packages
+ e0932431e301b99b3820fe3eea14ed140d8e7362a6d3e05ad5be342d4ab0dbb9 779 main/binary-amd64/Packages.gz
+ f9d930b8017653be78ced8187ad56498b45f1498f5488b2eb564115615214bc9 196 main/binary-amd64/Release
