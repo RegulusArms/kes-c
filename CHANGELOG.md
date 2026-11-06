@@ -4,7 +4,13 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.15
+## 0.3.3-alpha.16
+
+- **Double-clicking an encrypted archive extracts it also when its password was saved for another archive.** Kestrel
+  already tried every saved password when extracting, but only skipped the Extract dialog for a password saved for
+  that very file; now it tries the saved ones first (as Extract Here does) and extracts at once when one opens it.
+
+## 0.3.3-alpha.15 (2026-11-06)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha15).
 
