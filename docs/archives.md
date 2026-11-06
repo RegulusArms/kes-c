@@ -6,7 +6,7 @@ Double-clicking an archive opens Kestrel's Extract dialog instead of another app
 
 ## Extracting
 
-![The right-click menu on a RAR archive, with Extract Here, Extract To… and Compress…](screenshot-archive-menu.png)
+![The right-click menu on a 7z archive: Extract Here, Extract To…, Open as Archive, Test Archive, Compress… and the other file entries](screenshots/archive-menu.png)
 
 Right-click an archive:
 
@@ -21,13 +21,19 @@ Right-click an archive:
 
   These choices, except the destination, are remembered.
 
+![Extract To… for holiday-photos.7z: the folder to extract to, into a new folder named after it, what to do with existing files, a password if it has one, Keep damaged files, and moving the archive to the trash or opening the folder afterwards](screenshots/extract.png)
+
 **Several archives at once.** Select more than one archive and right-click: **Extract All Here** and **Extract All To…** extract each of them the way Extract Here / Extract To… does on its own (its own folder, the same handling of existing files), one after another, as one job in the status bar: its ✕ stops them all. A split set selected whole (`x.part1.rar` … `x.part3.rar`) counts as one archive. At the end one summary says what was extracted and what wasn't (a password window you cancelled, a missing program, a damaged archive), with the details under **Show Details**, instead of a message per archive.
 
 **Encrypted archives.** Kestrel checks every archive before extracting. If it's encrypted (including RAR and 7z archives whose file names are hidden) it looks for the password, and asks only when it has none that opens it. A wrong password asks again, and nothing half-extracted is left behind. In Extract All, the first password you type is tried on every encrypted archive after it; you're asked again only for one it doesn't open, and the new password is then the one tried on the rest. Trying a password is a quick test (listing the archive, or testing its smallest encrypted file), not an extraction.
 
 **Remembered passwords.** The password window has a **Remember this password** box (off by default; only shown when a keyring is running). Ticked, the password is saved in your desktop's login keyring (GNOME Keyring on Ubuntu and Mint, KWallet on KDE, through the Secret Service), as "Kestrel Explorer: archive password for photos.7z" in Passwords and Keys (Seahorse). It's saved only when you ask, because any app running as you can read the login keyring. Kestrel then finds a password in this order: the one typed last in this job, the one saved for this archive (recognised by its size and the start of its contents, so renaming or moving it doesn't matter), then each of the other saved ones, and only if none opens the archive does it ask. **Preferences → Forget Saved Archive Passwords…** deletes them all (or delete single ones in Passwords and Keys). Without a keyring everything works the same, without saving.
 
+![The password window for tax-papers.7z: "tax-papers.7z is encrypted. Enter its password", Show, Remember this password (saved in the login keyring), Cancel and Extract](screenshots/archive-password.png)
+
 **Looking inside: Open as Archive.** Right-click an archive → **Open as Archive** opens a window listing what's inside it, as a tree of its folders and files with their sizes, packed sizes and times (🔒 marks an encrypted file), with a filter box. Select files or folders and choose **Extract Here** (next to the archive) or **Extract To…**: each one is put right in that folder under its own name (`photos/2024/beach.jpg` → `beach.jpg`; a folder comes with everything inside it). A name that's taken gets a number; nothing is replaced. The items are extracted into a hidden folder first and moved into place only once all of them are complete, so a failure or ✕ leaves nothing half-made. **Extract All…** and **Test** are there too. It works for 7z, zip, rar, zpaq and tar archives (with any compression) and what 7-Zip opens (iso, deb, cab…), not for a single compressed file (`.gz`, `.xz`…), which holds one file anyway. An archive whose names are encrypted asks for its password before it can be listed (a saved one is found first); one with encrypted files asks when you extract one of them, once while the window is open. Double-click a file (or right-click → **Open**) to open it with its app: it's extracted to a read-only temporary copy in `~/.cache/kestrel-explorer/archive-files` first (copies not used for a day are deleted). Drag items out of the window onto a Kestrel folder or the sidebar to extract them there (a job, as Extract To…), or onto the desktop or another app, which get them extracted to temporary copies as they're dropped (up to 500 MB; encrypted items whose password hasn't been given yet go only to Kestrel, which can ask for it).
+
+![Open as Archive: holiday-photos.7z as a tree of its folders and files with their sizes, packed sizes and dates, a filter box, and Extract Here, Extract To…, Extract All… and Test](screenshots/archive-window.png)
 
 **Testing: Test Archive.** Right-click an archive → **Test Archive** (or several → **Test Archives**) decompresses everything in it and checks each file against its checksum, without writing anything: 7-Zip, `unrar`, `unzip` and `zpaq` test their formats, and for tar and single compressed files the compressor checks its data and tar reads the archive through. It runs as a job in the status bar, finds or asks for passwords as extracting does, and ends with one message: OK, or which files are damaged, with the program's own words under **Show Details**.
 
@@ -36,6 +42,8 @@ Right-click an archive:
 ## Compressing
 
 Select files and/or folders, right-click and choose **Compress…**. The dialog shows only the options the chosen format supports:
+
+![Compress the Trip to the Coast folder: the archive's name and location, format 7z, compression level, method, CPU threads, encryption (also of the file names), split volumes, solid archive, extra options, and the exact 7z command](screenshots/compress.png)
 
 | Option | What it does |
 |---|---|

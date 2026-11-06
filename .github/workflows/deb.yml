@@ -15,12 +15,13 @@ name: Build .deb
 on:
   push:
     branches: [DEV, main]
-    # only Markdown (docs, changelogs, TODO) or the benchmark changed: nothing to build, test or publish (bench/ is
-    # run by hand, and nothing built, tested or packaged uses it)
-    paths-ignore: ['**.md', 'bench/**']
+    # only Markdown (docs, changelogs, TODO), the docs' pictures or the benchmark changed: nothing to build, test or
+    # publish (bench/ is run by hand, and nothing built, tested or packaged uses it or docs/). Pictures elsewhere
+    # (data/icons) are packaged, so they still build.
+    paths-ignore: ['**.md', 'docs/**.png', 'docs/**.jpg', 'bench/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'bench/**']
+    paths-ignore: ['**.md', 'docs/**.png', 'docs/**.jpg', 'bench/**']
   workflow_dispatch:   # run by hand from the Actions tab, whatever changed
 
 permissions:

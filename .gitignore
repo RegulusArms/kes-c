@@ -41,3 +41,6 @@ bench/results.json
 bench/results.md
 bench/results-kubuntu.json
 bench/results-kubuntu.md
+
+# the screenshot tool for the docs (local only)
+shots/
