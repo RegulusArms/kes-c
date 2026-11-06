@@ -181,6 +181,8 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/drives.cpp` | Slow drives (LTFS tapes, floppy disks): recognising them from the mount table, their sizes read in the background, tape attributes and index sync, one job at a time per drive |
 | `src/tapebuf.cpp` | The RAM write buffer for copies onto a tape (no shoe-shining): read ahead by a thread, sized from the memory available |
 | `src/diskimage.cpp` | Disk images: Back Up Drive to Image… (the admin helper reads the drive into a FIFO; Kestrel compresses with zstd, encrypts with gpg and writes the image as you, under a part name) and Mount Image (a loop device through udisks, LUKS unlocked, compressed or encrypted images expanded into the cache first) |
+| `src/ramdisk.cpp` | RAM disks (a folder in `/dev/shm`, or a tmpfs of its own mounted through the admin helper), how long each lasts, saving a persistent one to disk and loading it back; and private mode's hidden RAM disk |
+| `src/ramdiskwin.cpp` | The New RAM Disk… and Edit RAM Disk… window |
 | `src/jobs.cpp` | The job queue: one for every Kestrel (kept by the tower, else each Kestrel's own), by drive, one at a time or all at once |
 | `src/jobswin.cpp` | The Jobs window: every job, its steps and log, the queue's controls |
 | `src/joblogs.cpp` | Saving finished jobs' logs to `~/.cache/kestrel-explorer/job-logs` (a file per job, a folder per day) and pruning old ones |
@@ -189,7 +191,7 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
 | `src/widgets.cpp` | Grid delegate, path bar, sidebar, info panel, search |
 | `src/fsmodel.cpp` | The folder views' model: lists a folder by its names' bytes on a thread (so names that aren't valid UTF-8 work), follows changes through inotify, sorts and filters as the views need |
-| `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
+| `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching (in the shared freedesktop cache, or Kestrel's own with separate caching) |
 | `src/viewer.cpp` | Image viewer: decoding ahead at screen size, zoom, the filmstrip, the info panel, compare, quick actions, dragging an image out and Ctrl+C |
 | `src/imgedit.cpp` | Saving the viewer's changes to image files: rotations through the orientation tag, Straighten, crop and resize; turning files from the menu (Rotate ▸: jpegtran, lossless formats); keeping metadata in an image made from another |
 | `src/media.cpp` | Converting media: ffprobe's details, ffmpeg's options built from the settings (videos, audio), running ffmpeg with progress into a part file; converting images |
@@ -212,9 +214,10 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/prefswin.cpp` | The Preferences window, built from that list: tabs, search, resets |
 | `src/menus.cpp` | The right-click menus as the user lays them out: entry ids, the default layouts, rearranging a built menu, and the editor (Preferences → Menus) |
 | `src/hashcheck.cpp` | Checksum files: Verify Checksums, Create Checksum File…, and checking one file in Properties |
+| `src/pgp.cpp` | Encrypt… and Decrypt: encrypted copies made with gpg, with a password or to people's public keys, written under a part name and claimed only when gpg has succeeded |
 | `src/signature.cpp` | Verify Signature: checking `.sig` / `.asc` / `.gpg` signatures with gpg, said plainly; fetching a missing key |
 | `src/dupes.cpp` | Find Duplicates…: grouping identical files (by size, then their beginnings, then SHA-256), the window, trashing or hard-linking the copies not kept |
-| `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs |
+| `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs and the remembered past syncs (`sync-history.json`) |
 | `src/diskusage.cpp` | Disk Usage…: counting a folder or drive as a job, and the treemap window with its list |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |

@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.18
+## 0.3.4-alpha.0
+
+- Nothing yet.
+
+## 0.3.3-alpha.18 (2026-11-06)
 
 - **Separate caching (Preferences → Privacy): Kestrel's thumbnails can be kept apart from other apps.** When it's on,
   Kestrel no longer reads or writes the thumbnail cache the desktop's apps share (GNOME Files and others): it makes
