@@ -17,7 +17,7 @@ That's the question Kestrel sets out to answer, and why I'm building it.
 
 A file manager for Ubuntu and Linux Mint that's easy to pick up and puts many jobs you'd normally do in a terminal into the window. It also adds quality-of-life improvements over GNOME Files. It's written in C++ with Qt 6.
 
-![Kestrel Explorer's Overview page: drives with usage bars, phones and cameras, network locations and bookmarks](docs/screenshot-overview.png)
+![Kestrel Explorer's Overview page: drives with usage bars and their health, phones and cameras, network locations and bookmarks](docs/screenshots/overview.png)
 
 **Terminal jobs, in the window:**
 - **Archives:** create and extract 7z, zip, rar, zpaq and every tar format, with the options the command-line tools offer (level, method, threads, passwords, split volumes), and a preview of the exact command that will run. Double-click an archive to extract it.

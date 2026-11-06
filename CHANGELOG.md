@@ -6,7 +6,11 @@ What changed in each version of Kestrel Explorer, newest first.
 
 ## 0.3.4-alpha.0
 
-- Nothing yet.
+- **A picture of every window in the guides.** [Features](docs/features.md) and [Archives](docs/archives.md) now show
+  each of Kestrel's windows next to the text about it: the main window, Properties, Open With, Rename and Batch Rename,
+  the Jobs and Tower windows, Preferences, the archive windows, Find Duplicates, Disk Usage, Compare and Sync,
+  checksums, signatures and encryption, the converters, the Link window, the drive windows, RAM disks, the image viewer
+  and the Save window other apps get. The older screenshots were all taken again from the current version.
 
 ## 0.3.3-alpha.18 (2026-11-06)
 

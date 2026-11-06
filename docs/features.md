@@ -2,18 +2,26 @@
 
 ← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Right-click menus](context-menus.md) · [Install guide](install.md)
 
-![The right-click menu on a file: Open, Open With, Cut, Copy, Move To, Copy To, Duplicate, Rename, Copy Path / Name, Star, Links & Shortcuts, Compress, Send To, Move to Trash, Delete Permanently and Properties](screenshot-context-menu.png)
+![A Kestrel window on the Pictures folder: the toolbar, the path bar, the sidebar with places, bookmarks and drives, and the pictures as thumbnails with a folder's preview mosaic](screenshots/browser.png)
+
+![The right-click menu on a file: Open, Open With, Cut, Copy, Move To, Copy To, Duplicate, New Folder with Selection, Rename, Copy Path / Name, Star, Pin, Links & Shortcuts, Compress, Create Checksum File, Encrypt, Send To, Move to Trash, Delete Permanently and Properties](screenshots/context-menu.png)
 
 **File management**
 - Tabs, back/forward history, a clickable path bar (Ctrl+L to type a path), and a sidebar.
 - Follows the desktop's theme: light or dark, accent colour, fonts and icons, including switching while Kestrel is open. On GTK desktops the theme's own look needs `qt6-gtk-platformtheme` (see [Dependencies](dependencies.md)); the dark style is followed without it too.
 - **Other apps' Open and Save dialogs** (a browser's "Save image as", Flatpak and Snap apps, and GTK 4 and Qt apps that use the desktop portal) open as a Kestrel window, with the file name, the file type and Save/Open at the bottom, once you've run `./install.sh --default` (see [Build / install](install.md#build--install)).
   - **Free names, as browsers give repeated downloads:** when a Save window's folder already has a file of the suggested name, the name becomes the next free one (`photo.jpg` → `photo (1).jpg`, then `(2)`…), in each folder you go to; where the original is free it comes back. A name you type or a file you pick is yours and stays as it is (Kestrel asks before saving over a file). Saving several files at once gives each one a free name the same way.
+
+  ![A Save window from another app, as Kestrel shows it: the Pictures folder, and at the bottom the file name, already made free (harbour (1).jpg, since harbour.jpg is there), with Cancel and Save](screenshots/file-chooser.png)
+
   - **Save locations:** Preferences → Windows can have a Save window start on an Overview of its own, which shows first the folders you keep for saving (Downloads, a project folder…). They're only for Save windows: adding one doesn't star or bookmark it. Add them with **Add Folder…** on that page (or in Preferences), and right-click one to move it earlier or later or to remove it. An app saving over an existing file still opens in its folder, and Open windows start where the app asks.
 - The sidebar shows standard places, your GTK bookmarks (shared with GNOME Files), mounted drives and connected phones, with an unmount option. Drives aren't polled: Kestrel hears from the kernel when one is mounted or unmounted, reads a disk's size from the system without asking the drive, and asks for free space only when you open a folder or a job ends.
 - **Mounts** in the sidebar lists the mounts GNOME Files shows that aren't drives of their own: ZFS datasets, FUSE mounts (sshfs, rclone, gocryptfs…) and other mounts in your home folder, and network shares (SMB, SFTP, FTP…) connected through the desktop. Each says what it is when you hover over it, and its right-click menu can unmount it. Recently used servers that aren't connected show greyed: click one to connect, or right-click → **Remove from Recent Servers**.
 - Drag sidebar entries to reorder them within a section, drag a section header to move the whole section, and click a header to collapse it.
 - Right-click a bookmark → **Edit Bookmark…** to change its name and location (with a folder picker), or remove it or move it up and down.
+
+  ![Edit Bookmark: the bookmark's name and its location, with Browse…](screenshots/edit-bookmark.png)
+
 - Grid and list views, sorting, hidden files (Ctrl+H). In the grid, an item is its icon (a picture's own shape) and its name: the highlight fits around them, and a click or right-click elsewhere in its cell is the folder's empty space (New Folder, Paste…); a selection rectangle picks the items it touches.
 - **A sort for each folder.** Changing the sort (the column headers or the Sort menu) changes it for that folder
   only, which keeps it. Folders that were never sorted use the default: **Sort → Set as Default** makes the current
@@ -28,9 +36,9 @@
   taken (a photo's EXIF, a PNG's Creation Time, an MP4 / MOV video's header; read in the background, falling back to
   the date created). Also in search results, Starred, Recent and Trash; kept per folder, like the sort.
 
-  ![The Sort menu: Name, Size, Type, Modified, Ascending, Descending, Pinned & Starred First, Group by Period, Group by Day (highlighted), Date to Group By, Set as Default, Apply to Subfolders](screenshot-sort-menu.png)
+  ![The Sort menu: Name, Size, Type, Modified, Ascending, Descending, Pinned & Starred First, Group by Period, Group by Day (highlighted), Date to Group By, Set as Default, Apply to Subfolders](screenshots/sort-menu.png)
 
-  ![Pictures in the list view grouped by day: "Today, Wednesday, 28 October 2026 (2)", "Yesterday…", then one header for each earlier day, each with a Collapse line at its end](screenshot-group-by-day.png)
+  ![Pictures in the list view grouped by day: a header for today, yesterday and each earlier day, each with a Collapse line at its end](screenshots/group-by-day.png)
 
 - While a search runs, a thin progress bar shows under the search bar (and "Searching…" in the view until something is found); a search that finds nothing says **Nothing found** in the view itself (with the reason when something went wrong, such as a regular expression that doesn't parse), never in a window.
 - Search the current folder by typing to filter, or search subfolders recursively. Wildcards are supported.
@@ -45,6 +53,9 @@
     Overview, Starred, Recent and search results' tabs open, but take no drop there.
 - File operations run on background threads, so the window stays responsive even with tens of thousands of files. Copy, move, duplicate, move to trash, permanent delete, restore, empty trash, compress and extract show their status and a progress bar in the status bar at the bottom of the window, with ✕ to cancel. When several run at once, the bar shows the oldest with "+N more" (hover to see them all). Operations running in your other Kestrel windows are counted too ("+N in other windows"), or shown when this window has none; ✕ on one of those asks its window to cancel it, and 🛡 marks admin-session jobs. Closing a window while operations are running asks whether to stop them or keep going.
 - If a name already exists when copying or moving, you can replace, merge, skip or keep both.
+
+  ![File conflict: a file named Budget 2026.csv already exists in Documents; Skip, Keep Both, Cancel or Replace, and Apply this action to all conflicts](screenshots/conflict.png)
+
 - Trash, permanent delete, and restoring or emptying the trash. The Trash shows everything you've deleted on every drive in one list: your home trash plus the trash folder each drive keeps for files deleted on it (`.Trash-<uid>`, the same as GNOME Files). The Location column shows where each item came from, and Restore, Delete Permanently and Empty Trash work across all of them.
 - **Shred with BleachBit:** with [BleachBit](https://www.bleachbit.org) installed, right-click files or folders → **Shred with BleachBit…** overwrites them and then deletes them, so they can't be recovered; **Empty Trash with BleachBit…** (in the Trash and on the sidebar's Trash) does the same to everything in the trash, on every drive. Both ask first, run in the status bar with ✕ to stop, and list anything BleachBit couldn't shred. On SSDs and some file systems, overwriting can't guarantee that every old copy of the data is gone.
 - Nothing is replaced until its replacement is complete, and no file appears half-written. Each file a copy or move writes, decompressing a single file (`.gz`, `.xz`, …), compressing over an older archive, checksum files, shortcuts, pasted images and Kestrel's own settings files are written under a hidden name (`.kes-….part`) beside their destination and renamed into place the moment they're complete. A full disk, a cancel or a crash leaves the old version as it was, never a half-written one. (One exception, on tapes: see below.)
@@ -65,10 +76,18 @@
     there, a hard link to another drive); click one to change it. **OK** shows everything that will be made or
     changed, and only then makes it, as one job, undone in one step. A file with several names (hard links) says so,
     and **Find the Other Names** searches its drive for them.
+
+    ![The Link window: on the left the two files the links will point to, on the right the Desktop folder they go in, with the links-to-be ghosted, and below the list of links to make](screenshots/link-window.png)
+
   - **Edit Link…** on symbolic links (or **Edit…** beside a link's target in Properties): the same window, to point them
     elsewhere, switch between absolute and relative, or rename them. A changed link is made beside the old one and
     swapped in, never deleted first; one changed by another program meanwhile is left alone.
 - Rename (F2). Batch rename works with templates (`[Name] ###`, `[Date]`) or find and replace with regex.
+
+  ![Rename File: the name, with only the part before the extension selected](screenshots/rename.png)
+
+  ![Renaming 6 pictures with the template "Coast trip [###]": each file's new name shown beside its old one, Coast trip [001].jpg to [006].jpg](screenshots/batch-rename.png)
+
 - **New Folder with Selection…** (right-click one or more items) makes a folder beside them, named as you choose, and moves them into it; Undo puts them back.
 - Duplicate, Move To…, Copy To…, and Compress / Extract (see [Archives](archives.md)).
 - **Undo (Ctrl+Z)** for moves, renames (also batch), Move to Trash, and anything created by copy, paste, duplicate, new folder/file or links (undoing those moves them to the trash). The Edit menu shows what will be undone. Permanent deletes, merges into existing folders, archives and admin-session operations can't be undone. Each Kestrel undoes only what was done in it (its own windows); turn on Preferences → *Share undo between all Kestrel windows* to have Ctrl+Z in any window undo the newest action from any Kestrel. The shared history is kept by the tower (see below) and is cleared when the last Kestrel closes.
@@ -78,7 +97,13 @@
 - **Search file contents**: the search bar's *File contents* option searches inside files, in the current folder (and its subfolders with *Include subfolders*). **Automatic** uses the desktop's search index (`localsearch`) where it covers the folder (instant), and otherwise reads the files themselves with `ripgrep` (much faster) or `grep`, so external drives, network shares and folders the index skips are searched too; when the index finds nothing (it isn't running, or hasn't got to the folder yet), the files are read after all. Or choose **Search index** or **Read the files** yourself. Reading the files also offers **Regular expression** and **Match case**, skips binary files, and shows the matching line and its number in a *Match* column (the first few in its tooltip); ✕ stops it. Opening a result starts your text editor at that line where the editor allows it (gedit, Geany, VS Code, Kate, Sublime Text, Zed…; GNOME Text Editor has no way to be told one, so it opens the file). Files on a tape or floppy are never read for this.
 - **Thumbnails for other files** (PDFs, fonts, audio covers, comics…) come from the system thumbnailers GNOME Files uses. Images and videos keep Kestrel's own fast thumbnailing; a system thumbnailer is only a fallback when an image can't be decoded.
 - **Extras GNOME Files offers through extensions:** *Open in Visual Studio Code* (and VSCodium, Cursor, Zed, Sublime Text) and *Open With* for folders; your **Nautilus scripts** (`~/.local/share/nautilus/scripts`) under *Scripts*, with the same `NAUTILUS_SCRIPT_*` variables; **Send To** → Email or Bluetooth; and **Network Sharing…** for folders (Samba usershares, needs the `samba` package).
+
+  ![Network Sharing for the Music folder: share it, its share name and comment, letting others change files, and guest access](screenshots/network-sharing.png)
+
 - Open With: shows recommended apps and lets you set the default app. You can also open a terminal in the current folder or set an image as wallpaper.
+
+  ![Open With for a text file: a search box, the applications that open it, and Always use for this file type](screenshots/open-with.png)
+
 - **UWP wallpapers** (when [UWP](https://github.com/RegulusArms/UWP) is installed):
   - **Set as Wallpaper (UWP)** on an image or video adds it to UWP's library and shows it on every monitor as a new UWP profile named after the file. It starts UWP if needed and opens its editor. Without UWP, "Set as Wallpaper" sets the GNOME background instead.
   - **Add to Selected UWP Monitor** appears while UWP's editor window is open. It adds the file to UWP's library and puts it on the monitors selected in the editor (or adds it to that monitor's slideshow). Press OK in UWP to keep it, just as when you pick from UWP's own library.
@@ -92,13 +117,20 @@
     - **Remove:** delete one or more selected tags.
     - **Clear All Metadata…:** strip everything, optionally keeping the orientation and colour profile so the image looks the same.
     - Greyed-out rows (file system info and values exiftool calculates) are read-only.
+
+    ![Properties of a picture, General tab: its name, type, location, size, dates, inode, the app it opens with and the drive it's on](screenshots/properties.png)
+
+    ![Properties, Metadata tab: every tag exiftool reads, by group, with a filter; the camera's make and model among them; Add Tag…, Edit…, Remove and Clear All Metadata…](screenshots/properties-metadata.png)
+
+    ![Add Tag: a tag to choose or type (Artist, XMP-dc:Description…) and its value](screenshots/add-tag.png)
+
   - **Wipe Metadata…** (right-click one or more images, with `exiftool` installed) takes out all of their metadata at once: camera details, GPS location, dates, comments and image-generation prompts. The pixels aren't touched. By default the original is kept and a copy without metadata is made beside it (`photo (no metadata).jpg`; Undo moves the copies to the trash). Preferences → Images & Videos can make it wipe the originals instead, with no backup (it asks first), and can turn off keeping the orientation and colour profile. Works on JPEG, PNG, WebP, HEIC/HEIF, AVIF, JPEG XL, GIF and TIFF, not on camera raw files, whose maker notes are needed to develop them. Each image is written whole and then put in place, so a failure or ✕ leaves the image as it was.
     - The tag descriptions and "Accepts" types were written with the help of an AI tool while Kestrel was being made, and may not be completely accurate. They ship as fixed text: Kestrel itself runs no AI. Descriptions outside the common tags are built from exiftool's tag names and categories.
   - **Checksums:** MD5, SHA1 and SHA256, with a field to check against a known checksum, or **Browse…** for a checksum file that lists the file (see [Checksum files](features.md#checksum-files)).
 
 **Jobs: one queue, and the Jobs window**
 
-![The Jobs window: a copy of 4 items to Backup running (1.1 GB of 1.3 GB, 11 seconds left) and two copies waiting for their drives; beside them the running job's steps (two scans copied, the third copying, one to go) and its log](screenshot-jobs.png)
+![The Jobs window: a copy of 4 items to Backup running (142 MB of 1.3 GB at 15 MB/s, a minute left) and two copies waiting for their drives; beside them the running job's steps and its log](screenshots/jobs.png)
 
 - Jobs that read or write drives (copy, move, delete, extract, compress, checksums, shredding) wait for their turn on the drives they use, across every Kestrel window and process, so two jobs never fight over one drive. By drive (the default): jobs on different drives run side by side, jobs on the same drive one after the other, in order. Or one at a time. Or **all at once**, to let it rip: every job starts as soon as it's queued, also on a drive another job is using (paused ones still wait); it's never the default, and is chosen in the Jobs window or Preferences → Files. Jobs sharing a drive then compete for it, which can make them slower overall, and on a tape or floppy makes it seek back and forth. A rename within a drive doesn't wait.
 - Click the job progress in the status bar (or ☰ → **Jobs…**, Ctrl+Shift+J) for the **Jobs window**: every job of every Kestrel window, running, waiting and finished, with progress and time left. There's one Jobs window for all of Kestrel: opened from any window (also one of a separate Kestrel, as a folder opened from another app can start), it shows every job wherever it runs, whole, and closes any other that was open. Select one for its steps and its log (the archive tools' live output, passwords masked), with Copy and Save Log…. A copy or move is titled with what it copies and where to, and its log starts with what started it (Paste, Paste Into Folder, a drop, Copy To…, Move To…), in which window and when, from where to where, and how long it waited and for which jobs. If its destination folder was moved or deleted while it waited, it stops with one message saying so, before copying anything. Pause, Resume, Stop (Delete), Start Now, move a waiting job up or down; **Verify copies** for a copy or move of this Kestrel's (see above); Pause All / Resume All; start new jobs paused; choose by drive, one at a time or all at once. Finished jobs stay listed until **Clear Finished**, which forgets every Kestrel's (also those of a Kestrel that has closed, whose logs went with it).
@@ -108,6 +140,9 @@
 - Making thumbnails and folder previews shows in the Jobs window's lower part: a job per folder you look at ("Thumbnails: Pictures/2024, 312 of 840"), for its window, with Pause and Stop (what's made stays). Leaving a folder puts its job behind the one you're in now; it goes on when nothing newer waits and stops after 3 minutes (Preferences → Images & Videos), and going back puts it first again. **Thumbnailing** (under the thumbnail list, or Preferences → Images & Videos, for every Kestrel window) chooses when they run: wait while another job uses the drive (the default), one per drive even while it's in use (beside the copies there; the others on that drive wait behind it), or paused (none made until it's switched back; what's made still shows). Tapes and floppies only get previews where allowed. The job buttons sit right under the jobs list, the thumbnail jobs' own under theirs.
 - A paused copy stops within a few megabytes (its part file kept aside); a paused extraction or compression pauses its program. Administrator jobs can't be paused.
 - Preferences → **Show developer tools** adds ☰ → **Tower…**: the tower's status, the Kestrels checked in, every message it passes on, the queue and the drives in use, and the shared undo list (also `kes --tower-monitor`). Its **Windows** tab shows each of that Kestrel's windows as Qt sees it (size, the minimum and maximum it asks for, state, screen, border) and its recent changes, to copy or save: for a window that misbehaves, compare it with a new one (Ctrl+N).
+
+  ![The Tower window (developer tools), Status tab: the tower is running, its process, uptime and protocol, the Kestrels checked in and the job queue; tabs for Kestrels, Messages, Queue & Lanes, Shared Undo and Windows](screenshots/tower.png)
+
 
 **Tapes (LTFS) and floppy disks**
 - Recognised automatically (a tape by its LTFS mount, a floppy as a removable disk of a few MB), with their own icons in the sidebar and on the Overview, where a tape shows its volume name and LTFS's details.
@@ -124,6 +159,9 @@
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
 - **Open as Archive**: a window listing what's inside an archive, to extract single files or folders from it (7z, zip, rar, zpaq, tar and what 7-Zip opens). Double-click a file to open it with its app (from a temporary copy), or drag items out onto a Kestrel folder, the sidebar, the desktop or another app.
+
+  ![Open as Archive: holiday-photos.7z as a tree of its folders and files with their sizes, packed sizes and dates, a filter box, and Extract Here, Extract To…, Extract All… and Test](screenshots/archive-window.png)
+
 - **Test Archive(s)**: check every file in one or several archives against its checksum without extracting, with one message at the end.
 - **Extract All Here** and **Extract All To…** for several archives at once: one job, one ✕, one summary at the end; a split set counts as one archive.
 - **Encrypted archives**, including RAR and 7z with hidden file names: Kestrel asks for the password, and asks again if it's wrong. In Extract All the first password typed is tried on the rest, and you're asked again only when it doesn't open one.
@@ -141,7 +179,7 @@
 
 **Overview (default homepage)**
 
-![The Overview page: the Backup and Photos drives with usage bars and free space, Phones & Cameras, Network with Connect to Server, and the bookmarked folders as cards with image previews](screenshot-overview-drives.png)
+![The Overview page: the Backup and Photos drives with usage bars, free space and their health, Phones & Cameras, Network with Connect to Server, and the bookmarked folders as cards with previews](screenshots/overview.png)
 
 - Like the old GNOME Files "Other Locations" page:
   - **Drives:** every drive with a usage bar (amber at 75%, red at 90%) and eject/unmount buttons. Unmounted drives can be mounted with a click, and encrypted drives ask for their passphrase. A ZFS pool appears as one card with pool-level numbers.
@@ -152,6 +190,9 @@
   - **Frequent Folders** (off until chosen): the 12 folders you open most in Kestrel (not in other apps' Open and Save windows). They're counted while the desktop's File History switch (Settings → Privacy) is on, as Recent is, and Preferences → Privacy doesn't turn counting off. Right-click one to remove it from the list. `kes-setup --bleachbit`'s History option deletes the count.
 - **Choose what it shows** in Preferences → Overview: tick the sections to show and put them in any order; the card size (small, normal, large); whether the system drive is shown alone, with its other mounts (`/boot`, `/boot/efi`), or not at all; the usage bar; and free space as a size or a percentage.
 - **Drive health:** each drive's card shows its health from S.M.A.R.T., as the desktop's udisks reports it (no root needed): "Healthy", or a warning such as "3 bad sectors", with its temperature and how long it has been powered on. A failing drive's card turns red, and a notification says so the first time Kestrel sees it. Click the health line (or right-click → **Drive Health…**) for what the drive reports, in plain words: bad and pending sectors, cable errors, wear, and so on. NVMe drives need udisks 2.10 or later (Ubuntu 24.04 has it). Drives in USB enclosures often don't pass their health through, and show "Health not available". A ZFS pool shows its worst disk. The same line is in a drive's Properties. Preferences → Overview can turn it off.
+
+  ![Drive Health for the Backup drive: Healthy, its model, temperature and time powered on, and what it reports (bad sectors, cable errors, time powered on, temperature), each OK](screenshots/drive-health.png)
+
 - Preferences → General → **Homepage** can be the Overview, your home folder, or any folder or network address. The homepage opens at launch and with the Home button (Alt+Home).
 
 **Phones and cameras**
@@ -188,8 +229,14 @@
   - **Crop (Shift+C)**, drag over the part to keep and press Enter, and **Resize (Shift+S)** (50%, 1920x1080, or the longer side): the viewer shows the result at once, and nothing is written yet. Crop and resize again as often as you like; Esc undoes them all. **Ctrl+S** saves the result as a new file beside the original, or over it, as you choose; leaving the image or closing the viewer asks the same (with Discard). A JPEG keeps its camera details, a PNG its generation prompts. **Straighten (Shift+O)** turns a JPEG's pixels the way its orientation tag says (jpegtran, lossless), for programs that ignore the tag.
   - **Quick actions:** star (*), pin (P), show in its folder (G), Open With (O), move or copy to a folder (M, C) or to one of the last nine in one key (Ctrl+1–9 moves, Alt+1–9 copies), Set as Wallpaper, Move to Trash (Delete) and undo (Ctrl+Z, which puts the image back in the viewer too).
   - It remembers its size and position, full screen, and whether the filmstrip and info panel were shown.
+
+  ![The image viewer: a picture fitted to the window, the filmstrip of the folder's pictures below it, and the info panel with a histogram, the file's details and the camera's settings](screenshots/viewer.png)
+
 - **Rotate ▸** (right-click one or more images): 90° clockwise, 180°, 90° counter-clockwise, flip horizontally or vertically, saved in the files. A JPEG's picture is turned without re-compressing it (jpegtran, from `libjpeg-turbo-progs`), its metadata kept and its orientation set to normal; one whose size isn't a whole number of JPEG blocks asks first whether to trim the odd pixels at its edge (at most 15) or only set its orientation tag. PNG, BMP, TIFF and lossless WebP are written again losslessly; HEIC, AVIF and lossy WebP ask first, since saving them again loses a little quality. Each file is written whole under a hidden name and renamed over the original; the thumbnails follow.
 - **Convert Image…** (right-click one or more images): to JPEG, PNG, WebP, AVIF, HEIC or TIFF, for example iPhone photos (HEIC) to JPEG. Only the formats something installed can write are offered (Qt's image plugins; for HEIC and AVIF also `heif-enc` from `libheif-examples`); anything Qt can't read is read through ffmpeg. Options: the quality (lossy formats), the size (as it is, the longest side, or a percentage), keeping the metadata (camera, date, location; into formats other than JPEG with exiftool) or not, and the colour under transparent parts for JPEG. Photos are turned upright as their orientation says. The new files go beside the originals or into a folder you choose, never over a file, and the originals can go to the trash afterwards.
+
+  ![Convert Image: to JPEG, the quality, the size, keeping the metadata, the colour under transparent parts, and where the new files go](screenshots/convert-image.png)
+
 - Images and videos open in your system's default app unless you choose otherwise. In Preferences you can pick **Open images with** (system default, Kestrel's built-in viewer, or any installed image app) and **Open videos with** (system default or any installed video app). "View Image" in the right-click menu always uses the built-in viewer.
 - The info panel (F3) shows EXIF details: camera, lens, exposure and GPS.
 - It also shows the prompts and settings that Stable Diffusion, ComfyUI and other image generators save in PNG, WebP and JPEG files. Kestrel only reads that text from the file.
@@ -206,11 +253,17 @@ With `ffmpeg` installed, right-click:
 
 Each runs as one job with a real percentage, the time left and ✕ (several files one after another, with one summary at the end). ffmpeg writes under a hidden name that's given the real name only when finished, so a stop or a failure leaves no half-made file. The originals can go to the trash afterwards (only those converted).
 
+![Convert Video: the video's details, a preset (MP4, plays everywhere), then the format, codec, quality, resolution, frame rate, sound, speed, trim, turn, graphics card and extra options, the new name and a size guess, and the ffmpeg command](screenshots/convert-video.png)
+
+![Extract Audio: the sound track, keeping the sound as it is (AAC into .m4a) or converting it, where it goes, and the ffmpeg command](screenshots/extract-audio.png)
+
+![Convert Audio for two files: the format (MP3), quality, sample rate and channels, evening out the volume, where they go, and the ffmpeg command](screenshots/convert-audio.png)
+
 ## Preferences
 
 ☰ → **Preferences…** shows every setting Kestrel keeps in one window, in tabs, including the ones you'd otherwise change somewhere in the windows (each says where else it's set, such as "Also: ☰ → View → Show Hidden Files (Ctrl+H)"):
 
-![Preferences, Views tab: the view (grid or list), the icon sizes in the grid and the list, hidden files, the sidebar and the info panel, and the default sort, each saying where else it's set](screenshot-preferences.png)
+![Preferences, Views tab: the view (grid or list), the icon sizes in the grid and the list, hidden files, the sidebar and the info panel, and the default sort, each saying where else it's set](screenshots/preferences.png)
 
 - **General:** homepage, single-click, which apps open images and videos, opening the image viewer full screen, sharing undo between windows, developer tools.
 - **Views:** grid or list, icon sizes, hidden files, the sidebar and info panel, the default sort and grouping for folders without their own, Pinned & Starred First, folder previews (how many images, which ones, the colour), and the search bar's options.
@@ -225,17 +278,19 @@ Each runs as one job with a real percentage, the time left and ✕ (several file
 
 A change applies at once to every open window, and to the other Kestrels; a change made in a window (Ctrl+H, the zoom slider…) shows in an open Preferences window as it happens. The search box at the top filters every tab's settings. **Reset This Tab** and **Reset All** go back to the defaults, after asking.
 
-![Preferences searched for "jobs": only the tabs with a match are enabled, with how many (Images & Videos (2), Files (3)), and the Files tab shows how jobs run, starting new jobs paused and how files are written to a tape](screenshot-preferences-search.png)
+![Preferences searched for "jobs": only the tabs with a match are enabled, with how many (Images & Videos (2), Files (5)), and the Images & Videos tab shows when thumbnails are made](screenshots/preferences-search.png)
 
 **Your own right-click menus.** Preferences → **Menus** sets up the right-click menu separately for a folder, a file, an archive, several items, the empty space in a folder, and the image viewer. Untick an entry to hide it; drag entries (or use Move Up / Move Down) to reorder them and to move them into or out of a submenu, such as Links & Shortcuts (or the viewer's View and Rotate and Edit); add separators and submenus of your own. An entry only appears when it applies (Extract for archives, BleachBit's entries when it's installed…), wherever you put it, and entries added in later versions show up in their default place. **Reset to Default** puts a menu back as it was.
 
-![Preferences, Menus tab, the menu for a file: a submenu "Organise" made with New Submenu…, holding Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin / Unpin unticked](screenshot-menu-editor.png)
+![Preferences, Menus tab, the menu for a file: a submenu "Organise" holding Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin / Unpin unticked](screenshots/menu-editor.png)
 
-![The resulting right-click menu on a text file: Organise opens with Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin is gone](screenshot-custom-menu.png)
+![The resulting right-click menu on a text file: Organise opens with Move To…, Copy To…, Duplicate and New Folder with Selection…, and Pin is gone](screenshots/custom-menu.png)
 
 ## Checksum files
 
 Double-clicking a checksum file opens **Verify Checksums** instead of a text editor. It checks every file the checksum file lists, one after another, with a progress bar: each row shows ✔ OK, ✘ Doesn't match (hover for the expected and actual hash), ✘ Missing, or why the file couldn't be read, and the summary says how many passed. **Stop** stops part-way and **Verify Again** starts over. The check is one job in the Jobs window, which goes on when you close the Verify window or the Kestrel window it came from: its log has each file's result, and the files that didn't pass are listed at its end. A file that only looks like a checksum file (a `.md5` with no checksums in it) opens as usual.
+
+![Verify Checksums for SHA256SUMS: four files, three OK and presentation.pdf Doesn't match, with the progress bar at 100% and Verify Again](screenshots/verify-checksums.png)
 
 - Files: `.sfv`, `.md5`, `.sha1`, `.sha224`, `.sha256`, `.sha384`, `.sha512`, `.b2` (and `.md5sum`, `.sha256sum`, …), `MD5SUMS`, `SHA256SUMS`, `B2SUMS` and the like, and `CHECKSUM` files such as Fedora's.
 - Formats: `md5sum`/`sha256sum` output (`hash  name`, `hash *name`, and their escaped names), BSD tags (`SHA256 (name) = hash`, as `--tag` and Fedora write them, inside a PGP-signed file too), SFV (`name CRC32`, `;` comments), and a file holding only a hash, which is for the file of the same name without the extension (`disk.iso.sha256` → `disk.iso`).
@@ -245,6 +300,8 @@ Double-clicking a checksum file opens **Verify Checksums** instead of a text edi
 In **Properties → Checksums**, **Browse…** checks one file against a checksum file: it finds the file's line (by path, else by name) and says whether it matches.
 
 **Create Checksum File…** (right-click one or more files or folders) makes checksum files. Pick the algorithms (CRC32, MD5, SHA1, SHA256, SHA512, BLAKE2b) and whether to write one file per algorithm, as `md5sum`, `sha256sum` and the others write them (CRC32 as an `.sfv`), or one `name-CHECKSUM` file with every algorithm as BSD tags. Then pick the name and the folder to save in (by default the selection's name and folder). The files inside folders are included, with names relative to the checksum file, so `sha256sum -c` (or `cksum -c` for a CHECKSUM file) and Kestrel's own Verify Checksums can check them later. Each file is read once for all the algorithms, with progress in the status bar. A file that can't be read is left out and named afterwards. Kestrel remembers the algorithms and the layout you chose last.
+
+![Create Checksum File for two items: the algorithms (SHA256 ticked), one file per algorithm or one with all of them, the name and the folder, and the file it creates](screenshots/create-checksums.png)
 
 ## Signatures
 
@@ -257,12 +314,16 @@ Double-clicking a signature (`.sig`, `.asc`, `.gpg`, `.sign`), or right-click �
 
 **Show gpg's Output** shows gpg's own words. A key opens as usual, an encrypted `.gpg` or `.asc` file as Decrypt (below). A signed checksum file (`SHA256SUMS` with `SHA256SUMS.gpg`, `.asc` or `.sig` beside it) is checked first, then every file it lists (Verify Checksums): opening either the checksum file or its signature does both. Needs `gnupg` (usually installed).
 
+![Verify Signature: Valid signature: the file is exactly what the key's owner signed, and when, with the signature and signed file, the key ID and the fingerprint; Check Again and Show gpg's Output](screenshots/signature.png)
+
 ## Encrypting and decrypting
 
 Right-click one or more files → **Encrypt…** makes an encrypted copy beside each with `gpg` (OpenPGP): `name.gpg`, or `name.asc` with **As text**, to paste into an email. The originals stay as they are. Two ways:
 
 - **With a password** (typed twice): anyone who has it can open the file. AES-256, as Compress… encrypts tar archives; the password goes to gpg privately (not on its command line) and gpg's agent doesn't keep it.
 - **To people's keys**: tick the public keys in your keyring of the people it's for; only they can open it, and there's no password to pass on. Each key says whether you've verified it's really theirs (anyone can make a key with any name: compare its fingerprint, shown when you hover over it, with the one they gave you). **Also to my own key** (on when you have one) lets you open it too.
+
+![Encrypt Tax return.pdf: with a password (typed twice) or to people's keys, listing the keys in the keyring and whether each is verified, Also to my own key, and As text (.asc)](screenshots/encrypt.png)
 
 Double-clicking an encrypted `.gpg`, `.pgp` or `.asc` file, or right-click → **Decrypt**, makes a decrypted copy beside it, under its name without the extension (or the next free name). gpg looks at it first: one encrypted with a password asks for it (a password saved in your keyring for that file is tried first, and **Remember this password** saves it there), one encrypted to your key lets gpg ask for your key's passphrase in its own window, and one encrypted only to other people's keys says so, with their key IDs. If what was inside was also signed, it says whether the signature is good and by whom.
 
@@ -273,6 +334,8 @@ Either way it's a job, and the new file appears only once gpg has finished: a wr
 Right-click a folder, several folders or a drive (in the sidebar or on the Overview) → **Find Duplicates…** finds the files with the same contents there. It's quick: only files of the same size are read, first their beginnings, then (where those match too) the whole file, so files in a group are identical. It runs as a job with progress and **Stop**, waiting for its turn on the drive. Options (kept for next time, also in Preferences → Files): the smallest size, look in subfolders, include hidden files, skip hard links (they're one file, not copies). It stays on each folder's own drive.
 
 The results list each group with its files' thumbnails, folders, dates and sizes, and the space that can be freed. A **Keep** box on each file, and helpers to keep **the oldest**, **the newest** or **those in a folder** in every group. Then **Move the Others to Trash** (Undo brings them back) or **Replace the Others with Hard Links…** (on the same drive only, asking first: each becomes the same file as the one kept, so the space is used once). A group with no file kept is never touched, and a file that changed since the search is left alone. Double-click a file to show it in its folder.
+
+![Find Duplicates in Pictures: two groups of identical files, each file with its thumbnail, folder, date and size and a Keep box, the space that can be freed, and the buttons to keep the oldest, the newest or those in a folder](screenshots/find-duplicates.png)
 
 ## What's using this space? (Disk Usage)
 
@@ -285,6 +348,8 @@ Right-click a folder → **Disk Usage…**, or a drive in the sidebar or on the 
 - The folder sizes Properties remembers show at once, with when they were counted, while it counts again; what it counts is remembered for Properties in turn. **Recalculate** counts again.
 - On a tape or a floppy it doesn't count until you click **Count Now**: counting reads every folder there.
 
+![Disk Usage for a home folder: a treemap with a block for each folder and its biggest files inside it, and beside it the folder's items, biggest first, with their sizes and shares](screenshots/disk-usage.png)
+
 ## Drive images: backing up and mounting
 
 **Back Up Drive to Image…** (right-click a drive in the sidebar, or its card on the Overview, mounted or not) copies
@@ -296,6 +361,8 @@ writes under a hidden name and is renamed into place only once the whole drive h
 leaves nothing behind. It won't save onto the drive being read, checks the free space first (a compressed image's
 size can't be known, so it asks), and asks first while the drive is mounted for writing (unmounting it gives the most
 faithful copy).
+
+![Back Up Drive to Image: the device to copy and its size, the folder and name of the image, Compress (zstd) and Encrypt with a password, and how much the drive holds and how much is free there](screenshots/backup-image.png)
 
 **Mount Image** (double-click an `.img`, or right-click any `.img`, `.iso` or `.raw`) sets the image up as a drive
 through udisks, as GNOME's Disk Image Mounter does, and mounts its file systems read-only (**Mount Image for Writing**
@@ -335,6 +402,8 @@ How long it lasts:
 RAM disks are listed in the sidebar's **RAM Disks**, greyed while one isn't in memory (a click brings it back).
 Right-click one to edit, save or remove it.
 
+![New RAM Disk: its name, a size limit of its own (with a size and where it's mounted) or none, how long it lasts, and the folder its files are saved to](screenshots/ramdisk.png)
+
 **Private mode** (☰ → **Private Mode**, or Preferences → Privacy): Kestrel's caches (the thumbnails and folder previews
 it makes, folder sizes, job logs) and its histories (Frequent Folders, recent servers, remembered syncs, the image
 viewer's Move To / Copy To folders, the last Save folder) are kept in a hidden RAM disk of its own, and nothing is added
@@ -349,4 +418,8 @@ leaving private mode. Before that, it says which files will be deleted, until yo
 
 Right-click a folder → **Compare With…** asks for another folder and lists the differences, through every subfolder: only on one side (a folder there is one row), newer on one side, or the same name with other contents. By size and date, or tick **Compare contents** to read the files byte by byte. Choose what's listed (the same items are hidden), and for the items selected: **Open Left** / **Open Right**, **Copy to Right →** / **← Copy to Left** (asking before replacing anything), **Trash on Left** / **Trash on Right**. The list is compared again after a copy.
 
+![Compare Folders: Documents and its copy on the Backup drive, the kinds of difference to show, and the 7 differences, each with what differs and both sides' sizes and dates; buttons to open, copy or trash either side](screenshots/compare.png)
+
 Right-click a folder → **Sync To…** (or ☰ → **Sync Folders…**) makes a destination match a source, one way, such as Pictures → a backup drive. **Preview** lists exactly what will be copied, replaced (also where the destination's copy is newer, said as such) and, if you tick it, deleted from the destination; **Sync Now** runs it, as a job. With `rsync` installed it does the copying (it resumes an interrupted copy and only sends what changed); otherwise, or if you choose, Kestrel's own copy does. Either way a file being replaced is kept until its new copy is complete. Deleting on the destination is off by default, and asks again before deleting anything (for good, not to the trash). **Save Pair…** keeps the folders and choices under a name ("Pictures → Backup HDD"); pick it under **Saved** and **Run** previews and syncs it in one click. A pair on a removable drive is found by its file system's UUID wherever the drive is mounted next time. Every sync that runs is also remembered on its own, without a name (the last five for each folder): **Sync To…** on a folder synced before, from either end, opens already filled in as its latest sync was run (the same From and To, the right way round, deleting or not, rsync or Kestrel's copy), so only **Preview** and **Sync Now** are left; its other past syncs are under **Last synced**. A remembered folder that isn't there now (deleted, or on a drive that isn't connected) is said, not just filled in.
+
+![Sync Folders: from Pictures to the Backup drive's Pictures, deleting or not, rsync or Kestrel's own copy, and the preview: what will be copied and replaced (where the destination's copy is newer, said as such), with sizes](screenshots/sync.png)
