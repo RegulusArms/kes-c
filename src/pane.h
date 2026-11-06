@@ -6,6 +6,7 @@
 #include "search.h"
 
 #include <QPointer>
+#include <QSet>
 #include <QWidget>
 
 class Animator;
@@ -153,7 +154,8 @@ private:
     QModelIndex source_index_for(const QString &p) const;   // in the attached model
     places::FolderSort folder_sort(const QString &p) const;   // its own, or the default
     void fill_trash(const QVariant &items, int gen);
-    void add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel);
+    void add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, const QVariantMap &stats, int gen,
+                        const QStringList &sel);
     void trash_changed();
     void dir_loaded(const QString &p);
     QModelIndex index_for(const QString &p) const;
@@ -179,6 +181,24 @@ private:
     int trash_gen = 0;              // bumps on every combined-trash reload, so stale loads are dropped
     QFileSystemWatcher *trash_watch = nullptr;
     bool trash_reload = false;
+    // the results follow their files: a deleted one goes, one that comes back returns, a renamed one is renamed
+    // (SearchModel::update/moved). Checked on a thread when a folder they're in changes, a job ends, Kestrel moves
+    // or renames something, or Kestrel comes back to the front.
+    QFileSystemWatcher *results_watch = nullptr;
+    int results_watched_gen = -1;   // the search the watched folders are for
+    QSet<QString> results_changed;  // folders changed since the last check ("" = every result)
+    bool results_checking = false;  // a check is running (another one waits for it)
+    int finished_seen = 0;          // the finished jobs counted at the last check
+    QTimer *results_timer = nullptr;
+    // set_path's checks of where it's going (look()): waited for at most LOOK_MS
+    enum class Look { File, Dir, Missing, Denied, Busy };
+    static constexpr int LOOK_MS = 300;
+    Look look(const QString &p);
+    void late_look(const QString &p, Look what);
+    void tell_cannot_open(const QString &p, Look what);
+    void watch_results(const QStringList &paths);
+    void check_results(const QString &dir = QString());   // soon, coalesced; "" = every result
+    void run_results_check();
     QWidget *search_bar;
     QLineEdit *search_edit;
     QCheckBox *search_sub;

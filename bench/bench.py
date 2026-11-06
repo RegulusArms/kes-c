@@ -2,7 +2,10 @@
 """Benchmark Kestrel Explorer (C++) against GNOME Files, Nemo (on Linux Mint), Dolphin, Thunar, Krusader and PCManFM,
 whichever are installed. See bench/README.md; the results go in docs/performance.md.
 
-  bench/run.sh                      build, generate the data (first time), run everything, print the tables
+It runs only in the clean container its wrappers make (bench/container.sh: bench/run.sh for Ubuntu, mint.sh,
+kubuntu.sh, fs.sh), which holds nothing of the machine's but the source, never on the machine itself.
+
+  bench/run.sh                      build, generate the data, run everything, print the tables
   bench/run.sh --runs 5             more runs per measurement (medians are reported)
   bench/run.sh --only startup,copy  re-run only some measurements (the rest are kept from the last run)
   bench/run.sh --apps thunar        measure only these apps (the others' results are kept from the last run)
@@ -34,9 +37,12 @@ ROOT = os.path.realpath(os.path.dirname(HERE))
 DATA = os.environ.get("KESTREL_BENCH_DATA", "/tmp/kestrel-bench-data")
 CMAKE = "/usr/bin/cmake" if os.access("/usr/bin/cmake", os.X_OK) else "cmake"
 BUILD = os.environ.get("KESTREL_BUILD_DIR", "build")  # build folder name (another machine sharing these folders)
-# set by a wrapper that runs the benchmark in a container of another desktop's distribution ("Kubuntu": bench/kubuntu.sh),
-# whose report gets sections of its own ("Kestrel vs Dolphin on Kubuntu")
+# set by a wrapper that runs the benchmark in a container of another desktop's distribution ("Kubuntu": bench/kubuntu.sh,
+# "Mint": bench/mint.sh), whose report gets sections of its own ("Kestrel vs Dolphin on Kubuntu"), but for the app that
+# is only measured there ("home": Nemo on Mint, whose section is "Kestrel vs Nemo")
 PLATFORM = os.environ.get("KESTREL_BENCH_PLATFORM", "")
+# the "Test machine" line's system, from a wrapper whose image's /etc/os-release doesn't name it (Mint's says Ubuntu)
+DISTRO = os.environ.get("KESTREL_BENCH_DISTRO", "")
 # The file managers Kestrel is compared with; the ones installed are measured (GNOME Files on Ubuntu, Nemo on Linux
 # Mint, Dolphin, Thunar, Krusader and PCManFM where they're installed). File operations go through each one's D-Bus
 # file-operations service, as other apps use it: "service" starts it, "ops" is (bus name, object path, {operation:
@@ -67,7 +73,7 @@ OTHERS = {
                       (("copy", "CopyURIs"), ("move", "MoveURIs"), ("trash", "TrashURIs"), ("empty", "EmptyTrash"))}),
              "settings": [("org.nemo.preferences", "confirm-trash", "false")],   # Empty Trash would ask first
              "files": dict(NO_BLINK), "skip": {},
-             "heading": "## Performance: Kestrel vs Nemo", "intro": "the file manager it replaces", "gtk": True,
+             "heading": "## Performance: Kestrel vs Nemo", "intro": "the file manager it replaces", "gtk": True, "home": "Mint",
              "helpers": "separate helper processes", "search": "", "whole_folder": False,
              "thumbnails": False, "no_thumbs_why": "makes no thumbnails in this setup (a fresh home folder with its default "
                                                    "settings)"},
@@ -114,8 +120,14 @@ OTHERS = {
 }
 APPS = ("kestrel",) + tuple(OTHERS)
 # measured the same way for every app
+# Copies within one drive that can clone (Btrfs, XFS) and within one SMB share (server-side copy): measured only where
+# the folder to copy in is given (bench/fs.sh makes them in a container). Kestrel is timed with Preferences → Files →
+# Copying on (the system's copy: "s") and off (its own read/write loop, as before it had the setting: "loop_s").
+FS_TESTS = {"copy_btrfs": ("KESTREL_BENCH_BTRFS", "Within one Btrfs drive (a clone)"),
+            "copy_xfs": ("KESTREL_BENCH_XFS", "Within one XFS drive (a clone)"),
+            "copy_smb": ("KESTREL_BENCH_SMB", "Within one SMB share (the server copies it)")}
 COMMON = ("startup", "open_gallery", "videos", "pdfs", "open_list", "navigate", "scroll_end", "live", "responsive", "copy",
-          "move_xdev", "trash", "windows", "idle")
+          "move_xdev", "trash", "windows", "idle") + tuple(FS_TESTS)
 # Kestrel only: its "open folders as tabs" setting, and features the other file managers have no equivalent of
 KESTREL_ONLY = ("windows_tabs", "bulk_thumbs", "mosaics", "search", "metadata")
 FOLDER_TESTS = ("open_gallery", "videos", "pdfs")   # "open a folder": timed by the thumbnails it makes
@@ -163,6 +175,30 @@ def no_crash_report():
 def launch(app, folder):
     return subprocess.Popen(app_command(app, folder), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True, preexec_fn=no_crash_report)
+
+
+def launch_window(app, args):
+    """For tests that don't time the launch: the app started with ARGS (after its command), and its first window.
+    Krusader now and then exits at once, before any window (seen in about one full run in two): it's started again,
+    up to 3 times, with its exit code and the end of what it printed noted on stderr, so the run goes on and the
+    cause is in the log. Returns (process, window)."""
+    for attempt in range(3):
+        err = tempfile.TemporaryFile()
+        p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=err,
+                             start_new_session=True, preexec_fn=no_crash_report)
+        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, f"{app}: no window")
+        ids = window_ids(p.pid)
+        if ids:
+            err.close()
+            return p, ids[0]
+        err.seek(0)
+        tail = err.read()[-800:].decode(errors="replace").strip()
+        err.close()
+        stop(p)
+        print(f"{app} exited (code {p.returncode}) before its window (attempt {attempt + 1}/3): {tail}",
+              file=sys.stderr, flush=True)
+        time.sleep(1)
+    raise RuntimeError(f"{app}: exited before its window, 3 times")
 
 
 def stop(p):
@@ -372,10 +408,8 @@ def measure_navigate(app):
     """A window already open (on the small folder) taken to the folder of 10,000 files, then to a small one (100 files),
     through its location bar, as a user goes from folder to folder. Each is timed from the Return key until the window
     has stopped changing, as for the folder of 10,000 files (settle); typing the path isn't counted."""
-    p = launch(app, f"{DATA}/small")
+    p, win = launch_window(app, [f"{DATA}/small"])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         settle(win, time.monotonic(), f"{app} on the small folder", 60, quiet=1.0)
         r = {"rss_mb": None}
         for key, folder in (("s", f"{DATA}/flat"), ("small_s", f"{DATA}/windows/folder0")):
@@ -435,10 +469,8 @@ def measure_live(app):
     where the app shows one), and the CPU time the run used meanwhile (run_cpu)."""
     folder = os.path.join(home(), "incoming")
     os.makedirs(folder)
-    p = launch(app, folder)
+    p, win = launch_window(app, [folder])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         settle(win, time.monotonic(), f"{app} on an empty folder", 60, quiet=1.0)
         before = run_cpu()
         t0 = time.monotonic()
@@ -467,10 +499,8 @@ def measure_responsive(app):
     to = os.path.join(home(), "to")
     os.makedirs(to)
     dst = os.path.join(to, os.path.basename(src))
-    p = launch(app, os.path.dirname(src))
+    p, win = launch_window(app, [os.path.dirname(src)])
     try:
-        wait_for(lambda: window_ids(p.pid) or p.poll() is not None, 60, "no window")
-        win = window_ids(p.pid)[0]
         time.sleep(UI_SETTLE)
         title_from = window_title(win)
         press(win, "ctrl+a")
@@ -666,10 +696,7 @@ class UiOps:
 
     def __init__(self, app, args):
         self.app = app
-        self.p = subprocess.Popen(app_command(app) + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  start_new_session=True, preexec_fn=no_crash_report)
-        wait_for(lambda: window_ids(self.p.pid) or self.p.poll() is not None, 60, f"{app}: no window")
-        self.win = window_ids(self.p.pid)[0]
+        self.p, self.win = launch_window(app, args)
         time.sleep(UI_SETTLE)
 
     def keys(self, *keys):
@@ -721,12 +748,12 @@ def ui_transfer(app, src, dst_parent, move):
     return n, t0
 
 
-def measure_copy_other(app):
-    src = f"{DATA}/copysrc"
+def measure_copy_other(app, src=None, dst_parent=None):
+    src = src or f"{DATA}/copysrc"
     want = tree_size(src)
-    dst_parent = os.path.join(home(), "copydst")
+    dst_parent = dst_parent or os.path.join(home(), "copydst")
     os.makedirs(dst_parent)
-    dst = os.path.join(dst_parent, "copysrc")
+    dst = os.path.join(dst_parent, os.path.basename(src))
     n = None
     try:
         if OTHERS[app]["ops"] is None:   # Copy, then Paste in the destination
@@ -745,6 +772,33 @@ def measure_copy_other(app):
             n.close()
         shutil.rmtree(dst_parent, ignore_errors=True)
         shutil.rmtree(os.path.join(home(), "copy"), ignore_errors=True)
+
+
+def measure_copy_within(app, test):
+    """The copy test's files copied within one folder on another file system (FS_TESTS), source and copy both there
+    ("s"), then its 5 × 50 MB alone ("big_s": the small files are all under the size the system's copy is used for).
+    The sources are put there once (not timed); each run's copies are deleted after it."""
+    base = os.environ[FS_TESTS[test][0]]
+    src, big = os.path.join(base, "copysrc"), os.path.join(base, "copybig")
+    if not os.path.isdir(src) or tree_size(src) != tree_size(f"{DATA}/copysrc"):
+        shutil.rmtree(src, ignore_errors=True)
+        shutil.copytree(f"{DATA}/copysrc", src, symlinks=True)
+    if not os.path.isdir(big):
+        os.makedirs(big)
+        for k in range(5):
+            shutil.copy(f"{DATA}/copysrc/big{k}.bin", big)
+    subprocess.run(["sync"])
+    if app in OTHERS:
+        if OTHERS[app]["ops"] is None:   # copied through its window: from the home folder only
+            return {"s": None}
+        r = measure_copy_other(app, src, os.path.join(base, f"copydst-{app}"))
+        r["big_s"] = measure_copy_other(app, big, os.path.join(base, f"copydst-{app}"))["s"]
+        return r
+    runs = {(mode, what): harness(app, "copy_at", base, mode, what)
+            for mode in ("loop", "kernel") for what in ("copysrc", "copybig")}   # loop: as before the setting
+    return {"s": runs["kernel", "copysrc"]["s"], "loop_s": runs["loop", "copysrc"]["s"],
+            "big_s": runs["kernel", "copybig"]["s"], "big_loop_s": runs["loop", "copybig"]["s"],
+            "rss_mb": max(r["rss_mb"] for r in runs.values())}
 
 
 def measure_move_xdev(app):
@@ -925,11 +979,11 @@ def measure_idle(app):
         stop(p)
 
 
-def harness(app, test, arg=None):
+def harness(app, test, *args):
     """A measurement inside the app (kestrel_cpp)."""
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
     cmd = [os.path.join(HERE, BUILD, "kestrel_cpp"), test, DATA]
-    out = subprocess.run(cmd + ([arg] if arg else []), env=env, capture_output=True, text=True, timeout=900)
+    out = subprocess.run(cmd + [a for a in args if a], env=env, capture_output=True, text=True, timeout=900)
     line = next((ln for ln in out.stdout.splitlines() if ln.startswith("{")), None)
     if line is None:
         raise RuntimeError(f"{app} {test} failed:\n{out.stderr[-2000:]}")
@@ -970,6 +1024,8 @@ def measure(app, test):
             return measure_responsive(app)
         if test == "copy" and app in OTHERS:
             return measure_copy_other(app)
+        if test in FS_TESTS:
+            return measure_copy_within(app, test)
         if test == "move_xdev":
             return measure_move_xdev(app)
         if test == "trash":
@@ -1195,6 +1251,15 @@ def tables(res, other):
                # a folder when it opens it)
                "ready_at_end": [OTHERS[a]["label"] if a in OTHERS else "Kestrel" for a in apps
                                 if med(a, SCROLL_TEST) is not None and med(a, SCROLL_TEST) < 0.05]}
+    # copies within one drive or share (FS_TESTS), where measured: Kestrel before and with the system's copy
+    fs = [t for t in FS_TESTS if med("kestrel", t) is not None or med(other, t) is not None]
+    summary["fs_table"] = ([f"| Copy 20,000 small files + 5 × 50 MB | Kestrel, its own copy (before) | "
+                            f"Kestrel, the system's copy (now) | {OTHERS[other]['label']} |", "|---|---|---|---|"] +
+                           [f"| {FS_TESTS[t][1]} | {secs(med('kestrel', t, 'loop_s'))} | {secs(med('kestrel', t))} | "
+                            f"{secs(med(other, t))} |" for t in fs] +
+                           [f"| …its 5 × 50 MB alone, {FS_TESTS[t][1][0].lower()}{FS_TESTS[t][1][1:]} | "
+                            f"{secs(med('kestrel', t, 'big_loop_s'))} | {secs(med('kestrel', t, 'big_s'))} | "
+                            f"{secs(med(other, t, 'big_s'))} |" for t in fs]) if fs else []
     # idle CPU far above Kestrel's: worth a word of caution (Nemo kept a fifth of a core busy in the Mint VM)
     busy, calm = med(other, "idle", "cpu_ms"), med("kestrel", "idle", "cpu_ms")
     summary["busy_idle"] = busy / (IDLE_SECONDS * 10) if busy and busy > 1000 and busy > 10 * (calm or 0) else None
@@ -1228,20 +1293,31 @@ def machine(other):
             distro = next((ln.split("=", 1)[1].strip().strip('"') for ln in f if ln.startswith("PRETTY_NAME=")), "")
     except OSError:
         pass
-    if PLATFORM:   # the container is Ubuntu's image with the desktop's packages added
+    if DISTRO:
+        distro = DISTRO
+    elif PLATFORM:   # the container is Ubuntu's image with the desktop's packages added
         distro = (f"{distro.replace('Ubuntu', PLATFORM, 1)}, in a Docker container (Ubuntu's image with the {PLATFORM} "
                   f"packages the apps use)")
     return cpu, os.cpu_count(), version or OTHERS[other]["label"], distro
 
 
 def section(t1, t2, summary, runs, other):
+    fs_block = "" if not summary["fs_table"] else (
+        "\n**Copying with the system's help:** the same files copied within one Btrfs drive, one XFS drive (loop images "
+        "on a RAM disk) and one SMB share (Samba on the same machine, mounted with the kernel's SMB client), source and "
+        "copy both there, made by bench/fs.sh in a container. Kestrel is timed with Preferences → Files → Copying off "
+        "(it reads and writes every byte itself, as before that setting) and on (a clone on Btrfs and XFS, the server's "
+        "own copy on SMB).\n\n" + "\n".join(summary["fs_table"]) + "\n")
     cpu, threads, version, distro = machine(other)
     label = OTHERS[other]["label"]
-    heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if PLATFORM else "")
-    intro = OTHERS[other]["intro"] + (f", which it replaces on {PLATFORM}" if PLATFORM else "")
+    away = PLATFORM and OTHERS[other].get("home") != PLATFORM   # Nemo on Mint is its own section, as it was
+    heading = OTHERS[other]["heading"] + (f" on {PLATFORM}" if away else "")
+    intro = OTHERS[other]["intro"] + (f", which it replaces on {PLATFORM}" if away else "")
     run_with = f"`bench/{PLATFORM.lower()}.sh`" if PLATFORM else "`bench/run.sh`"
     kde = (" The desktop was set to KDE's, so both apps used Plasma's Qt integration and the Breeze style, as on a "
-           "Plasma desktop." if os.environ.get("XDG_CURRENT_DESKTOP") == "KDE" else "")
+           "Plasma desktop." if os.environ.get("XDG_CURRENT_DESKTOP") == "KDE" else
+           " The desktop was set to Cinnamon's, so Kestrel used Qt's GTK integration and both apps Mint's Mint-Y theme "
+           "and icons, as on Linux Mint." if os.environ.get("XDG_CURRENT_DESKTOP") == "X-Cinnamon" else "")
     bench_link = "https://github.com/RegulusArms/kes-c/tree/main/bench"
     owns = label + ("'" if label.endswith("s") else "'s")   # GNOME Files', Nemo's
     ui = OTHERS[other]["ops"] is None   # Dolphin, Krusader, PCManFM: no file-operations service, keys in its window
@@ -1353,7 +1429,7 @@ Both apps are measured in the same way:
 - **CPU while idle:** the CPU time all the app's processes use in {IDLE_SECONDS} s with a folder open and nothing happening. It's counted in 10 ms steps.
 
 {chr(10).join(t1)}
-
+{fs_block}
 Kestrel compared with {label}:
 {summary['vs']}
 
@@ -1376,7 +1452,7 @@ These are measured inside the app, because {features}.
 
 def write_results(sections):
     """bench/results.md: a Performance section (docs/performance.md) for each app compared with ("Kestrel vs GNOME Files", and/or
-    "Kestrel vs Nemo" from a run on Linux Mint, "Kestrel vs Dolphin on Kubuntu" from bench/kubuntu.sh), to paste into
+    "Kestrel vs Nemo" from bench/mint.sh or a run on Linux Mint, "Kestrel vs Dolphin on Kubuntu" from bench/kubuntu.sh), to paste into
     docs/performance.md."""
     path = os.path.join(HERE, "results.md")
     with open(path, "w") as f:
@@ -1413,6 +1489,9 @@ def report(res, args):
         t1, t2, summary = tables(res, other)
         print()
         print("\n".join(t1))
+        if summary["fs_table"]:
+            print()
+            print("\n".join(summary["fs_table"]))
         if others:
             sections.append(section(t1, t2, summary, runs, other))
     print()
@@ -1429,6 +1508,9 @@ def main():
     ap.add_argument("--report", action="store_true", help="rebuild the tables from results.json without running")
     ap.add_argument("--measure", nargs=2, metavar=("APP", "TEST"), help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if os.environ.get("KESTREL_BENCH_CONTAINER") != "1":
+        sys.exit("The benchmark runs in a clean container, never on this machine itself: bench/run.sh (Ubuntu), "
+                 "bench/mint.sh, bench/kubuntu.sh or bench/fs.sh")
     if args.measure:
         print(json.dumps(measure(*args.measure)), flush=True)
         os._exit(0)
@@ -1476,6 +1558,8 @@ def main():
                     continue
                 if test == "videos" and not os.path.isdir(f"{DATA}/videos"):
                     continue
+                if test in FS_TESTS and not os.environ.get(FS_TESTS[test][0]):
+                    continue   # (its folder not given: what an earlier run measured is kept)
                 n = runs_for(test, args.runs)
                 res[(app, test)] = []
                 for i in range(n):

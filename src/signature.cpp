@@ -33,6 +33,18 @@ QString signature_for(const QString &file)
     return QString();
 }
 
+// The tag of the first OpenPGP packet in bytes (binary), or -1: 1 and 3 begin an encrypted message (to a key, with a
+// password), 2 and 4 a signature
+static int first_tag(const QByteArray &bytes)
+{
+    if (bytes.isEmpty() || !(uchar(bytes.at(0)) & 0x80))
+        return -1;
+    uchar ctb = uchar(bytes.at(0));
+    return ctb & 0x40 ? ctb & 0x3f : (ctb & 0x3c) >> 2;   // new format, old format
+}
+
+static bool encrypted_tag(int tag) { return tag == 1 || tag == 3; }
+
 Kind kind_of(const QString &sig)
 {
     QFile f(sig);
@@ -44,11 +56,17 @@ Kind kind_of(const QString &sig)
         return CLEARSIGNED;
     if (text.startsWith("-----BEGIN PGP SIGNATURE-----"))
         return DETACHED;
-    if (text.startsWith("-----BEGIN PGP MESSAGE-----"))
-        return INLINE;   // (or encrypted: gpg then finds no signature)
+    if (text.startsWith("-----BEGIN PGP MESSAGE-----")) {   // signed, or encrypted (Decrypt): its first packet says
+        qsizetype body = text.indexOf("\n\n");
+        if (body < 0)
+            body = text.indexOf("\r\n\r\n");
+        QByteArray b64 = body < 0 ? QByteArray() : text.mid(body).trimmed().left(64);
+        b64.truncate(b64.indexOf('\n') < 0 ? b64.size() : b64.indexOf('\n'));
+        return encrypted_tag(first_tag(QByteArray::fromBase64(b64.trimmed()))) ? NOT_SIGNATURE : INLINE;
+    }
     if (text.startsWith("-----BEGIN") || head.isEmpty())   // a key, a certificate, other text
         return NOT_SIGNATURE;
-    if (!(uchar(head.at(0)) & 0x80))   // an OpenPGP packet's first byte has its top bit set
+    if (!(uchar(head.at(0)) & 0x80) || encrypted_tag(first_tag(head)))   // an OpenPGP packet's first byte has its top bit set
         return NOT_SIGNATURE;
     return isfile(signed_file(sig)) ? DETACHED : INLINE;
 }
@@ -254,7 +272,14 @@ static void check(QWidget *parent, const QString &sig, std::function<void(const 
         paths << signed_file(sig);
     fileops::queue_job(
         parent, tx("Checking the signature %1").arg(basename(sig)), paths,
-        [sig](Task *) { return QVariant(to_map(verify(sig))); },
+        [sig](Task *t) {
+            t->log(tx("Checking %1 with gpg").arg(sig));
+            Result r = verify(sig);
+            t->log(headline(r));
+            if (!r.output.trimmed().isEmpty())
+                t->log(r.output.trimmed());
+            return QVariant(to_map(r));
+        },
         [done](const QVariant &res) {
             if (res.isValid())
                 done(from_map(res.toMap()));

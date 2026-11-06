@@ -18,7 +18,12 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
+#include <unistd.h>
+// (the C library's unlink, rename, rmdir, chmod, realpath… declared wherever util's are: a file with `using namespace
+// util` that calls ::unlink(…) without them gets util::unlink, which throws, where a failure was meant to be ignored)
 
 typedef struct _GAppInfo GAppInfo;
 typedef struct _GIcon GIcon;
@@ -68,8 +73,26 @@ extern const char *VERSION;
 QString HOME();
 QString CONFIG_DIR();      // ~/.config/kestrel-explorer
 QString CACHE_ROOT();      // ~/.cache
-QString THUMB_DIR();       // ~/.cache/thumbnails
-QString APP_CACHE();       // ~/.cache/kestrel-explorer
+// where new thumbnails are written: ~/.cache/thumbnails; with separate caching ~/.cache/kestrel-explorer/thumbnails;
+// in private mode the private RAM disk's thumbnails
+QString THUMB_DIR();
+QString APP_CACHE();       // ~/.cache/kestrel-explorer (in private mode: the private RAM disk's cache)
+QString SHARED_THUMB_DIR();   // ~/.cache/thumbnails, also in private mode (read from there, never written)
+// ~/.cache/kestrel-explorer/thumbnails, also in private mode: separate caching's thumbnails (never the RAM disk's)
+QString OWN_THUMB_DIR();
+// The thumbnail folders to look in for a cached thumbnail, in order: separate caching's (while there are thumbnails
+// in it, also after it's turned off, until they're deleted), THUMB_DIR(), and the shared one unless separate caching
+// is on (it shares nothing with the desktop's other apps then, reading included).
+QStringList THUMB_READ_DIRS();
+// Separate caching (Preferences → Privacy): thumbnails kept in Kestrel's own cache folder instead of the desktop's
+// shared one. Any thread may read it while the UI thread changes it.
+void set_separate_cache(bool on);
+bool separate_cache();
+QString HISTORY_DIR();     // where history files go: CONFIG_DIR(), or in private mode the private RAM disk's history
+// Private mode (ramdisk.h): caches and histories in this folder (empty: back to the usual places). Any thread may
+// read the paths above while the UI thread changes this.
+void set_private_dir(const QString &dir);
+QString private_dir_in_use();
 QString TRASH_DIR();       // ~/.local/share/Trash
 QString GTK_BOOKMARKS();   // ~/.config/gtk-3.0/bookmarks
 
@@ -77,6 +100,9 @@ extern const QSet<QString> VIDEO_EXTS;
 extern const QSet<QString> RAW_EXTS;
 
 QSettings &settings();
+// The settings file for kept history (recent_servers, viewer_recent_folders, chooser_folder): settings(), or in
+// private mode a copy in the private RAM disk (UI thread only)
+QSettings &history_settings();
 
 // Prefer the system's programs and libraries over Anaconda's (or Miniconda's, Miniforge's…).
 //
@@ -92,7 +118,10 @@ void prefer_system_environment();
 
 // ---------------------------------------------------------------- paths (os.path semantics)
 
-QByteArray enc(const QString &path);    // file-system encoding of a path
+// A path's bytes and back, losslessly: a name that isn't valid UTF-8 keeps each stray byte as a lone surrogate
+// (U+DC80–U+DCFF, Python's surrogateescape). enc() also finds a name Qt decoded with U+FFFD (QFileSystemModel's),
+// when exactly one entry of its folder matches it.
+QByteArray enc(const QString &path);
 QString dec(const char *path);
 QString dirname(const QString &p);
 QString basename(const QString &p);
@@ -112,6 +141,10 @@ QString ext_of(const QString &p);        // lower-cased extension with the dot
 
 // tests: every stat_/lstat_ under prefix waits ms, as on a tape busy seeking (empty prefix: off)
 void set_test_busy(const QString &prefix, int ms);
+// tests: how many of those waits (and KESTREL_TEST_STATFS_DELAY_MS's) were on the UI thread: each would hold the
+// window. A count, not a time, so a check of it is the same on a fast or a slow machine
+int test_ui_waits();
+void note_test_wait();   // (a test delay is about to wait: counted if it's on the UI thread)
 bool stat_(const QString &p, struct stat &st);    // follows links; false on error
 bool lstat_(const QString &p, struct stat &st);
 bool exists(const QString &p);

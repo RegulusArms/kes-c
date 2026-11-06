@@ -1,6 +1,7 @@
 #include "atc.h"
 
 #include "jobs.h"
+#include "ramdisk.h"
 #include "stats.h"
 #include "util.h"
 
@@ -86,7 +87,8 @@ static const QList<QPair<QString, Field>> FINISHED_FIELDS = {{"id", STR},   {"ti
                                                              {"took", NUM}, {"ended", NUM}, {"admin", BOOL}};
 static const QList<QPair<QString, Field>> THUMB_FIELDS = {{"id", STR},   {"title", STR}, {"folder", STR}, {"window", STR},
                                                           {"state", STR}, {"done", NUM}, {"total", NUM}, {"paused", BOOL}};
-static const QStringList UNDO_KINDS = {"move", "move_into", "rename", "trash", "create", "none"};   // none: can't be undone (items [])
+// none: can't be undone (items []); links: the Link window's batch (links.h UndoItems: b may be "->" + a link's contents)
+static const QStringList UNDO_KINDS = {"move", "move_into", "rename", "trash", "create", "none", "links"};
 
 static bool valid_fields(const QJsonObject &o, const QList<QPair<QString, Field>> &fields);
 
@@ -137,11 +139,12 @@ bool valid_undo(const QJsonObject &op)
 {
     if (!UNDO_KINDS.contains(op.value("kind").toString()) || !op.value("label").isString() || !op.value("items").isArray())
         return false;
+    bool links = op.value("kind").toString() == "links";
     for (const QJsonValue &v : op.value("items").toArray()) {   // [a, b]: absolute paths (b is "" for trash and create)
         QJsonArray pair = v.toArray();
         QString b = pair.at(1).toString();
         if (pair.size() != 2 || !pair.at(0).isString() || !pair.at(1).isString() || !pair.at(0).toString().startsWith('/') ||
-            !(b.isEmpty() || b.startsWith('/')))
+            !(b.isEmpty() || b.startsWith('/') || (links && b.startsWith("->"))))
             return false;
     }
     return true;
@@ -415,7 +418,11 @@ int run_tower(int argc, char **argv)
     tower->node = g_dbus_node_info_new_for_xml(XML, nullptr);
     tower->land.setSingleShot(true);
     tower->land.setInterval(LAND_MS);
-    QObject::connect(&tower->land, &QTimer::timeout, &app, &QCoreApplication::quit);
+    QObject::connect(&tower->land, &QTimer::timeout, &app, []() {
+        // the last Kestrel has gone: what lasts only while Kestrel runs goes with it (ramdisk.h)
+        ramdisk::last_kestrel_gone();
+        QCoreApplication::quit();
+    });
     tower->land.start();
     g_bus_own_name(
         G_BUS_TYPE_SESSION, NAME, G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE,

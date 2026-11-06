@@ -30,7 +30,7 @@ These entries are on the file, folder, archive and several-items menus. The sect
 
 | Entry | What it does | Shows |
 |---|---|---|
-| **Open** | Opens the item(s): folders in this tab, files in their default app (or the app chosen in Preferences for images and videos) | Always |
+| **Open** | Opens the item(s): folders in this tab, files in their default app (or the app chosen in Preferences for images and videos); an archive gets Kestrel's Extract dialog, or is extracted as **Extract Here** does when it's encrypted and a password saved in the keyring (for it or for another archive) opens it | Always |
 | **Show in Folder** | Goes to the folder the item is in and selects it | In search results |
 | **Collapse This Group** | Collapses the date group the item is in | When the folder is grouped by date |
 | **Cut** / **Copy** | Puts the item(s) on the clipboard to paste elsewhere (also into GNOME Files and other apps) | Always |
@@ -60,10 +60,9 @@ These entries are on the file, folder, archive and several-items menus. The sect
 | **Create Symbolic Link Here** | Makes a symbolic link to each item in this folder | In a real folder (not Starred or Recent) |
 | **Create Relative Symbolic Link Here** | The same, with a relative target, so the link keeps working if both are moved together | In a real folder |
 | **Create Hard Link Here** | Makes a hard link to each file in this folder | Files only (not folders or links), in a real folder |
-| **Create Symbolic Link In…** | Asks for a folder and makes the links there | Always |
+| **Link…** | Opens the Link window with the items picked on the left and this folder on the right: links of any kind (symbolic, relative, hard, `.desktop` shortcut) to make in any folders, renamed as they're listed, all made with OK as one job and undone as one step | Always |
 | **Send Link to Desktop** | Makes a symbolic link on the Desktop | Always |
-| **Create Desktop Shortcut (.desktop) Here** | Makes a `.desktop` launcher that opens the item | In a real folder |
-| **Send Shortcut (.desktop) to Desktop** | The same, on the Desktop | Always |
+| **Edit Link…** | Opens the Link window with the selected symbolic links in its list, to change what they point to, switch between absolute and relative, or rename or move them | When a symbolic link is selected |
 | **Open Link Target Location** | Goes to the folder of what the link points to and selects it | When a symbolic link is selected |
 | **Add to Bookmarks** | Adds the folder to the sidebar's bookmarks | Folders only |
 
@@ -75,7 +74,11 @@ The shared entries, plus:
 |---|---|---|
 | **View Image** | Opens the image in Kestrel's own viewer, whatever app images open with | Images |
 | **Open With ▸** | The apps that can open it (up to 8), and **Other Application…** to pick any | Always |
+| **Mount Image** | Sets the disk image up as a drive (through udisks) and mounts its file systems read-only, so they show in the sidebar and on the Overview; a LUKS-encrypted one asks for its password. A compressed (`.img.zst`, `.xz`, `.gz`) or encrypted (`.img.gpg`) image is first expanded into a copy in the cache (asked first), deleted once unmounted. Unmounting the last of its file systems detaches it. Double-clicking an `.img` does the same | Disk images (`.img`, `.iso`, `.raw`; compressed or `.gpg` too) |
+| **Mount Image for Writing** | The same, mounted so it can be changed | Plain `.img` and `.raw` images you can write to |
 | **Verify Signature** | Checks the signature with `gpg` against the file it signs (the same name without the extension; a clearsigned file against itself) and says plainly what it means: valid and by whom (and whether that's a key you've verified), a bad signature, or the signer's key missing (with **Fetch Key…**, asking first). A signed checksum file's files are checked next | Signatures (`.sig`, `.asc`, `.gpg`, `.sign`), not encrypted archives |
+| **Encrypt…** | Makes an encrypted copy beside the file with `gpg` (`name.gpg`, or `name.asc` as text), the original left as it is: with a password (typed twice; AES-256) or to people's public keys picked from your keyring (each one marked verified or not; your own key too, if you have one, so you can open it). Runs as a job; a cancel or failure leaves no file behind (see [Features](features.md#encrypting-and-decrypting)) | Files (archives too), not folders |
+| **Decrypt** | Decrypts it with `gpg` into a copy beside it, under its name without the extension (or the next free one): asks for the password when it was encrypted with one (one saved in the keyring for it is tried first, and it can be saved there), or lets gpg ask for your key's passphrase when it was encrypted to your key; one encrypted only to other people's keys says so. Says who signed what was inside, if anyone. Double-clicking an encrypted `.gpg`, `.pgp` or `.asc` does the same | `.gpg`, `.pgp` and `.asc` files (not encrypted tar archives, which Extract opens) |
 | **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
 | **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
 | **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
@@ -98,8 +101,9 @@ The shared entries, plus:
 | **Open With ▸** | Other apps that open folders (not file managers), and **Other Application…** | Always |
 | **Paste Into Folder** | Pastes the clipboard's files into this folder | Enabled when files are on the clipboard |
 | **Find Duplicates…** | Finds the files with the same contents in the folder (and its subfolders), to keep some and move the others to the trash or replace them with hard links (see [Features](features.md)) | Always |
+| **Disk Usage…** | Shows what fills the folder as a map: each subfolder a block sized by what it holds, its biggest files and subfolders inside it (see [Features](features.md)) | Always |
 | **Compare With…** | Asks for another folder and lists what differs between the two: only on one side, newer on one side, other contents; copy across or trash from the list | Always |
-| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again | Always |
+| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again. A folder synced before (as the source or the destination) opens filled in as its last sync was run, the right way round, with the other syncs it took part in under **Last synced**; a remembered folder that isn't there now is said | Always |
 | **Folder Colour ▸** | Gives the folder's icon one of 10 colours, or **Default** | Always |
 | **Show Image Previews** | Turns the mosaic of images on the folder's icon on or off for this folder | Always |
 | **Reset Folder Cover** | Removes the cover image you chose, back to the automatic mosaic | When it has a chosen cover |
@@ -140,6 +144,8 @@ menu's entries, with these after Links & Shortcuts:
 | **Open as Archive** | Opens a window listing what's inside, to open or extract single items (see [below](#open-as-archive-window)) | When its program can list it |
 | **Test Archive** | Checks the archive for damage without extracting | Always |
 | **Extract (install …)** | Greyed out in place of the above, naming the package that extracts this format | When that program is missing |
+| **Encrypt…** | As for a file | Always |
+| **Mount Image** | As for a file: an `.iso`, or a compressed disk image (`.img.xz`…), set up as a drive and mounted (an `.iso` still opens as an archive when double-clicked) | Disk images |
 
 See [Archives](archives.md) for formats, passwords and limits.
 
@@ -161,6 +167,7 @@ The shared entries, plus:
 | **Convert Audio…** | As for one audio file or one folder, for all of them | When all are audio files or all are folders, with ffmpeg installed |
 | **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
 | **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
+| **Encrypt…** | As for a file: an encrypted copy beside each, all with the same password or to the same keys, as one job | No folders selected |
 | **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
 
 ## Empty space in a folder
@@ -171,6 +178,7 @@ The shared entries, plus:
 | **New Document ▸** | **Empty File…**, and a new file from each template in your Templates folder | Always |
 | **Paste** | Pastes the clipboard's files here; an image on the clipboard (a screenshot) is saved as a file | Enabled with files or an image on the clipboard |
 | **Paste as Link** | Makes symbolic links here to the clipboard's files | Enabled with files on the clipboard |
+| **Link…** | Opens the Link window with this folder on the right ("Link goes in"): pick on the left what the links point to, of any kind, and make them all with OK as one job, undone as one step | Not in the Trash |
 | **Select All** | Selects everything in the folder | Always |
 | **Sort By ▸** | The column (Name, Size, Type, Modified) and order; **Pinned & Starred First**; **Group by Period** / **Group by Day** and **Date to Group By**; **Set as Default** (this sort for folders without their own); **Apply to Subfolders** | Always |
 | **Show Hidden Files** | Shows or hides dot files (Ctrl+H) | Always |
@@ -240,6 +248,8 @@ Right-click a tab's title.
 | **Open** / **Open in New Tab** | Opens the place here or in a new tab | Every entry |
 | **Open in Terminal** | Opens a terminal there | Folders, drives and mounted shares (not phones or servers) |
 | **Find Duplicates…** | Finds the files with the same contents on the drive (as for a folder) | Drives |
+| **Disk Usage…** | What's using the drive's space, as a map (as for a folder; on a tape or floppy it counts only when asked) | Drives |
+| **Back Up Drive to Image…** | Copies the drive (that partition, or its whole disk) byte for byte into an image file, optionally compressed (zstd) and encrypted with a password (gpg), as a job; reading it asks for the administrator password. Refuses to save onto the drive being read, checks the free space, and asks first while it's mounted for writing | Drives (not tapes or floppies) |
 | **Edit Bookmark…** | Changes the bookmark's name and location | Bookmarks |
 | **Remove Bookmark** | Removes the bookmark (the folder stays) | Bookmarks |
 | **Move Up** / **Move Down** | Moves the bookmark in the list | Bookmarks |
@@ -249,6 +259,12 @@ Right-click a tab's title.
 | **Unmount** | Unmounts the drive (a tape writes its index first); asks first while a job still uses it | Drives, mounted network shares |
 | **Remove from Recent Servers** | Forgets a recently used server | Servers not connected |
 | **Eject** / **Unmount** | Disconnects the phone or camera | Mounted phones and cameras |
+| **Bring Back into Memory** | Makes the RAM disk again (mounting one with a size limit asks for your password once), and loads its saved files if it keeps them | RAM disks not in memory now (greyed; a click does the same) |
+| **Save to Disk Now** | Saves the RAM disk's files to its folder on disk now, as a job (only what changed) | RAM disks that save their files to disk, while in memory |
+| **Edit RAM Disk…** | Changes its name, size limit, how long it lasts, and where and how often it's saved | RAM disks |
+| **Remove RAM Disk…** | Asks, then takes it down for good: saved one last time first if it keeps its files (that copy stays), its files deleted from memory, its startup units removed | RAM disks |
+| **New RAM Disk…** | Makes a RAM disk (also ☰ → New RAM Disk…) | RAM disks, Private |
+| **Leave Private Mode** | Turns private mode off in every Kestrel; its RAM disk, with the files saved in Private, is deleted (said first, unless that's turned off) | Private (while private mode is on) |
 | **Hide from Sidebar** | Takes the place out of the sidebar, in every window; Preferences → Sidebar → Places shown brings it back | Places (Overview, Home, Recent, Starred, the user folders, Trash) |
 
 ## Overview cards
@@ -263,6 +279,9 @@ On the Overview page.
 | **Add to Bookmarks** | Bookmarks the drive or folder | Mounted drives, frequent folders |
 | **Properties** | The drive's Properties | Mounted drives |
 | **Find Duplicates…** | As in the sidebar | Mounted drives |
+| **Disk Usage…** | As in the sidebar; also the button beside the card's usage bar ("What's using this space?") | Mounted drives (not phones) |
+| **Mount** | Mounts the drive (as clicking its card does) | Drives not mounted |
+| **Back Up Drive to Image…** | As in the sidebar | Drives, mounted or not (not phones, network shares, tapes or floppies) |
 | **Drive Health…** | What the drive reports about itself (S.M.A.R.T., through udisks), in plain words; also opened by clicking the card's health line | Drives with a health line (Preferences → Overview → Show each drive's health) |
 | **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
 | **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |
@@ -271,6 +290,18 @@ On the Overview page.
 | **Remove from Save Locations** | Takes the folder off the list (the folder stays) | Save locations |
 | **Unstar** | Takes it off the Starred list | Starred items |
 | **Remove from Frequent Folders** | Forgets how often the folder was opened, so it leaves the section until it's opened often again | Frequent folders |
+
+## Disk Usage window
+
+Right-click a block in the map, or a row in the list beside it.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Go Into** | Shows that folder in the map (as clicking it does) | Folders with their contents mapped (not small ones) |
+| **Open** | Opens the file in its app, or the folder in the Kestrel window it was opened from | Files and folders (not "smaller files") |
+| **Show in Folder** | Shows it selected in its folder, in that Kestrel window | Files and folders |
+| **Move to Trash** | Moves it to the trash and takes it off the map (Undo in a Kestrel window brings it back) | Files and folders |
+| **Properties** | Its Properties | Files and folders |
 
 ## Open as Archive window
 

@@ -9,7 +9,7 @@ tests/run.sh                  # every test
 tests/run.sh fileops atc_undo # only some
 ```
 
-There are over 1,100 checks in 25 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo), archives (extracting several at once, looking inside one, testing, and remembered passwords with a real keyring), Preferences and the right-click menus' layouts, the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar and its Mounts section, searching (filters, and inside files with the index, ripgrep or grep), pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), the job queue and its windows, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, the image viewer (lossless rotations, crop and resize, compare, the filmstrip and info panel), the file tools (Find Duplicates, Compare With…, Sync To…, Verify Signature), the Overview (its choices, Starred, Frequent Folders, drive health), rotating image files and converting media, the translations, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 and 26.04 on every push that changes more than Markdown files and the benchmark, also with AddressSanitizer and UndefinedBehaviorSanitizer, builds a .deb on each, installs each on a clean system of its release, and, once they're published, installs them again from each release's apt suite. Details: [tests/README.md](../tests/README.md).
+There are over 1,100 checks in 25 tests: file operations (copy, move, merge, delete, cancel, trash, links, undo, clones and the system's copies), archives (extracting several at once, looking inside one, testing, and remembered passwords with a real keyring), Preferences and the right-click menus' layouts, the tower that keeps several Kestrels in sync (shared changes, the shared task list, shared undo, opening folders as tabs), phones and cameras, rearranging the sidebar and its Mounts section, searching (filters, and inside files with the index, ripgrep or grep), pinned items and folder sorts, grouping by date, tapes and floppy disks (slow drives), the job queue and its windows, following the desktop theme, the file chooser, the admin helper that runs as root, every menu entry and shortcut, screen-reader names and dropping onto folders, parsing modelled on Python's, the image viewer (lossless rotations, crop and resize, compare, the filmstrip and info panel), the file tools (Find Duplicates, Disk Usage, Compare With…, Sync To…, Verify Signature, Encrypt and Decrypt, backing up and mounting disk images), the Link window, the Overview (its choices, Starred, Frequent Folders, drive health), rotating image files and converting media, the translations, and `install.sh` and `kes-setup`, including a BleachBit dry run of Kestrel's cleaner. Each test runs with a throwaway home folder on a private D-Bus bus, so your files, settings, dock and open windows are never touched. GitHub Actions runs them on Ubuntu 24.04 and 26.04 on every push that changes more than Markdown files and the benchmark, also with AddressSanitizer and UndefinedBehaviorSanitizer, builds a .deb on each, installs each on a clean system of its release, and, once they're published, installs them again from each release's apt suite. Details: [tests/README.md](../tests/README.md).
 
 ## Architecture
 
@@ -172,6 +172,7 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | File | Purpose |
 |---|---|
 | `src/main.cpp` | The `kes` program's entry point (calls `kes_main` in `app.cpp`) |
+| `src/version.cpp` | The version (`KES_VERSION`), compiled into each program on its own, so the rest of the code is built once and shared by `kes` and the tests |
 | `src/app.cpp` | Main window: tabs, toolbar, menus and shortcuts, context menus, applying settings, starting up |
 | `src/actions.cpp` | The main window's file actions: clipboard, drops, new files and folders, rename, trash and delete, restore, links |
 | `src/opening.cpp` | Opening files and folders: what double-click and Enter do (folders, archives, images, videos, other files, as Preferences says), Quick View, the image viewer |
@@ -179,13 +180,18 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/pane.cpp` | The browser pane in each tab: grid and list views, the overview page, the combined trash, Starred and Recent, search, history, selection, each folder's sort and grouping |
 | `src/drives.cpp` | Slow drives (LTFS tapes, floppy disks): recognising them from the mount table, their sizes read in the background, tape attributes and index sync, one job at a time per drive |
 | `src/tapebuf.cpp` | The RAM write buffer for copies onto a tape (no shoe-shining): read ahead by a thread, sized from the memory available |
+| `src/diskimage.cpp` | Disk images: Back Up Drive to Image… (the admin helper reads the drive into a FIFO; Kestrel compresses with zstd, encrypts with gpg and writes the image as you, under a part name) and Mount Image (a loop device through udisks, LUKS unlocked, compressed or encrypted images expanded into the cache first) |
+| `src/ramdisk.cpp` | RAM disks (a folder in `/dev/shm`, or a tmpfs of its own mounted through the admin helper), how long each lasts, saving a persistent one to disk and loading it back; and private mode's hidden RAM disk |
+| `src/ramdiskwin.cpp` | The New RAM Disk… and Edit RAM Disk… window |
 | `src/jobs.cpp` | The job queue: one for every Kestrel (kept by the tower, else each Kestrel's own), by drive, one at a time or all at once |
 | `src/jobswin.cpp` | The Jobs window: every job, its steps and log, the queue's controls |
+| `src/joblogs.cpp` | Saving finished jobs' logs to `~/.cache/kestrel-explorer/job-logs` (a file per job, a folder per day) and pruning old ones |
 | `src/windiag.cpp` | Window diagnostics: each window's size, limits, state and recent changes (the Tower window's Windows tab) |
 | `src/towerwin.cpp` | The Tower window (developer tools, `kes --tower-monitor`): what the tower is doing, live |
 | `src/groups.cpp` | Grouping by date: the model that puts date headers between the items (by period or by day), and the dates it groups by (created, and taken from metadata on worker threads) |
-| `src/widgets.cpp` | File-system model, grid delegate, path bar, sidebar, info panel, search |
-| `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching |
+| `src/widgets.cpp` | Grid delegate, path bar, sidebar, info panel, search |
+| `src/fsmodel.cpp` | The folder views' model: lists a folder by its names' bytes on a thread (so names that aren't valid UTF-8 work), follows changes through inotify, sorts and filters as the views need |
+| `src/thumbs.cpp` | Background thumbnail and folder-mosaic generation and caching (in the shared freedesktop cache, or Kestrel's own with separate caching) |
 | `src/viewer.cpp` | Image viewer: decoding ahead at screen size, zoom, the filmstrip, the info panel, compare, quick actions, dragging an image out and Ctrl+C |
 | `src/imgedit.cpp` | Saving the viewer's changes to image files: rotations through the orientation tag, Straighten, crop and resize; turning files from the menu (Rotate ▸: jpegtran, lossless formats); keeping metadata in an image made from another |
 | `src/media.cpp` | Converting media: ffprobe's details, ffmpeg's options built from the settings (videos, audio), running ffmpeg with progress into a part file; converting images |
@@ -199,16 +205,20 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/chooser.cpp` | The system's file chooser: the portal backend (`kes --file-chooser`) and the Save/Open bar of chooser windows |
 | `src/focus.cpp` | Giving the focus to the app files are dropped into: on X11 directly, on GNOME on Wayland through the drop focus extension (`data/gnome-shell/`), on KDE Plasma on Wayland through a KWin script loaded for each drop |
 | `src/admin.cpp` | The admin session: starts the root helper once, sends it operations, the 🛡 status-bar indicator, and "Retry as Administrator" |
-| `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations |
+| `src/admin_helper.cpp` | The small root helper (Qt Core only, for JSON) that performs admin-session operations (paths come as their bytes, base64, beside the JSON text, so names that aren't valid UTF-8 survive) |
 | `src/windows.cpp` | Opening windows: every dialog, message, question and file or folder picker is a free window (see [Windows](#windows)) |
 | `src/dialogs.cpp` | Properties (including the metadata editor and Add Tag picker), Open With, rename, batch rename, Edit Bookmark |
+| `src/links.cpp` | Making and changing links as a batch: the checks on each link to make or change, and the job that does them all (failure-atomic, undone as one step) |
+| `src/linkwin.cpp` | The Link window (Link…, Edit Link…, Properties' Edit… beside a link's target): two browsers side by side, the links-to-be ghosted in place, the list and its confirmation |
 | `src/prefs.cpp` | Every setting: its tab, label, default and where else it's changed; setting one applies it everywhere and tells the other Kestrels |
 | `src/prefswin.cpp` | The Preferences window, built from that list: tabs, search, resets |
 | `src/menus.cpp` | The right-click menus as the user lays them out: entry ids, the default layouts, rearranging a built menu, and the editor (Preferences → Menus) |
 | `src/hashcheck.cpp` | Checksum files: Verify Checksums, Create Checksum File…, and checking one file in Properties |
+| `src/pgp.cpp` | Encrypt… and Decrypt: encrypted copies made with gpg, with a password or to people's public keys, written under a part name and claimed only when gpg has succeeded |
 | `src/signature.cpp` | Verify Signature: checking `.sig` / `.asc` / `.gpg` signatures with gpg, said plainly; fetching a missing key |
 | `src/dupes.cpp` | Find Duplicates…: grouping identical files (by size, then their beginnings, then SHA-256), the window, trashing or hard-linking the copies not kept |
-| `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs |
+| `src/compare.cpp` | Compare With… and Sync To…: two folders' differences, the sync plan (rsync or Kestrel's copy), saved sync pairs and the remembered past syncs (`sync-history.json`) |
+| `src/diskusage.cpp` | Disk Usage…: counting a folder or drive as a job, and the treemap window with its list |
 | `src/metadata.cpp` | EXIF and PNG-text reading, the date a photo or video was taken, the prompts image generators save in files, exiftool reading/editing, and the tag catalog for the Add Tag picker (the tag descriptions and "Accepts" types were written with the help of an AI tool and may not be completely accurate) |
 | `src/overview.cpp` | Overview page: drives, phones and cameras, network locations, bookmarks, starred items, frequent folders; its sections chosen in Preferences → Overview |
 | `src/health.cpp` | Drive health (S.M.A.R.T.) from udisks over D-Bus: the cards' health line, the Drive Health window, the failing-drive notification |
@@ -224,7 +234,7 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |
 | `src/atc.cpp` | The tower (`kes --atc`) and each window's link to it, which keep several running Kestrels in sync |
 | `tests/` | The test suite (see [Tests](#tests)) |
-| `bench/` | [The benchmark](../bench/README.md) against GNOME Files, Nemo, Dolphin (also on Kubuntu), Thunar, Krusader and PCManFM (see [Performance](performance.md), [at a glance](performance.md#at-a-glance)) |
+| `bench/` | [The benchmark](../bench/README.md) against GNOME Files, Nemo (on Linux Mint, also in a container), Dolphin (also on Kubuntu), Thunar, Krusader and PCManFM (see [Performance](performance.md), [at a glance](performance.md#at-a-glance)) |
 | `CMakeLists.txt` | Build configuration, and the .deb (CPack) |
 | `kes-setup` | Makes Kestrel the default file manager for the current user, and puts things back (run by `install.sh`; also in the .deb) |
 | `data/` | The app icon (`icons/hicolor`, built into `kes` through `kestrel.qrc`), the .deb's app menu entry and file chooser portal files, and the GNOME Shell drop focus extension |

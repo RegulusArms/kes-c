@@ -1,0 +1,3 @@
+# Benchmark output of bench/mint.sh (README.md; the other runs' results are in the top-level .gitignore)
+results-mint.json
+results-mint.md

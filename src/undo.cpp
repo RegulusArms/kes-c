@@ -3,6 +3,7 @@
 #include "app.h"
 #include "atc.h"
 #include "fileops.h"
+#include "links.h"
 #include "util.h"
 #include "widgets.h"
 #include "windows.h"
@@ -73,6 +74,13 @@ void record(const QString &kind, const QString &label, const QList<QPair<QString
 {
     if (items.isEmpty() && kind != "none")
         return;
+    if (kind == "move" || kind == "move_into" || kind == "rename" || kind == "links") {
+        QList<QPair<QString, QString>> done;
+        for (const auto &it : items)
+            if (it.second.startsWith('/'))   // (not move_into's folder, nor a link made or changed)
+                done << it;
+        Q_EMIT signals_()->moved(done);
+    }
     if (shared() && !atc::radio()->request("UndoPush", to_json(Op{kind, label, items})).isNull())
         return;   // the tower tells every window (undo_changed)
     stack << Op{kind, label, items};
@@ -141,8 +149,19 @@ void undo(MainWindow *win, std::function<void()> after)
             after();
         return;
     }
+    // the items that went back where they were (old, new as moved now)
+    auto tell_moved = [op]() {
+        QList<QPair<QString, QString>> back;
+        for (const auto &[from, to] : op.items)
+            if (to.startsWith('/') && lexists(from) && !lexists(to))
+                back << qMakePair(to, from);
+        if (!back.isEmpty())
+            Q_EMIT signals_()->moved(back);
+    };
     QPointer<MainWindow> w(win);
-    auto done = [w, title, op, after](const QVariant &res) {
+    auto done = [w, title, op, after, tell_moved](const QVariant &res) {
+        if (op.kind == "rename" || op.kind == "links")
+            tell_moved();
         if (after)
             after();
         if (!w)
@@ -177,7 +196,8 @@ void undo(MainWindow *win, std::function<void()> after)
                 ::rmdir(enc(made).constData());
         };
         if (!jobs.isEmpty()) {
-            fileops::start_ops(win, jobs, title, [done, remove_made]() {
+            fileops::start_ops(win, jobs, title, [done, remove_made, tell_moved]() {
+                tell_moved();
                 remove_made();
                 done(QStringList());
             });
@@ -202,6 +222,7 @@ void undo(MainWindow *win, std::function<void()> after)
                 } else {
                     try {
                         util::rename(new_path, old_path);
+                        task->log(tx("Renamed back: %1 → %2").arg(new_path, basename(old_path)));
                     } catch (const OSError &e) {
                         errors << basename(new_path) + ": " + e.message();
                     }
@@ -228,8 +249,34 @@ void undo(MainWindow *win, std::function<void()> after)
                     util::move(trashed, orig);
                     if (!info.isEmpty() && exists(info))
                         util::unlink(info);
+                    task->log(tx("Put back: %1").arg(orig));
                 } catch (const OSError &e) {
                     errors << basename(orig) + ": " + e.message();
+                }
+            }
+        } else if (op.kind == "links") {   // the Link window's batch (links.h), backwards
+            for (int i = op.items.size() - 1; i >= 0; --i) {
+                task->check();
+                const auto &[a, b] = op.items[i];
+                try {
+                    if (b.isEmpty()) {   // made: to the trash, as any item created
+                        if (lexists(a)) {
+                            util::trash(a);
+                            task->log(tx("Moved to the trash: %1").arg(a));
+                        }
+                    } else if (b.startsWith("->")) {   // its contents changed: what it held before, put back
+                        links::replace_symlink(a, b.mid(2));
+                        task->log(tx("Pointed back: %1").arg(a));
+                    } else if (!lexists(b)) {
+                        errors << tx("%1: no longer exists").arg(basename(b));
+                    } else if (lexists(a)) {
+                        errors << tx("%1: that name is taken again").arg(basename(a));
+                    } else {   // renamed or moved: back
+                        links::move_symlink(b, a);
+                        task->log(tx("Renamed back: %1 → %2").arg(b, a));
+                    }
+                } catch (const Error &e) {
+                    errors << basename(a) + ": " + e.message();
                 }
             }
         } else if (op.kind == "create") {   // move what was created to the trash
@@ -241,14 +288,19 @@ void undo(MainWindow *win, std::function<void()> after)
                     continue;
                 try {
                     util::trash(p);
+                    task->log(tx("Moved to the trash: %1").arg(p));
                 } catch (const OSError &e) {
                     errors << basename(p) + ": " + e.message();
                 }
             }
         }
+        for (const QString &e : std::as_const(errors))
+            task->log(tx("Couldn't undo: %1").arg(e));
+        if (!errors.isEmpty())
+            task->had_errors = true;
         return errors;
     };
-    fileops::run_job(win, title, work, done);
+    fileops::run_job(win, title, work, done, true, false, true);   // (done needs no window: w may have gone)
 }
 
 }  // namespace undo

@@ -9,6 +9,7 @@
 #include "windows.h"
 
 #include <QCheckBox>
+#include <QSignalBlocker>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QGuiApplication>
@@ -67,15 +68,6 @@ QString clock_text(qint64 ms)
     qint64 s = ms / 1000;
     return s >= 3600 ? QString("%1:%2:%3").arg(s / 3600).arg(s / 60 % 60, 2, 10, QChar('0')).arg(s % 60, 2, 10, QChar('0'))
                      : QString("%1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'));
-}
-
-QString state_label(const QString &state)
-{
-    static const QHash<QString, const char *> labels = {
-        {"waiting", TX_NOOP("Waiting")}, {"running", TX_NOOP("Running")}, {"paused", TX_NOOP("Paused")},
-        {"done", TX_NOOP("Done")},       {"done with errors", TX_NOOP("Done, with errors")},
-        {"failed", TX_NOOP("Failed")},   {"cancelled", TX_NOOP("Cancelled")}};
-    return labels.contains(state) ? tx(labels.value(state)) : state;
 }
 
 }  // namespace
@@ -171,6 +163,18 @@ JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
     connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
     for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
         controls->addWidget(b);
+    verify_box = new QCheckBox(tx("Verify copies"));
+    verify_box->setToolTip(tx("Read each file back once it's copied and compare it with the original (for the files "
+                              "copied from now on). Its default is in Preferences → Files."));
+    connect(verify_box, &QCheckBox::toggled, this, [this](bool on) {
+        Task *t = local_task(selected_row());
+        if (!t || t->verify.load() < 0 || t->verify.load() == int(on))
+            return;
+        t->verify = int(on);
+        t->log(on ? tx("Verify copies turned on (Jobs window): each file copied from now on is read back and checked.")
+                  : tx("Verify copies turned off (Jobs window)."));
+    });
+    controls->addWidget(verify_box);
     controls->addStretch(1);
     jl->addLayout(controls);
     lists->addWidget(jbox);
@@ -457,7 +461,7 @@ void JobsWindow::refresh()
         QString where = r.local || r.finished ? QString() : tx("  (another Kestrel)");
         it->setText(0, (r.admin ? "🛡 " : "") + r.title + where);
         it->setToolTip(0, r.title + (r.text.isEmpty() ? QString() : "\n" + r.text));
-        it->setText(1, state_label(r.state));
+        it->setText(1, fileops::state_label(r.state));
         bool active = r.state == "running" || r.state == "paused";
         it->setData(2, FractionRole, active ? QVariant(r.fraction) : QVariant());
         it->setText(2, r.state == "waiting" ? QString("…") : QString());
@@ -483,6 +487,19 @@ const JobsWindow::Row *JobsWindow::selected_row() const
     return nullptr;
 }
 
+Task *JobsWindow::local_task(const Row *r) const
+{
+    if (!r || r->finished)
+        return nullptr;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        if (j.flight + "/" + j.id == r->key && j.local)
+            return j.local;
+    for (const TaskInfo &t : TaskBoard::instance()->all())
+        if (t.flight + "/" + t.id == r->key && t.local)
+            return t.local;
+    return nullptr;
+}
+
 void JobsWindow::show_details()
 {
     const Row *r = selected_row();
@@ -494,6 +511,17 @@ void JobsWindow::show_details()
     now_btn->setEnabled(queued && r->state == "waiting");
     up_btn->setEnabled(queued && r->state == "waiting");
     down_btn->setEnabled(queued && r->state == "waiting");
+    {
+        Task *t = r && !r->finished ? local_task(r) : nullptr;
+        int v = t ? t->verify.load() : -1;
+        QSignalBlocker block(verify_box);
+        verify_box->setChecked(v == 1);
+        verify_box->setEnabled(v >= 0);
+        verify_box->setToolTip(r && !r->finished && !t
+                                   ? tx("Only for this Kestrel's own jobs: set it in the Kestrel that started the job")
+                                   : tx("Read each file back once it's copied and compare it with the original (for the "
+                                        "files copied from now on). Its default is in Preferences → Files."));
+    }
     if (!r) {
         head->setText(tx("Choose a job to see what it's doing."));
         steps->clear();
@@ -513,7 +541,7 @@ void JobsWindow::show_details()
     for (const jobs::Job &j : jobs::Queue::instance()->jobs())
         if (j.flight + "/" + j.id == r->key)
             drives = j.drives;
-    QString text = "<b>" + r->title.toHtmlEscaped() + "</b> — " + state_label(r->state);
+    QString text = "<b>" + r->title.toHtmlEscaped() + "</b> — " + fileops::state_label(r->state);
     if (!r->text.isEmpty())
         text += "<br>" + r->text.toHtmlEscaped();
     if (!drives.isEmpty())

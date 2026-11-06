@@ -257,9 +257,19 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
     QString uri = file_uri(path);
     QString cache_dir = join(THUMB_DIR(), flavor);
     QString cache_path = join(cache_dir, md5(uri) + ".png");
-    bool in_cache_dir = path.startsWith(THUMB_DIR());
-    if (!in_cache_dir && !fresh && exists(cache_path)) {
-        QImage img(cache_path);
+    QStringList read_dirs = THUMB_READ_DIRS();
+    bool in_cache_dir = path.startsWith(SHARED_THUMB_DIR() + "/") || path.startsWith(OWN_THUMB_DIR() + "/") ||
+                        path.startsWith(THUMB_DIR() + "/");
+    // Those made before are still used where they're kept: in private mode the shared cache's (new ones go to the
+    // private RAM disk); after separate caching is turned off, Kestrel's own folder's until they're deleted (new
+    // ones go to the shared cache). With separate caching on the shared cache isn't read either.
+    QStringList cached_at;
+    for (const QString &d : read_dirs)
+        cached_at << join(join(d, flavor), md5(uri) + ".png");
+    for (const QString &cached : cached_at) {
+        if (in_cache_dir || fresh || !exists(cached))
+            continue;
+        QImage img(cached);
         if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
             stats::count("thumbnails from the disk cache");
             return img;
@@ -589,8 +599,9 @@ static bool made_by_us(const QString &png_path)
 
 QPair<qint64, qint64> purge_thumbnails(bool include_shared)
 {
-    // Always removes the folder-mosaic cache and the PNGs we tagged in the shared freedesktop cache. With
-    // include_shared, empties ~/.cache/thumbnails entirely (also thumbnails made by GNOME Files and other apps).
+    // Always removes the folder-mosaic cache, the thumbnails in Kestrel's own folders (separate caching's, private
+    // mode's) and the PNGs we tagged in the shared freedesktop cache. With include_shared, empties ~/.cache/thumbnails
+    // entirely (also thumbnails made by GNOME Files and other apps). In private mode the shared cache isn't touched.
     qint64 files = 0, size = 0;
     QStringList targets;
     auto collect = [&](const QString &dir) {
@@ -602,24 +613,32 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
     };
     collect(join(APP_CACHE(), "folders"));    // folder mosaics
     collect(join(APP_CACHE(), "animated"));   // looping video previews
-    for (const QString &flavor : FLAVORS) {
-        QString d = join(THUMB_DIR(), flavor);
-        if (!isdir(d))
-            continue;
-        QStringList names;
-        try {
-            names = listdir(d);
-        } catch (const OSError &) {
-            continue;
+    QString shared = SHARED_THUMB_DIR();
+    bool touch_shared = private_dir_in_use().isEmpty();
+    QStringList dirs{OWN_THUMB_DIR()};
+    if (!dirs.contains(THUMB_DIR()))
+        dirs << THUMB_DIR();
+    if (touch_shared && !dirs.contains(shared))
+        dirs << shared;
+    for (const QString &top : dirs)
+        for (const QString &flavor : FLAVORS) {
+            QString d = join(top, flavor);
+            if (!isdir(d))
+                continue;
+            QStringList names;
+            try {
+                names = listdir(d);
+            } catch (const OSError &) {
+                continue;
+            }
+            for (const QString &n : names) {
+                QString p = join(d, n);
+                if (n.endsWith(".png") && isfile(p) && (top != shared || include_shared || made_by_us(p)))
+                    targets << p;
+            }
         }
-        for (const QString &n : names) {
-            QString p = join(d, n);
-            if (n.endsWith(".png") && isfile(p) && (include_shared || made_by_us(p)))
-                targets << p;
-        }
-    }
-    if (include_shared)
-        collect(join(THUMB_DIR(), "fail"));
+    if (include_shared && touch_shared)
+        collect(join(shared, "fail"));
     for (const QString &t : targets) {
         struct stat st;
         if (stat_(t, st) && ::unlink(enc(t).constData()) == 0) {
@@ -1512,7 +1531,8 @@ void RecursiveBuilder::emit_progress(bool force)
         QString name = basename(rstrip(root, '/'));
         task->report(d, s ? 0 : t,
                      QString("%1 — %2 of %3%4").arg(name.isEmpty() ? root : name, group_digits(d), group_digits(t),
-                                                    s ? QString("+, scanning…") : QString()));
+                                                    s ? QString("+, scanning…") : QString()) +
+                         (c.isEmpty() ? QString() : " — " + basename(c)));
     }
 }
 
@@ -1524,6 +1544,7 @@ void RecursiveBuilder::one(char kind, const QString &path)
         stop = true;
     if (stop)   // skipped: not counted as done
         return;
+    enum { MADE_FILE, MADE_FOLDER, NONE, BIG, GONE } how = GONE;
     {
         struct stat st;
         if (stat_(path, st)) {
@@ -1532,17 +1553,27 @@ void RecursiveBuilder::one(char kind, const QString &path)
                 o.cover = covers.value(path);
                 o.color = colors.value(path, opts.color);
                 thumbs::folder_thumb(path, st.st_mtime, size, o, fresh);
+                how = MADE_FOLDER;
             } else if (st.st_size <= max_bytes || is_video(path)) {
-                thumbs::file_thumb(path, st.st_mtime, size, fresh);
+                bool made = !thumbs::file_thumb(path, st.st_mtime, size, fresh).isNull();
                 if (size != 128)   // mosaic tiles use the small size
                     thumbs::file_thumb(path, st.st_mtime, 128, fresh);
+                how = made ? MADE_FILE : NONE;
+            } else {
+                how = BIG;
             }
         }
     }
+    if (task && how == NONE)   // (thread-safe: a line in its log)
+        task->log(tx("No preview could be made of %1").arg(path));
     {
         QMutexLocker g(&lock);
         done += 1;
         current = path;
+        files_made += how == MADE_FILE;
+        folders_made += how == MADE_FOLDER;
+        no_preview += how == NONE;
+        too_big += how == BIG;
     }
     emit_progress();
 }
@@ -1572,6 +1603,8 @@ bool RecursiveBuilder::run(Task *job)
         task = nullptr;
         return false;
     }
+    if (task)
+        task->log(tx("Looking through %1").arg(root));
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
         if (task && task->cancelled)
             stop = true;
@@ -1605,6 +1638,14 @@ bool RecursiveBuilder::run(Task *job)
         workers_pool.clear();
     workers_pool.waitForDone();
     emit_progress(true);
+    if (task) {
+        QStringList parts{txn("%Ln file preview(s) made", files_made), txn("%Ln folder preview(s) made", folders_made)};
+        if (no_preview)
+            parts << txn("%Ln file(s) with no preview", no_preview);
+        if (too_big)
+            parts << txn("%Ln file(s) too big for a preview (Preferences → Images & Videos)", too_big);
+        task->log(tx("%1 of %2 done: %3").arg(group_digits(done), group_digits(total), parts.join(", ")));
+    }
     task = nullptr;
     return stop;
 }

@@ -790,7 +790,7 @@ int main(int argc, char **argv)
             makedirs(join(many, dir), true);
             for (int f = 0; f < per; ++f) {
                 QString name = QString("%1/a_rather_long_file_name_to_make_the_listing_longer_%2.txt").arg(dir).arg(f, 3, 10, QChar('0'));
-                write_text(join(many, name), "x");
+                write_text(join(many, name), "x", true);   // new: no fsync each (25,000 of them)
                 want << name;
             }
         }
@@ -989,8 +989,14 @@ int main(int argc, char **argv)
     QString pick2 = join(look, "picked2");
     makedirs(pick2, true);
     select({"inner/"});
+    w->statusBar()->clearMessage();
     fw->extract_selected(pick2);
-    Asked first = drive({{"one"}}, [&]() { return exists(join(pick2, "inner/a.txt")) ? QString("done") : QString(); });
+    // done when the job has finished (its "Extracted" message), not when its file appears: the window learns the
+    // password only then, and a second extraction started before that would ask again
+    Asked first = drive({{"one"}}, [&]() {
+        return exists(join(pick2, "inner/a.txt")) && w->statusBar()->currentMessage().startsWith("Extracted")
+                   ? QString("done") : QString();
+    });
     select({"top.txt"});
     fw->extract_selected(pick2);
     Asked second = drive({}, [&]() { return exists(join(pick2, "top.txt")) ? QString("done") : QString(); });
@@ -1012,7 +1018,13 @@ int main(int argc, char **argv)
                    ("[Desktop Entry]\nType=Application\nName=Note\nExec=" + script + " %f\nMimeType=text/plain;\n").toUtf8());
         makedirs(home_path(".config"), true);
         write_text(home_path(".config/mimeapps.list"), "[Default Applications]\ntext/plain=kes-test-open.desktop\n");
-        spin(500);   // (GIO notices new applications by watching their folders)
+        wait_for([]() {   // (GIO notices new applications by watching their folders: in its own time)
+            GAppInfo *ai = g_app_info_get_default_for_type("text/plain", FALSE);
+            bool ours = ai && QByteArray(g_app_info_get_id(ai)) == "kes-test-open.desktop";
+            if (ai)
+                g_object_unref(ai);
+            return ours;
+        });
         bool made_plain = make7("plain.7z", "");
         ArchiveWindow *pw = ArchiveWindow::open(w, join(base, "plain.7z"));
         wait_for([&]() { return pw->loaded(); });
@@ -1125,7 +1137,7 @@ int main(int argc, char **argv)
             QString dir = join(big, QString("d%1").arg(d, 3, 10, QChar('0')));
             makedirs(dir, true);
             for (int f = 0; f < 200; ++f)
-                write_text(join(dir, QString("f%1").arg(f, 3, 10, QChar('0'))), "");
+                write_text(join(dir, QString("f%1").arg(f, 3, 10, QChar('0'))), "", true);   // new: no fsync each
         }
         write_text(join(big, "a.txt"), "x");
         QDateTime when(QDate(2021, 3, 4), QTime(5, 6, 7));

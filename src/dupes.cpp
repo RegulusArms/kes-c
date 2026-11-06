@@ -51,6 +51,15 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
         if (task)
             task->check();
     };
+    auto note = [task](const QString &line) {
+        if (task)
+            task->log(line);
+    };
+    auto cant_read = [&](const QString &path) {
+        if (unreadable)
+            *unreadable << path;
+        note(tx("Couldn't be read, left out: %1").arg(path));
+    };
     // 1. every regular file, by size (links are never followed: a symlink isn't a copy)
     QHash<qint64, QList<File>> by_size;
     QSet<QString> seen_paths;
@@ -68,10 +77,11 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
             return;
         seen_inodes << inode;
         by_size[st.st_size] << File{path, qint64(st.st_size), qint64(st.st_mtime), inode.first, inode.second};
-        if (++found % 500 == 0 && task)
-            task->report(0, 0, tx("Looking through the files: %1 found").arg(group_digits(found)));
+        if (++found % 500 == 0 && task && task->due())
+            task->report(0, 0, tx("Looking through the files: %1 found — %2").arg(group_digits(found), dirname(path)));
     };
     for (const QString &root : roots) {
+        note(tx("Looking through %1").arg(root));
         struct stat rst;
         if (!lstat_(root, rst))
             continue;
@@ -107,6 +117,8 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
     int to_read = 0;
     for (const auto &c : candidates)
         to_read += int(c.size());
+    note(txn("%Ln file(s) found", found));
+    note(txn("%Ln file(s) of a size another has too: their beginnings are compared", to_read));
     int read = 0;
     QList<QList<File>> same_head;
     for (const QList<File> &c : std::as_const(candidates)) {
@@ -118,8 +130,7 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
             ++read;
             QByteArray h = head_hash(f.path);
             if (h.isEmpty()) {
-                if (unreadable)
-                    *unreadable << f.path;
+                cant_read(f.path);
                 continue;
             }
             by_head[h] << f;
@@ -129,9 +140,13 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
                 same_head << g;
     }
     qint64 bytes = 0, done = 0;
+    int same_start = 0;
     for (const auto &g : same_head)
-        for (const File &f : g)
+        for (const File &f : g) {
             bytes += f.size > HEAD ? f.size : 0;
+            ++same_start;
+        }
+    note(txn("%Ln file(s) begin like another of the same size: read whole (%1)", same_start).arg(human_size(bytes)));
     QList<Group> out;
     for (const QList<File> &g : std::as_const(same_head)) {
         QHash<QString, QList<File>> by_hash;
@@ -145,15 +160,15 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
                     QString h = hashcheck::hash_file(
                         f.path, "sha256",
                         [&](qint64 n, qint64) {
-                            if (task)
+                            if (task && task->due())
                                 task->report(before + n, std::max<qint64>(bytes, 1),
-                                             tx("Comparing the files of the same size: %1").arg(basename(f.path)));
+                                             tx("Comparing the files of the same size: %1 · %2")
+                                                 .arg(basename(f.path), task->speed(before + n)));
                         },
                         check);
                     by_hash[h] << f;
                 } catch (const OSError &) {
-                    if (unreadable)
-                        *unreadable << f.path;
+                    cant_read(f.path);
                 }
                 done += f.size;
             }
@@ -171,6 +186,7 @@ QList<Group> find(const QStringList &roots, const Options &opts, Task *task, QSt
         qint64 wa = freed({a}), wb = freed({b});
         return wa != wb ? wa > wb : a.files.first().path < b.files.first().path;
     });
+    note(txn("%Ln group(s) of identical files; %1 can be freed", out.size()).arg(human_size(freed(out))));
     return out;
 }
 
@@ -289,7 +305,8 @@ using namespace dupes;
 
 enum { DupGroupRole = Qt::UserRole + 40, DupFileRole };
 
-DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(win), win(win), roots(roots)
+// A window of its own (no parent): closing the Kestrel window it came from doesn't close it or stop its search
+DupesWindow::DupesWindow(MainWindow *win, const QStringList &roots) : QDialog(nullptr), win(win), roots(roots)
 {
     QStringList shown;
     for (const QString &r : roots)
@@ -665,17 +682,26 @@ void DupesWindow::link_others()
                 n)
                 .arg(no_keeper ? "\n\n" + tx("Groups with no file kept are left as they are.") : QString()),
             [self, work, all]() {
-                if (!self || !self->win)
+                if (!self)
                     return;
                 auto replaced = std::make_shared<QStringList>();
                 fileops::queue_job(
-                    self->win, tx("Replacing duplicates with hard links"), all,
+                    self->win ? static_cast<QWidget *>(self->win) : self.data(), tx("Replacing duplicates with hard links"), all,
                     [work, replaced](Task *t) {
                         QStringList errors;
                         for (int i = 0; i < work.size(); ++i) {
                             t->check();
                             t->report(i, work.size(), basename(work[i].first.path));
-                            errors << link_over(work[i].first, work[i].second, replaced.get());
+                            int before = int(replaced->size());
+                            QStringList failed = link_over(work[i].first, work[i].second, replaced.get());
+                            t->log(tx("Kept: %1").arg(work[i].first.path));
+                            for (int k = before; k < replaced->size(); ++k)
+                                t->log(tx("  replaced with a hard link to it: %1").arg(replaced->at(k)));
+                            for (const QString &e : failed)
+                                t->log(tx("  left as it is: %1").arg(e));
+                            if (!failed.isEmpty())
+                                t->had_errors = true;
+                            errors << failed;
                         }
                         return QVariant(errors);
                     },

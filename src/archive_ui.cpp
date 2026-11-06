@@ -66,7 +66,8 @@ static bool argv_tool(const QString &t) { return t == "zpaq"; }
 namespace archive_ui {
 
 QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool offer_remember,
-                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled)
+                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled,
+                      const QString &accept)
 {
     auto *dlg = new QDialog(parent);
     dlg->setObjectName("archive_password");
@@ -89,11 +90,11 @@ QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool off
         lay->addWidget(remember);
         lay->addWidget(small(tx("Saved in your login keyring (Passwords and Keys), where any app you run can read it.")));
     }
-    QString t = archive::extract_tool(path);
-    if (argv_tool(t))
+    QString t = accept.isEmpty() ? archive::extract_tool(path) : QString();   // (not extracting: no tool's note)
+    if (!t.isEmpty() && argv_tool(t))
         lay->addWidget(small(tx(ARGV_NOTE).arg(t)));
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    bb->button(QDialogButtonBox::Ok)->setText(tx("Extract"));
+    bb->button(QDialogButtonBox::Ok)->setText(accept.isEmpty() ? tx("Extract") : accept);
     QObject::connect(bb, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
     QObject::connect(bb, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
     QObject::connect(dlg, &QDialog::finished, dlg, [edit, remember, ok, cancelled](int r) {
@@ -754,18 +755,37 @@ static bool check_tool(MainWindow *win, const QString &path)
     return true;
 }
 
-// check the archive (on a thread) and call then(encrypted, keyring): keyring, an encrypted one's password can be saved
-static void probe_then(MainWindow *win, const QString &path, std::function<void(bool, bool)> then)
+// check the archive (on a thread) and call then(encrypted, keyring, saved): keyring, an encrypted one's password can be
+// saved; saved, a password from the keyring that opens it (the one saved for it, else any other saved one that opens
+// it, as extracting tries them), "" if none
+static void probe_then(MainWindow *win, const QString &path, std::function<void(bool, bool, const QString &)> then)
 {
     if (!check_tool(win, path))
         return;
     QPointer<MainWindow> w(win);
-    fileops::run_task(
+    fileops::run_job(
         win, tx("Opening %1").arg(basename(path)),
-        [path]() {
+        [path](Task *task) {
             archive::ProbeResult r = archive::probe(path);
-            return QVariant(QVariantMap{{"encrypted", r.encrypted}, {"error", r.error},
-                                        {"keyring", r.encrypted && keyring::available()}});
+            bool kr = r.encrypted && r.error.isEmpty() && keyring::available();
+            QString saved;
+            if (kr) {
+                QString own = keyring::lookup(keyring::fingerprint(path));
+                QStringList candidates;
+                if (!own.isEmpty())
+                    candidates << own;
+                for (const QString &c : keyring::all())
+                    if (!candidates.contains(c))
+                        candidates << c;
+                for (const QString &c : candidates) {
+                    task->check();
+                    if (archive::password_opens(task, path, c)) {
+                        saved = c;
+                        break;
+                    }
+                }
+            }
+            return QVariant(QVariantMap{{"encrypted", r.encrypted}, {"error", r.error}, {"keyring", kr}, {"saved", saved}});
         },
         [w, then](const QVariant &res) {
             QVariantMap info = res.toMap();
@@ -774,8 +794,9 @@ static void probe_then(MainWindow *win, const QString &path, std::function<void(
             if (!info["error"].toString().isEmpty())
                 warn(w, tx("Extract"), info["error"].toString());
             else
-                then(info["encrypted"].toBool(), info["keyring"].toBool());
-        });
+                then(info["encrypted"].toBool(), info["keyring"].toBool(), info["saved"].toString());
+        },
+        true, false);
 }
 
 // if `out` holds exactly one folder, use that folder in its place (no needless nesting)
@@ -1376,15 +1397,35 @@ void extract_here(MainWindow *win, const QString &path)
 
 void extract_all_here(MainWindow *win, const QStringList &archives) { extract_all(win, archives, here_options()); }
 
+static void show_extract_dialog(QPointer<MainWindow> w, const QString &path, bool encrypted, bool keyring)
+{
+    auto *dlg = new ExtractDialog(w, {path}, encrypted, keyring);
+    QObject::connect(dlg, &QDialog::accepted, w, [w, dlg, path]() { extract_all(w, {path}, dlg->options()); });
+    show_free(dlg);
+}
+
 void extract_dialog(MainWindow *win, const QString &path)
 {
     QPointer<MainWindow> w(win);
-    probe_then(win, path, [w, path](bool encrypted, bool keyring) {
+    probe_then(win, path, [w, path](bool encrypted, bool keyring, const QString &) {
+        if (w)
+            show_extract_dialog(w, path, encrypted, keyring);
+    });
+}
+
+void open_archive(MainWindow *win, const QString &path)
+{
+    QPointer<MainWindow> w(win);
+    probe_then(win, path, [w, path](bool encrypted, bool keyring, const QString &saved) {
         if (!w)
             return;
-        auto *dlg = new ExtractDialog(w, {path}, encrypted, keyring);
-        QObject::connect(dlg, &QDialog::accepted, w, [w, dlg, path]() { extract_all(w, {path}, dlg->options()); });
-        show_free(dlg);
+        if (encrypted && !saved.isEmpty()) {   // nothing to ask: as Extract Here, with the password that opened it
+            QVariantMap opts = here_options();
+            opts["password"] = saved;
+            extract_all(w, {path}, opts);
+            return;
+        }
+        show_extract_dialog(w, path, encrypted, keyring);
     });
 }
 

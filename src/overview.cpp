@@ -1,6 +1,8 @@
 #include "overview.h"
 
 #include "dialogs.h"
+#include "diskusage.h"
+#include "diskimage.h"
 #include "drives.h"
 #include "fileops.h"
 #include "places.h"
@@ -141,7 +143,7 @@ QVariantList scan_filesystems(bool system_mounts, bool with_health)
                 hidden = false;
             if (root != "/" && hidden && !root.startsWith("/run/media/") && !(system_mounts && system_mount(root)))
                 continue;
-            if (dev.startsWith("/dev/loop"))
+            if (dev.startsWith("/dev/loop") && drives::user_loop(dev).isEmpty())   // (a mounted disk image shows)
                 continue;
         }
         bool net = drives::network_fs(fs);
@@ -271,7 +273,7 @@ QStringList save_order(const QList<QPair<QString, bool>> &order)
 }
 
 // filesystem type from the udev database (no root, no subprocess)
-static QString udev_fstype(const QString &dev)
+QString udev_fstype(const QString &dev)
 {
     struct stat st;
     if (!stat_(dev, st))
@@ -802,8 +804,9 @@ DriveCard::DriveCard(const DriveInfo &info_, const CardLook &look, QWidget *pare
     if (info.mounted && total) {
         qint64 free = info.free < 0 ? 0 : info.free;
         double pct = (total - free) * 100.0 / total;
+        QProgressBar *bar = nullptr;
         if (look.bar) {
-            auto *bar = new QProgressBar;
+            bar = new QProgressBar;
             bar->setObjectName("usage");
             bar->setRange(0, 1000);
             bar->setValue(int(pct * 10));
@@ -813,13 +816,35 @@ DriveCard::DriveCard(const DriveInfo &info_, const CardLook &look, QWidget *pare
             bar->setStyleSheet(QString("QProgressBar { border: none; border-radius: 4px; background: %1; }"
                                        "QProgressBar::chunk { border-radius: 4px; background: %2; }")
                                    .arg(card_border().name(), color));
-            col->addWidget(bar);
         }
         QString line = look.percent ? tx("%1% free of %2").arg(i18n::number(qRound(100 - pct)), human_size(total))
                                     : tx("%1 free of %2  (%3% used)").arg(human_size(free), human_size(total), i18n::number(qRound(pct)));
         if ((info.kind == "tape" || info.kind == "floppy") && !info.status.isEmpty())   // "Tape · 12 loads" and the like
             line = info.status + "  ·  " + line;
-        col->addWidget(small(new QLabel(line)));
+        auto *line_label = small(new QLabel(line));
+        // Disk Usage… beside the usage bar (beside the line when there's no bar): not for phones (gvfs is slow)
+        QWidget *usage = look.bar ? static_cast<QWidget *>(bar) : line_label;
+        if (info.kind != "phone" && info.root.startsWith('/')) {
+            usage_button = new QToolButton;
+            usage_button->setObjectName("disk_usage");
+            usage_button->setAutoRaise(true);
+            usage_button->setIcon(diskusage::icon());
+            usage_button->setIconSize(QSize(16, 16));
+            usage_button->setToolTip(tx("What's using this space?"));
+            usage_button->setAccessibleName(tx("What's using this space?"));
+            connect(usage_button, &QToolButton::clicked, this, &DriveCard::disk_usage);
+            auto *row = new QHBoxLayout;
+            row->setSpacing(4);
+            row->addWidget(usage, 1, Qt::AlignVCenter);
+            row->addWidget(usage_button, 0, Qt::AlignVCenter);
+            col->addLayout(row);
+            if (look.bar)
+                col->addWidget(line_label);
+        } else {
+            if (look.bar)
+                col->addWidget(bar);
+            col->addWidget(line_label);
+        }
     } else {
         QString state = !info.status.isEmpty() ? info.status
                                                 : (!info.mounted ? tx("Not mounted — click to mount") : QString());
@@ -1116,7 +1141,7 @@ void OverviewPage::network_section(const QList<DriveInfo> &network)
     if (network.isEmpty())
         nflow->addWidget(small(new QLabel(tx("No network locations connected."))));
     lay->addLayout(connect_row());
-    QStringList recents = settings().value("recent_servers").toStringList();
+    QStringList recents = history_settings().value("recent_servers").toStringList();
     if (!recents.isEmpty()) {
         auto *row = new QHBoxLayout;
         row->addWidget(small(new QLabel(tx("Recent:"))));
@@ -1361,9 +1386,12 @@ DriveCard *OverviewPage::drive_card(DriveInfo info)
                 Q_EMIT open_in_tab(target);
         });
         connect(card, &Card::menu_requested, this, [this, info](const QPoint &pos) { drive_menu(info, pos); });
+        QString root = info.root;
+        connect(card, &DriveCard::disk_usage, this, [this, root]() { Q_EMIT disk_usage(root); });
     } else {
         overview::VolumeRef v = info.volume;
         connect(card, &Card::clicked, this, [this, v]() { do_mount(v); });
+        connect(card, &Card::menu_requested, this, [this, info](const QPoint &pos) { drive_menu(info, pos); });
     }
     return card;
 }
@@ -1442,12 +1470,23 @@ void OverviewPage::drive_menu(const DriveInfo &info, const QPoint &pos)
             refresh();
         });
         m.addAction(tx("Find Duplicates…"), this, [this, target]() { Q_EMIT find_duplicates(target); });
+        if (info.kind != "phone" && target.startsWith('/'))
+            m.addAction(tx("Disk Usage…"), this, [this, target]() { Q_EMIT disk_usage(target); });
         if (info.has_health) {
             QString name = info.name;
             health::Info h = info.health;
             m.addAction(tx("Drive Health…"), this, [this, name, h]() { health::open_window(this, name, h); });
         }
         m.addAction(tx("Properties"), this, [this, target]() { Q_EMIT properties(target); });
+    } else if (info.volume) {   // not mounted
+        overview::VolumeRef v = info.volume;
+        m.addAction(tx("Mount"), this, [this, v]() { do_mount(v); });
+    }
+    QString dev = info.device;
+    if (dev.startsWith("/dev/") && info.kind != "phone" && info.kind != "network" && info.kind != "tape" &&
+        info.kind != "floppy") {
+        m.addSeparator();
+        m.addAction(tx("Back Up Drive to Image…"), this, [this, dev]() { diskimage::backup_window(this, dev); });
     }
     if (info.kind == "tape" || info.kind == "floppy") {
         m.addSeparator();
@@ -1599,7 +1638,7 @@ void OverviewPage::save_places_section()
     auto *add = new QPushButton(theme_icon({"list-add", "folder-new"}), tx("Add Folder…"));
     add->setObjectName("add_save_place");
     connect(add, &QPushButton::clicked, this, [this]() {
-        QString start = settings().value("chooser_folder").toString();   // where the last Save window saved
+        QString start = history_settings().value("chooser_folder").toString();   // where the last Save window saved
         QPointer<OverviewPage> self(this);
         choose_folder(window(), tx("Add a Save Location"), isdir(start) ? start : HOME(), [self](const QString &p) {
             if (self)

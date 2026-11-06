@@ -1,11 +1,83 @@
 // Shared helpers for the test programs (see tests/README.md).
 //
-// Each test is one program that includes app.cpp (for the app's internal state), runs the real code offscreen and
-// prints PASS / FAIL lines. run.sh starts every test with a throwaway HOME on a private D-Bus session bus, so your own
+// Each test is one program linked with the app's code (kes_objs: the same objects as kes), runs the real code offscreen
+// and prints PASS / FAIL lines. run.sh starts every test with a throwaway HOME on a private D-Bus session bus, so your own
 // files, settings and running Kestrel windows are never touched.
 #pragma once
 
-#include "app.cpp"   // the app's state and statics (WINDOWS, g_thumbs, open_window…); on_atc, handle_fm1: incoming.h
+// the app's headers (its shared state, WINDOWS, g_thumbs, open_window…: app.h; on_atc, handle_fm1: incoming.h)
+#include "app.h"
+#include "admin.h"
+#include "animate.h"
+#include "archive.h"
+#include "archive_ui.h"
+#include "atc.h"
+#include "chooser.h"
+#include "diskimage.h"
+#include "linkwin.h"
+#include "dialogs.h"
+#include "drives.h"
+#include "compare.h"
+#include "convert.h"
+#include "diskusage.h"
+#include "dupes.h"
+#include "fileops.h"
+#include "hashcheck.h"
+#include "fm1.h"
+#include "groups.h"
+#include "incoming.h"
+#include "jobs.h"
+#include "jobswin.h"
+#include "overview.h"
+#include "menus.h"
+#include "places.h"
+#include "prefswin.h"
+#include "metadata.h"
+#include "prefs.h"
+#include "sharing.h"
+#include "signature.h"
+#include "undo.h"
+#include "proc.h"
+#include "thumbs.h"
+#include "towerwin.h"
+#include "stats.h"
+#include "util.h"
+#include "uwp.h"
+#include "viewer.h"
+#include "windiag.h"
+#include "archivewin.h"
+#include "widgets.h"
+#include "windows.h"
+#include <QApplication>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QCloseEvent>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QImageReader>
+#include <QJsonArray>
+#include <QLabel>
+#include <QMenu>
+#include <QMessageBox>
+#include <QMimeData>
+#include <QPainter>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSlider>
+#include <QTabBar>
+#include <QSplitter>
+#include <QStatusBar>
+#include <QTabWidget>
+#include <QToolBar>
+#include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include <QWindow>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+
+using namespace util;
 #include "atc.h"
 #include "fileops.h"
 #include "undo.h"
@@ -55,8 +127,12 @@ inline void spin(int ms)
     loop.exec();
 }
 
-inline bool wait_for(const std::function<bool()> &f, int ms = 5000)
+// Waits until f() is true, or gives up. The limit is only how long a failing check takes to say so: a slow runner
+// (the sanitizers, 2 CPUs, a loaded machine) must never fail a check that's merely taking its time, so no wait gives
+// up before 30 s, whatever it asks for. A check of how fast something happens doesn't belong here (or anywhere).
+inline bool wait_for(const std::function<bool()> &f, int ms = 30000)
 {
+    ms = std::max(ms, 30000);
     for (int t = 0; t < ms; t += 50) {
         if (f())
             return true;
@@ -124,6 +200,20 @@ struct DirWatch {
     }
 };
 
+// The newest finished job titled `title` (with `with` in its log), once it's in the finished list: it gets there
+// through the event loop after the job ends, so it's waited for. Empty (no title) if none comes.
+inline FinishedTask finished_task(const QString &title, const QString &with = QString())
+{
+    FinishedTask last;
+    wait_for([&]() {
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == title && (with.isEmpty() || f.log.contains(with)))
+                last = f;
+        return !last.title.isEmpty();
+    });
+    return last;
+}
+
 template <typename T> T *shown_window()
 {
     for (QWidget *w : QApplication::topLevelWidgets())
@@ -189,6 +279,33 @@ public:
         }
         g_variant_unref(r);
         return out;
+    }
+
+    // Waits until the tower is up and this Kestrel's radio has caught up with it (its own CheckIn answered: until
+    // then its reports aren't sent, atc::announce), then checks in. Seeing the tower on the bus isn't enough: the
+    // Kestrel hears of it a moment later, through its own name watch.
+    bool join()
+    {
+        bool up = wait_for([&]() { return tower_pid() != 0 && atc::radio()->caught_up(); });
+        check_in();
+        return up;
+    }
+
+    // Waits until this Kestrel has heard everything the tower passed on before now: a marker reported here comes to
+    // its radio after them (one tower, answering in turn; signals arrive in order). A "nothing came" check needs this,
+    // not a wait of some length that a slow runner might outlast.
+    bool sync()
+    {
+        static int n = 0;
+        QString mark = QString("sync-%1").arg(++n);
+        bool got = false;
+        QMetaObject::Connection c = QObject::connect(atc::radio(), &atc::Radio::heard, [&](const QJsonObject &m) {
+            got = got || m.value("marker").toString() == mark;
+        });
+        report({{"type", "starred"}, {"marker", mark}});   // (a harmless message: the lists are read again)
+        bool ok = wait_for([&]() { return got; });
+        QObject::disconnect(c);
+        return ok;
     }
 
     void check_in() { call("CheckIn", QString(R"({"pid":1,"impl":"fake","protocol":%1})").arg(atc::PROTOCOL).toUtf8()); }

@@ -5,6 +5,7 @@
 #include "common.h"
 
 #include "groups.h"
+#include "linkwin.h"
 
 #include <QAbstractSlider>
 #include <QAccessible>
@@ -21,6 +22,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QTabBar>
+#include <QTextBoundaryFinder>
 #include <QTreeWidget>
 
 using namespace test;
@@ -646,7 +648,10 @@ int main(int argc, char **argv)
 
     // -- many selected folders dropped into a sibling don't hold the window. Each one leaving the view deselects it, and
     // the status line counted the whole selection again for each (with a list search for duplicates in it): 800
-    // folders froze the window for seconds. A timer ticking every 10 ms measures the longest the window was held.
+    // folders froze the window for seconds. Now the folder's changes are looked at together (every 150 ms), what goes
+    // leaves the view in runs, and the status line is worked out once for a burst (every 30 ms at most): counted here
+    // against the time the move took (counts: the same on any machine), with the longest the window was held (a timer
+    // ticking every 10 ms) shown beside them.
     {
         QString dir = home_path("many");
         const int n = 1500;
@@ -700,16 +705,24 @@ int main(int argc, char **argv)
             QDragMoveEvent move(pos.toPoint(), Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
             QApplication::sendEvent(dropw, &move);
             QDropEvent drop(pos, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+            int removals = 0;   // the view's rows taken out: one run each
+            QMetaObject::Connection gone = QObject::connect(v->model(), &QAbstractItemModel::rowsRemoved, [&]() { ++removals; });
+            stats::enable();   // (counts the status line's updates)
+            qint64 updates_before = stats::counted("status line updates");
             clock.start();
             tick.start(10);
             QApplication::sendEvent(dropw, &drop);
             bool moved = wait_for([&]() { return w->pane()->all_paths().size() == 1; }, 60000);
             spin(300);   // the status line's update after the burst
             tick.stop();
+            qint64 updates = stats::counted("status line updates") - updates_before, took = clock.elapsed();
+            QObject::disconnect(gone);
+            // (one per folder, either of them, was the freeze)
             if (!moved || !exists(join(dir, "aa-target/d1499")))
                 r = "not moved";
-            else if (longest > 2500)
-                r = QString("the window was held for %1 ms").arg(longest);
+            else if (removals > took / 150 + 5 || removals > n / 2 || updates > took / 30 + 5 || updates > n / 2)
+                r = QString("for %1 folders in %2 ms: %3 removals from the view, %4 status line updates (the window "
+                            "held for up to %5 ms)").arg(n).arg(took).arg(removals).arg(updates).arg(longest);
         }
         check(r.isEmpty(), QString::number(n) + " selected folders dropped into a sibling move without holding the window" +
                                (r.isEmpty() ? QString() : " (" + r + ")"));
@@ -823,6 +836,90 @@ int main(int argc, char **argv)
         check(bad.isEmpty(), "the grid packs its items (no empty cell, as many columns as fit), also after zooming and at "
                              "every window width" + (bad.isEmpty() ? QString() : " (" + bad + ")"));
         w->close_tab(w->tabs->indexOf(own));
+    }
+
+    // -- the grid's long names: each is measured and wrapped once, not again on every hit test and paint (a folder of
+    // long names with colour emoji, which are slow to measure, froze the window while the mouse moved over it); the
+    // first line is the longest start that fits, and a line never ends inside a character (an emoji's surrogate pair,
+    // a joined emoji)
+    {
+        QString dir = home_path("longnames");
+        makedirs(dir, true);
+        const QString emoji = QString::fromUtf8("\xF0\x9F\xA4\xB8\xE2\x80\x8D\xE2\x99\x80\xEF\xB8\x8F");   // woman cartwheeling
+        QStringList names;
+        for (int i = 0; i < 40; ++i)
+            names << QString(i, QChar('g')) + emoji + " Gymnastics NCAA Balance Beam Classic Enhanced 4K HD #sports " +
+                         QString::number(i) + ".webm";
+        for (const QString &n : names)
+            write_text(join(dir, n), "x");
+        Pane *own = w->new_tab(dir);
+        w->set_view("grid");
+        QListView *g = own->grid;
+        wait_for([&]() { return own->all_paths().size() == names.size(); });
+        spin(300);
+        auto *del = qobject_cast<GridDelegate *>(g->itemDelegate());
+        auto hover_all = [&]() {   // every item's name, as a mouse over it would
+            QAbstractItemModel *m = g->model();
+            for (int r = 0; r < m->rowCount(g->rootIndex()); ++r) {
+                QRect vr = g->visualRect(m->index(r, 0, g->rootIndex()));
+                if (vr.intersects(g->viewport()->rect()))
+                    g->indexAt(QPoint(vr.center().x(), vr.bottom() - 8));
+            }
+        };
+        hover_all();
+        int before = del ? del->names_measured : -1;
+        hover_all();
+        hover_all();
+        int again = del ? del->names_measured - before : -1;
+        check(del && before > 0 && again == 0,
+              QString("hit tests over the grid don't measure a name again (%1 names measured on the second and third "
+                      "rounds)").arg(again));
+
+        // the wrap itself, at widths a pixel apart, so the cut falls at every place in and around the emoji
+        QString bad;
+        QFont f = g->font();
+        QFontMetrics fm(f);
+        int width = fm.horizontalAdvance(QString(20, QChar('g')));
+        // 20 g's, then the emoji; and a family (man, woman, girl, boy joined), whose first parts alone are wider than
+        // the whole (drawn as separate people), so measuring longer and longer starts isn't steadily wider
+        const QString family = QString::fromUtf8("\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7"
+                                                 "\xE2\x80\x8D\xF0\x9F\x91\xA6");
+        for (const QString &n : {names.value(20), QString(20, QChar('g')) + family + " Gymnastics family meet.webm"})
+        for (int px = width - fm.horizontalAdvance("g"); px <= width + 3 * fm.horizontalAdvance(n.mid(20, 11)) && del;
+             ++px) {
+            const GridDelegate::Wrapped &wr = del->wrap(f, n, px);
+            QString first = wr.lines.value(0);
+            QTextBoundaryFinder gb(QTextBoundaryFinder::Grapheme, n);
+            gb.setPosition(first.size());
+            if (!n.startsWith(first) || first.isEmpty() || !gb.isAtBoundary())
+                bad = QString("in %1 pixels, \"%2\" cut after %3 of its characters")
+                          .arg(QString::number(px), n, QString::number(first.size()));
+        }
+        QString plain(80, QChar('k'));   // no natural boundary: the first line takes as much as fits
+        const GridDelegate::Wrapped &wp = del->wrap(f, plain, width);
+        int cut = wp.lines.value(0).size();
+        if (fm.horizontalAdvance(plain.left(cut)) > width || fm.horizontalAdvance(plain.left(cut + 1)) <= width ||
+            wp.widths.value(0) != fm.horizontalAdvance(plain.left(cut)))
+            bad = QString("an 80-letter name's first line is %1 letters in a width of %2 letters").arg(cut).arg(20);
+        check(bad.isEmpty(), "a long name's first line is the longest start that fits, never cut inside a character" +
+                                 (bad.isEmpty() ? QString() : " (" + bad + ")"));
+        w->close_tab(w->tabs->indexOf(own));
+    }
+
+    // -- the Link window: a free window, with its two browsers (the file chooser's) inside it, not windows of their own
+    // and not native ones
+    {
+        LinkWindow *lw = LinkWindow::open(w, {home_path("file.txt")}, HOME());
+        spin(100);
+        QStringList native;
+        for (QWidget *x : lw->findChildren<QWidget *>())
+            if (x->internalWinId())
+                native << x->metaObject()->className();
+        check(is_free_window(lw) && lw->left && !lw->left->isWindow() && lw->right && !lw->right->isWindow() &&
+                  native.isEmpty(),
+              "the Link window is a free window, its two browsers inside it (not windows, nor native ones)" +
+                  (native.isEmpty() ? QString() : " (" + native.join(", ") + ")"));
+        lw->close();
     }
 
     // -- Properties windows: each a free window of its own (not modal, not kept above or attached to Kestrel), several

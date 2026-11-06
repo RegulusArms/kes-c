@@ -4,6 +4,20 @@
 <context>
     <name>Kestrel</name>
     <message numerus="yes">
+        <source>%Ln folder(s) found — %1</source>
+        <translation>
+            <numerusform>%Ln folder found — %1</numerusform>
+            <numerusform>%Ln folders found — %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
+        <translation>
+            <numerusform>%Ln folder found: it gets this folder&apos;s sort once the job ends</numerusform>
+            <numerusform>%Ln folders found: each gets this folder&apos;s sort once the job ends</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Sort applied to %Ln subfolder(s)</source>
         <translation>
             <numerusform>Sort applied to %Ln subfolder</numerusform>
@@ -333,6 +347,13 @@ Ends after %Ln minutes without admin actions, or when Kestrel quits.</numerusfor
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln item(s) listed in %1</source>
+        <translation>
+            <numerusform>%Ln item listed in %1</numerusform>
+            <numerusform>%Ln items listed in %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Reading %1 — sorting %Ln item(s)</source>
         <translation>
             <numerusform>Reading %1 — sorting %Ln item</numerusform>
@@ -372,6 +393,13 @@ Ends after %Ln minutes without admin actions, or when Kestrel quits.</numerusfor
         <translation>
             <numerusform>%Ln of these files already exists in this folder. Do you want to replace it?</numerusform>
             <numerusform>%Ln of these files already exist in this folder. Do you want to replace them?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln difference(s)</source>
+        <translation>
+            <numerusform>%Ln difference</numerusform>
+            <numerusform>%Ln differences</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -666,10 +694,38 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
+        <source>%Ln file(s) found</source>
+        <translation>
+            <numerusform>%Ln file found</numerusform>
+            <numerusform>%Ln files found</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
+        <translation>
+            <numerusform>%Ln file of a size another has too: its beginning is compared</numerusform>
+            <numerusform>%Ln files of a size another has too: their beginnings are compared</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>Comparing the beginnings of %Ln file(s)</source>
         <translation>
             <numerusform>Comparing the beginnings of %Ln file</numerusform>
             <numerusform>Comparing the beginnings of %Ln files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
+        <translation>
+            <numerusform>%Ln file begins like another of the same size: read whole (%1)</numerusform>
+            <numerusform>%Ln files begin like another of the same size: read whole (%1)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln group(s) of identical files; %1 can be freed</source>
+        <translation>
+            <numerusform>%Ln group of identical files; %1 can be freed</numerusform>
+            <numerusform>%Ln groups of identical files; %1 can be freed</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -759,6 +815,76 @@ This can&apos;t be undone.</numerusform>
         <translation>
             <numerusform>+%Ln in other windows</numerusform>
             <numerusform>+%Ln in other windows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
+        <translation>
+            <numerusform>Verified %Ln copied file: read back, it matches its original (SHA-256).</numerusform>
+            <numerusform>Verified %Ln copied files: each one read back matches its original (SHA-256).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
+        <translation>
+            <numerusform>Verified %Ln copied file: %1 doesn&apos;t match its original (listed above).</numerusform>
+            <numerusform>Verified %Ln copied files: %1 don&apos;t match their originals (listed above).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
+        <translation>
+            <numerusform>%Ln cloned file shares its original&apos;s data on the drive: nothing to read back.</numerusform>
+            <numerusform>%Ln cloned files share their original&apos;s data on the drive: nothing to read back.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
+        <translation>
+            <numerusform>Extended attributes left out on %Ln item, as the destination can&apos;t hold them: %1</numerusform>
+            <numerusform>Extended attributes left out on %Ln items, as the destination can&apos;t hold them: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
+        <translation>
+            <numerusform>%Ln file cloned (the copy shares the original&apos;s space until one of them changes)</numerusform>
+            <numerusform>%Ln files cloned (each copy shares the original&apos;s space until one of them changes)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
+        <translation>
+            <numerusform>%Ln file copied by the system (on a network share, by the server itself)</numerusform>
+            <numerusform>%Ln files copied by the system (on a network share, by the server itself)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) read and written by Kestrel</source>
+        <translation>
+            <numerusform>%Ln file read and written by Kestrel</numerusform>
+            <numerusform>%Ln files read and written by Kestrel</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
+        <translation>
+            <numerusform>%Ln copied file doesn&apos;t match its original (read back after copying), so nothing was deleted from where it came from: %1</numerusform>
+            <numerusform>%Ln copied files don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
+        <translation>
+            <numerusform>Verifying was turned off: %Ln copied file on the tape wasn&apos;t read back.</numerusform>
+            <numerusform>Verifying was turned off: %Ln copied files on the tape weren&apos;t read back.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
+        <translation>
+            <numerusform>Reading back %Ln file copied onto the tape, to verify it</numerusform>
+            <numerusform>Reading back %Ln files copied onto the tape, in the order they lie on it, to verify them</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -867,10 +993,10 @@ This can&apos;t be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>Finished, with %Ln error(s).</source>
+        <source>%Ln item(s) failed.</source>
         <translation>
-            <numerusform>Finished, with %Ln error.</numerusform>
-            <numerusform>Finished, with %Ln errors.</numerusform>
+            <numerusform>%Ln item failed.</numerusform>
+            <numerusform>%Ln items failed.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -962,6 +1088,13 @@ This can&apos;t be undone.</numerusform>
         <translation>
             <numerusform>%Ln OK</numerusform>
             <numerusform>%Ln OK</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Checked %Ln file(s): %1.</source>
+        <translation>
+            <numerusform>Checked %Ln file: %1.</numerusform>
+            <numerusform>Checked %Ln files: %1.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -1087,6 +1220,160 @@ This can&apos;t be undone.</numerusform>
         <translation>
             <numerusform>Job queue: %Ln job, by drive</numerusform>
             <numerusform>Job queue: %Ln jobs, by drive</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%1 in %Ln file(s) so far — %2</source>
+        <translation>
+            <numerusform>%1 in %Ln file so far — %2</numerusform>
+            <numerusform>%1 in %Ln files so far — %2</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln smaller file(s)</source>
+        <translation>
+            <numerusform>%Ln smaller file</numerusform>
+            <numerusform>%Ln smaller files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder size(s) remembered for Properties</source>
+        <translation>
+            <numerusform>%Ln folder size remembered for Properties</numerusform>
+            <numerusform>%Ln folder sizes remembered for Properties</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
+        <translation>
+            <numerusform>%Ln folder couldn&apos;t be read and counts as empty: %1</numerusform>
+            <numerusform>%Ln folders couldn&apos;t be read and count as empty, such as %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln step(s):</source>
+        <translation>
+            <numerusform>%Ln step:</numerusform>
+            <numerusform>%Ln steps:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file preview(s) made</source>
+        <translation>
+            <numerusform>%Ln file preview made</numerusform>
+            <numerusform>%Ln file previews made</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln folder preview(s) made</source>
+        <translation>
+            <numerusform>%Ln folder preview made</numerusform>
+            <numerusform>%Ln folder previews made</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) with no preview</source>
+        <translation>
+            <numerusform>%Ln file with no preview</numerusform>
+            <numerusform>%Ln files with no preview</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
+        <translation>
+            <numerusform>%Ln file too big for a preview (Preferences → Images &amp; Videos)</numerusform>
+            <numerusform>%Ln files too big for a preview (Preferences → Images &amp; Videos)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln names</source>
+        <translation>
+            <numerusform>%Ln name</numerusform>
+            <numerusform>%Ln names</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>“%1” has %Ln names (hard links).</source>
+        <translation>
+            <numerusform>“%1” has %Ln name (hard link).</numerusform>
+            <numerusform>“%1” has %Ln names (hard links).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln new link(s):</source>
+        <translation>
+            <numerusform>%Ln new link:</numerusform>
+            <numerusform>%Ln new links:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln link(s) to point elsewhere:</source>
+        <translation>
+            <numerusform>%Ln link to point elsewhere:</numerusform>
+            <numerusform>%Ln links to point elsewhere:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln link(s) to rename or move:</source>
+        <translation>
+            <numerusform>%Ln link to rename or move:</numerusform>
+            <numerusform>%Ln links to rename or move:</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Making %Ln link(s)</source>
+        <translation>
+            <numerusform>Making %Ln link</numerusform>
+            <numerusform>Making %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Making and changing %Ln link(s)</source>
+        <translation>
+            <numerusform>Making and changing %Ln link</numerusform>
+            <numerusform>Making and changing %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>You don&apos;t have permission to make %Ln of these links.</source>
+        <translation>
+            <numerusform>You don&apos;t have permission to make %Ln of these links.</numerusform>
+            <numerusform>You don&apos;t have permission to make %Ln of these links.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Made or changed %Ln link(s)</source>
+        <translation>
+            <numerusform>Made or changed %Ln link</numerusform>
+            <numerusform>Made or changed %Ln links</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Mounted %Ln file system(s) from “%1”</source>
+        <translation>
+            <numerusform>Mounted %Ln file system from “%1”</numerusform>
+            <numerusform>Mounted %Ln file systems from “%1”</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Encrypt %Ln File(s)</source>
+        <translation>
+            <numerusform>Encrypt %Ln File</numerusform>
+            <numerusform>Encrypt %Ln Files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Encrypting %Ln file(s)</source>
+        <translation>
+            <numerusform>Encrypting %Ln file</numerusform>
+            <numerusform>Encrypting %Ln files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Saved to %1 every %Ln minute(s), at logout and at shutdown</source>
+        <translation>
+            <numerusform>Saved to %1 every %Ln minute, at logout and at shutdown</numerusform>
+            <numerusform>Saved to %1 every %Ln minutes, at logout and at shutdown</numerusform>
         </translation>
     </message>
 </context>

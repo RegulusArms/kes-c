@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -257,6 +258,28 @@ int main(int argc, char **argv)
     check(copied && QFile::exists(join(W, "tree2/d1/f1")) && is_link(join(W, "tree2/to-victim")) &&
               QFile::symLinkTarget(join(W, "tree2/to-victim")) == victim && victim_intact(),
           "copy copies a folder tree, and symlinks in it as links");
+    // extended attributes, when Kestrel asks for them ("xattrs": Preferences → Files → Copying), on files and folders
+    {
+        QString xs = join(W, "xsrc");
+        QDir().mkpath(xs);
+        write_file(join(xs, "f.txt"));
+        auto xattr_of = [](const QString &path, const char *name) {
+            char buf[256];
+            ssize_t n = ::getxattr(path.toLocal8Bit().constData(), name, buf, sizeof buf);
+            return n < 0 ? QByteArray() : QByteArray(buf, n);
+        };
+        if (::setxattr(join(xs, "f.txt").toLocal8Bit().constData(), "user.kestrel.test", "v", 1, 0) == 0 &&
+            ::setxattr(xs.toLocal8Bit().constData(), "user.kestrel.dir", "d", 1, 0) == 0) {
+            QJsonObject with = h.call({{"op", "copy"}, {"src", xs}, {"dst", join(W, "xwith")}, {"xattrs", true}});
+            QJsonObject without = h.call({{"op", "copy"}, {"src", xs}, {"dst", join(W, "xwithout")}});
+            check(ok(with) && xattr_of(join(W, "xwith/f.txt"), "user.kestrel.test") == "v" &&
+                      xattr_of(join(W, "xwith"), "user.kestrel.dir") == "d" && !with.contains("xattrs_left_out") && ok(without) &&
+                      xattr_of(join(W, "xwithout/f.txt"), "user.kestrel.test").isEmpty(),
+                  "copy keeps a file's and a folder's extended attributes when asked (\"xattrs\"), and not otherwise");
+        } else {
+            skip("copying extended attributes (this file system takes no user.* attributes)");
+        }
+    }
     check(ok(h.call({{"op", "move"}, {"src", join(W, "tree2")}, {"dst", join(W, "tree3")}})) &&
               !QFile::exists(join(W, "tree2")) && QFile::exists(join(W, "tree3/d0/f0")),
           "move moves a folder");
@@ -335,28 +358,47 @@ int main(int argc, char **argv)
         check(!dir_r.isEmpty() && !ok(dir_r) && contents(join(W, "olddir")) == old_before && leftovers().isEmpty(),
               "replacing a folder: a failure part-way keeps the old folder as it was, and leaves no half-made copy");
     }
+    // part-way, however fast the disk: a helper started with KESTREL_TEST_COPY_HOLD holds each copy after its first
+    // piece while the hold file is there (and says so with <hold>.reached), still answering a cancel
     write_file(join(W, "huge"), "x");
-    ::truncate(enc(join(W, "huge")).constData(), qint64(2) << 30);   // 2 GB (sparse): long enough to stop part-way
+    ::truncate(enc(join(W, "huge")).constData(), qint64(16) << 20);   // (sparse) more than the helper's 1 MB piece
+    QString hold = home_path("copy-hold");
+    auto hold_next = [&]() {
+        write_file(hold, "h");
+        QFile::remove(hold + ".reached");
+    };
+    auto reached = [&]() { return wait_for([&]() { return exists(hold + ".reached"); }); };
+    auto holding = [&](Helper &x) {
+        qputenv("KESTREL_TEST_COPY_HOLD", enc(hold));
+        bool up = x.start();
+        qunsetenv("KESTREL_TEST_COPY_HOLD");
+        return up;
+    };
+    Helper held;
+    bool held_up = holding(held);
     {
-        qint64 id = h.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
-        QJsonObject m = h.next(id);
+        hold_next();
+        qint64 id = held.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
+        QJsonObject m = held.next(id);
         QJsonArray pr = m.value("progress").toArray();
         bool partway = !pr.isEmpty() && pr[0].toDouble() > 0 && pr[0].toDouble() < pr[1].toDouble() / 2;
-        QElapsedTimer clock;
-        clock.start();
-        h.cancel(id);
-        QJsonObject r = h.reply(id);
-        check(partway && r.value("cancelled").toBool() && clock.elapsed() < 2000 &&
-                  read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
-              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way at once, keeping "
-              "the file it was replacing and no half-made copy");
+        bool at = reached();
+        held.cancel(id);
+        QJsonObject r = held.reply(id);
+        QFile::remove(hold);
+        check(held_up && at && partway && r.value("cancelled").toBool() && read_file(join(W, "conf.txt")) == "original" &&
+                  leftovers().isEmpty(),
+              "a large file's copy reports its bytes as it goes, and a cancel stops it part-way, keeping the file it "
+              "was replacing and no half-made copy");
     }
     {
+        hold_next();
         Helper ending;
-        bool started = ending.start();
+        bool started = holding(ending);
         qint64 id = ending.send({{"op", "copy"}, {"src", join(W, "huge")}, {"dst", join(W, "conf.txt")}});
-        bool partway = !ending.next(id).value("progress").toArray().isEmpty();
+        bool partway = !ending.next(id).value("progress").toArray().isEmpty() && reached();
         bool exited = ending.stop();
+        QFile::remove(hold);
         check(started && partway && exited && read_file(join(W, "conf.txt")) == "original" && leftovers().isEmpty(),
               "ending the admin session part-way through a copy stops it, keeping the file it was replacing and no "
               "half-made copy");
@@ -366,20 +408,24 @@ int main(int argc, char **argv)
         // meanwhile is kept and the copy fails with a conflict; one that's there already is never replaced
         QString fresh = join(W, "fresh.bin"), mid = join(W, "mid.bin");
         write_file(mid, "m");
-        ::truncate(enc(mid).constData(), qint64(256) << 20);   // sparse; the first progress report comes at once
-        qint64 id = h.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
-        bool partway = !h.next(id).value("progress").toArray().isEmpty();
+        ::truncate(enc(mid).constData(), qint64(16) << 20);   // (sparse)
+        hold_next();
+        qint64 id = held.send({{"op", "copy"}, {"src", mid}, {"dst", fresh}, {"replace", false}});
+        bool partway = !held.next(id).value("progress").toArray().isEmpty() && reached();
         write_file(fresh, "theirs");
-        QJsonObject r = h.reply(id, 60000);
+        QFile::remove(hold);
+        QJsonObject r = held.reply(id, 60000);
         QJsonObject taken = h.call({{"op", "copy"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
         QJsonObject moved = h.call({{"op", "move"}, {"src", join(W, "w.txt")}, {"dst", join(W, "conf.txt")}, {"replace", false}});
-        check(partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
+        check(held_up && partway && !r.isEmpty() && !ok(r) && r.value("error").toString().contains("appeared") &&
                   read_file(fresh) == "theirs" && !ok(taken) && !ok(moved) && read_file(join(W, "conf.txt")) == "original" &&
                   read_file(join(W, "w.txt")) == "hello" && leftovers().isEmpty(),
               "a copy or move to a new name keeps a file another program saves there meanwhile (or had saved), and says so");
         QFile::remove(fresh);
         QFile::remove(mid);
     }
+    held.stop();
+    QFile::remove(hold + ".reached");
     QFile::remove(join(W, "huge"));
     QDir().mkpath(join(W, "mvsrc"));
     write_file(join(W, "mvsrc/moved.txt"), "moved");
@@ -490,6 +536,37 @@ int main(int argc, char **argv)
               whole.value("path").toString() == join(victim, "keep") && whole.value("mode").toInt() == 0600,
           "Kestrel resolves the user's own symlinked folders first (chmod: the whole path; a link itself otherwise)");
 
+    // -- names that aren't valid UTF-8 go through as their bytes (base64 beside the text), not as lossy JSON text
+    {
+        QByteArray dir = util::enc(W) + "/odd\xff dir", file = dir + "/f\xfe.txt";
+        ::mkdir(dir.constData(), 0755);
+        write_text(util::dec(file.constData()), "x");
+        QString file_q = util::dec(file.constData());
+        auto send = [&](const QString &op, const QVariantMap &args) {
+            QJsonObject req = QJsonObject::fromVariantMap(admin::resolve_paths(op, args));
+            req["op"] = op;
+            return h.call(req);
+        };
+        auto q = [](const QByteArray &bytes) { return util::dec(bytes.constData()); };
+        QByteArray moved = dir + "/g\xfd.txt";
+        QJsonObject renamed = send("rename", {{"src", file_q}, {"dst", q(moved)}});
+        QJsonObject made = send("mkdir", {{"path", q(dir + "/sub\xfc")}});
+        QJsonObject linked = send("symlink", {{"link", q(dir + "/ln")}, {"target", q("t\xfb")}});
+        char target[64] = {};
+        ssize_t tn = ::readlink((dir + "/ln").constData(), target, sizeof target - 1);
+        struct stat st;
+        check(ok(renamed) && ::lstat(moved.constData(), &st) == 0 && ::lstat(file.constData(), &st) != 0 && ok(made) &&
+                  ::lstat((dir + "/sub\xfc").constData(), &st) == 0 && S_ISDIR(st.st_mode) && ok(linked) &&
+                  QByteArray(target, int(std::max<ssize_t>(tn, 0))) == "t\xfb",
+              "names that aren't valid UTF-8 (a folder, a file, a symlink's target) reach the helper byte for byte: "
+              "rename, mkdir and symlink work on them (" + renamed.value("error").toString() + ")");
+        QJsonObject as_text{{"op", "delete"}, {"path", q(moved)}};
+        check(!ok(h.call(as_text)) && ::lstat(moved.constData(), &st) == 0,
+              "...sent only as JSON text, such a name doesn't survive (so the bytes are needed)");
+        QJsonObject nul{{"op", "mkdir"}, {"path", "/x"}, {"path_b64", QString::fromLatin1(QByteArray("/tmp/a\0b", 8).toBase64())}};
+        check(!ok(h.call(nul)), "...a path with a NUL byte in it is refused");
+    }
+
     // -- a folder swapped for a symlink while a delete runs: renameat2(RENAME_EXCHANGE) trades a folder in the tree
     // for a symlink to the victim (kept outside the tree) and back, in one step each, so the path always exists
     // (a race: the old helper loses it in some rounds, not all, so rounds run for a few seconds)
@@ -582,5 +659,69 @@ int main(int argc, char **argv)
               "...and a write there that fails part-way leaves no half-written file under its name (" + left.join(", ") + ")");
         qunsetenv("KESTREL_TEST_SLOW");
     }
+
+    // ---- readdev (Back Up Drive to Image): reads a block device and nothing else, into a FIFO of the user's
+    {
+        Helper rd;
+        bool started = rd.start();
+        QString f = join(W, "not-a-device.bin"), fifo = join(W, "image.fifo");
+        write_file(f, "secret");
+        ::mkfifo(fifo.toLocal8Bit().constData(), 0600);
+        QJsonObject r1 = rd.call({{"op", "readdev"}, {"device", f}, {"fifo", fifo}}, 10000);
+        QJsonObject r2 = rd.call({{"op", "readdev"}, {"device", "/dev/null"}, {"fifo", fifo}}, 10000);
+        check(started && !ok(r1) && r1.value("error").toString().contains("not a block device") && !ok(r2) &&
+                  r2.value("error").toString().contains("not a block device"),
+              "readdev reads block devices only: a file, or /dev/null, is refused");
+        QString blk;   // a block device this user can read, where the machine has one
+        for (const QString &n : QDir("/dev").entryList(QDir::System | QDir::NoDotAndDotDot)) {
+            struct stat st;
+            QString p = "/dev/" + n;
+            if (::stat(p.toLocal8Bit().constData(), &st) == 0 && S_ISBLK(st.st_mode) &&
+                ::access(p.toLocal8Bit().constData(), R_OK) == 0) {
+                blk = p;
+                break;
+            }
+        }
+        if (blk.isEmpty()) {
+            skip("readdev writes only into a FIFO (no block device here this user can read)");
+        } else {
+            QString plain = join(W, "plain.out");
+            write_file(plain, "");
+            QJsonObject r3 = rd.call({{"op", "readdev"}, {"device", blk}, {"fifo", plain}}, 10000);
+            check(!ok(r3) && r3.value("error").toString().contains("FIFO") && QFileInfo(plain).size() == 0,
+                  "readdev writes only into a FIFO of the user's, never a file (" + blk + ")");
+        }
+        rd.stop();
+    }
+
+    // -- RAM disks: a tmpfs only on an empty folder of yours, unmounted only if it's a tmpfs of yours, and a mount unit
+    // only for a path with nothing systemd would expand (all refused before anything is mounted or written)
+    {
+        QString full = join(W, "rd-full"), empty = join(W, "rd-empty");
+        makedirs(full, true);
+        makedirs(empty, true);
+        write_file(join(full, "f.txt"), "f");
+        Helper rh;   // (the main one has been stopped by now)
+        check(rh.start(), "a helper for the RAM disk checks starts");
+        auto error = [](const QJsonObject &r) { return r.value("ok").toBool() ? QString() : r.value("error").toString(); };
+        QString not_empty = error(rh.call({{"op", "tmpfs_mount"}, {"path", full}, {"size_mb", 16}}));
+        QString no_size = error(rh.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 0}}));
+        QString huge = error(rh.call({{"op", "tmpfs_mount"}, {"path", empty}, {"size_mb", 1e12}}));
+        QString not_ram = error(rh.call({{"op", "tmpfs_unmount"}, {"path", empty}}));
+        QString percent = join(W, "rd-50%");
+        makedirs(percent, true);
+        QString expands = error(rh.call({{"op", "tmpfs_unit"}, {"path", percent}, {"size_mb", 16}, {"enable", true}}));
+        check(not_empty.contains("isn't empty") && no_size.contains("size") && huge.contains("size") &&
+                  not_ram.contains("isn't a RAM disk") && expands.contains("%") && read_file(join(full, "f.txt")) == "f",
+              "tmpfs_mount refuses a folder that isn't empty and a size outside 1 MB to the memory; tmpfs_unmount a "
+              "folder that isn't a RAM disk; tmpfs_unit a path with % in it (" +
+                  QStringList{not_empty, no_size, huge, not_ram, expands}.join(" | ") + ")");
+        if (getuid() != 0) {
+            QString theirs = error(rh.call({{"op", "tmpfs_mount"}, {"path", "/usr/share/doc"}, {"size_mb", 16}}));
+            check(theirs.contains("isn't your folder"), "tmpfs_mount refuses a folder that isn't yours (" + theirs + ")");
+        }
+        rh.stop();
+    }
+
     finish();
 }

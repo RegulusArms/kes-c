@@ -9,9 +9,9 @@ tests/run.sh                     # build, then run every test
 tests/run.sh fileops atc_undo    # only some of them
 ```
 
-`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`tests/build/`). It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build.
+`run.sh` builds the app (`build/kes`, in Release mode like `install.sh`) and the test programs (`build/tests/`) in one build, through ccache when it's installed. It then runs each test and prints its `PASS` / `FAIL` / `SKIP` lines, how long it took, and a summary. It exits with 0 only if every test passed. A full run takes about 4 minutes after the first build. A test still running after 10 minutes is stopped and counts as failed (the installer test after 30: it runs `install.sh`, which builds the app again in the same build folder, all of it when the compiler cache is empty).
 
-To build into other folders, set `KESTREL_BUILD_DIR` (for example `KESTREL_BUILD_DIR=build-mint tests/run.sh` builds into `build-mint/` and `tests/build-mint/`). That keeps two machines' builds apart when they share this folder, such as a virtual machine with an older Qt.
+To build into other folders, set `KESTREL_BUILD_DIR` (for example `KESTREL_BUILD_DIR=build-mint tests/run.sh` builds into `build-mint/`, the tests in `build-mint/tests/`). That keeps two machines' builds apart when they share this folder, such as a virtual machine with an older Qt.
 
 ## Your own setup is never touched
 
@@ -23,35 +23,56 @@ Each test runs:
 
 The installer test also uses a keyfile GSettings backend, so your real dock isn't changed. It replaces `pgrep` and `sudo` with stubs, so it can't close a running GNOME Files or install packages.
 
+## Fast or slow, the same result
+
+A check tests the code, not the machine: it passes on a fast desktop and on a slow runner (the sanitizers, 2 CPUs, a
+busy machine) alike, and fails on either when the code is wrong.
+
+- **Wait for what you check**, never a fixed time: `wait_for` (it never gives up before 30 s, so a slow runner only
+  makes a passing check take longer), `finished_task()` for a job's record, `FakeFlight::join()` before anything this
+  Kestrel reports to the tower.
+- **"Nothing happened"** needs a point after which it would have: `FakeFlight::sync()` (everything the tower passed
+  on before it has been heard), the job having ended, a later message.
+- **No time limits**: not "took under 500 ms", not "held the window under 1 s". Count what the code did instead: the
+  UI thread's waits on a busy drive (`util::test_ui_waits`), the status line's updates (`stats::counted`). A rate is
+  measured against the time that actually passed.
+- **Part-way is held, not raced**: not "a file big enough that the cancel comes first". Hold the work where the check
+  needs it: `KESTREL_TEST_COPY_HOLD_AT` (Kestrel's copy pauses itself), `KESTREL_TEST_COPY_HOLD` (the admin helper's
+  copy waits), a `Task::progress` handler on the job's own thread, a FIFO written when the test says, a job holding
+  a drive.
+
+`tests/ci-local.sh --cpus 2 --repeat 3` runs the suite slower, several times: what passes here once and fails there
+is a check that times the machine.
+
 ## What's tested
 
 | Test | Checks | Covers |
 |---|---|---|
-| [`fileops`](#fileops) | 137 | File operations |
+| [`fileops`](#fileops) | 165 | File operations |
 | [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
 | [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
 | [`atc_tasks`](#atc_tasks) | 35 | The shared task list |
-| [`atc_undo`](#atc_undo) | 20 | Undo between Kestrels |
+| [`atc_undo`](#atc_undo) | 22 | Undo between Kestrels |
 | [`atc_tabs`](#atc_tabs) | 18 | Open folders as tabs |
 | [`devices`](#devices) | 22 | Phones and cameras |
 | [`sidebar`](#sidebar) | 32 | Rearranging the sidebar, and its Mounts section |
 | [`pinned`](#pinned) | 31 | Pinned items and folder sorts |
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
-| [`jobs`](#jobs) | 47 | The job queue, the Jobs window and the Tower window |
-| [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
+| [`jobs`](#jobs) | 59 | The job queue, the Jobs window and the Tower window |
+| [`theme`](#theme) | 84 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
-| [`admin_helper`](#admin_helper) | 47 | The admin helper, the part that runs as root |
-| [`ui`](#ui) | 33 | Menus, shortcuts, accessibility, drag and drop |
+| [`admin_helper`](#admin_helper) | 50 | The admin helper, the part that runs as root |
+| [`ui`](#ui) | 34 | Menus, shortcuts, accessibility, drag and drop |
 | [`parsing`](#parsing) | 5 | Parsing modelled on Python's |
 | [`search`](#search) | 33 | Searching: filters, and inside files |
 | [`viewer`](#viewer) | 89 | The image viewer and saving its changes |
-| [`tools`](#tools) | 31 | Find Duplicates, Compare, Sync, Verify Signature |
+| [`tools`](#tools) | 76 | Find Duplicates, Disk Usage, Compare, Sync, Verify Signature, Encrypt / Decrypt, disk images |
 | [`overview`](#overview) | 49 | The Overview, Starred, Frequent Folders, drive health |
 | [`media`](#media) | 59 | Rotating image files and converting media |
 | [`i18n`](#i18n) | 9 | Translations |
-| [`installer`](#installer) | 64 | `install.sh` and `kes-setup` |
+| [`installer`](#installer) | 65 | `install.sh` and `kes-setup` |
 
 ### fileops
 
@@ -63,12 +84,19 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **Cancel:** a copy cancelled part-way leaves no half-copied files.
 - **Without RENAME_NOREPLACE or hard links** (as on an LTFS tape; `KESTREL_TEST_NO_LINK`): a copy to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name.
 - **A folder copied to a new name** has that name from the start and fills in file by file. Cancelled or failing part-way, it keeps the files finished so far, whole, with the original's permissions; Ctrl+Z puts it in the trash.
+- **How a file is copied** (Preferences → Files → Copying), each way whole and logged, and each failing part-way keeping the file it would have replaced, with no part file:
+  - setting off: Kestrel's own loop (a file size limit part-way);
+  - on, no clone (`KESTREL_TEST_NO_CLONE`): copy_file_range (a file size limit, a read error after its first 4 MB piece via `KESTREL_TEST_COPY_FAIL_AT`, a cancel between pieces);
+  - a clone, where the test's drive can make one (Btrfs, XFS, ZFS 2.2+), with an error once it's in; skipped elsewhere (ext4 and overlayfs can't).
+- **Extended attributes and ACLs** (Preferences → Files → Copying, off by default): none copied while off; on, a file's and a folder's `user.*` attributes arrive, and an ACL (where setfacl and the file system allow); a destination that can't hold them (`KESTREL_TEST_XATTRS_UNSUPPORTED`) still gets the copy, and the log names what was left out once for the job. Skipped on a file system without `user.*` attributes.
+- **Verify copies** (off by default): on, a copy is read back and matches, hashed while Kestrel copied it or read again where the system copied it; one that reads back different (`KESTREL_TEST_CORRUPT_COPY`) is named in the log and the job's failures and kept.
 - **Replacing a file** keeps the old one until the new one is complete:
   - cancelling part-way, or a write that fails part-way, leaves it as it was and no temporary file;
   - a symlink in the way is replaced rather than written through;
   - another hard link of the old file is left alone.
 - **Replacing a folder** does the same: a cancel or a write that fails part-way keeps the old folder and leaves no half-made copy. Copying or moving a folder onto another replaces it whole.
 - **A destination another program saves meanwhile** (free when the job was planned, then saved while a file or folder copy runs, or before it starts) is kept and the conflict reported; only Replace replaces. Also when decompressing a single file.
+- **The Link window:** a free window whose two browsers are inside it; the picks previewed in the folder with nothing made; a preview renamed in place and the kind kept by Add to List; a name taken shows in the list and OK makes nothing; OK's summary, then the link made (no part names left) and Undo offered. Edit Link… renames and repoints a link in one step, and Undo puts it back. A link changed by another program meanwhile, or a name taken, is never overwritten; a link whose replacement can't be made keeps what it held; a file's other names (hard links) are found.
 - **Trash and undo:**
   - Move to Trash, and where the item came from;
   - undo of trash, move, copy (into the trash, not deleted) and rename; undo explaining what it can't put back;
@@ -258,6 +286,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 - Off (the default): each Kestrel undoes only its own actions.
 - On: Ctrl+Z undoes the newest action from any Kestrel, each action is handed out once, and trash and create entries are sent as `[path, ""]`.
+- The Link window's batches (kind `links`): a changed link's old contents are accepted for that kind only, and Ctrl+Z puts another Kestrel's changed link back.
 - With no tower, undo falls back to the Kestrel's own history.
 
 ### atc_tabs
@@ -299,11 +328,11 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - saves a mount moved within it, and collapses;
   - Remove from Recent Servers takes a server out of it and the saved list, and tells other Kestrels.
 - **Drives aren't polled:**
-  - left alone for 7 seconds, no drive is asked anything;
+  - left alone for 7 seconds (once the first answers are in), no drive is asked anything;
   - a drive mounted shows and one unmounted goes as soon as the mount table changes;
   - a disk's size from /sys is lsblk's (skipped where no disk is mounted);
   - when a job ends, the free space is asked again;
-  - a mount that's in the mount table only after the sidebar's refresh, with no other event, still shows; one mounted while mount changes keep coming every 100 ms shows within a second.
+  - a mount that's in the mount table only after the sidebar's refresh, with no other event, still shows; one mounted while mount changes keep coming every 100 ms still shows (a refresh put off by each change never would).
 
 ### pinned
 
@@ -406,8 +435,10 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a cancelled waiting job ends without running;
   - Start Now; moving a job up; Start New Jobs Paused.
 - **Pausing:** a copy (its part file stops growing, then it finishes) and a program a job runs (stopped, continued, ended on cancel).
-- **Steps and log:** a copy's steps, and its log kept after it ends.
-- **The Jobs window** opens from the job panel and lists running, waiting and finished jobs; Delete cancels the selected job (not the main window's Move to Trash).
+- **Steps and log:** a copy's steps, and its log kept after it ends, ending with how long it took.
+- **What jobs log:** a size count's what it counted and found; Move to Trash each item; a job that only reports gets its progress in its log while the log is quiet, now and then; a stopped one ends with when it stopped.
+- **Saving logs** (off by default): nothing saved while off; on, a file per job in the day's folder with its title, outcome, times, steps and log; a write failing part-way leaves nothing under the name and no part file; pruning by age, then by size (never today's, never other files).
+- **The Jobs window** opens from the job panel and lists running, waiting and finished jobs; Delete cancels the selected job (not the main window's Move to Trash). Verify copies: off for a copy by default, turned on for a waiting one (which then reads its copy back), not offered for a job that copies nothing.
 - **Through the tower:**
   - another Kestrel's job holds a lane ours waits for (one queue); a Kestrel that leaves frees its lanes;
   - another Kestrel pauses and resumes our job; everyone hears the queue;
@@ -442,6 +473,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
   - a folder without images is drawn in the default folder colour like the others (the theme's icon only with folder previews off);
   - a special folder (Downloads, Home…) gets its symbol on it, in a shade that stands out on any colour, also white and black (skipped if the icon theme has no symbolic folder icons);
   - on the Overview, a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default colour, a network one a folder in it, not the theme's icon.
+- **Separate caching** (Preferences → Privacy): on, a thumbnail is made and kept in Kestrel's own cache folder, and the shared cache is neither read (another app's thumbnail of the file is ignored) nor written; off again, one kept in Kestrel's folder is still used and a new one goes to the shared cache; Delete All Thumbnails deletes those in Kestrel's folder too (and its own in the shared cache), after which they're made again into the shared cache.
 - **Generating folder previews:**
   - Generate Folder Previews makes previews for the folder and the folders directly in it (not deeper), and its recursive form for every folder below, both without a thumbnail for every image, as Generate Previews Recursively makes (Generate Previews: only the folder's own files');
   - a preview build finishes scanning the tree before most previews are made;
@@ -492,17 +524,18 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **The admin helper, the part that runs as root** (`kes-admin-helper`). It runs as the normal user (no pkexec) and gets requests over its pipe, as Kestrel sends them.
 
-- **Every operation works:** mkdir, touch, write, copyfile, copy, move, rename, symlink, hardlink, chmod, delete, cancel. Hardlink refuses a file that isn't the user's.
+- **Every operation works:** mkdir, touch, write, copyfile, copy, move, rename, symlink, hardlink, chmod, delete, cancel. Hardlink refuses a file that isn't the user's. Readdev reads block devices only, into a FIFO of the user's only.
 - **Onto itself:**
   - moving or copying a file or folder onto itself (with or without merging) leaves it as it was, instead of deleting it as the destination it replaces;
   - moving or copying a folder into itself is refused;
   - moving a file onto a hard link to it keeps the file.
 - **A replacement keeps what it replaces until the new one is complete:**
   - a write that fails part-way (a helper whose writes fail past 1 MB, as on a full disk) keeps the old file or folder as it was and leaves no half-made copy;
-  - a cancel stops a large file's copy part-way at once (its progress counts bytes), and ending the session part-way does the same;
+  - a cancel stops a file's copy part-way (its progress counts bytes; the copy held there by `KESTREL_TEST_COPY_HOLD`), and ending the session part-way does the same;
   - copying or moving a folder onto another replaces it whole.
 - **New names:** a copy or move to a new name keeps a file another program saves there meanwhile (or already had).
 - **Symlinks** inside a copied or deleted tree are handled as links.
+- **Extended attributes:** a copy keeps a file's and a folder's when Kestrel asks (`"xattrs"`), and not otherwise.
 - **Ownership:** what it makes (copies, new folders and the parents made for them, files, links) gets the owner of the folder it's made in, and a copy given another group loses its set-group-ID bit (seen through one of the user's other groups; skipped if there's none).
 - **Refused:** relative paths; deleting, replacing, moving away, renaming or changing the permissions of top-level and home folders (checked with paths that don't exist, so nothing real is touched).
 - **No escaping through symlinks:**
@@ -515,6 +548,7 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **Menus and shortcuts, and the window's controls.**
 
+- **The Link window** is a free window, with its two browsers inside it (not windows of their own, nor native ones).
 - **Properties shortcuts in the right-click menu:** Calculate Folder Size counts the folder again (not the size remembered), Open Metadata opens it on the Metadata tab, and neither shows for a plain text file.
 - **Every menu entry, compared with `tests/ui_actions.txt`:**
   - every entry, submenu and separator, with its shortcuts, in the main menu, the toolbar's menus and the context menus (empty space, a file, a folder, two files, a tab); an entry or shortcut lost when code moves is named in the failure;
@@ -615,17 +649,30 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 
 **The file tools.**
 
+- **Disk images:** Back Up Drive to Image's stream becomes the image byte for byte (for the user alone, no part left); no image when the drive wasn't read to its end, a write fails part-way or it's cancelled part-way; compressed and encrypted, it opens with its password. Which names are disk images, mounted from a copy, or mountable for writing; Mount Image in their menu only; never saved on the drive being read.
 - **Find Duplicates:**
   - what's grouped: identical files through subfolders; not a later difference, symlinks, hidden files or hard links unless asked;
   - keeping the oldest, newest or those in a folder;
   - replacing with hard links (failing part-way leaves the file whole);
   - the window from a folder's menu trashing the copies not kept (undoable).
+- **Disk Usage:**
+  - the count matches Properties' (an unreadable folder as empty, named); biggest first, small files together, small folders kept as a block;
+  - taking an item out makes the folders above it smaller; the treemap's blocks fill the map by share, apart, not long and thin;
+  - the window from a folder's menu (not a file's or several folders'): it counts, maps, lists, remembers the sizes for Properties;
+  - going in and Back, an item's menu, Move to Trash taking it off the map (undoable);
+  - a map at once from the sizes remembered; on a tape, counting only when asked; the Overview card's button.
 - **Compare:** each kind of difference, a deep compare, the window and Copy to Right.
 - **Sync:** the plan, a preview and sync with Kestrel's copy, deleting asked again, saved pairs, and rsync (a part-way failure leaves the old file; run again it completes).
+- **Remembered syncs:** each sync that ran kept once per pair and found from either folder; Sync To… on the source or the destination filled in as last run, the right way round; a folder never synced as before; a remembered folder that's gone filled in with a warning, the older sync a click away; folders chosen before the lookup ends kept; the last five per folder, the same pair moved to the top, the saved pairs untouched.
 - **Verify Signature:**
   - gpg's status lines and the plain words;
   - real keys: detached, clearsigned, trusted or not, no key, a changed or missing file;
   - opening a signature, and a signed SHA256SUMS checked and then its files.
+- **Encrypt / Decrypt:**
+  - gpg's key list (the keys that can encrypt, yours first) and packet list (a password, your key, someone else's, not encrypted), and the decrypted names;
+  - real keys: with a password (a wrong one leaves nothing; decrypted again, the next free name), to your key as text, to someone else's (theirs, and failing leaves nothing);
+  - failing part-way (a file-size limit) or cancelled: no file and no part left;
+  - the menus, double-clicking an encrypted file (its password asked, then decrypted), and the Encrypt window (keys listed, differing passwords refused, to a key and your own).
 
 ### overview
 
@@ -721,8 +768,8 @@ The installer test also uses a keyfile GSettings backend, so your real dock isn'
 - **`kes-setup --bleachbit`** writes BleachBit's cleaner:
   - only the user can change it (also run under umask 000: BleachBit ignores a world-writable cleaner), with no part file left, and it says BleachBit will ask once whether to trust it;
   - well-formed, following BleachBit's CleanerML schema (needs `xmllint`);
-  - only naming Kestrel's cache, its lists, the three history keys (with the image viewer's recent folders) and the save locations in its settings;
-  - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
+  - only naming Kestrel's cache, its lists (the remembered syncs too), the three history keys (with the image viewer's recent folders) and the save locations in its settings;
+  - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; the Cache option alone keeps the saved job logs and the Job logs option alone deletes only them; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
   - `--undo` removes the cleaner and leaves the user's own.
 - **`kes-setup --install-optional`** (stub `dpkg`, `apt-cache` and `sudo`) asks apt to install exactly the optional packages that are missing and available, names the unavailable ones, and installs nothing when they're all there.
 
@@ -739,7 +786,7 @@ Everything `install.sh` needs to build, plus a few tools a normal Ubuntu desktop
 
 GitHub Actions (`.github/workflows/deb.yml`) runs `tests/run.sh` on Ubuntu 24.04 (a GitHub runner) and on Ubuntu
 26.04 (a clean ubuntu:26.04 container, the tests run as a normal user) before building a .deb on each; a failing test on
-either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or tools is caught too. A push or pull request that only changes Markdown files doesn't start it. Two more jobs:
+either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or tools is caught too. A push or pull request that only changes Markdown files doesn't start it. Each of these test jobs keeps its own ccache between runs (`actions/cache`), so only the files changed since the last passing run are compiled again. Two more jobs:
 
 - **Sanitizers:** the whole suite with AddressSanitizer and UndefinedBehaviorSanitizer, on 24.04 and 26.04, which find
   memory errors (use after free, overflows) and undefined behaviour that a normal run can miss. Locally:
@@ -762,11 +809,32 @@ either stops the run, so a change that only breaks on 26.04's newer Qt, GLib or 
   ubuntu:24.04 or 26.04 system, and `stable` or `dev`. A release Kestrel no longer supports keeps its frozen suites,
   checked on that release's system whenever the repository is updated.
 
+## Running CI's tests here
+
+`tests/ci-local.sh` runs CI's four test jobs (`test-noble`, `test-resolute`, `sanitizers-noble`, `sanitizers-resolute`) in Docker the way a GitHub runner runs them, all at once, and prints each job's result, failures and skipped checks. A pass on this machine's own `tests/run.sh` says little about CI: most of what has failed only in CI was timing, and this machine has many more and faster cores than a runner.
+
+```bash
+tests/ci-local.sh                        # every test job, on the working tree
+tests/ci-local.sh test-noble             # only some
+tests/ci-local.sh --head                 # the last commit, as CI checks it out
+tests/ci-local.sh --cpus 2 --repeat 3    # a slower machine, three runs of the tests: brings out timing races
+tests/ci-local.sh --only installer       # each job runs only these tests (after its usual build)
+tests/ci-local.sh --print                # what each job would run
+```
+
+- **The jobs come from `deb.yml`:** every job with a step that runs `tests/run.sh`, and its own `run:` steps, shells and packages, so the script follows the workflow without being edited. `uses:` steps are left out (the checkout is a copy of the tree; the cache only saves compile time).
+- **A runner's size:** each job gets 4 CPUs of its own (whole cores with their second threads, as Azure's vCPUs are) and 16 GB, like a GitHub runner for a public repository, so the build's `-j` and the timing of the tests' threads are a runner's.
+- **A job on the runner's VM** (no `container:`) runs in a fresh `ubuntu:<release>` container with what the runner image has that the tests use (sudo, setfacl, zstd, zip…, and `/usr/share/doc`, which Docker's minimal image leaves out), as the user `runner` (uid 1001, passwordless sudo), its workspace and `/tmp` on Docker volumes (a real disk, as the VM's, not overlayfs). A job with `container:` runs in that image as root, its workspace (`/__w`) on a volume as Actions mounts it.
+- **`sudo sysctl -w`** in a step can't be done in a container: it becomes a check that this machine already has that value (the 24.04 sanitizer job needs `vm.mmap_rnd_bits=28`).
+- **The tree:** by default the working tree (git's files and new ones not ignored); at the end it lists what isn't committed, which CI won't have until it's pushed. `--head` tests the last commit instead.
+- **Fresh each time:** base images are pulled again, and each job's container and volumes (`kes-ci-<job>`) are removed before it starts and when the script ends. Logs stay in a temporary folder it names (or `--logs DIR`).
+- **What it can't copy:** the runner's kernel (a container has this machine's) and the VM's block devices, so the checks needing a mounted disk or partition (in `tools` and `devices`) may still skip here and run in CI. It needs Docker and `python3-yaml`.
+
 ## How the tests work
 
 Each test is one small program in `tests/`, built from `test_<name>.cpp`:
 
-- **It includes `app.cpp` directly** (`common.h`), so it can reach the app's internal state (the window list, the thumbnail manager, `on_atc`, `handle_fm1`…). The rest of `src/` is compiled once into `kes_core`, shared by all tests.
+- **It links the app's own code**: everything in `src/` but `main.cpp` and the admin helper is compiled once into `kes_objs` (the root `CMakeLists.txt`, with `-DKES_BUILD_TESTS=ON`), which `kes` and every test link. A test reaches the app's state through its headers (`common.h`: the window list, the thumbnail manager, `on_atc`, `handle_fm1`…). Only the version differs: `src/version.cpp`, compiled into each program, says "test" in the tests.
 - **It drives the real code** (`fileops::start_ops`, `undo::undo`, `places::set_starred`, …) and checks the results on disk and in the windows.
 - **`FakeFlight`** (`common.h`) plays "another Kestrel": a second connection to the bus that checks in with the tower, reports changes, calls tower methods and records everything the tower broadcasts.
 - **Each test program can also act as the tower.** When a test's Kestrel finds no tower, it starts `<test program> --atc`, just as the app starts `kes --atc`.

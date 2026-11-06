@@ -1,7 +1,8 @@
 // Asynchronous thumbnail generation.
 //
 // File thumbnails are read from / written to the shared freedesktop cache (~/.cache/thumbnails), so thumbnails
-// made by GNOME Files are reused and vice versa. Folder previews are a mosaic of the first images in the folder,
+// made by GNOME Files are reused and vice versa; with separate caching (Preferences → Privacy) they're kept in
+// ~/.cache/kestrel-explorer/thumbnails instead, and the shared cache isn't read (util THUMB_DIR, THUMB_READ_DIRS). Folder previews are a mosaic of the first images in the folder,
 // cached in ~/.cache/kestrel-explorer/folders.
 #pragma once
 
@@ -274,6 +275,7 @@ private:
     QSet<QString> no_previews;
     QMutex lock;
     int done = 0, total = 0;
+    int files_made = 0, folders_made = 0, no_preview = 0, too_big = 0;   // for its log
     bool scanning = true;
     QString current;
     qint64 last_emit = 0;

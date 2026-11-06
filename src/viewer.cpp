@@ -1308,7 +1308,7 @@ void ImageViewer::add_found(const QStringList &found)
 
 // ------------------------------------------------------------ quick actions
 
-QStringList ImageViewer::recent_folders() { return settings().value("viewer_recent_folders").toStringList(); }
+QStringList ImageViewer::recent_folders() { return history_settings().value("viewer_recent_folders").toStringList(); }
 
 void ImageViewer::remember_folder(const QString &folder)
 {
@@ -1317,7 +1317,7 @@ void ImageViewer::remember_folder(const QString &folder)
     QStringList l = recent_folders();
     l.removeAll(folder);
     l.prepend(folder);
-    settings().setValue("viewer_recent_folders", l.mid(0, 9));
+    history_settings().setValue("viewer_recent_folders", l.mid(0, 9));
 }
 
 void ImageViewer::transfer(const QString &folder, const QString &op) { transfer_file(current(), folder, op); }

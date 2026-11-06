@@ -4,9 +4,12 @@
 #include "archive_ui.h"
 #include "dialogs.h"
 #include "hashcheck.h"
+#include "links.h"
+#include "linkwin.h"
 #include "prefs.h"
 #include "stats.h"
 
+#include <QComboBox>
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -14,16 +17,22 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QTreeWidget>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <gio/gdesktopappinfo.h>
+#include <linux/fs.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <utime.h>
 
 #include <atomic>
@@ -211,6 +220,200 @@ int main(int argc, char **argv)
         ::chmod(enc(P("big")).constData(), 0755);
     }
 
+    // -- how a file is copied (Preferences → Files → Copying): a clone where the drive can share data between files,
+    // else the kernel's copy_file_range, else (or with the setting off) Kestrel's own read/write loop. Each one
+    // failing part-way keeps the file it would have replaced and leaves no part file
+    {
+        makedirs(P("how"), true);
+        QByteArray data(6 * 1024 * 1024, 'k');   // more than one 4 MB piece
+        data[5 * 1024 * 1024] = 'Z';
+        make(P("how/src.bin"), data);
+        auto leftovers = []() {
+            QStringList out;
+            for (const QString &n : listdir(P("how")))
+                if (n.startsWith(".kes-"))
+                    out << n;
+            return out;
+        };
+        auto copy_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        auto copied_whole = [&](const QString &how) {
+            ::unlink(enc(P("how/out.bin")).constData());
+            bool ok = run_ops(w, {{"copy", P("how/src.bin"), P("how/out.bin")}});
+            return ok && read_file(P("how/out.bin")) == data && copy_log().contains(how) && leftovers().isEmpty();
+        };
+        auto fails_part_way = [&](const std::function<void()> &arm, const std::function<void()> &disarm) {
+            make(P("how/keep.txt"), "precious");
+            arm();
+            run_ops(w, {{"copy", P("how/src.bin"), P("how/keep.txt"), true}});
+            disarm();
+            return text_of(P("how/keep.txt")) == "precious" && leftovers().isEmpty();
+        };
+        struct rlimit old_lim;
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        sighandler_t old_handler = nullptr;
+        auto limit = [&]() {   // writes past 1 MB fail (EFBIG)
+            struct rlimit lim = old_lim;
+            lim.rlim_cur = 1 << 20;
+            old_handler = ::signal(SIGXFSZ, SIG_IGN);
+            ::setrlimit(RLIMIT_FSIZE, &lim);
+        };
+        auto unlimit = [&]() {
+            ::setrlimit(RLIMIT_FSIZE, &old_lim);
+            ::signal(SIGXFSZ, old_handler);
+        };
+
+        // Kestrel's loop: the setting off
+        prefs::set("copy_kernel", false);
+        check(copied_whole("1 file read and written by Kestrel"),
+              "with the system's copy off, Kestrel reads and writes the file itself, and the copy is whole");
+        check(fails_part_way(limit, unlimit),
+              "...that copy failing part-way (a write error) keeps the file it would have replaced, with no part file");
+
+        // copy_file_range: the setting on (the default), no clone
+        prefs::set("copy_kernel", true);
+        qputenv("KESTREL_TEST_NO_CLONE", "1");
+        check(copied_whole("1 file copied by the system"),
+              "with it on, where the drive can't clone, the system copies the file (copy_file_range), whole");
+        check(fails_part_way(limit, unlimit),
+              "...that copy failing part-way (a write error) keeps the file it would have replaced, with no part file");
+        check(fails_part_way([]() { qputenv("KESTREL_TEST_COPY_FAIL_AT", QByteArray::number(4 * 1024 * 1024)); },
+                             []() { qunsetenv("KESTREL_TEST_COPY_FAIL_AT"); }),
+              "...and failing after its first piece (a read error) does too");
+        {
+            make(P("how/keep.txt"), "precious");
+            make(P("how/long.bin"), "long");
+            ::truncate(enc(P("how/long.bin")).constData(), qint64(1) << 30);   // 1 GB (sparse): reports come part-way
+            Task *ct = fileops::start_ops(w, {{"copy", P("how/long.bin"), P("how/keep.txt"), true}}, "Test");
+            QObject::connect(ct, &Task::progress, ct, [ct](double, const QString &text) {
+                if (text.endsWith("long.bin"))   // part-way, on the copying thread
+                    ct->cancel();
+            }, Qt::DirectConnection);
+            QPointer<Task> ctp(ct);
+            wait_for([&]() { return !ctp; }, 20000);
+            check(text_of(P("how/keep.txt")) == "precious" && leftovers().isEmpty(),
+                  "...and cancelled between its pieces, it keeps the file it would have replaced");
+            ::unlink(enc(P("how/long.bin")).constData());
+        }
+        qunsetenv("KESTREL_TEST_NO_CLONE");
+
+        // a clone, where this drive can make one (Btrfs, XFS, ZFS 2.2+; not the ext4 or overlay of most test runs)
+        bool can_clone = false;
+        {
+            make(P("how/probe-a"), "probe");
+            int a = ::open(enc(P("how/probe-a")).constData(), O_RDONLY | O_CLOEXEC);
+            int b = ::open(enc(P("how/probe-b")).constData(), O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+            can_clone = a >= 0 && b >= 0 && ::ioctl(b, FICLONE, a) == 0;
+            ::close(a);
+            ::close(b);
+            ::unlink(enc(P("how/probe-a")).constData());
+            ::unlink(enc(P("how/probe-b")).constData());
+        }
+        if (can_clone) {
+            check(copied_whole("1 file cloned"), "on a drive that can, a copy on the same drive is a clone, whole");
+            check(fails_part_way([]() { qputenv("KESTREL_TEST_COPY_FAIL_AT", "0"); },
+                                 []() { qunsetenv("KESTREL_TEST_COPY_FAIL_AT"); }),
+                  "...a clone followed by an error keeps the file it would have replaced, with no part file");
+        } else {
+            skip("copying by a clone (this drive can't share data between files: Btrfs, XFS or ZFS 2.2+ can)");
+        }
+    }
+
+    // -- extended attributes and ACLs (Preferences → Files → Copying, off by default)
+    {
+        makedirs(P("xa/dir"), true);
+        make(P("xa/f.txt"), "attrs");
+        make(P("xa/dir/in.txt"), "inside");
+        auto xattr_of = [](const QString &path, const char *name) {
+            char buf[512];
+            ssize_t n = ::getxattr(enc(path).constData(), name, buf, sizeof buf);
+            return n < 0 ? QByteArray() : QByteArray(buf, n);
+        };
+        auto last_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        QByteArray url = "https://example.com/f.txt";
+        bool can = ::setxattr(enc(P("xa/f.txt")).constData(), "user.xdg.origin.url", url.constData(), size_t(url.size()), 0) == 0 &&
+                   ::setxattr(enc(P("xa/dir")).constData(), "user.xdg.tags", "red", 3, 0) == 0;
+        if (can) {
+            bool off_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/off.txt")}});
+            prefs::set("copy_xattrs", true);
+            bool on_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/on.txt")}, {"copy", P("xa/dir"), P("xa/dir2")}});
+            check(off_ok && xattr_of(P("xa/off.txt"), "user.xdg.origin.url").isEmpty() && on_ok &&
+                      xattr_of(P("xa/on.txt"), "user.xdg.origin.url") == url && xattr_of(P("xa/dir2"), "user.xdg.tags") == "red" &&
+                      text_of(P("xa/on.txt")) == "attrs" && exists(P("xa/dir2/in.txt")),
+                  "a copy keeps no extended attributes by default; with Keep extended attributes on, a file's (where it "
+                  "was downloaded from) and a folder's (its tags) are copied");
+            // an ACL, where the file system and setfacl allow one
+            make(P("xa/acl.txt"), "acl");
+            if (which("setfacl") && proc::run({"setfacl", "-m", "u:nobody:r", P("xa/acl.txt")}).rc == 0) {
+                bool acl_ok = run_ops(w, {{"copy", P("xa/acl.txt"), P("xa/acl2.txt")}});
+                check(acl_ok && !xattr_of(P("xa/acl2.txt"), "system.posix_acl_access").isEmpty() &&
+                          xattr_of(P("xa/acl2.txt"), "system.posix_acl_access") == xattr_of(P("xa/acl.txt"), "system.posix_acl_access"),
+                      "...and a file's ACL arrives too");
+            } else {
+                skip("copying an ACL (needs setfacl, and a file system with ACLs)");
+            }
+            // a destination that can't hold them: the copy goes on, and the log says once which were left out
+            qputenv("KESTREL_TEST_XATTRS_UNSUPPORTED", "1");
+            bool fat_ok = run_ops(w, {{"copy", P("xa/f.txt"), P("xa/fat.txt")}, {"copy", P("xa/dir"), P("xa/fat-dir")}});
+            qunsetenv("KESTREL_TEST_XATTRS_UNSUPPORTED");
+            QString log = last_log();
+            check(fat_ok && text_of(P("xa/fat.txt")) == "attrs" && exists(P("xa/fat-dir/in.txt")) &&
+                      log.count("Extended attributes left out") == 1 && log.contains("on 2 items") &&
+                      log.contains("user.xdg.origin.url") && log.contains("user.xdg.tags"),
+                  "...where the destination can't hold them, the copy is made all the same, and its log names what was "
+                  "left out, once for the job (" + log.section('\n', -3) + ")");
+            prefs::set("copy_xattrs", false);
+        } else {
+            skip("copying extended attributes (this file system takes no user.* attributes)");
+        }
+    }
+
+    // -- Verify copies (off by default; per job in the Jobs window): read back and compared with the original
+    {
+        makedirs(P("vf"), true);
+        QByteArray data(6 * 1024 * 1024, 'v');   // more than one 4 MB piece
+        data[5 * 1024 * 1024] = 'W';
+        make(P("vf/src.bin"), data);
+        auto last_log = []() {
+            const QList<FinishedTask> &f = TaskBoard::instance()->finished;
+            return f.isEmpty() ? QString() : f.last().log;
+        };
+        Task *t0 = nullptr;
+        bool plain = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/plain.bin")}}, QString(), &t0);
+        QString plain_log = last_log();
+        prefs::set("copy_verify", true);
+        prefs::set("copy_kernel", false);
+        bool a = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/a.bin")}});
+        QString log_a = last_log();
+        prefs::set("copy_kernel", true);
+        qputenv("KESTREL_TEST_NO_CLONE", "1");
+        bool b = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/b.bin")}});
+        QString log_b = last_log();
+        qunsetenv("KESTREL_TEST_NO_CLONE");
+        check(plain && !plain_log.contains("Verified") && a && b && read_file(P("vf/a.bin")) == data &&
+                  read_file(P("vf/b.bin")) == data && log_a.contains("Verified 1 copied file") &&
+                  log_a.contains("matches its original") && log_b.contains("matches its original"),
+              "Verify copies: off by default; on, a copy is read back and matches its original, hashed while Kestrel "
+              "copied it, or read again where the system copied it (" + log_a.section('\n', -2, -2) + ")");
+        qputenv("KESTREL_TEST_CORRUPT_COPY", "c.bin");
+        boxes.clear();
+        bool c = run_ops(w, {{"copy", P("vf/src.bin"), P("vf/c.bin")}});
+        qunsetenv("KESTREL_TEST_CORRUPT_COPY");
+        QString log_c = last_log();
+        wait_for([]() { return boxes.join("\n").contains("doesn't match the original"); });   // (closed by a timer)
+        check(c && exists(P("vf/c.bin")) && read_file(P("vf/c.bin")) != data && log_c.contains("doesn't match its original") &&
+                  log_c.contains("Verified 1 copied file") && log_c.contains("(listed above)") && boxes.join("\n").contains("doesn't match the original") &&
+                  read_file(P("vf/src.bin")) == data,
+              "...a copy that reads back different (a byte changed on the drive) is named in the job's log and its "
+              "failures, and kept as it is (" + boxes.join(" ").left(160) + ")");
+        prefs::set("copy_verify", false);
+    }
+
     // -- replacing a file: the old one stays until the new one is complete (a cancel or an error keeps it); a symlink
     // in the way is replaced, not written through; another hard link of the old file keeps its contents
     {
@@ -344,32 +547,25 @@ int main(int argc, char **argv)
         ::truncate(enc(P("race/big.bin")).constData(), qint64(32) << 20);   // sparse: several chunks, so one to pause at
         make(P("race/dir/inner.bin"), "i");
         ::truncate(enc(P("race/dir/inner.bin")).constData(), qint64(32) << 20);
-        // as soon as the copy's hidden part appears beside the destination (the copy has started, and its final rename
-        // is still to come), the job is paused (held at its next chunk) and "another program" saves the destination.
-        // Watched here, not through progress reports, which come at most every 80 ms: a fast disk can copy the file
-        // before the first one. Paused, not raced: on a slow runner the copy could otherwise finish first.
+        // part-way through the copy (its hidden part beside the destination, its final rename still to come), the job
+        // holds itself at its next piece (KESTREL_TEST_COPY_HOLD_AT, as Pause does) and "another program" saves the
+        // destination; then it goes on. Held by the copy itself, not caught by watching for its part: a fast disk can
+        // copy the file between two looks, and a slow one can still be inside a piece after any fixed wait.
         auto run_racing = [&](const fileops::Job &job, const std::function<void()> &intrude) {
             boxes.clear();
-            bool stepped = false;
+            qputenv("KESTREL_TEST_NO_CLONE", "1");   // (a clone is one call: nothing part-way to step into)
+            qputenv("KESTREL_TEST_COPY_HOLD_AT", QByteArray::number(4 << 20));
             Task *t = fileops::start_ops(w, {job}, "Test", []() {});
             QPointer<Task> tp(t);   // not deleted before events are processed
-            QElapsedTimer clock;
-            clock.start();
-            while (!stepped && clock.elapsed() < 10000) {   // not processing events: the job runs on its own thread
-                if (!leftovers().isEmpty()) {
-                    tp->set_paused(true);
-                    QThread::msleep(100);   // the chunk it's on finished
-                    if (!leftovers().isEmpty()) {
-                        intrude();
-                        stepped = true;
-                    }
-                    tp->set_paused(false);
-                    break;
-                }
-                QThread::usleep(200);
-            }
+            bool stepped = wait_for([&]() { return !tp || tp->paused(); }) && tp && !leftovers().isEmpty();
+            if (stepped)
+                intrude();
+            qunsetenv("KESTREL_TEST_COPY_HOLD_AT");
+            qunsetenv("KESTREL_TEST_NO_CLONE");
+            if (tp)
+                tp->set_paused(false);
             wait_for([&]() { return !tp; }, 60000);
-            wait_for([]() { return !boxes.isEmpty(); }, 3000);
+            wait_for([]() { return !boxes.isEmpty(); });
             return stepped;
         };
         // what went wrong, for the check's text
@@ -446,6 +642,189 @@ int main(int argc, char **argv)
     check(undo_and_wait(w, [&]() { return exists(P("t/gone.txt")); }) && !exists(trashed),
           "undo Move to Trash: puts it back");
 
+    // ---- names that aren't valid UTF-8 (an old archive's Latin-1 or DOS names): kept byte for byte. Qt's own
+    // decoding made them U+FFFD, so a folder holding one couldn't be deleted ("No such file or directory")
+    {
+        auto raw_make = [](const QByteArray &path) {
+            int fd = ::open(path.constData(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+            ::write(fd, "r", 1);
+            ::close(fd);
+        };
+        auto raw_names = [](const QString &dir) {   // the folder's names as bytes, sorted
+            QList<QByteArray> out;
+            if (DIR *d = ::opendir(enc(dir).constData())) {
+                while (struct dirent *e = ::readdir(d))
+                    if (strcmp(e->d_name, ".") && strcmp(e->d_name, ".."))
+                        out << QByteArray(e->d_name);
+                ::closedir(d);
+            }
+            std::sort(out.begin(), out.end());
+            return out;
+        };
+        // a Latin-1 byte, a lone continuation byte, an encoded surrogate (invalid), valid UTF-8, and U+1F080, whose
+        // UTF-16 low surrogate (U+DC80) is in the range kept for stray bytes: it must stay a character
+        QList<QByteArray> samples = {"a\xb3" "b", "\xff", "x\xed\xb2\x80y", "caf\xc3\xa9", "\xf0\x9f\x82\x80", "\xb3\xf0\x9f\x82\x80"};
+        bool round = true;
+        for (const QByteArray &s : samples)
+            round = round && enc(dec(s.constData())) == s;
+        check(round && dec("caf\xc3\xa9") == QString::fromUtf8("caf\xc3\xa9") &&
+                  dec("\xf0\x9f\x82\x80") == QString::fromUtf8("\xf0\x9f\x82\x80"),
+              "a name's bytes survive dec() and enc() whether or not they're valid UTF-8; valid ones decode as UTF-8");
+
+        QString bbs = P("bbs");
+        makedirs(join(bbs, "sub"), true);
+        raw_make(enc(bbs) + "/3261.ufo:\xb3SUBJECT");
+        raw_make(enc(bbs) + "/sub/caf\xe9.txt");
+        make(join(bbs, "plain.txt"));
+        QList<QByteArray> before = raw_names(bbs), before_sub = raw_names(join(bbs, "sub"));
+        check(run_ops(w, {{"copy", bbs, P("bbs-copy")}}) && boxes.isEmpty() && raw_names(P("bbs-copy")) == before &&
+                  raw_names(P("bbs-copy/sub")) == before_sub,
+              "a folder holding names that aren't UTF-8 is copied with those names byte for byte");
+        check(run_ops(w, {{"delete", P("bbs-copy"), QString()}}) && boxes.isEmpty() && !lexists(P("bbs-copy")),
+              "...and deleted whole");
+
+        // a name as Qt lists it (QFileSystemModel: U+FFFD for the stray byte) still reaches the file, when only one
+        // entry of its folder reads that way; with two, neither is guessed
+        QString lossy = QFile::decodeName(enc(bbs) + "/3261.ufo:\xb3SUBJECT");
+        raw_make(enc(bbs) + "/twin\xb3");
+        raw_make(enc(bbs) + "/twin\xb4");
+        QString twin = QFile::decodeName(enc(bbs) + "/twin\xb3");
+        check(lossy.contains(QChar(0xFFFD)) && lexists(lossy) && !lexists(twin),
+              "a path with U+FFFD for a stray byte finds its file when exactly one name in the folder matches it");
+        check(run_ops(w, {{"delete", lossy, QString()}}) && raw_names(bbs).size() == before.size() + 1 &&
+                  !raw_names(bbs).contains("3261.ufo:\xb3SUBJECT"),
+              "...so deleting it from a folder view deletes that file, and only it");
+        boxes.clear();
+
+        // the folder view lists by the names' bytes: a folder whose own name isn't UTF-8 opens and lists what's in it
+        // (Qt's QFileSystemModel, used before, listed nothing there), and follows changes in it
+        {
+            QByteArray ob = enc(P("oddview")) + "/odd\xff dir";
+            ::mkdir(enc(P("oddview")).constData(), 0755);
+            ::mkdir(ob.constData(), 0755);
+            raw_make(ob + "/plain.txt");
+            raw_make(ob + "/caf\xe9.txt");
+            ::mkdir((ob + "/sub\xb3").constData(), 0755);
+            auto q = [](const QByteArray &b) { return dec(b.constData()); };
+            Pane *p = w->pane();
+            auto listed = [&]() {
+                QStringList out;
+                QAbstractItemModel *m = p->view()->model();
+                QModelIndex root = p->view()->rootIndex();
+                for (int r = 0; r < m->rowCount(root); ++r)
+                    out << m->index(r, 0, root).data(PathRole).toString();
+                return out;
+            };
+            auto shown_as = [&](const QString &path) {
+                QAbstractItemModel *m = p->view()->model();
+                QModelIndex root = p->view()->rootIndex();
+                for (int r = 0; r < m->rowCount(root); ++r)
+                    if (m->index(r, 0, root).data(PathRole).toString() == path)
+                        return m->index(r, 0, root).data().toString();
+                return QString();
+            };
+            p->set_path(q(ob));
+            QStringList want{q(ob + "/sub\xb3"), q(ob + "/caf\xe9.txt"), q(ob + "/plain.txt")};
+            bool got = wait_for([&]() { return listed() == want; });
+            check(got && p->path == q(ob) && shown_as(q(ob + "/caf\xe9.txt")) == QString::fromUtf8("caf\xef\xbf\xbd.txt"),
+                  "the folder view opens a folder whose name isn't UTF-8 and lists what's in it, each path byte for byte "
+                  "(folders first; a stray byte shown as U+FFFD) (" + QStringList(listed()).join(" | ") + ")");
+            raw_make(ob + "/new\xfe.txt");
+            bool came = wait_for([&]() { return listed().contains(q(ob + "/new\xfe.txt")); });
+            ::unlink((ob + "/plain.txt").constData());
+            bool went = wait_for([&]() { return !listed().contains(q(ob + "/plain.txt")); });
+            check(came && went, "...a file made in it shows up, one deleted goes");
+            raw_make(ob + "/sub\xb3/inner\xfd");
+            p->set_path(q(ob + "/sub\xb3"));
+            check(wait_for([&]() { return listed() == QStringList{q(ob + "/sub\xb3/inner\xfd")}; }),
+                  "...and its subfolder (also not UTF-8) opens too");
+            p->set_path(P("oddview"));
+            wait_for([&]() { return !listed().isEmpty(); });
+            p->set_path(HOME());
+        }
+
+        // in the trash: Delete Permanently, from its question box
+        auto delete_permanently = [&](const QStringList &paths, bool cancel) {
+            closer.stop();
+            boxes.clear();
+            w->delete_paths(paths);
+            QMessageBox *box = nullptr;
+            wait_for([&]() { return (box = shown_window<QMessageBox>()) != nullptr; });
+            bool clicked = false;
+            for (QAbstractButton *b : box ? box->buttons() : QList<QAbstractButton *>())
+                if (box->buttonRole(b) == QMessageBox::DestructiveRole) {
+                    b->click();
+                    clicked = true;
+                }
+            if (cancel)
+                for (Task *t : TaskBoard::instance()->mine())
+                    if (t->title == "Deleting")
+                        t->cancel();
+            closer.start(100);
+            spin(300);
+            wait_for([]() { return TaskBoard::instance()->mine().isEmpty(); }, 20000);
+            spin(300);
+            return clicked;
+        };
+        QString info_dir = join(TRASH_DIR(), "info");
+        util::trash(bbs);
+        QString tb = join(TRASH_DIR(), "files/bbs");
+        check(delete_permanently({tb}, false) && !lexists(tb) && !lexists(join(info_dir, "bbs.trashinfo")) &&
+                  boxes.isEmpty(),
+              "Delete Permanently in the trash deletes a folder holding names that aren't UTF-8, and its record");
+
+        QByteArray odd = enc(P("t")) + "/notes\xb3.txt";
+        raw_make(odd);
+        util::trash(dec(odd.constData()));
+        QString todd = dec((enc(TRASH_DIR()) + "/files/notes\xb3.txt").constData());
+        check(lexists(todd) && trash_original_path(todd) == dec(odd.constData()),
+              "a trashed file whose name isn't UTF-8 knows its original place, byte for byte (Restore)");
+        check(delete_permanently({todd}, false) && !lexists(todd) && raw_names(info_dir).isEmpty(),
+              "...and Delete Permanently deletes it and its record");
+
+        // a delete that doesn't finish keeps the record of what's left, so it can still be restored
+        for (int i = 0; i < 3000; ++i)
+            make(P(QString("many/f%1").arg(i)));
+        util::trash(P("many"));
+        QString tmany = join(TRASH_DIR(), "files/many");
+        check(delete_permanently({tmany}, true) && lexists(tmany) && exists(join(info_dir, "many.trashinfo")) &&
+                  trash_original_path(tmany) == P("many"),
+              "a Delete Permanently in the trash that stops part-way keeps the record of the item left (Restore)");
+
+        // an item with no record (left by such a failure before): Delete Permanently deleted it, then crashed on the
+        // missing record (::unlink there was util::unlink, which throws)
+        util::unlink(join(info_dir, "many.trashinfo"));
+        check(delete_permanently({tmany}, false) && !lexists(tmany),
+              "Delete Permanently on a trashed item that has no record deletes it (no crash)");
+
+        // Empty Trash: each record goes after its item, as a job only when it's a stray (no item)
+        make(P("t/e1.txt"));
+        make(P("t/e2/in.txt"));
+        util::trash(P("t/e1.txt"));
+        util::trash(P("t/e2"));
+        write_text(join(info_dir, "ghost.trashinfo"), "[Trash Info]\nPath=/nowhere/ghost\n");
+        closer.stop();
+        w->empty_trash();
+        QMessageBox *ask_box = nullptr;
+        wait_for([&]() { return (ask_box = shown_window<QMessageBox>()) != nullptr; });
+        if (ask_box && ask_box->button(QMessageBox::Yes))
+            ask_box->button(QMessageBox::Yes)->click();
+        closer.start(100);
+        bool emptied = wait_for([&]() {
+            return raw_names(join(TRASH_DIR(), "files")).isEmpty() && raw_names(info_dir).isEmpty();
+        }, 20000);
+        spin(300);
+        FinishedTask last;
+        for (const FinishedTask &f : TaskBoard::instance()->finished)
+            if (f.title == "Emptying trash")
+                last = f;
+        check(emptied && last.log.contains("ghost.trashinfo") && !last.log.contains("e1.txt.trashinfo") &&
+                  !last.log.contains("e2.trashinfo"),
+              "Empty Trash deletes every item and record; an item's record goes after it (kept if the item can't be "
+              "deleted), a stray record as a job of its own");
+        boxes.clear();
+    }
+
     // ---- undo
     make(P("u/file.txt"), "u");
     check(run_ops(w, {{"move", P("u/file.txt"), P("dst/file.txt")}}, "Move"), "a move with undo finishes");
@@ -485,6 +864,173 @@ int main(int argc, char **argv)
               undo_and_wait(w, [&]() { return !lexists(P("u/rep-dst/fresh.txt")); }) &&
               text_of(P("u/rep-dst/rep.txt")) == "newer",
           "undoing a batch of copies leaves the one that replaced a file where it is");
+
+    // ---- the Link window (linkwin.h, links.h): links are listed first and made or changed only at OK, as one job,
+    // undone as one step; a name taken or a link changed meanwhile is never overwritten
+    {
+        makedirs(P("lk/to/dir"), true);
+        makedirs(P("lk/in"), true);
+        make(P("lk/to/a.txt"), "a");
+        make(P("lk/to/b.txt"), "b");
+        LinkWindow *lw = LinkWindow::open(w, {P("lk/to/a.txt"), P("lk/to/b.txt")}, P("lk/in"));
+        QPointer<LinkWindow> lwp(lw);
+        // closed and deleted (Qt 6.4 doesn't carry out a deleteLater() in the nested loop spin() runs: done here)
+        auto closed = [&lwp]() {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return !lwp;
+        };
+        auto ghost_names = [&]() {
+            QStringList out;
+            for (int i = 0; i < lw->ghosts->count(); ++i)
+                out << lw->ghosts->item(i)->text();
+            out.sort();
+            return out;
+        };
+        bool picked = wait_for([&]() { return lw->picks().size() == 2; });
+        bool previews = wait_for([&]() { return ghost_names() == QStringList({"a.txt", "b.txt"}); });
+        check(is_free_window(lw) && picked && previews && lw->dest() == P("lk/in") && listdir(P("lk/in")).isEmpty(),
+              "Link… opens a free window: the items picked on the left, the folder on the right, the links-to-be shown "
+              "there and nothing made yet");
+        check(lw->left->embedded && lw->right->embedded && !WINDOWS.contains(lw->left) && !WINDOWS.contains(lw->right),
+              "its two browsers are the file chooser's, inside the window (not Kestrel windows of their own)");
+
+        // a preview renamed in place, the kind chosen, then added to the list
+        for (int i = 0; i < lw->ghosts->count(); ++i)
+            if (lw->ghosts->item(i)->text() == "a.txt")
+                lw->ghosts->item(i)->setText("renamed a");
+        lw->kind->setCurrentIndex(lw->kind->findData("rel"));
+        spin(100);
+        lw->add_picks();
+        QStringList names;
+        for (const links::Link &l : lw->pending)
+            names << l.name + "/" + l.kind;
+        names.sort();
+        check(names == QStringList({"b.txt/rel", "renamed a/rel"}) && lw->list->topLevelItemCount() == 2 &&
+                  listdir(P("lk/in")).isEmpty(),
+              "Add to List keeps them in the list with the name given in place and the kind chosen, still unmade (" +
+                  names.join(", ") + ")");
+
+        // a problem: the name taken in the folder meanwhile
+        make(P("lk/in/b.txt"), "someone else's");
+        lw->remove_selected();   // (nothing selected: the list is only checked again)
+        QString problem;
+        for (int i = 0; i < lw->list->topLevelItemCount(); ++i)
+            if (lw->list->topLevelItem(i)->text(0) == "b.txt")
+                problem = lw->list->topLevelItem(i)->text(5);
+        boxes.clear();
+        lw->commit();
+        check(problem.contains("taken") && wait_for([]() { return !boxes.isEmpty(); }) &&
+                  boxes.last().contains("can't be made") && text_of(P("lk/in/b.txt")) == "someone else's" &&
+                  !lexists(P("lk/in/renamed a")),
+              "a name taken in the folder shows in the list, and OK makes nothing until it's changed (" + problem + ")");
+
+        // the one in the way removed from the list; OK shows the summary, and its OK makes the rest as one job
+        for (int i = 0; i < lw->list->topLevelItemCount(); ++i)
+            lw->list->topLevelItem(i)->setSelected(lw->list->topLevelItem(i)->text(0) == "b.txt");
+        lw->remove_selected();
+        closer.stop();
+        lw->commit();
+        QMessageBox *summary = nullptr;
+        wait_for([&]() { return (summary = shown_window<QMessageBox>()) != nullptr; });
+        QString said = summary ? summary->informativeText() : QString();
+        bool none_yet = !lexists(P("lk/in/renamed a"));
+        if (summary)
+            summary->button(QMessageBox::Ok)->click();
+        closer.start(100);
+        check(summary && said.contains("1 new link") && said.contains(P("lk/in/renamed a")) && none_yet,
+              "OK first shows what will be made (" + said.simplified() + ")");
+        check(wait_for([&]() { return islink(P("lk/in/renamed a")) && closed(); }) &&
+                  util::readlink(P("lk/in/renamed a")) == "../to/a.txt" && undo::label() == "Create Link",
+              "...then makes it, with a relative path, closes the window, and offers Undo");
+        bool parts = false;
+        for (const QString &n : listdir(P("lk/in")))
+            parts = parts || n.startsWith(".kes-");
+        check(!parts, "no part names are left beside the links made");
+
+        // Edit Link…: the link in the list, kind and name changed, both done in one step and undone in one
+        lw = LinkWindow::open(w, {}, QString(), {P("lk/in/renamed a")});
+        lwp = lw;
+        bool listed = lw->pending.size() == 1 && lw->pending[0].is_edit() && lw->pending[0].kind == "rel" &&
+                      lw->list->selectedItems().size() == 1;
+        lw->kind->setCurrentIndex(lw->kind->findData("sym"));
+        bool shown_there = wait_for([&]() { return lw->ghosts->count() == 1; });
+        if (shown_there)
+            lw->ghosts->item(0)->setText("final");
+        spin(100);
+        check(listed && shown_there && lw->pending[0].name == "final" && lw->pending[0].kind == "sym" &&
+                  islink(P("lk/in/renamed a")) && !lexists(P("lk/in/final")),
+              "Edit Link… lists the link to change it; the kind and name change in the list only");
+        lw->run(lw->pending);
+        check(wait_for([&]() { return islink(P("lk/in/final")) && closed(); }) && !lexists(P("lk/in/renamed a")) &&
+                  util::readlink(P("lk/in/final")) == P("lk/to/a.txt") && undo::label() == "Change Links",
+              "its OK changes it: renamed and pointing by the absolute path");
+        check(undo_and_wait(w, [&]() { return islink(P("lk/in/renamed a")) && !lexists(P("lk/in/final")); }) &&
+                  util::readlink(P("lk/in/renamed a")) == "../to/a.txt",
+              "Undo puts the link back as it was (its name and what it held)");
+
+        // the checks, and what a commit refuses
+        links::Link hard;
+        hard.name = "h";
+        hard.folder = P("lk/in");
+        hard.points_to = P("lk/to/dir");
+        hard.kind = "hard";
+        bool folder_refused = !links::check(hard, {hard}).isEmpty() && links::check(hard, {hard}).first().blocks;
+        links::Link broken;
+        broken.name = "br";
+        broken.folder = P("lk/in");
+        broken.points_to = P("lk/to/gone");
+        QList<links::Problem> bp = links::check(broken, {broken});
+        check(folder_refused && bp.size() == 1 && !bp[0].blocks,
+              "a hard link to a folder is refused; a symbolic link to something that isn't there is only a warning");
+
+        links::Link changed = links::from_existing(P("lk/in/renamed a"));
+        changed.kind = "sym";
+        util::rename(P("lk/in/renamed a"), P("lk/in/aside"));
+        util::symlink("elsewhere", P("lk/in/renamed a"));   // another program changes it meanwhile
+        links::UndoItems items;
+        bool refused = false;
+        try {
+            links::commit(changed, &items);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused && items.isEmpty() && util::readlink(P("lk/in/renamed a")) == "elsewhere",
+              "a link changed after it was listed is left as it is, not overwritten");
+
+        links::Link fresh;
+        fresh.name = "b.txt";   // taken (by someone else's file)
+        fresh.folder = P("lk/in");
+        fresh.points_to = P("lk/to/b.txt");
+        refused = false;
+        try {
+            links::commit(fresh, &items);
+        } catch (const Error &) {
+            refused = true;
+        }
+        check(refused && items.isEmpty() && text_of(P("lk/in/b.txt")) == "someone else's",
+              "a new link never replaces what has its name");
+
+        // replacing a link fails part-way (the folder can't take the new one): the old link stays, and no part
+        makedirs(P("lk/ro"), true);
+        util::symlink("old", P("lk/ro/l"));
+        ::chmod(enc(P("lk/ro")).constData(), 0555);
+        refused = false;
+        try {
+            links::replace_symlink(P("lk/ro/l"), "new", "old");
+        } catch (const Error &) {
+            refused = true;
+        }
+        ::chmod(enc(P("lk/ro")).constData(), 0755);
+        check((refused || ::geteuid() == 0) && util::readlink(P("lk/ro/l")) == (::geteuid() == 0 ? "new" : "old") &&
+                  listdir(P("lk/ro")) == QStringList{"l"},
+              "a link whose new version can't be made keeps what it held, with no part left");
+
+        // hard links: the other names of a file, found on its drive
+        util::link(P("lk/to/b.txt"), P("lk/to/dir/b-again"));
+        QStringList others = links::other_names(P("lk/to/b.txt"), nullptr);
+        check(others == QStringList{P("lk/to/dir/b-again")}, "the other names of a file are found on its drive (" +
+                                                                 others.join(", ") + ")");
+    }
 
     // ---- batch rename: a failure part-way puts every item back under its old name (a dangling symlink too, which
     // exists() wouldn't see), and a name taken meanwhile is never replaced
@@ -579,7 +1125,9 @@ int main(int argc, char **argv)
             prefs::set("metadata_wipe", "copy");
             QString copy = P("wm/gen (no metadata).png");
             w->wipe_metadata({txt, png});
-            check(wait_for([&]() { return exists(copy); }, 20000) && wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
+            // the copy is renamed into place by the job's thread; its Undo is recorded when the job ends, after that
+            check(wait_for([&]() { return exists(copy) && undo::label() == "Wipe Metadata"; }, 20000) &&
+                      wait_for([&]() { return QImage(copy).text("parameters").isEmpty(); }) &&
                       QImage(png).text("parameters") == "a prompt" && text_of(txt) == "t" && !lexists(P("wm/notes (no metadata).txt")),
                   "with \"make a copy\" (the default), Wipe Metadata… writes a copy without the metadata beside the "
                   "image, leaving the original and the files that aren't images as they were");
@@ -1346,14 +1894,13 @@ int main(int argc, char **argv)
 
         make(P("shred/slow.txt"));
         called = false;
+        ::unlink(enc(P("bleachbit-args")).constData());
         Task *t = fileops::shred(w, {P("shred/slow.txt")}, "Test", [&](const QStringList &) { called = true; });
         QPointer<Task> tp(t);
-        spin(500);
+        bool running = wait_for([&]() { return exists(P("bleachbit-args")); });   // it has started (and sleeps 30 s)
         t->cancel();
-        QElapsedTimer clock;
-        clock.start();
-        bool stopped = wait_for([&]() { return !tp; }, 5000);
-        check(stopped && clock.elapsed() < 5000 && lexists(P("shred/slow.txt")) && !called,
+        bool stopped = wait_for([&]() { return !tp; }, 20000);   // (before the stand-in's 30 s would end it)
+        check(running && stopped && lexists(P("shred/slow.txt")) && !called,
               "✕ stops a shred: BleachBit is stopped, and nothing is reported as left");
         qputenv("PATH", old_path);
     }
@@ -1368,15 +1915,12 @@ int main(int argc, char **argv)
     proc::Options quiet;
     quiet.out = proc::DEVNULL;
     quiet.err = proc::DEVNULL;
-    QElapsedTimer clock;
-    clock.start();
-    auto r = proc::run({"sh", "-c", "echo $$ > \"$0\"; exec sleep 5", P("sleeper.pid")}, 300, quiet);
+    // (timed_out says the timeout ended it: a program left to finish its sleep ends on its own, not timed out)
+    auto r = proc::run({"sh", "-c", "echo $$ > \"$0\"; exec sleep 60", P("sleeper.pid")}, 300, quiet);
     pid_t pid = pid_t(QString::fromUtf8(read_file(P("sleeper.pid"))).trimmed().toInt());
-    check(r.timed_out && clock.elapsed() < 2000 && pid > 0 && ::kill(pid, 0) != 0,
-          "a program's timeout holds without pipes, and it's stopped");
-    clock.restart();
-    r = proc::run({"sh", "-c", "exec >&- 2>&-; sleep 5"}, 300);
-    check(r.timed_out && clock.elapsed() < 2000, "a program's timeout holds after it closes its output");
+    check(r.timed_out && pid > 0 && ::kill(pid, 0) != 0, "a program's timeout holds without pipes, and it's stopped");
+    r = proc::run({"sh", "-c", "exec >&- 2>&-; sleep 60"}, 300);
+    check(r.timed_out, "a program's timeout holds after it closes its output");
     r = proc::run({"sh", "-c", "echo hi"}, 5000);
     check(!r.timed_out && r.rc == 0 && r.out == "hi\n", "a program that finishes in time isn't affected");
     ::unlink(P("left.pid").toLocal8Bit().constData());
@@ -1513,7 +2057,7 @@ int main(int argc, char **argv)
             }
             return QVariant();
         });
-        spin(150);
+        wait_for([&]() { return holder && !holder->queued; });   // it has the drive
         d->recalc->click();
         QPointer<Task> count;
         wait_for([&]() {
@@ -1592,11 +2136,19 @@ int main(int argc, char **argv)
         w->move_into_new(items, nf, "Part");
         QString part = join(nf, "Part");
         bool partway = wait_for([&]() { return isfile(join(part, "a.txt")) && isfile(join(part, "b.txt")); }, 10000);
-        spin(500);
+        wait_for([]() { return TaskBoard::instance()->mine().isEmpty(); });   // it has tried sub too, and ended
         ::chmod(enc(join(nf, "sub")).constData(), 0755);
         check(partway && isdir(join(nf, "sub")) && isfile(join(nf, "sub/in.txt")) && !lexists(join(part, "sub")) &&
                   isdir(part),
               "a move failing part-way keeps everything: what moved stays in the new folder, the rest where it was");
+
+        // Undo removes the folder it made only once it's empty: with something else put in it meanwhile, both stay
+        // (::rmdir there was util::rmdir, which threw on a folder that isn't empty: a crash)
+        make(P("mi/box/item.txt"), "i");
+        make(P("mi/box/other.txt"), "o");
+        undo::record("move_into", "New Folder with Selection", {{P("mi/box"), QString()}, {P("mi/item.txt"), P("mi/box/item.txt")}});
+        check(undo_and_wait(w, [&]() { return isfile(P("mi/item.txt")); }) && isfile(P("mi/box/other.txt")),
+              "undoing New Folder with Selection keeps the folder when something else is in it now (no crash)");
     }
     finish();
 }

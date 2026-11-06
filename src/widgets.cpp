@@ -4,6 +4,7 @@
 #include "archive.h"
 #include "atc.h"
 #include "dialogs.h"
+#include "diskimage.h"
 #include "drives.h"
 #include "fileops.h"
 #include "jobs.h"
@@ -13,6 +14,8 @@
 #include "places.h"
 #include "prefs.h"
 #include "proc.h"
+#include "ramdisk.h"
+#include "ramdiskwin.h"
 #include "thumbs.h"
 #include "util.h"
 #include "windows.h"
@@ -37,6 +40,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QTextBoundaryFinder>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -50,121 +54,6 @@
 using namespace util;
 
 // ---------------------------------------------------------------- models
-
-QString FastIconProvider::type(const QFileInfo &fi) const
-{
-    if (fi.isDir())
-        return tx("Folder");
-    QString suf = fi.suffix().toLower();
-    QMutexLocker lock(&mutex);   // every model's file-info thread asks the one provider
-    auto it = types.constFind(suf);
-    if (it != types.constEnd())
-        return *it;
-    QString t = mime_for(fi.fileName(), 0).comment();
-    if (t.isEmpty())
-        t = tx("File");
-    types.insert(suf, t);
-    return t;
-}
-
-FSModel::FSModel(ThumbnailManager *thumbs, QObject *parent) : QFileSystemModel(parent), thumbs(thumbs)
-{
-    setReadOnly(false);
-    // One provider for every model, never deleted: the model doesn't own it, and its file-info thread may still use
-    // it while the model is being destroyed. (Unsetting it first crashes on Qt 6.4.)
-    static FastIconProvider *provider = new FastIconProvider;
-    setIconProvider(provider);
-    connect(thumbs, &ThumbnailManager::updated, this, &FSModel::thumb_ready);
-}
-
-QPixmap FSModel::thumb(const QModelIndex &index) const
-{
-    QFileInfo fi = fileInfo(index);
-    QString path = fi.absoluteFilePath();
-    qint64 mtime = fi.lastModified().toSecsSinceEpoch();
-    if (fi.isDir())
-        return thumbs->folder_pixmap(path, mtime, thumb_size, folder_previews, this);
-    if (!thumbs::can_thumbnail(path))
-        return QPixmap();
-    return thumbs->get(path, mtime, false, thumb_size, fi.size(), this);
-}
-
-QIcon FSModel::plain_icon(const QModelIndex &index) const
-{
-    QFileInfo fi = fileInfo(index);
-    if (fi.isDir())
-        return icon_for_path(fi.absoluteFilePath(), 1);
-    QString suf = fi.suffix().toLower();
-    auto it = suffix_icons.constFind(suf);
-    if (it != suffix_icons.constEnd())
-        return *it;
-    QIcon icon = icon_for_path(fi.absoluteFilePath(), 0);
-    suffix_icons.insert(suf, icon);
-    return icon;
-}
-
-QVariant FSModel::data(const QModelIndex &index, int role) const
-{
-    if (index.column() == 0) {
-        if (role == ThumbRole) {
-            QPixmap pm = thumb(index);
-            return pm.isNull() ? QVariant() : QVariant(pm);
-        }
-        if (role == Qt::DecorationRole) {
-            QPixmap pm = thumb(index);
-            return pm.isNull() ? QVariant(plain_icon(index)) : QVariant(QIcon(pm));
-        }
-        if (role == PathRole)
-            return filePath(index);
-        if (role == KindRole) {
-            QFileInfo fi = fileInfo(index);
-            return (fi.isDir() ? KIND_DIR : 0) | (fi.isSymLink() ? KIND_LINK : 0);
-        }
-        if (role == SizeRole)
-            return QFileSystemModel::size(index);   // (from the model's cache)
-    }
-    return QFileSystemModel::data(index, role);
-}
-
-void FSModel::thumb_ready(const QString &path)
-{
-    if (dirname(path) != rootPath())
-        return;
-    QModelIndex idx = index(path);
-    if (idx.isValid())
-        Q_EMIT dataChanged(idx, idx, {Qt::DecorationRole, ThumbRole});
-}
-
-QStringList FSModel::mimeTypes() const { return QFileSystemModel::mimeTypes() << archive::MEMBERS_MIME; }
-
-bool FSModel::dropMimeData(const QMimeData *data, Qt::DropAction, int, int, const QModelIndex &parent)
-{
-    QString target = parent.isValid() ? filePath(parent) : rootPath();
-    if (!isdir(target))
-        target = dirname(target);
-    // from Open as Archive: extracted straight into the folder (checked first: the file list it also offers would
-    // extract them to a temporary folder)
-    if (data->hasFormat(archive::MEMBERS_MIME) && members_handler) {
-        auto handler = members_handler;
-        auto *copy = new QMimeData;   // the drag's data goes when the drag ends
-        copy->setData(archive::MEMBERS_MIME, data->data(archive::MEMBERS_MIME));
-        QTimer::singleShot(0, this, [handler, copy, target]() {
-            handler(copy, target);
-            delete copy;
-        });
-        return true;
-    }
-    if (!data->hasUrls() || !drop_handler)
-        return false;
-    QStringList paths;
-    for (const QUrl &u : data->urls())
-        if (u.isLocalFile())
-            paths << u.toLocalFile();
-    auto handler = drop_handler;
-    bool copy_only = data->hasFormat(COPY_ONLY_MIME);
-    QTimer::singleShot(0, this, [handler, paths, target, copy_only]() { handler(paths, target, copy_only); });
-    return true;
-}
 
 // ---------------------------------------------------------------- drag picture (widgets.h)
 
@@ -383,23 +272,40 @@ SearchModel::SearchModel(ThumbnailManager *thumbs, QObject *parent) : QStandardI
     connect(thumbs, &ThumbnailManager::updated, this, &SearchModel::thumb_ready);
 }
 
-void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QString> &locations, const QVariantMap &matches)
+QVariantList SearchModel::stat_of(const QString &p)
+{
+    struct stat st, lst;
+    if (!stat_(p, st))
+        return {};
+    return {uint(st.st_mode), qint64(st.st_mtime), qint64(st.st_size), lstat_(p, lst) && S_ISLNK(lst.st_mode)};
+}
+
+// a row's stat-based parts (f: stat_of's): what it is, its size and time
+static void set_stat(const QList<QStandardItem *> &row, const QVariantList &f)
+{
+    bool is_dir = S_ISDIR(mode_t(f.value(0).toUInt()));
+    qint64 mtime = f.value(1).toLongLong(), size = f.value(2).toLongLong();
+    row[0]->setData(QVariantList{is_dir, mtime, size}, StatRole);
+    row[0]->setData((is_dir ? KIND_DIR : 0) | (f.value(3).toBool() ? KIND_LINK : 0), KindRole);
+    row[2]->setText(is_dir ? QString() : human_size(size));
+    row[2]->setData(size, Qt::UserRole);
+    row[3]->setText(i18n::date_time(QDateTime::fromSecsSinceEpoch(mtime)));
+}
+
+void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QString> &locations, const QVariantMap &matches,
+                            const QVariantMap &stats)
 {
     for (const QString &p : paths) {
-        struct stat st;
-        if (!stat_(p, st))
-            continue;
-        bool is_dir = S_ISDIR(st.st_mode);
+        QVariantList f = stats.isEmpty() ? stat_of(p) : stats.value(p).toList();
+        if (f.size() != 4)
+            continue;   // (gone already)
         auto *name = new QStandardItem(basename(p));
         name->setData(p, PathRole);
-        name->setData(QVariantList{is_dir, qint64(st.st_mtime), qint64(st.st_size)}, StatRole);
-        name->setData((is_dir ? KIND_DIR : 0) | (islink(p) ? KIND_LINK : 0), KindRole);
         name->setToolTip(p);
         name->setEditable(false);
         auto *loc = new QStandardItem(locations.isEmpty() ? dirname(p) : locations.value(p, dirname(p)));
-        auto *size = new QStandardItem(is_dir ? QString() : human_size(qint64(st.st_size)));
-        size->setData(qint64(st.st_size), Qt::UserRole);
-        auto *mod = new QStandardItem(i18n::date_time(QDateTime::fromSecsSinceEpoch(st.st_mtime)));
+        auto *size = new QStandardItem;
+        auto *mod = new QStandardItem;
         QStringList lines = matches.value(p).toStringList();   // "12:the line"
         QString first = lines.value(0);
         auto *match = new QStandardItem(first.isEmpty() ? QString() : tx("%1: %2", "a line number and the line").arg(first.section(':', 0, 0), first.section(':', 1).trimmed()));
@@ -413,15 +319,78 @@ void SearchModel::add_paths(const QStringList &paths, const QHash<QString, QStri
         }
         for (QStandardItem *it : {loc, size, mod, match})
             it->setEditable(false);
+        set_stat({name, loc, size, mod, match}, f);
         appendRow({name, loc, size, mod, match});
         rows.insert(p, name);
     }
+}
+
+SearchModel::~SearchModel()
+{
+    for (const QList<QStandardItem *> &row : std::as_const(gone))
+        qDeleteAll(row);
 }
 
 void SearchModel::clear_results()
 {
     removeRows(0, rowCount());
     rows.clear();
+    for (const QList<QStandardItem *> &row : std::as_const(gone))
+        qDeleteAll(row);
+    gone.clear();
+    generation += 1;
+}
+
+QStringList SearchModel::known_paths() const { return rows.keys() + gone.keys(); }
+
+void SearchModel::update(const QHash<QString, QVariantList> &found)
+{
+    for (auto it = found.begin(); it != found.end(); ++it) {
+        const QString &p = it.key();
+        QVariantList f = it.value();   // [] if it's gone, else stat_of's
+        if (f.isEmpty()) {
+            if (QStandardItem *item = rows.take(p))
+                gone.insert(p, takeRow(item->row()));   // kept: it may come back (Undo, a restore)
+            continue;
+        }
+        if (gone.contains(p)) {
+            QList<QStandardItem *> row = gone.take(p);
+            set_stat(row, f);
+            appendRow(row);
+            rows.insert(p, row[0]);
+        } else if (QStandardItem *item = rows.value(p)) {
+            QVariantList had = item->data(StatRole).toList();
+            if (had.value(1) != f.value(1) || had.value(2) != f.value(2) || had.value(0).toBool() != S_ISDIR(mode_t(f.value(0).toUInt()))) {
+                QList<QStandardItem *> row;
+                for (int c = 0; c < columnCount(); ++c)
+                    row << this->item(item->row(), c);
+                set_stat(row, f);
+            }
+        }
+    }
+}
+
+void SearchModel::moved(const QString &from, const QString &to)
+{
+    if (from == to || rows.contains(to) || gone.contains(to))
+        return;
+    QList<QStandardItem *> row;
+    if (QStandardItem *item = rows.take(from)) {
+        for (int c = 0; c < columnCount(); ++c)
+            row << this->item(item->row(), c);
+        rows.insert(to, item);
+    } else if (gone.contains(from)) {
+        row = gone.take(from);   // (its folder's change was noticed first: it's put back under its new name)
+        appendRow(row);
+        rows.insert(to, row[0]);
+    } else {
+        return;
+    }
+    row[0]->setText(basename(to));
+    row[0]->setData(to, PathRole);
+    row[0]->setToolTip(row[0]->toolTip().replace(0, from.size(), to));
+    if (row[1]->text() == dirname(from))   // (a trash or Recent listing's own Location stays)
+        row[1]->setText(dirname(to));
 }
 
 QVariant SearchModel::data(const QModelIndex &index, int role) const
@@ -458,6 +427,15 @@ SearchThread::SearchThread(const QString &root, const QString &query, bool hidde
       recursive(recursive), filter(filter), how(how), today(QDate::currentDate())
 {
     wildcard = query.contains('*') || query.contains('?') || query.contains('[');
+}
+
+void SearchThread::send(const QStringList &batch, const QVariantMap &matches)
+{
+    QVariantMap stats;   // stat here, not where they're shown: a busy drive would keep the window waiting
+    for (const QString &p : batch)
+        if (QVariantList f = SearchModel::stat_of(p); !f.isEmpty())
+            stats.insert(p, f);
+    Q_EMIT found(batch, matches, stats);
 }
 
 bool SearchThread::match(const QString &name) const
@@ -511,12 +489,12 @@ int SearchThread::run_contents()
         batch << p;
         n += 1;
         if (batch.size() >= 50) {
-            Q_EMIT found(batch);
+            send(batch);
             batch.clear();
         }
     }
     if (!batch.isEmpty())
-        Q_EMIT found(batch);
+        send(batch);
     return n;
 }
 
@@ -617,7 +595,7 @@ void SearchThread::run_read()
             lines << rest.section(':', 0, 0) + ":" + rest.section(':', 1).trimmed().left(200);
         }
         if (!batch.isEmpty() && (batch.size() >= 50 || since.elapsed() > 200)) {
-            Q_EMIT found(batch, matches);
+            send(batch, matches);
             batch.clear();
             matches.clear();
             since.restart();
@@ -629,7 +607,7 @@ void SearchThread::run_read()
     }
     finish_file();
     if (!batch.isEmpty())
-        Q_EMIT found(batch, matches);
+        send(batch, matches);
     p->wait();
     QString err = QString::fromUtf8(p->read_all_err()).trimmed();
     if (p->returncode >= 2 && files == 0 && !err.isEmpty())   // 1: nothing found; 2: an error (a bad pattern…)
@@ -682,7 +660,7 @@ void SearchThread::run()
         if (!recursive)   // the folder's own items (its subfolders listed, not gone into)
             dirs.clear();
         if (batch.size() >= 50) {
-            Q_EMIT found(batch);
+            send(batch);
             batch.clear();
         }
         return count < 10000;
@@ -690,7 +668,7 @@ void SearchThread::run()
     if (stop)
         return;
     if (!batch.isEmpty())
-        Q_EMIT found(batch);
+        send(batch);
 }
 
 // ---------------------------------------------------------------- grid delegate
@@ -778,14 +756,46 @@ void ListDelegate::paint(QPainter *p, const QStyleOptionViewItem &option, const 
         QStyledItemDelegate::paint(p, option, index);
 }
 
+const GridDelegate::Wrapped &GridDelegate::wrap(const QFont &font, const QString &text, int width) const
+{
+    // Every paint and every hit test (a mouse move's indexAt, the rubber band) lays out the name again, and measuring
+    // can be slow: a colour emoji's glyph is a PNG that FreeType decodes on each measure (~15x a plain name's cost),
+    // which froze the window on a folder of long emoji names. So each wrap is kept (bounded; cleared when full).
+    QString key = font.key() + QChar(0x1f) + QString::number(width) + QChar(0x1f) + text;
+    auto it = wrapped.constFind(key);
+    if (it != wrapped.constEnd())
+        return *it;
+    if (wrapped.size() >= 4096)
+        wrapped.clear();
+    QFontMetrics fm(font);
+    ++names_measured;
+    Wrapped w;
+    w.lines = lines(fm, text, width);
+    for (const QString &line : w.lines)
+        w.widths << fm.horizontalAdvance(line);
+    return *wrapped.insert(key, w);
+}
+
 QStringList GridDelegate::lines(const QFontMetrics &fm, const QString &text, int width) const
 {
     if (fm.horizontalAdvance(text) <= width)
         return {text};
+    // the longest start that fits (a binary search: measuring each shorter start in turn took a measure per character)
+    int lo = 1, hi = text.size() - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (fm.horizontalAdvance(text.left(mid)) <= width)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    int cut = lo;
+    // not inside a character (an emoji's surrogate pair, a joined emoji, an accent on its letter)
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, text);
+    graphemes.setPosition(cut);
+    if (!graphemes.isAtBoundary() && graphemes.toPreviousBoundary() > 0)
+        cut = graphemes.position();
     // break the first line at a natural boundary if possible
-    int cut = text.size();
-    while (cut > 1 && fm.horizontalAdvance(text.left(cut)) > width)
-        --cut;
     int brk = -1;
     for (QChar c : {QChar(' '), QChar('_'), QChar('-'), QChar('.')})
         brk = std::max<int>(brk, text.left(cut).lastIndexOf(c));
@@ -817,7 +827,9 @@ GridDelegate::Layout GridDelegate::layout(const QStyleOptionViewItem &option, co
     QFontMetrics fm(l.font);
     l.text_rect = QRect(l.r.x() + 4, l.icon_rect.bottom() + 6, l.r.width() - 8, fm.height() * 2 + 2);
     QString name = index.data(Qt::DisplayRole).toString();
-    l.lines = lines(fm, name.isEmpty() ? basename(path) : name, l.text_rect.width());
+    const Wrapped &w = wrap(l.font, name.isEmpty() ? basename(path) : name, l.text_rect.width());
+    l.lines = w.lines;
+    l.widths = w.widths;
     return l;
 }
 
@@ -828,7 +840,7 @@ QPainterPath GridDelegate::shape(const Layout &l) const
     out.addRoundedRect(l.drawn.adjusted(-4, -4, 4, 4), 6, 6);
     QFontMetrics fm(l.font);
     for (int i = 0; i < l.lines.size(); ++i) {   // each line as wide as its text, joining the one above
-        double w = std::min<double>(fm.horizontalAdvance(l.lines[i]) + 12, l.r.width());
+        double w = std::min<double>(l.widths.value(i) + 12, l.r.width());
         double y = l.text_rect.y() + i * fm.height();
         out.addRoundedRect(QRectF(l.r.x() + (l.r.width() - w) / 2, y - 2, w, fm.height() + 4), 6, 6);
     }
@@ -1221,7 +1233,7 @@ void Sidebar::drives_changed()
 
 namespace sidebar {
 
-const QStringList SECTIONS = {"places", "bookmarks", "devices", "mounts"};
+const QStringList SECTIONS = {"places", "bookmarks", "devices", "mounts", "ramdisks"};
 
 const QList<QPair<QString, QString>> PLACES = {
     {"overview", TX_NOOP("Overview")}, {"home", TX_NOOP("Home")},         {"recent", TX_NOOP("Recent")},
@@ -1330,7 +1342,7 @@ QList<Sidebar::Mount> Sidebar::mount_list() const
                 if (!(root.startsWith("/media/") || root.startsWith("/run/media/") || root.startsWith("/mnt")))
                     continue;
             }
-            if (dev.startsWith("/dev/loop"))
+            if (dev.startsWith("/dev/loop") && drives::user_loop(dev).isEmpty())   // (a mounted disk image shows)
                 continue;
         }
         seen << root;
@@ -1459,7 +1471,7 @@ void Sidebar::refresh()
         mount_entries << Entry{sh.name, target, sh.icon.isNull() ? theme_icon({"folder-remote", "folder"}) : sh.icon,
                                "share", i, target, tx("Network share: %1").arg(sh.uri)};
     }
-    for (const QString &uri : settings().value("recent_servers").toStringList().mid(0, 6)) {
+    for (const QString &uri : history_settings().value("recent_servers").toStringList().mid(0, 6)) {
         if (overview::connected(uri, shares))
             continue;
         Entry e{server_label(uri), uri, theme_icon({"folder-remote", "network-server", "folder"}), "server",
@@ -1475,16 +1487,32 @@ void Sidebar::refresh()
         device_list << Entry{ph.name, ph.mounted ? ph.root : ph.uri, icon, "phone", i, "phone:" + ph.name,
                              ph.mounted ? ph.fs : tx("%1 — click to connect").arg(ph.fs)};
     }
+    // RAM disks (ramdisk.h): private mode's Private folder, then each RAM disk (greyed when it's not in memory: a
+    // click brings it back)
+    QList<Entry> ramdisk_list;
+    if (ramdisk::private_mode() && !ramdisk::private_files().isEmpty())
+        ramdisk_list << Entry{tx("Private"), ramdisk::private_files(), theme_icon({"security-high", "changes-prevent", "folder"}),
+                              "private", QVariant(), "private",
+                              tx("Private mode: Save windows start here. Deleted when the last Kestrel closes.")};
+    for (const ramdisk::Disk &d : ramdisk::disks()) {
+        QString label = d.kind == ramdisk::MOUNT ? QString("%1 (%2)").arg(d.name, human_size(d.size_mb * 1024 * 1024)) : d.name;
+        Entry e{label, d.path, theme_icon({"media-memory", "drive-removable-media", "folder"}), "ramdisk", d.id,
+                "ramdisk:" + d.id, ramdisk::describe(d)};
+        e.dim = !ramdisk::online(d);
+        ramdisk_list << e;
+    }
     QStringList collapsed = settings().value("sidebar_collapsed").toStringList();
     for (const QString &id : sidebar::section_order(settings().value("sidebar_sections").toStringList())) {
-        QList<Entry> entries = id == "places"    ? in_order(place_list, "sidebar_places_order")
-                               : id == "devices" ? in_order(device_list, "sidebar_devices_order")
-                               : id == "mounts"  ? in_order(mount_entries, "sidebar_mounts_order")
-                                                 : bookmark_list;
+        QList<Entry> entries = id == "places"     ? in_order(place_list, "sidebar_places_order")
+                               : id == "devices"  ? in_order(device_list, "sidebar_devices_order")
+                               : id == "mounts"   ? in_order(mount_entries, "sidebar_mounts_order")
+                               : id == "ramdisks" ? in_order(ramdisk_list, "sidebar_ramdisks_order")
+                                                  : bookmark_list;
         if (entries.isEmpty())
             continue;
         bool shut = collapsed.contains(id);
-        header(id, (id == "places" ? tx("Places") : id == "devices" ? tx("Devices") : id == "mounts" ? tx("Mounts") : tx("Bookmarks")).toUpper(), shut);
+        header(id, (id == "places" ? tx("Places") : id == "devices" ? tx("Devices") : id == "mounts" ? tx("Mounts")
+                    : id == "ramdisks" ? tx("RAM Disks") : tx("Bookmarks")).toUpper(), shut);
         if (!shut)
             for (const Entry &e : entries)
                 add(e, id);
@@ -1565,9 +1593,10 @@ void Sidebar::move_entry(const QString &section, const QString &key, int index)
     }
     QStringList now = sidebar::moved(keys, key, index);
     if (now != keys)
-        save_order(section == "places"   ? "sidebar_places_order"
-                   : section == "mounts" ? "sidebar_mounts_order"
-                                         : "sidebar_devices_order",
+        save_order(section == "places"     ? "sidebar_places_order"
+                   : section == "mounts"   ? "sidebar_mounts_order"
+                   : section == "ramdisks" ? "sidebar_ramdisks_order"
+                                           : "sidebar_devices_order",
                    now);
 }
 
@@ -1627,6 +1656,15 @@ void Sidebar::clicked(QListWidgetItem *it)
         return;
     }
     QString p = it->data(PathRole).toString();
+    QVariantList ke = it->data(Qt::UserRole).toList();
+    if (ke.value(0) == "ramdisk") {   // not in memory now: brought back first
+        const QList<ramdisk::Disk> list = ramdisk::disks();
+        const ramdisk::Disk *d = ramdisk::find(list, ke.value(1).toString());
+        if (d && !ramdisk::online(*d)) {
+            ramdisk::bring_up(this, d->id);
+            return;
+        }
+    }
     if (!p.isEmpty())
         Q_EMIT open_path(p, QGuiApplication::keyboardModifiers() & Qt::ControlModifier);
 }
@@ -1710,7 +1748,11 @@ void Sidebar::menu(const QPoint &pos)
             m.addAction(tx("Empty Trash with BleachBit…"), this, [this]() { Q_EMIT shred_trash_requested(); });
     } else if (kind == "mount") {
         m.addAction(tx("Find Duplicates…"), this, [this, path]() { Q_EMIT find_duplicates(path); });
+        m.addAction(tx("Disk Usage…"), this, [this, path]() { Q_EMIT disk_usage(path); });
         drives::Slow slow = drives::slow_kind(path);
+        QString dev = extra.toString();
+        if (dev.startsWith("/dev/") && slow == drives::Slow::None)
+            m.addAction(tx("Back Up Drive to Image…"), this, [this, dev]() { diskimage::backup_window(this, dev); });
         if (slow != drives::Slow::None) {
             m.addSeparator();
             if (slow == drives::Slow::Tape)
@@ -1728,6 +1770,25 @@ void Sidebar::menu(const QPoint &pos)
     } else if (kind == "server") {
         m.addSeparator();
         m.addAction(tx("Remove from Recent Servers"), this, [this, path]() { forget_server(path); });
+    } else if (kind == "ramdisk") {
+        QString id = extra.toString();
+        const QList<ramdisk::Disk> list = ramdisk::disks();
+        const ramdisk::Disk *d = ramdisk::find(list, id);
+        m.addSeparator();
+        if (d && !ramdisk::online(*d))
+            m.addAction(tx("Bring Back into Memory"), this, [this, id]() { ramdisk::bring_up(this, id); });
+        if (d && d->life == ramdisk::PERSISTENT && ramdisk::online(*d))
+            m.addAction(tx("Save to Disk Now"), this, [this, id]() { ramdisk::save_now(this, id); });
+        if (d) {
+            ramdisk::Disk copy = *d;
+            m.addAction(tx("Edit RAM Disk…"), this, [this, copy]() { show_free(new RamDiskWindow(this, &copy)); });
+        }
+        m.addAction(tx("Remove RAM Disk…"), this, [this, id]() { ramdisk::remove(this, id); });
+        m.addAction(tx("New RAM Disk…"), this, [this]() { show_free(new RamDiskWindow(this)); });
+    } else if (kind == "private") {
+        m.addSeparator();
+        m.addAction(tx("Leave Private Mode"), this, [this]() { ramdisk::set_private(this, false); });
+        m.addAction(tx("New RAM Disk…"), this, [this]() { show_free(new RamDiskWindow(this)); });
     } else if (kind == "phone" && phones.value(extra.toInt()).mount) {
         int i = extra.toInt();
         m.addSeparator();
@@ -1805,10 +1866,10 @@ void Sidebar::hide_place(const QString &id)
 
 void Sidebar::forget_server(const QString &uri)
 {
-    QStringList recents = settings().value("recent_servers").toStringList();
+    QStringList recents = history_settings().value("recent_servers").toStringList();
     recents.removeAll(uri);
-    settings().setValue("recent_servers", recents);
-    settings().sync();
+    history_settings().setValue("recent_servers", recents);
+    history_settings().sync();
     atc::announce("sidebar");   // refreshes every sidebar, here and in other Kestrels
 }
 
@@ -2034,19 +2095,12 @@ void InfoPanel::show_path(const QString &p)
 
 void InfoPanel::set_preview()
 {
-    bool slow = !path.isEmpty() && drives::slow_kind(path) != drives::Slow::None;
-    if (path.isEmpty() || (slow ? !cached : !exists(path))) {
+    if (path.isEmpty() || !cached) {   // (what the worker read, refresh)
         preview->clear();
         return;
     }
-    bool is_dir;
-    qint64 mtime, fsize;
-    if (slow) {   // what the worker read (refresh)
-        is_dir = cached_dir, mtime = cached_mtime, fsize = cached_size;
-    } else {
-        QFileInfo fi(path);
-        is_dir = fi.isDir(), mtime = fi.lastModified().toSecsSinceEpoch(), fsize = fi.size();
-    }
+    bool is_dir = cached_dir;
+    qint64 mtime = cached_mtime, fsize = cached_size;
     int size = std::max(160, std::min(viewport()->width() - 24, 512));
     QPixmap pm;
     if (is_dir)
@@ -2082,18 +2136,25 @@ void InfoPanel::refresh()
 {
     clear();
     cached = false;
-    // a tape or floppy: everything is read on a worker, even whether the item exists (a tape seeking for another read
-    // answers nothing until it gets there), and an image's details only if the user allowed previews for that drive
+    // everything is read on a worker, even whether the item exists: a drive another program keeps busy, or a tape
+    // seeking for another read, answers nothing until it gets there, and the window mustn't wait. On a tape or floppy,
+    // an image's details only if the user allowed previews for that drive.
     drives::Slow slow = path.isEmpty() ? drives::Slow::None : drives::slow_kind(path);
     ++gen;
-    if (slow != drives::Slow::None) {
+    if (path.isEmpty()) {
+        title->setText("");
+        preview->clear();
+        return;
+    }
+    {
         int my = gen;
         QString p = path;
         QString t = basename(rstrip(path, '/'));
         title->setText(t.isEmpty() ? path : t);
         preview->clear();
-        row(tx("Details"), slow == drives::Slow::Tape ? tx("reading from the tape…") : tx("reading from the floppy disk…"));
-        bool details = is_image(path) && drives::previews_allowed(path);
+        if (slow != drives::Slow::None)
+            row(tx("Details"), slow == drives::Slow::Tape ? tx("reading from the tape…") : tx("reading from the floppy disk…"));
+        bool details = is_image(path) && (slow == drives::Slow::None || drives::previews_allowed(path));
         QPointer<InfoPanel> self(this);
         fileops::run_task(
             this, "",
@@ -2157,7 +2218,7 @@ void InfoPanel::refresh()
                 self->row(tx("Modified"), i18n::date_time(QDateTime::fromSecsSinceEpoch(self->cached_mtime)));
                 if (r.contains("link"))
                     self->row(tx("Link to"), r.value("link").toString());
-                if (is_image(self->path) && !details)
+                if (is_image(self->path) && !details && slow != drives::Slow::None)
                     self->row(tx("Details"), slow == drives::Slow::Tape
                                                  ? tx("not read from this tape (right-click the drive: Show Previews on This Drive)")
                                                  : tx("not read from this floppy disk (right-click the drive: Show Previews on This Drive)"));
@@ -2169,39 +2230,7 @@ void InfoPanel::refresh()
                 self->add_details(basic, ai);
             },
             true);
-        return;
     }
-    if (path.isEmpty() || !lexists(path)) {
-        title->setText("");
-        preview->clear();
-        return;
-    }
-    QString t = basename(rstrip(path, '/'));
-    title->setText(t.isEmpty() ? path : t);
-    set_preview();
-    struct stat st;
-    if (!stat_(path, st))
-        lstat_(path, st);
-    if (isdir(path)) {
-        try {
-            int n = listdir(path).size();
-            row(tx("Contents"), txn("%Ln item(s)", n));
-        } catch (const OSError &) {
-            row(tx("Contents"), tx("unreadable"));
-        }
-    } else {
-        row(tx("Size"), human_size(qint64(st.st_size)));
-        row(tx("Type"), mime_for(path, 0).comment());
-    }
-    row(tx("Modified"), i18n::date_time(QDateTime::fromSecsSinceEpoch(st.st_mtime)));
-    if (islink(path)) {
-        try {
-            row(tx("Link to"), util::readlink(path));
-        } catch (const OSError &) {
-        }
-    }
-    if (is_image(path))
-        add_details(metadata::basic_info(path), metadata::ai_info(path));
 }
 
 void InfoPanel::add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai)

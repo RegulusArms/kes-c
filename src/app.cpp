@@ -6,10 +6,13 @@
 #include "archive_ui.h"
 #include "atc.h"
 #include "chooser.h"
+#include "diskimage.h"
+#include "linkwin.h"
 #include "dialogs.h"
 #include "drives.h"
 #include "compare.h"
 #include "convert.h"
+#include "diskusage.h"
 #include "dupes.h"
 #include "fileops.h"
 #include "hashcheck.h"
@@ -25,9 +28,12 @@
 #include "metadata.h"
 #include "prefs.h"
 #include "sharing.h"
+#include "pgp.h"
 #include "signature.h"
 #include "undo.h"
 #include "proc.h"
+#include "ramdisk.h"
+#include "ramdiskwin.h"
 #include "thumbs.h"
 #include "towerwin.h"
 #include "stats.h"
@@ -47,6 +53,8 @@
 #include <QHeaderView>
 #include <QImageReader>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
@@ -263,6 +271,7 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
         ArchiveWindow::drop_members(this, &md, target);
     });
     connect(sidebar, &Sidebar::find_duplicates, this, [this](const QString &root) { dupes::open_window(this, {root}); });
+    connect(sidebar, &Sidebar::disk_usage, this, [this](const QString &root) { diskusage::open_window(this, root); });
     connect(sidebar, &Sidebar::empty_trash_requested, this, &MainWindow::empty_trash);
     connect(sidebar, &Sidebar::shred_trash_requested, this, &MainWindow::empty_trash_with_bleachbit);
     tabs = new QTabWidget;
@@ -324,7 +333,20 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     connect(task_panel, &TaskPanel::clicked, this, [this]() { JobsWindow::open(this); });
     setProperty("task_panel", QVariant::fromValue<QObject *>(task_panel));
     auto *admin_indicator = new admin::Indicator;   // 🛡 while an admin session is open
+    private_btn = new QToolButton;   // while private mode is on (ramdisk.h)
+    private_btn->setText(tx("Private"));
+    private_btn->setIcon(icon({"security-high", "changes-prevent"}));
+    private_btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    private_btn->setAutoRaise(true);
+    private_btn->setToolTip(tx("Private mode: Kestrel's caches and histories are kept in memory and deleted when the "
+                               "last Kestrel closes, and Save windows start in the Private folder."));
+    private_btn->setPopupMode(QToolButton::InstantPopup);
+    auto *private_menu = new QMenu(private_btn);
+    private_menu->addAction(tx("Open the Private Folder"), this, [this]() { navigate(ramdisk::private_files()); });
+    private_menu->addAction(tx("Leave Private Mode"), this, [this]() { ramdisk::set_private(this, false); });
+    private_btn->setMenu(private_menu);
     statusBar()->addWidget(status_label, 1);
+    statusBar()->addPermanentWidget(private_btn);
     statusBar()->addPermanentWidget(admin_indicator);
     statusBar()->addPermanentWidget(task_panel);
     statusBar()->addPermanentWidget(thumb_progress);
@@ -365,6 +387,17 @@ void MainWindow::make_chooser(const chooser::Request &req, std::function<void(co
     chooser->folder_changed();   // the suggested name made free in the folder it starts in
     if (chooser->name)
         chooser->name->setFocus();
+}
+
+void MainWindow::embed(std::function<void(const QStringList &)> activated)
+{
+    embedded = true;
+    embed_activated = std::move(activated);
+    setWindowFlags(Qt::Widget);
+    // two of them side by side in one window: each one's shortcuts only while the focus is in it (otherwise both
+    // would claim Ctrl+C and neither would get it)
+    for (QAction *a : findChildren<QAction *>())
+        a->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 }
 
 // A file chooser window keeps its own view settings, under "chooser/": changing the zoom, view, sort, panels and so on
@@ -543,25 +576,31 @@ void MainWindow::sort_subfolders(Pane *p)
                             p->grouping(), p->grouping_by()};
     auto work = [root](Task *task) -> QVariant {
         QStringList found;
+        task->log(tx("Looking for the folders below %1").arg(root));
         walk(
             root,
             [&](const QString &dir, QStringList &dirs, QStringList &) {
                 task->check();
                 for (const QString &d : dirs)
                     found << join(dir, d);
+                if (task->due())
+                    task->report(0, 0, txn("%Ln folder(s) found — %1", found.size()).arg(dir));
                 return true;
             },
             true, true);
+        task->log(txn("%Ln folder(s) found: each gets this folder's sort once the job ends", found.size()));
         return found;
     };
-    auto done = [this, root, sort](const QVariant &v) {
+    QPointer<MainWindow> self(this);
+    auto done = [self, root, sort](const QVariant &v) {   // (also when this window has closed meanwhile)
         if (!v.isValid())
             return;   // cancelled
         QStringList dirs = v.toStringList();
         places::set_folder_sort(dirs + QStringList{root}, sort);
-        statusBar()->showMessage(txn("Sort applied to %Ln subfolder(s)", dirs.size()), 5000);
+        if (self)
+            self->statusBar()->showMessage(txn("Sort applied to %Ln subfolder(s)", dirs.size()), 5000);
     };
-    fileops::run_job(this, tx("Applying sort to subfolders"), work, done);
+    fileops::run_job(this, tx("Applying sort to subfolders"), work, done, true, false, true);
 }
 
 void MainWindow::set_pinned_first(bool on)
@@ -714,6 +753,11 @@ void MainWindow::build_actions()
     A(tx("Preferences…"), {"Ctrl+,"}, [this]() { preferences(); }, menu, {"preferences-system"});
     A(tx("Jobs…"), {"Ctrl+Shift+J"}, [this]() { JobsWindow::open(this); }, menu);
     A(tx("Sync Folders…"), {}, [this]() { compare::open_sync(this, QString()); }, menu, {"folder-sync", "view-refresh"});
+    A(tx("New RAM Disk…"), {}, [this]() { show_free(new RamDiskWindow(this)); }, menu, {"media-memory", "drive-removable-media"});
+    // (ticked again or not by sync_private: leaving may first ask, and Cancel keeps it on)
+    a_private = A(tx("Private Mode"), {}, [this]() { ramdisk::set_private(this, a_private->isChecked()); sync_private(); },
+                  menu, {"security-high", "changes-prevent"}, true);
+    QTimer::singleShot(0, this, [this]() { sync_private(); });   // once the window's made
     a_tower = A(tx("Tower…"), {}, [this]() { TowerWindow::open(this); }, menu);
     a_tower->setVisible(settings().value("developer_tools", false).toBool());
     A(tx("Start Admin Session…"), {}, [this]() { admin::start_session(this); }, menu, {"security-high", "dialog-password"});
@@ -728,6 +772,19 @@ void MainWindow::build_actions()
           box->setIconPixmap(windowIcon().pixmap(64));
       },
       menu);
+}
+
+void MainWindow::sync_private()
+{
+    bool on = ramdisk::private_mode();
+    if (a_private) {
+        QSignalBlocker quiet(a_private);
+        a_private->setChecked(on);
+    }
+    if (private_btn)
+        private_btn->setVisible(on);
+    if (pane() && !chooser_mode)   // (a Save or Open window keeps the app's title)
+        pane_path_changed(pane());   // the title
 }
 
 // -- tabs
@@ -765,6 +822,7 @@ Pane *MainWindow::new_tab(const QString &path, bool activate)
         }
         if (chooser)   // at once: its OK button follows the selection
             chooser->selection_changed();
+        Q_EMIT selection_changed();
     });
     if (activate) {
         tabs->setCurrentIndex(i);
@@ -856,7 +914,7 @@ void MainWindow::pane_path_changed(Pane *p)
         return;
     pathbar->set_path(p->path);
     sidebar->select_path(p->path);
-    setWindowTitle(QString("%1 — %2").arg(p->title(), APP_NAME));
+    setWindowTitle(QString("%1 — %2").arg(p->title(), ramdisk::private_mode() ? tx("%1 (Private)").arg(APP_NAME) : QString(APP_NAME)));
     a_back->setEnabled(!p->back_stack.isEmpty());
     a_fwd->setEnabled(!p->fwd_stack.isEmpty());
     a_up->setEnabled(!p->is_overview() && !p->is_virtual() && p->path != "/");
@@ -866,6 +924,7 @@ void MainWindow::pane_path_changed(Pane *p)
     update_status();
     if (chooser)   // Save needs a folder, and the names a free one in each: re-checked in each place
         chooser->folder_changed();
+    Q_EMIT folder_changed();
 }
 
 void MainWindow::navigate(const QString &path) { open_location(path); }
@@ -929,10 +988,10 @@ void MainWindow::remember_server(const QString &uri)
     if (!prefs::get("history_servers").toBool())
         return;
     QStringList recents;
-    for (const QString &u : settings().value("recent_servers").toStringList())
+    for (const QString &u : history_settings().value("recent_servers").toStringList())
         if (u != uri)
             recents << u;
-    settings().setValue("recent_servers", QStringList{uri} + recents.mid(0, 9));
+    history_settings().setValue("recent_servers", QStringList{uri} + recents.mid(0, 9));
 }
 
 // -- view
@@ -1077,7 +1136,8 @@ Task *MainWindow::build_previews(const QString &root, bool folders_only, int dep
                                         .arg(text, name, group_digits(m["done"].toInt())),
                                     8000);
     };
-    return fileops::queue_job(this, tx("%1: %2").arg(what, name), {root}, work, done);
+    // done runs also when this window has closed (the cache and the other windows still need to know)
+    return fileops::queue_job(this, tx("%1: %2").arg(what, name), {root}, work, done, true, {}, false, {}, true);
 }
 
 void MainWindow::on_thumb_progress(int done, int total)
@@ -1113,6 +1173,7 @@ void MainWindow::update_status()
     Pane *p = pane();
     if (!p)
         return;
+    stats::count("status line updates");
     if (p->is_overview()) {
         status_label->setText(tx("Drives, network locations and bookmarks"));
         if (info->isVisible())
@@ -1233,6 +1294,12 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         pa->setEnabled(have_files || (md && md->hasImage()));
         QAction *pl = T(m->addAction(tx("Paste as Link"), this, [this]() { paste(QString(), true); }), "paste_link");
         pl->setEnabled(have_files);
+        if (!p->is_trash() && !p->dir().isEmpty()) {   // links to make here, picked in the Link window
+            QString here = p->dir();
+            T(m->addAction(icon({"emblem-symbolic-link", "insert-link"}), tx("Link…"), this,
+                           [this, here]() { LinkWindow::open(this, {}, here); }),
+              "link_window");
+        }
         T(m->addAction(tx("Select All"), this, [p]() { p->view()->selectAll(); }), "select_all");
         m->addSeparator();
         QMenu *sm = m->addMenu(tx("Sort By"));
@@ -1274,8 +1341,24 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         return m;
     }
 
+    // what each item is, as the view already knows it (a stat here would wait on a drive another program keeps busy,
+    // with the window frozen); asked only for what it doesn't know
+    QHash<QString, int> kinds;
+    for (const Pane::Known &k : p->selected_known())
+        if (k.kind >= 0)
+            kinds.insert(k.path, k.kind);
+    auto kind_of = [&kinds](const QString &x) {
+        auto it = kinds.constFind(x);
+        if (it != kinds.constEnd())
+            return *it;
+        int k = (isdir(x) ? KIND_DIR : 0) | (islink(x) ? KIND_LINK : 0);
+        kinds.insert(x, k);
+        return k;
+    };
+    auto dir_ = [&kind_of](const QString &x) { return bool(kind_of(x) & KIND_DIR); };
+    auto link_ = [&kind_of](const QString &x) { return bool(kind_of(x) & KIND_LINK); };
     QString single = paths.size() == 1 ? paths.first() : QString();
-    bool is_dir = !single.isEmpty() && isdir(single);
+    bool is_dir = !single.isEmpty() && dir_(single);
     // only a selection all in the trash gets the trash's menu; a mixed one (a search, Recent, Starred) gets the
     // usual menu, whose Move to Trash trashes the rest and asks before deleting what's already in the trash
     if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return in_trash(x); })) {
@@ -1291,13 +1374,13 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
 
     // which right-click menu this is (Preferences → Menus): a split set selected whole is several items
     QStringList arcs = std::all_of(paths.begin(), paths.end(),
-                                   [](const QString &x) { return archive::can_extract(x) && !isdir(x); })
+                                   [&dir_](const QString &x) { return archive::can_extract(x) && !dir_(x); })
                            ? archive_ui::archives_of(paths)
                            : QStringList();
     menus::Kind kind = paths.size() > 1 ? menus::SEVERAL : is_dir ? menus::FOLDER : arcs.size() == 1 ? menus::ARCHIVE
                                                                                                      : menus::FILE;
     T(m->addAction(icon({"document-open"}), tx("Open"), this, [this, p, paths]() { open_paths(p, paths); }), "open");
-    bool all_dirs = std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); });
+    bool all_dirs = std::all_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); });
     if (is_dir || all_dirs) {
         T(m->addAction(icon({"tab-new"}), tx("Open in New Tab"), this, [this, paths]() {
             for (const QString &x : paths)
@@ -1400,23 +1483,23 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(lm->addAction(tx("Create Relative Symbolic Link Here"), this, [this, paths, here]() { make_links(paths, here, "rel"); }),
           "link_rel_here");
     }
-    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isfile(x) && !islink(x); }))
+    if (!here.isEmpty() && std::all_of(paths.begin(), paths.end(), [&kind_of](const QString &x) { return kind_of(x) == 0; }))
         T(lm->addAction(tx("Create Hard Link Here"), this, [this, paths, here]() { make_links(paths, here, "hard"); }),
           "link_hard_here");
-    T(lm->addAction(tx("Create Symbolic Link In…"), this, [this, paths]() { make_links(paths, QString(), "sym"); }), "link_sym_in");
+    // the rest (another folder, a .desktop shortcut, several folders at once, renamed as they're made): the Link window
+    T(lm->addAction(tx("Link…"), this, [this, paths, here]() { LinkWindow::open(this, paths, here); }), "link_window");
     lm->addSeparator();
     QString desktop = xdg_user_dir("DESKTOP");
     T(lm->addAction(tx("Send Link to Desktop"), this, [this, paths, desktop]() { make_links(paths, desktop, "sym"); }),
       "link_desktop");
-    if (!here.isEmpty())
-        T(lm->addAction(tx("Create Desktop Shortcut (.desktop) Here"), this,
-                        [this, paths, here]() { make_links(paths, here, "desktop"); }),
-          "desktop_shortcut_here");
-    T(lm->addAction(tx("Send Shortcut (.desktop) to Desktop"), this,
-                    [this, paths, desktop]() { make_links(paths, desktop, "desktop"); }),
-      "desktop_shortcut_desktop");
-    if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); })) {
+    QStringList sym_links;
+    for (const QString &x : paths)
+        if (link_(x))
+            sym_links << x;
+    if (!sym_links.isEmpty()) {
         lm->addSeparator();
+        T(lm->addAction(tx("Edit Link…"), this, [this, sym_links]() { LinkWindow::open(this, {}, QString(), sym_links); }),
+          "link_edit");
         T(lm->addAction(tx("Open Link Target Location"), this, [this, paths]() { reveal(realpath(paths.first())); }),
           "link_target");
     }
@@ -1462,6 +1545,16 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, arcs]() { archive_ui::test_archives(this, arcs); }),
           "test_archives");
     }
+    // disk images: set up as a drive (diskimage.h); read-only unless asked
+    if (paths.size() == 1 && diskimage::is_image(paths[0])) {
+        QString img = paths[0];
+        T(m->addAction(icon({"drive-harddisk", "media-mount"}), tx("Mount Image"), this,
+                       [this, img]() { diskimage::mount_image(this, img, false); }),
+          "mount_image");
+        if (diskimage::can_write(img))
+            T(m->addAction(tx("Mount Image for Writing"), this, [this, img]() { diskimage::mount_image(this, img, true); }),
+              "mount_image_rw");
+    }
     QString quick = archive_ui::quick_compress_label(paths);
     if (!quick.isEmpty())
         T(m->addAction(icon({"package-x-generic", "archive-insert"}), quick, this,
@@ -1473,11 +1566,14 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     T(m->addAction(icon({"security-high", "document-properties"}), tx("Create Checksum File…"), this,
                    [this, paths]() { hashcheck::create_dialog(this, paths); }),
       "checksum_create");
-    if (std::all_of(paths.begin(), paths.end(), [](const QString &x) { return isdir(x); }))
+    if (std::all_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); }))
         T(m->addAction(icon({"edit-find", "edit-copy"}), tx("Find Duplicates…"), this,
                        [this, paths]() { dupes::open_window(this, paths); }),
           "find_duplicates");
     if (is_dir) {
+        T(m->addAction(diskusage::icon(), tx("Disk Usage…"), this,
+                       [this, single]() { diskusage::open_window(this, single); }),
+          "disk_usage");
         T(m->addAction(icon({"view-dual", "view-split-left-right"}), tx("Compare With…"), this,
                        [this, single]() { compare::open_compare(this, single); }),
           "compare_with");
@@ -1489,6 +1585,14 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(m->addAction(icon({"security-high", "emblem-ok-symbolic"}), tx("Verify Signature"), this,
                        [this, single]() { signature::open_window(this, single); }),
           "verify_signature");
+    if (!paths.isEmpty() && std::none_of(paths.begin(), paths.end(), [&dir_](const QString &x) { return dir_(x); }))
+        T(m->addAction(icon({"document-encrypt", "dialog-password"}), tx("Encrypt…"), this,
+                       [this, paths]() { pgp::encrypt_dialog(this, paths); }),
+          "encrypt");
+    if (!is_dir && !single.isEmpty() && pgp::is_encrypted_name(single) && !archive::opens_as_archive(single))
+        T(m->addAction(icon({"document-decrypt", "dialog-password"}), tx("Decrypt"), this,
+                       [this, single]() { pgp::decrypt(this, single); }),
+          "decrypt");
     if (!single.isEmpty() && (is_image(single) || is_video(single)) && uwp::editor_open())
         T(m->addAction(icon({"preferences-desktop-wallpaper", "video-display"}), tx("Add to Selected UWP Monitor"), this,
                        [this, single]() { uwp_add(single); }),
@@ -1506,7 +1610,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
         T(im->addAction(tx("Copy Image to Clipboard"), this, [single]() { QGuiApplication::clipboard()->setImage(QImage(single)); }),
           "image_copy");
     }
-    auto all = [&paths](bool (*f)(const QString &)) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
+    auto all = [&paths](const std::function<bool(const QString &)> &f) { return !paths.isEmpty() && std::all_of(paths.begin(), paths.end(), f); };
     if (paths.size() == 2 && all(&is_image))
         T(m->addAction(icon({"view-dual", "image-x-generic"}), tx("Compare in Viewer"), this, [this, p, paths]() { compare_in_viewer(p, paths); }),
           "compare_images");
@@ -1531,7 +1635,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
                        [this, paths]() { convert::extract_audio_dialog(this, paths); }),
           "extract_audio");
     }
-    if (ffmpeg && (all(&convert::is_audio) || all([](const QString &x) { return isdir(x); })))
+    if (ffmpeg && (all(&convert::is_audio) || all([&dir_](const QString &x) { return dir_(x); })))
         T(m->addAction(icon({"audio-x-generic"}), tx("Convert Audio…"), this, [this, paths]() { convert::audio_dialog(this, paths); }),
           "convert_audio");
     if (std::any_of(paths.begin(), paths.end(), [](const QString &x) { return metadata::can_wipe(x); })) {
@@ -1547,7 +1651,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     }
     QStringList folders;
     for (const QString &x : paths)
-        if (isdir(x))
+        if (dir_(x))
             folders << x;
     if (!folders.isEmpty() && folders.size() == paths.size()) {
         int n = int(m->actions().size());
@@ -1558,7 +1662,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
     }
     if (is_dir && thumbs->covers.contains(single))
         T(m->addAction(tx("Reset Folder Cover"), this, [this, single]() { thumbs->set_cover(single, QString()); }), "reset_cover");
-    group("send_to", [&]() { sharing::add_send_to_menu(m, paths); });
+    group("send_to", [&]() { sharing::add_send_to_menu(m, paths, dir_); });
     if (is_dir && sharing::can_share())
         T(m->addAction(icon({"folder-remote", "network-workgroup"}), tx("Network Sharing…"), this,
                        [this, single]() { sharing::share_dialog(this, single); }),
@@ -1582,7 +1686,7 @@ QMenu *MainWindow::build_menu(Pane *p, const QStringList &paths)
           "shred");
     m->addSeparator();
     // shortcuts into Properties: its size counted afresh, its Metadata tab
-    if (all_dirs && std::none_of(paths.begin(), paths.end(), [](const QString &x) { return islink(x); }))
+    if (all_dirs && std::none_of(paths.begin(), paths.end(), [&link_](const QString &x) { return link_(x); }))
         T(m->addAction(icon({"drive-harddisk", "document-properties"}), tx("Calculate Folder Size"), this, [this, paths]() {
             if (PropertiesDialog *d = properties(paths))
                 d->calculate_size();
@@ -1726,6 +1830,18 @@ void apply_settings(const QStringList &keys)
         } else if (key == "sidebar_sections" || key == "sidebar_collapsed" || key == "sidebar_hidden") {
             for (MainWindow *w : WINDOWS)
                 w->sidebar->refresh();
+        } else if (key == "private_mode") {
+            // this process's caches and histories to the private RAM disk or back (ramdisk.h), and what shows it
+            ramdisk::apply_private();
+            for (MainWindow *w : WINDOWS) {
+                w->sync_private();
+                w->sidebar->refresh();
+            }
+        } else if (key == "separate_cache") {
+            // where new thumbnails go, and whether the shared cache is read (util THUMB_DIR); those already shown stay
+            set_separate_cache(v.toBool());
+        } else if (key == "ramdisk_wipe_warning") {
+            // read when the last Kestrel closes, or private mode is left
         } else if (key.startsWith("history_")) {
             // read each time a file is opened, a folder entered…; the Overview follows history_frequent itself
         } else if (raw.startsWith("menus/") || raw.startsWith("tape_")) {
@@ -1740,6 +1856,8 @@ void apply_settings(const QStringList &keys)
             g_thumbs->set_mode(v.toString());
         } else if (key == "jobs_mode" || key == "jobs_start_paused") {
             // the job queue tells everyone itself (jobs::set_mode, "queue_mode")
+        } else if (key == "jobs_save_logs" || key == "copy_kernel") {
+            // read as each job ends (joblogs::save), or as a copy starts (start_ops)
         } else {
             prefs_wide = true;   // thumbnails, previews, undo, developer tools…: apply_preferences
         }
@@ -1775,12 +1893,19 @@ void MainWindow::clear_cache()
 
 void MainWindow::purge_thumbnails()
 {
+    // where it wrote them: THUMB_DIR(), its own folder while separate caching's thumbnails are left there, and the
+    // shared cache it wrote to before separate caching was turned on (not in private mode: that one isn't touched)
+    QStringList wrote{THUMB_DIR()};
+    if (!wrote.contains(OWN_THUMB_DIR()) && isdir(OWN_THUMB_DIR()))
+        wrote << OWN_THUMB_DIR();
+    if (!wrote.contains(SHARED_THUMB_DIR()) && private_dir_in_use().isEmpty())
+        wrote << SHARED_THUMB_DIR();
     auto *box = new QMessageBox(QMessageBox::Warning, tx("Delete All Thumbnails"),
                                 tx("Delete every thumbnail and folder preview %1 has made?\n\n"
                                         "• Folder mosaics in %2\n"
                                         "• Image/video thumbnails it wrote to %3\n\n"
                                         "They will be regenerated as you browse.")
-                                    .arg(APP_NAME, join(APP_CACHE(), "folders"), THUMB_DIR()),
+                                    .arg(APP_NAME, join(APP_CACHE(), "folders"), wrote.join(", ")),
                                 QMessageBox::Cancel, this);
     QPushButton *go = box->addButton(tx("Delete"), QMessageBox::DestructiveRole);
     auto *shared = new QCheckBox(tx("Also delete thumbnails made by other apps (GNOME Files, etc.)"));
@@ -1800,15 +1925,17 @@ void MainWindow::purge_now(bool include)
             auto [files, size] = thumbs::purge_thumbnails(include);
             return QVariant(QVariantList{files, size});
         },
-        [this](const QVariant &res) {
+        [self = QPointer<MainWindow>(this)](const QVariant &res) {   // (also when this window has closed meanwhile)
             QVariantList r = res.toList();
-            thumbs->clear_memory();
+            g_thumbs->clear_memory();
             repaint_all();
             atc::announce("thumbs_cleared");
-            statusBar()->showMessage(txn("Deleted %Ln thumbnail(s) (%1)", r.value(0).toLongLong())
-                                         .arg(human_size(r.value(1).toLongLong())),
-                                     6000);
-        });
+            if (self)
+                self->statusBar()->showMessage(txn("Deleted %Ln thumbnail(s) (%1)", r.value(0).toLongLong())
+                                                   .arg(human_size(r.value(1).toLongLong())),
+                                               6000);
+        },
+        false, true);
 }
 
 void MainWindow::show_shortcuts()
@@ -1901,6 +2028,24 @@ void MainWindow::closeEvent(QCloseEvent *ev)
         });
         return;
     }
+    // the last Kestrel closing deletes the files in private mode's RAM disk and in the RAM disks that last until
+    // Kestrel closes (the tower does it as it lands): said first, unless that's been turned off (ramdisk.h)
+    if (!wipe_confirmed && last && !chooser_mode && ramdisk::wipe_needs_warning()) {
+        QJsonObject status = QJsonDocument::fromJson(atc::radio()->request("Status").toUtf8()).object();
+        if (status.value("flights").toInt(1) <= 1) {   // (no other Kestrel: the tower's down, or we're its only flight)
+            ev->ignore();
+            if (wipe_box) {
+                wipe_box->raise();
+                wipe_box->activateWindow();
+                return;
+            }
+            wipe_box = ramdisk::warn_wipe(this, false, [this]() {
+                wipe_confirmed = true;
+                close();
+            });
+            return;
+        }
+    }
     // this window's jobs: shown in another window's status bar from now on
     for (MainWindow *m : WINDOWS)
         if (m != this && !m->chooser_mode) {
@@ -1908,9 +2053,11 @@ void MainWindow::closeEvent(QCloseEvent *ev)
                 m->task_panel->add(t);
             break;
         }
-    if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
-        set_view_value("geometry", saveGeometry());
-    set_view_value("splitter", split->saveState());
+    if (!embedded) {   // (one inside another window: its size is that window's)
+        if (!chooser_mode || !(isMaximized() || isFullScreen()))   // a chooser always opens as a smaller window
+            set_view_value("geometry", saveGeometry());
+        set_view_value("splitter", split->saveState());
+    }
     if (chooser)
         chooser->finish(false);   // closed without choosing: cancelled
     // the thumbnails and folder previews it asked for (the queue is the process's, which other windows may keep
@@ -1984,8 +2131,10 @@ MainWindow *open_chooser(const chooser::Request &req, std::function<void(const c
     QString start = req.current_folder;
     if (req.saving() && !req.replacing && prefs::get("chooser_start").toString() == "overview")
         start = OVERVIEW;   // its own Overview, with the save locations (a file being replaced: its folder)
+    if (req.saving() && !req.replacing && ramdisk::private_mode() && isdir(ramdisk::private_files()))
+        start = ramdisk::private_files();   // private mode: saved into memory unless another folder is chosen
     if (start != OVERVIEW && !isdir(start))
-        start = settings().value("chooser_folder").toString();   // where the last chooser picked something
+        start = history_settings().value("chooser_folder").toString();   // where the last chooser picked something
     if (start != OVERVIEW && !isdir(start))
         start = HOME();
     auto *w = new MainWindow({start}, g_thumbs, true);
@@ -2041,6 +2190,8 @@ int kes_main(int argc, char **argv)
         if (QByteArray(argv[i]) == "--atc")
             return atc::run_tower(argc, argv);   // the tower: no window (see atc.h)
     }
+    if (int rc = ramdisk::run_cli(argc, argv); rc >= 0)
+        return rc;   // a RAM disk's systemd unit: load or save it (ramdisk.h), no window
     std::signal(SIGPIPE, SIG_IGN);   // a tool that exits early must not kill Kestrel (proc::write_pipe also guards)
     QApplication::setApplicationName(APP_ID);
     QApplication::setApplicationVersion(VERSION);
@@ -2057,6 +2208,9 @@ int kes_main(int argc, char **argv)
     ensure_desktop_entry();
     QImageReader::setAllocationLimit(2048);
     settings();
+    ramdisk::apply_private();   // before anything reads or writes a cache
+    set_separate_cache(prefs::get("separate_cache").toBool());
+    ramdisk::prune();
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);
     for (int i = 1; i < argc; ++i)
@@ -2096,6 +2250,9 @@ int kes_main(int argc, char **argv)
     QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
     atc::radio()->start();
     fm1::start(handle_fm1, service ? std::function<void()>([]() { QApplication::quit(); }) : nullptr);
+    // mounted disk images: detached once nothing from them is mounted any more (diskimage.h)
+    QObject::connect(drives::MountWatch::instance(), &drives::MountWatch::changed, qApp, []() { diskimage::tidy(); });
+    QTimer::singleShot(3000, qApp, []() { diskimage::tidy(); });
     if (service) {
         // started by D-Bus for a "show in folder" request: no window of our own; quit if none is asked for
         QTimer::singleShot(30000, qApp, []() {

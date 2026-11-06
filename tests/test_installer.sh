@@ -233,25 +233,27 @@ cleaner_actions() {   # each action as "command path [parameter]", sorted
     grep -o '<action [^>]*>' "$CLEANER" | sed -E 's/.*command="([^"]*)".*path="([^"]*)"( section="[^"]*" parameter="([^"]*)")?.*/\1 \2 \4/' |
         sed 's/ *$//' | LC_ALL=C sort | tr '\n' ';'
 }
-EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CONFIG_HOME/kestrel-explorer/covers.json;'
+EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CACHE_HOME/kestrel-explorer/job-logs;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/covers.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/frequent.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
 EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sorts.json;delete $XDG_CONFIG_HOME/kestrel-explorer/starred.json;'
-EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sync-pairs.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sync-history.json;delete $XDG_CONFIG_HOME/kestrel-explorer/sync-pairs.json;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_folder;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_places;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf recent_servers;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf viewer_recent_folders;'
-check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 12 ]]' \
-    "the cleaner only deletes Kestrel's cache and lists, and only the history and save locations keys from its settings"
+check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 14 ]]' \
+    "the cleaner only deletes Kestrel's cache, its saved job logs and lists, and only the history and save locations keys from its settings"
 BLEACHBIT_XSD=/usr/share/doc/bleachbit/examples/cleaner_markup_language.xsd
 if command -v xmllint >/dev/null && [[ -f "$BLEACHBIT_XSD" ]]; then
     check 'xmllint --noout --schema "$BLEACHBIT_XSD" "$CLEANER" 2>/dev/null' "the cleaner follows BleachBit's CleanerML schema"
 else
     echo "SKIP the cleaner follows BleachBit's CleanerML schema (needs xmllint and BleachBit's schema)"
 fi
-BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.history kestrel_explorer.starred kestrel_explorer.pinned
-            kestrel_explorer.save_places kestrel_explorer.folder_looks kestrel_explorer.sync_pairs)
+BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.job_logs kestrel_explorer.history kestrel_explorer.starred
+            kestrel_explorer.pinned kestrel_explorer.save_places kestrel_explorer.folder_covers
+            kestrel_explorer.folder_colours kestrel_explorer.folder_sorts kestrel_explorer.sync_pairs)
 # BleachBit's command line, started without its launcher: BleachBit 4.6's (Ubuntu 24.04) asks loginctl about the
 # login session first, and fails when there is none (CI, containers)
 bleachbit_cli() {
@@ -262,10 +264,12 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     # what Kestrel writes, and what must stay: GNOME's thumbnails, another app's cache, a folder a link in the cache
     # points to, Kestrel's other settings and its install state
     KC="$HOME/.cache/kestrel-explorer" KCONF="$HOME/.config/kestrel-explorer"
-    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$KC/archive-files/1a2b" "$HOME/.cache/thumbnails/normal" \
+    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$KC/archive-files/1a2b" "$KC/job-logs/2026-10-30" \
+             "$HOME/.cache/thumbnails/normal" \
              "$HOME/.cache/other-app" "$HOME/Documents" "$KCONF"
     for f in "$KC/folders/1a2b-256.png" "$KC/animated/clip.webm" "$KC/device-files/phone/IMG_0001.MOV" \
              "$KC/exiftool-tagdb-13.50.json" "$KC/folder-sizes.json" "$KC/archive-files/1a2b/readme.txt" \
+             "$KC/job-logs/2026-10-30/101500-4242-3-Copying.log" \
              "$HOME/.cache/thumbnails/normal/3c4d.png" "$HOME/.cache/other-app/data"; do
         echo data > "$f"
     done
@@ -279,6 +283,7 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
         >> "$KCONF/kestrel-explorer.conf"
     for f in starred.json pinned.json covers.json folder_styles.json sorts.json frequent.json; do echo '{}' > "$KCONF/$f"; done
     echo '[]' > "$KCONF/sync-pairs.json"
+    echo '[]' > "$KCONF/sync-history.json"
     echo "chooser_conf=created" > "$KCONF/install-state"
     cp "$KCONF/kestrel-explorer.conf" "$WORK/conf.before"
     snapshot() { (cd "$HOME" && find . -path ./.config/bleachbit -prune -o -print0 | LC_ALL=C sort -z | xargs -0 ls -ld --time-style=+%s.%N | md5sum); }
@@ -292,23 +297,35 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     EXPECTED_LISTED+=" .cache/kestrel-explorer/device-files/phone/IMG_0001.MOV .cache/kestrel-explorer/exiftool-tagdb-13.50.json"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folder-sizes.json"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders .cache/kestrel-explorer/folders/1a2b-256.png"
-    EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked .config/kestrel-explorer/covers.json"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/job-logs/2026-10-30 .cache/kestrel-explorer/job-logs/2026-10-30/101500-4242-3-Copying.log"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/covers.json"
     EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/frequent.json"
     EXPECTED_LISTED+=" .config/kestrel-explorer/kestrel-explorer.conf"
     EXPECTED_LISTED+=" .config/kestrel-explorer/pinned.json .config/kestrel-explorer/sorts.json"
-    EXPECTED_LISTED+=" .config/kestrel-explorer/starred.json .config/kestrel-explorer/sync-pairs.json "
+    EXPECTED_LISTED+=" .config/kestrel-explorer/starred.json .config/kestrel-explorer/sync-history.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/sync-pairs.json "
     check '[[ "$(listed)" == "$EXPECTED_LISTED" ]]' \
         "BleachBit's dry run with Kestrel's cleaner lists exactly Kestrel's cache, lists and settings file$(
             [[ "$(listed)" == "$EXPECTED_LISTED" ]] || echo " (listed: $(listed); output: $(tail -3 "$WORK/bb-preview" | tr '\n' ' '))")"
     check '[[ "$(snapshot)" == "$before" ]]' "BleachBit's dry run changes nothing"
+    # the saved job logs are an option of their own: the cache option keeps them, and theirs takes nothing else
+    bleachbit_cli --preview kestrel_explorer.cache >"$WORK/bb-preview" 2>&1
+    cache_only="$(listed)"
+    bleachbit_cli --preview kestrel_explorer.job_logs >"$WORK/bb-preview" 2>&1
+    logs_only="$(listed)"
+    check '[[ "$cache_only" == *".cache/kestrel-explorer/folders/1a2b-256.png"* && "$cache_only" != *job-logs* &&
+           "$logs_only" == ".cache/kestrel-explorer/job-logs/2026-10-30 .cache/kestrel-explorer/job-logs/2026-10-30/101500-4242-3-Copying.log " ]]' \
+        "...Cache keeps the saved job logs, and Job logs deletes only them$(
+            [[ "$cache_only" != *job-logs* ]] || echo " (Cache listed: $cache_only)")"
     if /usr/bin/pgrep -x kes >/dev/null; then
         echo "SKIP BleachBit's clean with Kestrel's cleaner (a Kestrel is running, and BleachBit won't clean while it is)"
     else
         bleachbit_cli --clean "${BB_OPTIONS[@]}" >"$WORK/bb-clean" 2>&1
-        check '[[ -d "$KC" && -z "$(ls -A "$KC")" && ! -e "$KCONF/starred.json" && ! -e "$KCONF/covers.json" &&
+        check '[[ -d "$KC" && "$(ls -A "$KC")" == job-logs && -z "$(ls -A "$KC/job-logs")" && ! -e "$KCONF/starred.json" && ! -e "$KCONF/covers.json" &&
                ! -e "$KCONF/folder_styles.json" && ! -e "$KCONF/pinned.json" && ! -e "$KCONF/sorts.json" &&
-               ! -e "$KCONF/sync-pairs.json" && ! -e "$KCONF/frequent.json" ]]' \
-            "BleachBit's clean empties Kestrel's cache and deletes its lists"
+               ! -e "$KCONF/sync-pairs.json" && ! -e "$KCONF/sync-history.json" && ! -e "$KCONF/frequent.json" ]]' \
+            "BleachBit's clean empties Kestrel's cache and its saved job logs (their folder stays) and deletes its lists"
         check '[[ "$(cat "$HOME/Documents/notes.txt")" == "my own file" && -f "$HOME/.cache/thumbnails/normal/3c4d.png" &&
                -f "$HOME/.cache/other-app/data" && -f "$KCONF/install-state" && -f "$CLEANER" ]]' \
             "...and leaves everything else (a folder linked from the cache, GNOME's thumbnails, other apps' caches)"

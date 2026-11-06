@@ -26,6 +26,7 @@ typedef struct _GVolume GVolume;
 typedef struct _GVolumeMonitor GVolumeMonitor;
 
 class ThumbnailManager;
+class QToolButton;
 class QVBoxLayout;
 
 extern const QString OVERVIEW;         // "overview://"
@@ -131,6 +132,9 @@ QList<DriveInfo> network_infos(GVolumeMonitor *monitor, const QSet<QString> &kno
 // A recent server's address is one of these shares, or inside one
 bool connected(const QString &server, const QList<DriveInfo> &shares);
 
+// a block device's file system type as udev found it ("ext4", "crypto_LUKS"; empty: none), asking no drive
+QString udev_fstype(const QString &dev);
+
 }  // namespace overview
 
 // What drive cards show (Preferences → Overview); size: 0 small, 1 normal, 2 large (bookmark cards too)
@@ -146,6 +150,10 @@ public:
     explicit DriveCard(const DriveInfo &info, const CardLook &look = CardLook(), QWidget *parent = nullptr);
     DriveInfo info;
     QLabel *health_label = nullptr;   // its health line (a link to Drive Health…), when it has one
+    QToolButton *usage_button = nullptr;   // "What's using this space?" beside its usage, on a mounted drive
+
+Q_SIGNALS:
+    void disk_usage();
 };
 
 // A folder's card (a bookmark, a save location, a starred or frequent folder), or a starred file's
@@ -190,6 +198,7 @@ Q_SIGNALS:
     void add_bookmark(const QString &target);
     void properties(const QString &target);
     void find_duplicates(const QString &root);
+    void disk_usage(const QString &root);   // a drive's Disk Usage… (its card's button, its menu)
     void open_file(const QString &path);   // a starred file clicked
 
 protected:

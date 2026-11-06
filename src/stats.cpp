@@ -53,6 +53,12 @@ void count(const char *what, qint64 n)
     counts[what] += n;
 }
 
+qint64 counted(const char *what)
+{
+    std::lock_guard<std::mutex> g(lock);
+    return counts.value(what);
+}
+
 void peak(const char *what, qint64 value)
 {
     if (!enabled())

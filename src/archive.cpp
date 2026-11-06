@@ -602,7 +602,7 @@ static const QStringList GPG_ENCRYPT = {"--symmetric", "--cipher-algo", "AES256"
 
 static bool gpg_spec(const Spec &spec) { return is_tar(spec.format) && !spec.password.isEmpty(); }
 
-static std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
+std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o)
 {
     int p[2];
     if (::pipe2(p, O_CLOEXEC) != 0)
@@ -629,8 +629,13 @@ static std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const Q
     return g;
 }
 
+std::unique_ptr<proc::Process> spawn_gpg_encrypt(const QString &password, proc::Options o)
+{
+    return spawn_gpg(GPG_ENCRYPT, password, o);
+}
+
 // gpg -d, writing the archive's stream to its stdout pipe
-static std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, const QString &password)
+std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, const QString &password)
 {
     proc::Options o;
     o.out = proc::PIPE;
@@ -641,7 +646,7 @@ static std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, con
 static bool gpg_wrong_password(const QString &err) { return err.contains("Bad session key"); }
 
 // After gpg has exited: WrongPassword or Error if it failed
-static void check_gpg(proc::Process *g)
+void check_gpg(proc::Process *g)
 {
     if (g->returncode == 0)
         return;

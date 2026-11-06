@@ -151,6 +151,30 @@ static QList<Pref> build()
         .choices = {{TX_NOOP("By drive (jobs on different drives side by side)"), "drive"}, {TX_NOOP("One at a time"), "one"},
                     {TX_NOOP("All at once (every job starts as it's queued, even on a drive in use)"), "all"}};
     add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_start_paused", TX_NOOP("Start new jobs paused"), BOOL, false, TX_NOOP("the Jobs window (Ctrl+Shift+J)"));
+    add(TX_NOOP("Files"), TX_NOOP("Copying"), "copy_kernel",
+        TX_NOOP("Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)"),
+        BOOL, true, QString(),
+        TX_NOOP("On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same "
+        "drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the "
+        "server copies the file itself, so it doesn't cross the network twice; elsewhere the system copies it without "
+        "passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or "
+        "quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always "
+        "go through Kestrel's buffer or dd."));
+    add(TX_NOOP("Files"), TX_NOOP("Copying"), "copy_xattrs", TX_NOOP("Keep extended attributes and ACLs"), BOOL, false, QString(),
+        TX_NOOP("Copies also get their originals' extended attributes: the address a download came from, tags other apps "
+        "keep, access control lists (ACLs), and attributes backup tools rely on. Where the destination can't hold them "
+        "(FAT, exFAT, some network and FUSE drives) the copy goes on without them, and its log says which were left "
+        "out. Security labels need the administrator. A move within one drive always keeps them."));
+    add(TX_NOOP("Files"), TX_NOOP("Copying"), "copy_verify", TX_NOOP("Verify copies"), BOOL, false,
+        TX_NOOP("each job in the Jobs window (Ctrl+Shift+J)"),
+        TX_NOOP("Each file copied (or moved to another drive) is read back once it's written and its checksum compared "
+        "with the original's, read while it was copied. A copy that doesn't match is named in the job's log and its "
+        "list of failures (a move then keeps its original). Onto a tape, the files are read back after the whole job, "
+        "in the order they lie on it. Slower: every copy is read once more."));
+    add(TX_NOOP("Files"), TX_NOOP("Jobs"), "jobs_save_logs", TX_NOOP("Save each finished job's log"), BOOL, false, QString(),
+        TX_NOOP("Each job's log, with its steps, when it ran and how it ended, is saved as a file in "
+        "~/.cache/kestrel-explorer/job-logs (a folder for each day), so it's kept after Clear Finished and after Kestrel "
+        "quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB."));
 
     const QString dupes = TX_NOOP("Find Duplicates");
     const QString in_dupes = TX_NOOP("the Find Duplicates window (a folder's menu → Find Duplicates…)");
@@ -237,6 +261,24 @@ static QList<Pref> build()
         TX_NOOP("Remember the image viewer's Move To / Copy To folders (Ctrl+1–9, Alt+1–9)"), BOOL, true);
     add(TX_NOOP("Privacy"), history, "history_clear", TX_NOOP("Clear"), CUSTOM, QVariant(),
         TX_NOOP("Remove from Frequent Folders, Remove from Recent Servers (right-click one)"));
+    const QString separate = TX_NOOP("Separate caching");
+    add(TX_NOOP("Privacy"), separate, "separate_cache",
+        TX_NOOP("Keep thumbnails in Kestrel's own cache folder, apart from other apps"), BOOL, false, QString(),
+        TX_NOOP("Thumbnails are then neither read from nor written to the cache the desktop's apps share (GNOME Files "
+        "and others): Kestrel makes its own and keeps them in its cache folder, with its other caches. Turned off "
+        "again, the thumbnails kept there are still used until they're deleted (☰ → Delete All Thumbnails…), and new "
+        "ones go to the shared cache."));
+    const QString priv = TX_NOOP("Private mode");
+    add(TX_NOOP("Privacy"), priv, "private_mode", TX_NOOP("Private mode"), BOOL, false,
+        TX_NOOP("☰ → Private Mode; the status bar's Private; the sidebar's Private (Leave Private Mode)"),
+        TX_NOOP("Kestrel's caches (the previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent "
+        "servers, remembered syncs, the viewer's folders) are kept in memory and deleted when the last Kestrel closes; "
+        "nothing is added to the desktop's Recent; Save windows start in the Private folder, in memory too. It stays on, "
+        "also after Kestrel is closed and opened again, until it's turned off."));
+    add(TX_NOOP("Privacy"), priv, "ramdisk_wipe_warning",
+        TX_NOOP("Say which files will be deleted when the last Kestrel closes or private mode is left"), BOOL, true,
+        TX_NOOP("the warning's Don't show this again"),
+        TX_NOOP("The files saved in Private (private mode) and in RAM disks that last until Kestrel closes."));
     return l;
 }
 

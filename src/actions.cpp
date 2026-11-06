@@ -435,7 +435,7 @@ void MainWindow::rename_to(const QString &src, const QString &nw)
     }
 }
 
-void MainWindow::trash_paths(const QStringList &selected)
+void MainWindow::trash_paths(const QStringList &selected, std::function<void(const QStringList &)> after)
 {
     // what's already in the trash can only be deleted permanently (delete_paths asks first); the rest goes to the
     // trash. A selection can hold both (a search, Recent, Starred).
@@ -455,34 +455,42 @@ void MainWindow::trash_paths(const QStringList &selected)
             try {
                 util::trash(paths[i]);
                 *trashed << paths[i];
+                task->log(tx("Moved to the trash: %1").arg(paths[i]));
             } catch (const OSError &e) {
                 failed << QVariant(QStringList{paths[i], e.message()});
+                task->log(tx("Failed: %1: %2").arg(paths[i], e.message()));
+                task->had_errors = true;
             }
         }
         return task->cancelled ? QVariant() : QVariant(failed);
     };
-    auto done = [this, paths, trashed](const QVariant &res) {
+    // also when this window has closed meanwhile: what was trashed can still be undone, and what couldn't be is asked
+    QPointer<MainWindow> self(this);
+    auto done = [self, paths, trashed, after](const QVariant &res) {
         undo::record_paths("trash", TX_NOOP("Move to Trash"), *trashed);
         fileops::dirsizes::drop_with_parents(*trashed);   // the folders they left are smaller now
-        sidebar->refresh();
+        if (self)
+            self->sidebar->refresh();
+        if (after)
+            after(*trashed);
         QVariantList failed = res.toList();
         if (!failed.isEmpty()) {
-            ask_yes(this, tx("Cannot move to trash"),
+            ask_yes(self, tx("Cannot move to trash"),
                     txn("%Ln item(s) could not be moved to the trash:\n%1\n\nDelete them permanently?", failed.size())
                         .arg(failed.first().toStringList().value(1)),
-                    [this, failed]() {
+                    [self, failed]() {
                         QList<fileops::Job> jobs;
                         for (const QVariant &f : failed)
                             jobs << fileops::Job{"delete", f.toStringList().value(0), QString()};
-                        fileops::start_ops(this, jobs, tx("Deleting"));
+                        fileops::start_ops(self, jobs, tx("Deleting"));
                     });
-        } else if (res.isValid()) {
-            statusBar()->showMessage(txn("Moved %Ln item(s) to the trash", paths.size()), 4000);
-        } else {
-            statusBar()->showMessage(tx("Move to trash cancelled; items already moved stay in the trash"), 6000);
+        } else if (self && res.isValid()) {
+            self->statusBar()->showMessage(txn("Moved %Ln item(s) to the trash", paths.size()), 4000);
+        } else if (self) {
+            self->statusBar()->showMessage(tx("Move to trash cancelled; items already moved stay in the trash"), 6000);
         }
     };
-    fileops::run_job(this, tx("Moving to trash"), work, done);
+    fileops::run_job(this, tx("Moving to trash"), work, done, true, false, true);
 }
 
 void MainWindow::delete_paths(const QStringList &paths)
@@ -505,9 +513,9 @@ void MainWindow::delete_now(const QStringList &paths)
 {
     QPointer<MainWindow> self(this);
     auto done = [self, paths]() {
-        for (const QString &p : paths) {
+        for (const QString &p : paths) {   // the trash's record of each one deleted; one that failed keeps it (Restore)
             QString info_path = trash_info_path(p);
-            if (!info_path.isEmpty())
+            if (!info_path.isEmpty() && !lexists(p))
                 ::unlink(enc(info_path).constData());
         }
         if (self)
@@ -620,6 +628,8 @@ void MainWindow::restore(const QStringList &paths)
             QString orig = trash_original_path(p);
             if (orig.isEmpty()) {
                 errors << tx("%1: original location unknown").arg(basename(p));
+                task->log(tx("Skipped: %1: its original location is unknown").arg(p));
+                task->had_errors = true;
                 continue;
             }
             QString dest = !lexists(orig) ? orig : unique_path(dirname(orig), basename(orig), "num");
@@ -629,19 +639,25 @@ void MainWindow::restore(const QStringList &paths)
                 util::move(p, dest);
                 if (!info_path.isEmpty() && exists(info_path))
                     util::unlink(info_path);
+                task->log(dest == orig ? tx("Restored: %1").arg(dest)
+                                       : tx("Restored: %1 (as %2: its name was taken)").arg(orig, basename(dest)));
             } catch (const OSError &e) {
                 errors << basename(p) + ": " + e.message();
+                task->log(tx("Failed: %1: %2").arg(orig, e.message()));
+                task->had_errors = true;
             }
         }
         return errors;
     };
-    auto done = [this](const QVariant &res) {
-        sidebar->refresh();
+    QPointer<MainWindow> self(this);
+    auto done = [self](const QVariant &res) {   // (also when this window has closed: the errors are still told)
+        if (self)
+            self->sidebar->refresh();
         QStringList errors = res.toStringList();
         if (!errors.isEmpty())
-            warn(this, tx("Restore"), errors.mid(0, 20).join('\n'));
+            warn(self, tx("Restore"), errors.mid(0, 20).join('\n'));
     };
-    fileops::run_job(this, tx("Restoring"), work, done);
+    fileops::run_job(this, tx("Restoring"), work, done, true, false, true);
 }
 
 void MainWindow::empty_trash()
@@ -651,10 +667,20 @@ void MainWindow::empty_trash()
             if (b != QMessageBox::Yes)
                 return;
             QList<fileops::Job> jobs;
-            for (const QString &p : fileops::trash_contents())
+            QStringList items;   // in files/: each one's record in info/ goes after it, if it went
+            for (const QString &p : fileops::trash_contents()) {
+                if (basename(dirname(p)) == "info" && p.endsWith(".trashinfo") &&
+                    lexists(join(join(dirname(dirname(p)), "files"), basename(p).chopped(10))))
+                    continue;
+                if (in_trash(p))
+                    items << p;
                 jobs << fileops::Job{"delete", p, QString()};
+            }
             QPointer<MainWindow> self(this);
-            fileops::start_ops(this, jobs, tx("Emptying trash"), [self]() {
+            fileops::start_ops(this, jobs, tx("Emptying trash"), [self, items]() {
+                for (const QString &p : items)   // one that couldn't be deleted keeps its record (Restore)
+                    if (!lexists(p))
+                        ::unlink(enc(trash_info_path(p)).constData());
                 if (self)
                     self->sidebar->refresh();
             });

@@ -45,6 +45,7 @@ QString date(const QDate &d);                   // the system's short date, with
 QString date_time(const QDateTime &dt);         // that date and the time (hours and minutes)
 QString date_time_secs(const QDateTime &dt);    // …and seconds
 QString time(const QTime &t);                   // hours and minutes, in the system's 12 or 24 hours
+QString time_secs(const QTime &t);              // …and seconds
 QString long_date(const QDate &d);              // with the weekday and the month's name: Wednesday, 28 October 2026
 QString month_year(const QDate &d);             // October 2026
 

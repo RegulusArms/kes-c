@@ -159,13 +159,19 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
   <running type="exe">kes</running>
   <option id="cache">
     <label>Cache</label>
-    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, files opened from inside archives, copies of images dragged out of the image viewer as shown, the folder sizes Properties remembers, and exiftool's tag lists (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option)</description>
-    <action command="delete" search="walk.all" path="\$XDG_CACHE_HOME/kestrel-explorer"/>
+    <description>Delete Kestrel's cache: folder preview mosaics, video clips played in the file view, copies of phone videos made to play them, files opened from inside archives, copies of images dragged out of the image viewer as shown, the folder sizes Properties remembers, copies of compressed or encrypted disk images expanded to mount them, exiftool's tag lists, and the thumbnails kept apart from other apps by Preferences → Privacy → Separate caching (the thumbnails shared with GNOME Files are BleachBit's Thumbnails option; saved job logs are the Job logs option)</description>
+    <action command="delete" search="walk.all" path="\$XDG_CACHE_HOME/kestrel-explorer" nwholeregex="/kestrel-explorer/job-logs(/|\$)"/>
+  </option>
+  <option id="job_logs">
+    <label>Job logs</label>
+    <description>Delete the logs of finished jobs Kestrel saved (copies, moves, extractions…: what each did, when, and what failed), kept when Preferences → Files → Jobs says so</description>
+    <action command="delete" search="walk.all" path="\$XDG_CACHE_HOME/kestrel-explorer/job-logs"/>
   </option>
   <option id="history">
     <label>History</label>
-    <description>Delete the list of recently connected servers, the folder the last Open or Save dialog was left in, the image viewer's recent Copy To / Move To folders, and the count of the folders opened most (the Overview's Frequent Folders)</description>
+    <description>Delete the list of recently connected servers, the folder the last Open or Save dialog was left in, the image viewer's recent Copy To / Move To folders, the count of the folders opened most (the Overview's Frequent Folders), and the folders synced lately (which Sync Folders fills itself in from; the saved sync pairs are their own option)</description>
     <action command="delete" search="file" path="$conf/frequent.json"/>
+    <action command="delete" search="file" path="$conf/sync-history.json"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="recent_servers"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="chooser_folder"/>
     <action command="ini" search="file" path="$conf/kestrel-explorer.conf" section="General" parameter="viewer_recent_folders"/>
@@ -194,12 +200,22 @@ bleachbit_cleaner() {   # Kestrel's cleaner, in BleachBit's CleanerML: only file
     <warning>Sync Folders no longer lists them.</warning>
     <action command="delete" search="file" path="$conf/sync-pairs.json"/>
   </option>
-  <option id="folder_looks">
-    <label>Folder covers, colours and sorts</label>
-    <description>Delete the list of folders given a cover image, a colour, no image previews, or a sort of their own</description>
-    <warning>Those folders go back to their usual look and the default sort.</warning>
+  <option id="folder_covers">
+    <label>Folder covers</label>
+    <description>Delete the list of folders given a cover image</description>
+    <warning>Those folders show their usual preview again.</warning>
     <action command="delete" search="file" path="$conf/covers.json"/>
+  </option>
+  <option id="folder_colours">
+    <label>Folder colours</label>
+    <description>Delete the list of folders given a colour or no image previews</description>
+    <warning>Those folders go back to the usual colour, with image previews.</warning>
     <action command="delete" search="file" path="$conf/folder_styles.json"/>
+  </option>
+  <option id="folder_sorts">
+    <label>Folder sorts</label>
+    <description>Delete the list of folders given a sort or grouping of their own</description>
+    <warning>Those folders go back to the default sort.</warning>
     <action command="delete" search="file" path="$conf/sorts.json"/>
   </option>
 </cleaner>
@@ -442,7 +458,7 @@ if (( BLEACHBIT )); then
             { rm -f "$part"; exit 1; }
     ) || { echo "Couldn't write BleachBit's cleaner ($BLEACHBIT_CLEANER)." >&2; exit 1; }
     echo "Added Kestrel Explorer to BleachBit: its cache, history (recent servers, the last Open/Save folder, frequent" \
-         "folders), Starred, pinned items, and folder covers, colours and sorts. The first time BleachBit opens" \
+         "folders), Starred, pinned items, and folder covers, folder colours and folder sorts. The first time BleachBit opens" \
          "afterwards, it asks whether to trust the new cleaner (a check it makes for every cleaner you add): choose OK."
     command -v bleachbit >/dev/null || echo "BleachBit isn't installed yet (sudo apt install bleachbit); it will find the cleaner."
 fi

@@ -57,6 +57,11 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow(const QStringList &paths, ThumbnailManager *thumbs, bool chooser_mode = false);
     void make_chooser(const chooser::Request &req, std::function<void(const chooser::Result &)> done);
+    // A browser inside another window (each side of the Link window, linkwin.h): a chooser-mode window made a widget,
+    // its shortcuts working only while the focus is in it, and the files opened there (double-click, Enter) handed to
+    // activated instead of being opened. Its size and panels aren't saved.
+    void embed(std::function<void(const QStringList &)> activated = nullptr);
+    bool embedded = false;
 
     Pane *pane() const;
     QList<Pane *> panes() const;
@@ -82,6 +87,7 @@ public:
     void update_status();
     void open_paths(Pane *pane, const QStringList &paths, bool new_tab = false);
     void open_checksums(const QString &path);   // Verify Checksums, its signature first when one is beside it
+    void open_signed_or_encrypted(const QString &path);   // Verify Signature, or Decrypt
     bool open_file(const QString &path);
     void quick_view(Pane *pane, const QStringList &paths);
     ImageViewer *open_viewer(Pane *pane, const QStringList &images, int idx, bool whole_folder = false);   // whole_folder: follow it
@@ -105,7 +111,8 @@ public:
     void start_move_into(const QStringList &items, const QStringList &gone, const QString &folder);   // it's made
     void new_file(const QString &tmpl = QString());
     void rename(const QStringList &paths);
-    void trash_paths(const QStringList &paths);
+    // after(trashed): once it's done, with the items now in the trash (also after a cancel part-way)
+    void trash_paths(const QStringList &paths, std::function<void(const QStringList &)> after = nullptr);
     // Wipe Metadata…: the images' metadata taken out (metadata::wipe), as a queued job; copies beside them or the
     // originals themselves (asked first), as Preferences says. Undo moves the copies to the trash.
     void wipe_metadata(const QStringList &paths);
@@ -134,6 +141,9 @@ public:
     ChooserBar *chooser = nullptr;   // a file chooser window (see chooser.h)
     bool chooser_mode = false;       // a chooser window: has its own view settings (view_value)
     QAction *a_tower = nullptr;      // ☰ → Tower…, with Preferences → Show developer tools
+    QAction *a_private = nullptr;    // ☰ → Private Mode (ticked while it's on)
+    QToolButton *private_btn = nullptr;   // "Private" in the status bar while private mode is on
+    void sync_private();             // those two and the title, after private_mode changed
     // the window's and its tabs' view settings (size, zoom, view, sort, panels, hidden files, folder previews, search
     // options); a chooser window keeps its own (see view_value in app.cpp)
     QVariant view_value(const QString &key, const QVariant &def = QVariant()) const;
@@ -144,10 +154,15 @@ public:
     void sort_subfolders(Pane *p);    // Sort → Apply to Subfolders: p's sort, for every folder below p's
     void remember_server(const QString &uri);   // a server connected to, first in recent_servers (unless Privacy says no)
 
+Q_SIGNALS:
+    void selection_changed();   // in the current tab
+    void folder_changed();      // the current tab shows another folder, or another tab is current
+
 protected:
     void closeEvent(QCloseEvent *ev) override;
 
 private:
+    std::function<void(const QStringList &)> embed_activated;
     void build_toolbar();
     void fill_sort_menu();
     void add_sort_items(QMenu *m, Pane *p);   // the Sort menu's items, for p's folder
@@ -172,6 +187,8 @@ private:
     void purge_now(bool include_shared);         // Delete All Thumbnails, once confirmed
     QPointer<QMessageBox> close_box;             // "Jobs Are Running" (the last window), while it's asking
     bool close_confirmed = false;                // answered: close without asking again
+    QPointer<QMessageBox> wipe_box;              // "Close Kestrel" (RAM disk files deleted), while it's asking
+    bool wipe_confirmed = false;
 
     QList<QPointer<ImageViewer>> viewers;
     QSplitter *split;

@@ -63,6 +63,10 @@ public:
     std::unique_ptr<QEventLoopLocker> keeps_running;
     bool failed = false;         // ended with an error
     std::atomic<bool> had_errors{false};   // some of its items failed (it ends "done with errors")
+    // Verify after copy: -1 not a job that copies; 0 off; 1 on: each file copied is read back and compared with its
+    // original (fileops.cpp, Ops). Its default from Preferences → Files → Copying; changed per job in the Jobs window,
+    // also while it runs (for the files copied from then on)
+    std::atomic<int> verify{-1};
     qint64 elapsed_ms() const;   // since it started; 0 while it waits
     static qint64 now_ms();      // the clock of started_ms and queued_ms (monotonic)
 
@@ -75,8 +79,15 @@ public:
     void log_output(const QByteArray &chunk);   // a program's output, as it comes
     QString log_text() const;
     static Task *current();   // the job running on this thread, if any
-    // at most ~12 a second; `now`: always (a state the user must see at once, such as waiting for a tape to wind)
+    // at most ~12 a second; `now`: always (a state the user must see at once, such as waiting for a tape to wind).
+    // While its log has had nothing new for 15 seconds, the text goes into it too (with the time and the percentage),
+    // so every job's log shows how it went, also one that logs nothing of its own.
     void report(double done, double total = 0, const QString &text = QString(), bool now = false);
+    static qint64 beat_ms;   // how long the log is quiet before the progress text goes in (15 s; tests shorten it)
+    // A report now would be shown: a job checks this before making a costly progress text for each file or chunk
+    bool due() const;
+    // "12.3 MB/s": bytes done since it started, for its progress text (empty in its first 2 seconds)
+    QString speed(qint64 bytes) const;
 
 Q_SIGNALS:
     void progress(double fraction, const QString &text);   // fraction 0..1 or -1 for busy
@@ -91,7 +102,8 @@ protected:
 
 private:
     Fn fn;
-    qint64 last = 0;
+    std::atomic<qint64> last{0};
+    std::atomic<qint64> last_log{0}, last_beat{0};   // when it last logged a line, and a progress line of its own
     std::atomic<bool> pause_flag{false};
     mutable QMutex mtx;          // the log and the programs
     QWaitCondition resumed;
@@ -138,6 +150,8 @@ class TaskBoard : public QObject {
 public:
     static TaskBoard *instance();
     void add(Task *task);
+    // A quiet job the Jobs window still lists (a queued one): kept in `finished` when it ends, but not in the status bars
+    void record(Task *task);
     QList<TaskInfo> others(const QList<Task *> &mine) const;   // all but `mine`: our other windows', then other Kestrels'
     QList<TaskInfo> all() const { return others({}); }        // every job running or waiting: ours, then the others'
     void cancel(const TaskInfo &task);   // another Kestrel's task: asks it to cancel
@@ -163,6 +177,8 @@ private:
     void publish();
     void on_heard(const QJsonObject &msg);
     QList<Task *> local;
+    QSet<Task *> recorded;                   // quiet ones (record)
+    void on_ended(Task *task);
     QMap<QString, QList<TaskInfo>> remote;   // flight -> its tasks
     QHash<QString, JobDetail> details;       // "flight/task" -> what it answered
     QSet<QString> left;                      // flights that have closed (their finished jobs are kept)
@@ -216,10 +232,14 @@ namespace fileops {
 
 using Done = std::function<void(const QVariant &)>;
 
+// A job's state as shown: "waiting", "running", "paused", "done", "done with errors", "failed", "cancelled"
+QString state_label(const QString &state);
+
 // Run fn(task) on a thread, shown in the status bar unless quiet. on_done(result) runs on the UI thread (also
-// after a cancel, with an invalid QVariant) while `parent` exists. Errors are shown in a message box unless quiet.
+// after a cancel, with an invalid QVariant) while `parent` exists, or always with outlives_parent (it must then not
+// need parent). Errors are shown in a message box unless quiet.
 Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done = nullptr, bool cancellable = true,
-              bool quiet = false);
+              bool quiet = false, bool outlives_parent = false);
 // The same for a job that reads or writes drives: it waits in the job queue (jobs.h) for lanes on the drives of
 // `paths` before its thread starts, so it doesn't compete with other jobs on them (in any Kestrel). `steps`: what it's
 // going to do, listed in the Jobs window (it sets task->step as it goes).
@@ -229,9 +249,10 @@ Task *run_job(QWidget *parent, const QString &title, Task::Fn fn, Done on_done =
 Task *queue_job(QWidget *parent, const QString &title, const QStringList &paths, Task::Fn fn, Done on_done = nullptr,
                 bool cancellable = true, const QStringList &steps = QStringList(), bool quiet = false,
                 const QStringList &intro = QStringList(), bool outlives_parent = false);
-// Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet.
+// Run fn() (no arguments) on a thread, shown as a busy item in the status bar unless quiet. outlives_parent: as
+// run_job's.
 Task *run_task(QWidget *parent, const QString &title, std::function<QVariant()> fn, Done on_done = nullptr,
-               bool quiet = false);
+               bool quiet = false, bool outlives_parent = false);
 
 // op is "copy", "move", "merge_copy", "merge_move" or "delete"
 struct Job {
@@ -279,14 +300,20 @@ void fetch_local(QWidget *parent, const QStringList &paths, std::function<void(c
 // What creating a link of `kind` ("sym", "rel", "hard" or "desktop") to target in dest_dir means, as an
 // admin-helper request ({"op": "symlink" | "hardlink" | "write", ...}). The name is made unique.
 QVariantMap link_plan(const QString &kind, const QString &target, const QString &dest_dir);
+// The name such a link gets by default, before it's made unique ("Link to a.txt" beside a.txt, "a.desktop")
+QString link_name(const QString &kind, const QString &target, const QString &dest_dir);
+// A .desktop shortcut's contents for target (raises Error for a path with control characters)
+QString desktop_entry(const QString &target);
 QString plan_path(const QVariantMap &plan);
 QString make_link(const QVariantMap &plan);   // as the current user; raises OSError
 
 struct DirStats {
     qint64 size = 0, files = 0, dirs = 0;
 };
-// (total bytes, file count, dir count) recursively, not following symlinks
-DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr);
+// (total bytes, file count, dir count) recursively, not following symlinks. progress(so far, the folder it's in): now
+// and then (every 64 folders)
+DirStats dir_stats(const QString &path, std::function<bool()> cancel = nullptr,
+                   std::function<void(const DirStats &, const QString &)> progress = nullptr);
 
 // Folder sizes worked out before (Properties), so they show at once: ~/.cache/kestrel-explorer/folder-sizes.json,
 // keyed by path and checked against the folder's device and inode (another folder later under the same name isn't
@@ -300,6 +327,14 @@ struct Entry {
 QString cache_file();
 std::optional<Entry> get(const QString &folder);
 void put(const QString &folder, const DirStats &stats);
+// Many counted at once (Disk Usage), in one write: each with the device and inode it had when counted
+struct Counted {
+    QString folder;
+    quint64 dev = 0, ino = 0;
+    DirStats stats;
+};
+void put_many(const QList<Counted> &counted);
+QStringList folders();   // every folder remembered (not checked: get() checks one)
 void drop_with_parents(const QStringList &paths);   // each path's own entry and every folder's above it
 QString age_text(qint64 measured, qint64 now);      // "Calculated 3 days ago (2026-10-21 14:05)", "Calculated just now"
 }  // namespace dirsizes

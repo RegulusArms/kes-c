@@ -4,7 +4,230 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.0
+## 0.3.4-alpha.0
+
+- Nothing yet.
+
+## 0.3.3-alpha.18 (2026-11-06)
+
+- **Separate caching (Preferences → Privacy): Kestrel's thumbnails can be kept apart from other apps.** When it's on,
+  Kestrel no longer reads or writes the thumbnail cache the desktop's apps share (GNOME Files and others): it makes
+  its own thumbnails and keeps them in its cache folder (`~/.cache/kestrel-explorer/thumbnails`), with its other
+  caches. Turned off again, the thumbnails kept there are still used until they're deleted (☰ → Delete All
+  Thumbnails…, which now also clears that folder), and new ones go to the shared cache. BleachBit's Kestrel Cache
+  option already deletes them; run `kes-setup --bleachbit` again for its updated description.
+
+## 0.3.3-alpha.17 (2026-11-06)
+
+- **BleachBit: folder covers, folder colours and folder sorts are three options**, so each can be cleaned without
+  the others (they used to be one, "Folder covers, colours and sorts"). Run `kes-setup --bleachbit` again to update
+  the cleaner.
+
+## 0.3.3-alpha.16 (2026-11-06)
+
+- **Double-clicking an encrypted archive extracts it also when its password was saved for another archive.** Kestrel
+  already tried every saved password when extracting, but only skipped the Extract dialog for a password saved for
+  that very file; now it tries the saved ones first (as Extract Here does) and extracts at once when one opens it.
+
+## 0.3.3-alpha.15 (2026-11-06)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha15).
+
+## 0.3.3-alpha.14 (2026-11-05)
+
+- **Fixed: a folder of files with long names and emoji could freeze the window in the grid view.** Each name was
+  measured again, a character at a time, on every repaint and every mouse movement over the grid to find where its
+  first line ends, and a colour emoji is slow to measure, so moving the mouse over such a folder (or thumbnails
+  arriving) kept the window busy until it stopped responding. Each name is now wrapped once and remembered, and
+  wrapping no longer splits a joined emoji (such as a family) between the two lines.
+
+## 0.3.3-alpha.13 (2026-11-05)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha13).
+
+## 0.3.3-alpha.12 (2026-11-05)
+
+- **Fixed: Verify Checksums stopped when the Kestrel window it was opened from was closed**, and closing the Verify
+  window stopped it too. The whole checksum file is now checked as one job in the Jobs window, which goes on whichever
+  window closes: its log has each file's result and lists the files that didn't pass at its end, and it ends "done
+  with errors" when any didn't.
+- **Fixed: closing a Kestrel window could undo what its jobs did after they ended.** A Move to Trash still running
+  when its window closed couldn't be undone afterwards; Apply Sort to Subfolders left the subfolders unsorted; Delete
+  Thumbnails, making thumbnails anew and Write Tape Index didn't finish their work or report their errors; a retry
+  as administrator didn't say what failed. These now finish as if the window were still open.
+- **Fixed: closing the Kestrel window behind Find Duplicates, Disk Usage, Compare With… or Sync To… closed the tool
+  window too and stopped its scan.** They're now windows of their own: they stay open, their scans and syncs go on,
+  and a sync can still be started from them.
+- **Fixed: a folder whose name isn't valid UTF-8 showed empty.** Old archives and other systems leave names in
+  Latin-1 or DOS encodings; Kestrel's own file code has kept them byte for byte since 0.3.3-alpha.1, but the folder
+  view used Qt's folder model, which reads names as text and couldn't open such a folder. The folder view now has a
+  model of Kestrel's own that lists by the names' bytes, so these folders open and list like any other, and changes
+  in them show up. A stray byte in a name is shown as �.
+- **Fixed: Retry as Administrator failed on a name that isn't valid UTF-8.** The admin session now sends each path as
+  its exact bytes, so renaming, deleting, copying or linking such a file as administrator works.
+- **Fixed: closing a Kestrel window while Mount Image was setting an image up** could leave it attached as a loop
+  device, never mounted or detached. Mount Image now carries on to the end (its questions are windows of their own).
+
+## 0.3.3-alpha.11 (2026-11-03)
+
+- **Fixed: cancelling a RAM disk's save while a file was being copied left a hidden part file** (`.kes-….part`) in
+  the folder on disk. It's now removed, and the saved file stays as it was.
+
+## 0.3.3-alpha.10 (2026-11-03)
+
+- **RAM disks.** ☰ → **New RAM Disk…** makes a folder whose files are kept in memory. Without a size limit it needs no
+  password (a folder in `/dev/shm`, only yours); with a size limit of its own it's a tmpfs mounted on a folder you
+  choose, which asks for your password once. It can last until Kestrel closes, until you log out or restart, or always
+  (back, empty, at every login or start). Or it can keep its files: they're saved to a folder on disk when you log out
+  or shut down, every few minutes in between (you set how often) and with **Save to Disk Now**, and loaded back when it
+  comes up, also while Kestrel isn't running. Each save copies only what changed and never leaves a saved file half
+  written, and a RAM disk that came up without its files is never saved over them. RAM disks are listed in the
+  sidebar's new **RAM Disks** section, with Edit, Save to Disk Now and Remove when you right-click one.
+- **Private mode** (☰ → **Private Mode**, or Preferences → Privacy). Kestrel's caches (the thumbnails and folder
+  previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent servers, remembered syncs, the
+  viewer's folders) are kept in a hidden RAM disk, nothing is added to the desktop's Recent, and every Save window
+  starts in a **Private** folder in memory. All of it is deleted when the last Kestrel closes, or when private mode is
+  turned off. Kestrel says which files will be deleted first, until you tick **Don't show this again**. Private mode
+  stays on across restarts until you turn it off; the status bar, the title and the sidebar show it's on.
+
+## 0.3.3-alpha.9 (2026-11-03)
+
+- **Encrypt and decrypt files with gpg.** Right-click one or more files → **Encrypt…**: an encrypted copy beside each
+  (`name.gpg`, or `name.asc` as text to paste into an email), the original left as it is, either with a password
+  (typed twice) or to people's public keys from your keyring, so only they can open it and there's no password to pass
+  on. Each key says whether you've verified it's really theirs, and your own key is added so you can open it too.
+- **Decrypt** (right-click, or double-click an encrypted `.gpg`, `.pgp` or `.asc`): asks for the password when it was
+  encrypted with one (trying one saved in the keyring first, and offering to save it), lets gpg ask for your key's
+  passphrase when it was encrypted to your key, and says so when it's encrypted only to someone else's. The decrypted
+  copy goes beside it, and it says who signed what was inside, if anyone. Double-clicking an encrypted file used to
+  open Verify Signature, which then said it couldn't check it.
+- Both run as jobs, and the new file appears only once gpg has finished: a wrong password, a cancel or a failure
+  leaves nothing behind, and no file is ever replaced (a second copy takes the next free name).
+- **Sync To… remembers past syncs.** Every sync that runs is remembered, without having to name it: Sync To… on a
+  folder synced before, from either end, opens already filled in as it was last run (From, To, deleting or not, rsync
+  or Kestrel's copy), so only Preview → Sync Now is left. Opened on the destination, it's filled in the right way
+  round, so a sync can't be run backwards by accident. Other past syncs of that folder are under **Last synced**, and a
+  remembered folder that isn't there now (deleted, or its drive not connected) is said, not just filled in. Saved
+  pairs work as before. The list (`sync-history.json`, the last five syncs per folder) is cleaned by
+  `kes-setup --bleachbit`'s History option.
+- **Keep extended attributes and ACLs when copying** (Preferences → Files → Copying, off by default). Copies used to
+  keep only a file's times and permissions, silently dropping where a download came from, tags other apps keep, ACLs
+  and attributes backup tools rely on. With this on, copies of files and folders (and moves to another drive, and
+  copies made as administrator) keep them. Where the destination can't hold them (FAT, exFAT, some network and FUSE
+  drives) the copy goes on, and the job's log says once which were left out.
+- **Verify copies** (off by default; per job in the Jobs window, or for every job in Preferences → Files → Copying):
+  each file copied is read back once it's written and its checksum compared with the original's, which is worked out
+  while copying, so the original isn't read twice. Onto a tape, the files are read back after the whole job in the
+  order they lie on it, so the drive doesn't wind back and forth. A copy that doesn't match is named in the job's log
+  and its list of failures and kept, to copy again; a move between drives then keeps its original.
+
+## 0.3.3-alpha.8 (2026-11-02)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha8).
+
+## 0.3.3-alpha.7 (2026-11-02)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha7).
+
+## 0.3.3-alpha.6 (2026-11-02)
+
+- **Make and change links in one window.** Right-click → Links & Shortcuts → **Link…** opens two browsers side by
+  side: what the links point to on the left, the folder they go in on the right, where the links-to-be show ghosted
+  and can be renamed before they exist. Pick the kind (symbolic, relative symbolic, hard link, `.desktop` shortcut)
+  and **Add to List**; the list below gathers links from any number of folders and flags problems (a name already
+  taken, something that isn't there, a hard link to another drive). **OK** shows everything that will be made or
+  changed and makes it only once you confirm, as one job in the Jobs window, and Ctrl+Z undoes the whole batch.
+  A file that already has several names (hard links) says so, and **Find the Other Names** searches its drive.
+- The Link window also opens from the empty space in a folder (right-click → **Link…**), with that folder as where
+  the links go.
+- **Edit Link…** on symbolic links (also **Edit…** beside a link's target in Properties): point them somewhere else,
+  switch between absolute and relative, rename or move them, several at once. The new link is made beside the old
+  one and swapped in, never deleted first, and a link another program changed meanwhile is left alone.
+- **Back up a drive to an image file.** Right-click a drive in the sidebar or on the Overview (mounted or not) →
+  **Back Up Drive to Image…**: that partition or its whole disk, byte for byte, optionally compressed (zstd) and
+  encrypted with a password (gpg), as a job with progress and speed. It asks for the administrator password to read
+  the drive (only reading it); the image is made as you, never on the disk unencrypted, and appears only once the whole
+  drive is read, so a cancel or a failure leaves nothing. It won't save onto the drive being read, checks the free
+  space, and asks first while the drive is mounted for writing.
+- **Mount disk images.** Double-click an `.img` (or right-click any `.img`, `.iso`, `.raw` → **Mount Image**): its
+  file systems are mounted read-only and show in the sidebar and on the Overview like a plugged-in drive; unmounting
+  the last of them detaches it. **Mount Image for Writing** for a plain image you can change. LUKS encryption inside
+  asks for its password (which can be remembered in the keyring). Compressed (`.img.zst`, `.xz`, `.gz`) and
+  gpg-encrypted (`.img.gpg`) images, such as Back Up makes, are expanded into a copy in the cache first (asked first),
+  deleted once unmounted. Unmounted drives' cards on the Overview now have a right-click menu too (Mount, Back Up).
+- Links & Shortcuts is shorter: **Create Symbolic Link In…** and the two `.desktop` shortcut entries are now done in
+  the Link window. The one-click entries (Create Symbolic Link Here, Relative, Hard Link, Send Link to Desktop) stay.
+  If you had customised that menu, the removed entries simply drop out of it.
+
+## 0.3.3-alpha.5 (2026-11-01)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha5).
+
+## 0.3.3-alpha.4 (2026-11-01)
+
+- **What's using this space? Disk Usage shows it as a map.** Right-click a folder → **Disk Usage…**, or a drive in
+  the sidebar or on the Overview (whose drive cards also have a button for it beside the usage bar). Each subfolder
+  is a block sized by what it holds, with its biggest subfolders and files inside it; click a folder to go into it,
+  Back to go up, hover for a size and its share, and a list beside the map has the folder shown, biggest first.
+  Right-click an item to open it, show it in its folder, move it to the trash (Undo as usual) or see its Properties.
+  Counting is a job with progress, Pause and Stop that waits for its turn on the drive and stays on that drive. The
+  folder sizes Properties remembers show at once while it counts, and what it counts is remembered for Properties
+  in turn. On a tape or a floppy it counts only when you ask.
+- **Every job tells the Jobs window more about what it's doing.** Jobs that said little or nothing now log each
+  item: what Move to Trash, Restore and Undo moved (and what they couldn't), what a folder size count found, the
+  files a checksum job hashed or couldn't read, each verified file's result, the duplicates kept and linked, what a
+  compare found different, the previews made and the files that got none, a signature's result. Progress shows the
+  item a job is on, and copies, checksums and duplicate searches show their speed. A job whose log has been quiet
+  for 15 seconds gets a line with the time and how far it is, and every log now ends with how the job ended and how
+  long it took. Progress texts are made only when they're shown, so copies are no slower for it.
+- **Copies let the system do the work** (Preferences → Files → Copying, on by default). On a drive that can share
+  data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later) a copy on the same drive is now a clone: instant,
+  taking no extra space until one of them changes. On an SMB3 or NFS 4.2 share the server copies the file itself,
+  so it no longer crosses the network twice; elsewhere the kernel copies it without passing it through Kestrel.
+  Where neither works, and always onto tapes and for files under 64 KB (except on Btrfs), Kestrel reads and writes
+  the file itself as before (also with the setting off). Copies stay failure-atomic (written under a hidden name, renamed into place when whole), with
+  progress, pause and cancel; the job's log says how many files were cloned, copied by the system or by Kestrel.
+- **Job logs can be kept** (Preferences → Files → Jobs → Save each finished job's log, off by default): each
+  finished job's log is saved in `~/.cache/kestrel-explorer/job-logs`, a folder for each day and a file for each
+  job, so it outlives Clear Finished and quitting Kestrel. Logs older than 90 days are deleted, and the oldest days
+  while they take more than 100 MB. `kes-setup --bleachbit` gives BleachBit a separate **Job logs** option for them
+  (its Cache option now keeps them); run it again to update the cleaner.
+
+## 0.3.3-alpha.3 (2026-11-01)
+
+- **Kestrel no longer freezes when another program keeps a drive busy.** Opening a folder on such a drive, refreshing
+  it, or right-clicking an item there could hold the window until GNOME offered to force-quit it: each of these asked
+  the drive about the folder or every item in it, and a busy drive answers each question late. The right-click menu,
+  refresh and search results now use what the folder view already knows, the Info Panel reads its item in the
+  background (as it already did on tapes), and opening a folder waits at most a moment
+  before going ahead (a file named instead of a folder, or a folder that isn't there, is dealt with when the drive
+  answers).
+- **Search results follow their files.** A result you delete, move to the trash or another program deletes leaves the
+  results (and the count) at once; Undo brings a trashed one back, and a renamed or moved one is shown under its new
+  name. They used to stay listed as if nothing had happened.
+- **Double-clicking an encrypted archive whose password is saved in the keyring extracts it**, as Extract Here does,
+  instead of opening the Extract dialog to ask for what Kestrel already knows. Other archives still open the dialog.
+- **Folder size counts stay in the Jobs window** once they finish, like every other job; the count Properties starts
+  by itself used to vanish when it ended, also when Properties had been closed meanwhile.
+- **Two right-click menu texts are translated in Preferences → Menus:** View Image's "for images" and "Rotate 180°".
+
+## 0.3.3-alpha.2 (2026-10-31)
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#033-alpha2).
+
+## 0.3.3-alpha.1 (2026-10-31)
+
+- **Files whose names aren't valid UTF-8 can be deleted, copied, moved and restored from the trash.** A name from an old archive or another
+  system with a stray byte in it (Latin-1, DOS) was listed but then "No such file or directory" to everything done to
+  it, so a folder holding one couldn't be deleted, even from the trash. Kestrel now keeps such names byte for byte,
+  and a file shown with � in a folder is found too (unless two names in that folder read the same way).
+- **A Delete Permanently in the trash that fails or is cancelled keeps the item's record**, so it can still be
+  restored to where it came from; the record used to be deleted anyway, leaving the item's location "(unknown)".
+  Empty Trash likewise deletes each item's record only after the item.
+- **Fixed crashes:** Delete Permanently on a trashed item with no record (as such a failure left behind), and undoing
+  New Folder with Selection when something else had been put in the new folder meanwhile.
+
+## 0.3.3-alpha.0 (2026-10-31)
 
 - **Kestrel in ten more languages:** Chinese (Simplified), French, German, Italian, Japanese, Korean, Portuguese
   (Brazil and Portugal), Russian and Spanish. It uses the desktop's language, and English where it has no

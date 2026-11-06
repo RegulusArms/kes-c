@@ -14,6 +14,8 @@
 #include <QPushButton>
 
 #include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <thread>
 #include <time.h>
 #include <unistd.h>
@@ -34,7 +36,8 @@ static QString resolve_existing(const QString &p)
 {
     QString head = p, tail;
     for (;;) {
-        QString real = QFileInfo(head).canonicalFilePath();
+        char buf[PATH_MAX];   // (by its bytes: QFileInfo would lose a name that isn't valid UTF-8)
+        QString real = ::realpath(util::enc(head).constData(), buf) ? util::dec(buf) : QString();
         if (!real.isEmpty())
             return tail.isEmpty() ? real : util::join(real, tail);
         if (head == "/" || head.isEmpty())
@@ -54,14 +57,25 @@ QVariantMap resolve_paths(const QString &op, QVariantMap args)
     static const QMap<QString, QStringList> PATHS = {
         {"delete", {"path"}},  {"copy", {"src", "dst"}},   {"move", {"src", "dst"}},       {"rename", {"src", "dst"}},
         {"mkdir", {"path"}},   {"touch", {"path"}},        {"copyfile", {"src", "dst"}},   {"symlink", {"link"}},
-        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}};
+        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}, {"readdev", {"device", "fifo"}},
+        {"tmpfs_mount", {"path"}}, {"tmpfs_unmount", {"path"}}, {"tmpfs_unit", {"path"}}};
     for (const QString &key : PATHS.value(op)) {
         QString p = args.value(key).toString();
         if (!p.startsWith('/'))
             continue;   // the helper refuses it
-        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src");
+        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src") ||
+                     (op == "readdev" && key == "device");   // (/dev/disk/by-… names: the device itself)
         args[key] = whole ? resolve_existing(p) : util::join(resolve_existing(util::dirname(p)), util::basename(p));
     }
+    // Paths also go as their bytes (base64): JSON text can't carry a name that isn't valid UTF-8 (its stray bytes are
+    // lone surrogates in a QString, util.h enc()), so the helper uses "<key>_b64" where it's there. The text stays
+    // for its error messages. A symlink's target is bytes too.
+    QStringList keys = PATHS.value(op);
+    if (op == "symlink")
+        keys << "target";
+    for (const QString &key : keys)
+        if (args.value(key).typeId() == QMetaType::QString)
+            args[key + "_b64"] = QString::fromLatin1(util::enc(args.value(key).toString()).toBase64());
     return args;
 }
 
@@ -204,7 +218,7 @@ void AdminSession::send(const QByteArray &line)
     }
 }
 
-void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
+QJsonObject AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
 {
     start();
     qint64 rid;
@@ -254,7 +268,7 @@ void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
             continue;
         }
         if (msg->value("ok").toBool())
-            return;
+            return *msg;
         if (msg->value("cancelled").toBool())
             throw Cancelled();
         QString err = msg->value("error").toString();
@@ -318,19 +332,21 @@ void start_session(QWidget *parent)
     QPointer<QWidget> p(parent);
     fileops::run_job(
         parent, tx("Starting admin session"),
-        [](Task *) -> QVariant {
+        [](Task *task) -> QVariant {
             try {
                 session().start();
             } catch (const AdminError &e) {
+                task->log(tx("Not started: %1").arg(e.message()));
                 return e.message();
             }
+            task->log(tx("The admin session is open: administrator actions run in it until it's ended"));
             return QString();
         },
         [p](const QVariant &err) {
             if (!err.toString().isEmpty())
                 warn(p, tx("Admin Session"), err.toString());
         },
-        false)
+        false, false, true)
         ->admin = true;
 }
 
@@ -358,6 +374,10 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
             } catch (const AdminError &e) {
                 errors = QStringList{e.message()};
             }
+            for (const QString &e : std::as_const(errors))
+                task->log(tx("Failed: %1").arg(e));
+            if (!errors.isEmpty())
+                task->had_errors = true;
             return QVariantMap{{"errors", errors}};
         };
         auto done = [p, title, on_done](const QVariant &res) {
@@ -367,7 +387,8 @@ void retry_as_admin(QWidget *parent, const QString &title, const QString &messag
             if (on_done)
                 on_done(res.isValid() && errors.isEmpty());
         };
-        fileops::queue_job(p, tx("%1 (as administrator)").arg(title), paths, job, done)->admin = true;
+        // done also when p has closed meanwhile (its errors are still told; on_done must not need p)
+        fileops::queue_job(p, tx("%1 (as administrator)").arg(title), paths, job, done, true, {}, false, {}, true)->admin = true;
     };
     if (s.active()) {
         run();

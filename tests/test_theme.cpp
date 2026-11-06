@@ -303,6 +303,65 @@ int main(int argc, char **argv)
     check(named_accent("orange") == QColor("#ed5b00") && named_accent("slate") == QColor("#6f8396") &&
               !named_accent("olive").isValid(),
           "GNOME's accent colour names give libadwaita's colours");
+
+    // -- separate caching (Preferences → Privacy): thumbnails in Kestrel's own cache folder, the shared cache neither
+    // read nor written; turned off, the ones kept there are still used until deleted, and new ones go to the shared one
+    {
+        QString pics = home_path("sepcache");
+        makedirs(pics, true);
+        auto picture = [&](const QString &name, const QColor &c) {
+            QString f = join(pics, name);
+            QImage im(600, 400, QImage::Format_RGB32);
+            im.fill(c);
+            im.save(f, "PNG");
+            return f;
+        };
+        auto mtime_of = [](const QString &f) {
+            struct stat st;
+            return stat(f.toLocal8Bit().constData(), &st) == 0 ? qint64(st.st_mtime) : qint64(-1);
+        };
+        auto cached = [](const QString &top, const QString &f) {
+            return join(join(top, "normal"), md5(file_uri(f)) + ".png");
+        };
+        // a stand-in thumbnail of f with the right tags, in one colour, so it's seen whether it was used
+        auto plant = [&](const QString &top, const QString &f, const QColor &c) {
+            makedirs(dirname(cached(top, f)), true);
+            QImage im(128, 85, QImage::Format_RGB32);
+            im.fill(c);
+            im.setText("Thumb::URI", file_uri(f));
+            im.setText("Thumb::MTime", QString::number(mtime_of(f)));
+            return im.save(cached(top, f), "PNG");
+        };
+        auto colour = [](const QImage &im) { return im.isNull() ? QColor() : im.pixelColor(im.width() / 2, im.height() / 2); };
+        QString red = picture("red.png", Qt::red);
+        prefs::set("separate_cache", true);
+        check(wait_for([]() { return separate_cache(); }) && THUMB_DIR() == OWN_THUMB_DIR() &&
+                  OWN_THUMB_DIR().startsWith(APP_CACHE() + "/") && THUMB_DIR() != SHARED_THUMB_DIR(),
+              "separate caching on: new thumbnails go to Kestrel's own cache folder");
+        plant(SHARED_THUMB_DIR(), red, Qt::blue);
+        QImage made = thumbs::file_thumb(red, mtime_of(red), 128);
+        check(colour(made) == QColor(Qt::red) && colour(QImage(cached(OWN_THUMB_DIR(), red))) == QColor(Qt::red),
+              "...a thumbnail is made and kept there, not taken from the shared cache (another app's is ignored)");
+        check(colour(QImage(cached(SHARED_THUMB_DIR(), red))) == QColor(Qt::blue),
+              "...and the shared cache isn't written");
+        ::unlink(cached(SHARED_THUMB_DIR(), red).toLocal8Bit().constData());
+        plant(OWN_THUMB_DIR(), red, Qt::green);
+        prefs::set("separate_cache", false);
+        check(wait_for([]() { return !separate_cache(); }) && THUMB_DIR() == SHARED_THUMB_DIR() &&
+                  colour(thumbs::file_thumb(red, mtime_of(red), 128)) == QColor(Qt::green),
+              "separate caching off: a thumbnail kept in Kestrel's own folder is still used");
+        QString yellow = picture("yellow.png", Qt::yellow);
+        thumbs::file_thumb(yellow, mtime_of(yellow), 128);
+        check(exists(cached(SHARED_THUMB_DIR(), yellow)) && !exists(cached(OWN_THUMB_DIR(), yellow)),
+              "...and a new one goes to the shared cache");
+        thumbs::purge_thumbnails(false);
+        check(!exists(cached(OWN_THUMB_DIR(), red)) && !exists(cached(SHARED_THUMB_DIR(), yellow)),
+              "Delete All Thumbnails deletes those kept in Kestrel's own folder too (and its own in the shared cache)");
+        check(colour(thumbs::file_thumb(red, mtime_of(red), 128)) == QColor(Qt::red) &&
+                  exists(cached(SHARED_THUMB_DIR(), red)) && !exists(cached(OWN_THUMB_DIR(), red)),
+              "...after which they're made again, into the shared cache");
+        rmtree(pics);
+    }
     QString iface = "org.gnome.desktop.interface";
     if (desktop_schema(iface) == iface && has_schema_key(iface, "accent-color")) {
         GSettings *gs = g_settings_new("org.gnome.desktop.interface");
@@ -458,7 +517,7 @@ int main(int argc, char **argv)
             return ThumbJob();
         };
         QString many_dir = home_path("own/many"), few_dir = home_path("own/few");
-        spin(300);
+        wait_for([&]() { return job_of(many_dir).id && job_of(few_dir).id; });
         ThumbJob mj = job_of(many_dir);
         check(mj.id && mj.title() == "Thumbnails: own/many" && mj.total == 300 && mj.window == w1->windowTitle() &&
                   mj.state() == "Running" && job_of(few_dir).id,
@@ -528,14 +587,23 @@ int main(int argc, char **argv)
         // Stop: nothing more, and the view drawing the folder again doesn't start it again
         QStringList many3 = make_tree(home_path("own/many3"), 300);
         QString many3_dir = home_path("own/many3");
+        // stopped as its first preview comes (on the UI thread, before anything more is handed out): part-way however
+        // fast the machine makes them
+        bool stopped = false;
+        QMetaObject::Connection first = QObject::connect(g_thumbs, &ThumbnailManager::updated, [&](const QString &path) {
+            if (!stopped && path.startsWith(many3_dir + "/") && job_of(many3_dir).id) {
+                stopped = true;
+                g_thumbs->stop_job(job_of(many3_dir).id);
+            }
+        });
         ask(many3, w1->pane()->thumb_owner());
-        spin(200);
-        g_thumbs->stop_job(job_of(many3_dir).id);
-        spin(300);
+        wait_for([&]() { return stopped && !job_of(many3_dir).id; });
+        QObject::disconnect(first);
+        spin(300);   // (the previews already being made when it stopped)
         int stop_at = made(many3);
         ask(many3, w1->pane()->thumb_owner());
         spin(800);
-        check(stop_at < 250 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
+        check(stopped && stop_at < 300 && !job_of(many3_dir).id && made(many3) <= stop_at + 2,
               QString("Stop ends a thumbnail job: the view drawing the folder again doesn't start it again (%1 made at "
                       "the stop, %2 now)").arg(stop_at).arg(made(many3)));
 
@@ -557,11 +625,13 @@ int main(int argc, char **argv)
             prefs::set("thumb_mode", "paused");
             bool shown = jw->thumb_mode->currentData().toString() == "paused";
             ask(m1, w1->pane()->thumb_owner());
-            spin(1000);
+            wait_for([&]() { return job_of(m1_dir).state() == "Paused (all thumbnailing)"; });
+            spin(1000);   // (and stays so: nothing made meanwhile)
             check(shown && made(m1) == 0 && job_of(m1_dir).state() == "Paused (all thumbnailing)",
                   "thumbnailing paused: a thumbnail job makes nothing and is listed as paused (" +
                       job_of(m1_dir).state() + ", " + QString::number(made(m1)) + " made)");
             prefs::set("thumb_mode", "wait");
+            wait_for([&]() { return job_of(m1_dir).state() == "Waiting for the drive"; });
             spin(1000);
             check(made(m1) == 0 && job_of(m1_dir).state() == "Waiting for the drive",
                   "thumbnailing waits for the drive: a job on a drive another job uses waits (" + job_of(m1_dir).state() + ")");
@@ -570,6 +640,7 @@ int main(int argc, char **argv)
                       jw->thumb_mode->currentData().toString() == "drive",
                   "one thumbnail job per drive: it runs beside the job using its drive");
             ask(m2, w2->pane()->thumb_owner());
+            wait_for([&]() { return job_of(m2_dir).state() == "Waiting for another thumbnail job on its drive"; });
             spin(800);
             bool behind = job_of(m2_dir).state() == "Waiting for another thumbnail job on its drive" && made(m2) == 0 &&
                           job_of(m1_dir).id;

@@ -167,9 +167,9 @@ void add_scripts_menu(QMenu *menu, const QStringList &paths, const QString &cur_
 
 // ---------------------------------------------------------------- Send To
 
-void add_send_to_menu(QMenu *menu, const QStringList &paths)
+void add_send_to_menu(QMenu *menu, const QStringList &paths, const std::function<bool(const QString &)> &is_dir)
 {
-    if (paths.isEmpty() || std::any_of(paths.begin(), paths.end(), [](const QString &p) { return isdir(p); }))
+    if (paths.isEmpty() || std::any_of(paths.begin(), paths.end(), [&is_dir](const QString &p) { return is_dir ? is_dir(p) : isdir(p); }))
         return;
     QList<QPair<QStringList, QStringList>> targets;   // (icon + label, argv)
     if (which("xdg-email")) {

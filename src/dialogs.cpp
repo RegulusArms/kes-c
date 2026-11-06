@@ -1,9 +1,11 @@
 #include "dialogs.h"
 
 #include "admin.h"
+#include "app.h"
 #include "drives.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "linkwin.h"
 #include "health.h"
 #include "prefs.h"
 #include "undo.h"
@@ -427,7 +429,21 @@ QWidget *PropertiesDialog::general_tab()
                 target = util::readlink(path);
             } catch (const OSError &) {
             }
-            form->addRow(tx("Link target:"), sel_label(exists(path) ? target : tx("%1  (broken link)").arg(target)));
+            auto *row = new QHBoxLayout;
+            row->addWidget(sel_label(exists(path) ? target : tx("%1  (broken link)").arg(target)), 1);
+            auto *edit = new QPushButton(tx("Edit…"));
+            edit->setToolTip(tx("Change what it points to, or its name, in the Link window"));
+            connect(edit, &QPushButton::clicked, this, [this, link = path]() {
+                // the Kestrel window it was opened from (or any)
+                MainWindow *w = nullptr;
+                for (QWidget *p = parentWidget(); p && !w; p = p->parentWidget())
+                    w = qobject_cast<MainWindow *>(p);
+                if (!w && !WINDOWS.isEmpty())
+                    w = WINDOWS.first();
+                LinkWindow::open(w, {}, QString(), {link});
+            });
+            row->addWidget(edit);
+            form->addRow(tx("Link target:"), row);
         }
         size_label = sel_label(is_dir ? tx("Calculating…")
                                       : txn("%1 (%Ln byte(s))", st.st_size).arg(human_size(qint64(st.st_size))));
@@ -611,10 +627,21 @@ void PropertiesDialog::start_size(bool fresh)
     recalc->setEnabled(false);
     auto work = [to_count, total_of](Task *task) {
         QHash<QString, fileops::DirStats> counted;
-        for (const QString &d : to_count) {
-            task->report(0, 0, basename(d));
-            fileops::DirStats s = fileops::dir_stats(d, [task]() { return task->cancelled.load(); });
+        for (int i = 0; i < to_count.size(); ++i) {
+            const QString &d = to_count[i];
+            task->step = i;
+            task->report(0, 0, d, true);
+            task->log(tx("Counting %1").arg(d));
+            fileops::DirStats s = fileops::dir_stats(
+                d, [task]() { return task->cancelled.load(); },
+                [task](const fileops::DirStats &so_far, const QString &at) {
+                    if (task->due())
+                        task->report(0, 0, txn("%1 in %Ln file(s) so far — %2", so_far.files)
+                                               .arg(human_size(so_far.size), at));
+                });
             task->check();   // stopped: nothing is stored
+            task->log(tx("  %1 in %2 and %3, remembered for next time")
+                          .arg(human_size(s.size), txn("%Ln file(s)", s.files), txn("%Ln folder(s)", s.dirs)));
             counted.insert(d, s);
             // remembered at once, also if the window has been closed meanwhile (on the UI thread: dirsizes is)
             QMetaObject::invokeMethod(qApp, [d, s]() { fileops::dirsizes::put(d, s); });
@@ -637,8 +664,15 @@ void PropertiesDialog::start_size(bool fresh)
     };
     QString title = paths.size() == 1 ? tx("Counting the size of “%1”").arg(basename(rstrip(path, '/')))
                                       : txn("Counting the size of %Ln item(s)", paths.size());
+    // its log starts with the sizes it didn't count again: those remembered
+    QStringList intro;
+    for (auto it = known.constBegin(); it != known.constEnd(); ++it)
+        intro << tx("Remembered: %1: %2 in %3 (%4)")
+                     .arg(it.key(), human_size(it->stats.size), txn("%Ln file(s)", it->stats.files),
+                          fileops::dirsizes::age_text(it->measured, QDateTime::currentSecsSinceEpoch()));
+    QStringList steps = to_count.size() > 1 ? to_count : QStringList();
     // Recalculate: a job of its own (in the Jobs window, with Stop); the first count is quiet, as before
-    fileops::queue_job(this, title, to_count, work, done, true, {}, !fresh);
+    fileops::queue_job(this, title, to_count, work, done, true, steps, !fresh, intro);
 }
 
 void PropertiesDialog::calculate_size()

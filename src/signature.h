@@ -25,7 +25,7 @@ QString signed_file(const QString &sig);       // the same name without the exte
 QString signature_for(const QString &file);    // a signature beside file (file.gpg, .asc, .sig, .sign), or empty
 
 enum Kind {
-    NOT_SIGNATURE,   // a key, an encrypted file…: opened as any file
+    NOT_SIGNATURE,   // a key, an encrypted file (pgp.h: Decrypt)…: opened as any file
     DETACHED,        // signs another file (signed_file)
     CLEARSIGNED,     // text with its signature around it
     INLINE,          // a signed message (binary or armoured): what it signs is inside it

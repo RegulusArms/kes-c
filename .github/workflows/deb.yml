@@ -60,13 +60,23 @@ jobs:
         # unzip: the archives test of the unzip path (used only without 7-Zip; skipped without it)
         # rsync, gnupg: the tools test's sync with rsync and its signature checks (skipped without them)
         # ffmpeg: the media test's video and audio conversions (skipped without it)
+        # ccache: the compiler cache tests/run.sh builds through (kept between runs below)
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev libxcb1-dev libsecret-1-dev \
             dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full \
-            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg ccache
+
+      - name: Keep the compiler cache
+        # ccache (tests/run.sh uses it when installed), kept between runs: one cache per job, so each release and the
+        # sanitizer builds keep their own. A run saves its cache only if it passed; the next starts from the newest.
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: ccache-${{ github.job }}-
 
       - name: Run the tests
-        run: tests/run.sh
+        run: CCACHE_DIR="$PWD/.ccache" CCACHE_MAXSIZE=1G tests/run.sh
 
   test-resolute:
     # the same tests on Ubuntu 26.04 (a newer Qt, GLib and tools), so a change that only breaks there stops the package
@@ -85,14 +95,23 @@ jobs:
           apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev \
             libxcb1-dev libsecret-1-dev dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common \
             gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full libimage-exiftool-perl \
-            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg
+            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg ccache
+
+      - name: Keep the compiler cache
+        # ccache (tests/run.sh uses it when installed), kept between runs: one cache per job, so each release and the
+        # sanitizer builds keep their own. A run saves its cache only if it passed; the next starts from the newest.
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: ccache-${{ github.job }}-
 
       - name: Run the tests
         shell: bash
         run: |
           useradd -m -G users tester   # in a second group, as the runner's user is, for admin_helper's group ownership check
-          chown -R tester: "$GITHUB_WORKSPACE"
-          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 tests/run.sh"
+          mkdir -p .ccache && chown -R tester: "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 CCACHE_DIR='$GITHUB_WORKSPACE/.ccache' CCACHE_MAXSIZE=1G tests/run.sh"
 
   sanitizers-noble:
     runs-on: ubuntu-24.04
@@ -108,13 +127,22 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev libxcb1-dev libsecret-1-dev \
             dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full \
-            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg
+            libimage-exiftool-perl libjpeg-turbo-progs unzip rsync gnupg ffmpeg ccache
+
+      - name: Keep the compiler cache
+        # ccache (tests/run.sh uses it when installed), kept between runs: one cache per job, so each release and the
+        # sanitizer builds keep their own. A run saves its cache only if it passed; the next starts from the newest.
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: ccache-${{ github.job }}-
 
       - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
         # GCC 13's sanitizers can't start with the kernel's 32-bit address randomisation ("unexpected memory mapping")
         run: |
           sudo sysctl -w vm.mmap_rnd_bits=28
-          KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh
+          CCACHE_DIR="$PWD/.ccache" CCACHE_MAXSIZE=1G KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh
 
   sanitizers-resolute:
     # the sanitizer run on Ubuntu 26.04 too (GCC 15, Qt 6.10), set up as in "test-resolute". GCC 15's sanitizers start
@@ -130,14 +158,23 @@ jobs:
           apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ cmake pkg-config qt6-base-dev qt6-tools-dev qt6-l10n-tools libglib2.0-dev \
             libxcb1-dev libsecret-1-dev dbus libglib2.0-bin xdg-utils desktop-file-utils gnome-shell-common \
             gnome-settings-daemon-common bleachbit libxml2-utils gnome-keyring p7zip-full libimage-exiftool-perl \
-            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg
+            libjpeg-turbo-progs unzip zip rsync gnupg ffmpeg ccache
+
+      - name: Keep the compiler cache
+        # ccache (tests/run.sh uses it when installed), kept between runs: one cache per job, so each release and the
+        # sanitizer builds keep their own. A run saves its cache only if it passed; the next starts from the newest.
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ github.job }}-${{ github.sha }}
+          restore-keys: ccache-${{ github.job }}-
 
       - name: Run the tests with AddressSanitizer and UndefinedBehaviorSanitizer
         shell: bash
         run: |
           useradd -m -G users tester
-          chown -R tester: "$GITHUB_WORKSPACE"
-          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh"
+          mkdir -p .ccache && chown -R tester: "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && LANG=C.UTF-8 CCACHE_DIR='$GITHUB_WORKSPACE/.ccache' CCACHE_MAXSIZE=1G KESTREL_SANITIZE=address,undefined KESTREL_BUILD_DIR=build-asan tests/run.sh"
 
   deb:
     # a .deb for each supported Ubuntu release, built on that release (in a clean container) so it uses that release's

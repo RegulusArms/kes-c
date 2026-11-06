@@ -82,14 +82,19 @@ namespace archive_ui {
 // Extract All doesn't open this one
 enum class Ask { First, Wrong, NotSame };
 // Asks for the archive's password: ok(password, remember) runs with it; cancelled() when it's closed, cancelled or left
-// empty. offer_remember: a "Remember this password" box (a keyring is running). Returns the window, already shown.
+// empty. offer_remember: a "Remember this password" box (a keyring is running). accept: the OK button's text, for
+// something other than extracting (a disk image: Mount, Unlock). Returns the window, already shown.
 QDialog *ask_password(QWidget *parent, const QString &path, Ask reason, bool offer_remember,
-                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled = nullptr);
+                      std::function<void(const QString &, bool)> ok, std::function<void()> cancelled = nullptr,
+                      const QString &accept = QString());
 // Extracting runs one job for one or several archives (extract_all): each one's password is found the same way, first
 // one typed in this job (or the dialog), then the one saved in the keyring for this archive, then the other saved ones
 // (a quick test each), and only when none opens it is it asked for.
 void extract_here(MainWindow *win, const QString &path);
 void extract_dialog(MainWindow *win, const QString &path);
+// Double-clicking an archive: an encrypted one with a password saved for it is extracted as Extract Here does it,
+// any other gets the Extract dialog (extract_dialog)
+void open_archive(MainWindow *win, const QString &path);
 // The archives among paths, each split set (x.part1.rar … x.part3.rar) once, by its first part; in their order
 QStringList archives_of(const QStringList &paths);
 // Extract All Here / Extract All To…: each archive as Extract Here / Extract To… would, one after another in one job,

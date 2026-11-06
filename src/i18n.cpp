@@ -54,13 +54,15 @@ QString time(const QTime &t) { return QLocale().toString(t, QLocale::ShortFormat
 
 QString date_time(const QDateTime &dt) { return date(dt.date()) + " " + time(dt.time()); }
 
-QString date_time_secs(const QDateTime &dt)
+QString time_secs(const QTime &t)
 {
     QString f = QLocale().timeFormat(QLocale::ShortFormat);
     if (!f.contains("ss"))
         f.replace("mm", "mm:ss");
-    return date(dt.date()) + " " + QLocale().toString(dt.time(), f);
+    return QLocale().toString(t, f);
 }
+
+QString date_time_secs(const QDateTime &dt) { return date(dt.date()) + " " + time_secs(dt.time()); }
 
 QString long_date(const QDate &d) { return QLocale().toString(d, QLocale::LongFormat); }
 

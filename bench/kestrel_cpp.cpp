@@ -3,9 +3,12 @@
 //
 //   trash      move every file in ~/victim to the trash with the window's Move to Trash, then Empty Trash ("empty_s")
 //   move_xdev  move ~/move/movesrc to ARG (on another drive)
+//   copy_at    copy ARG/ARG3 (copysrc or copybig) to ARG/copydst-kestrel (one drive or share), with Preferences →
+//              Files → Copying on (ARG2 "kernel") or off ("loop")
 #include "app.h"
 #include "fileops.h"
 #include "metadata.h"
+#include "prefs.h"
 #include "thumbs.h"
 #include "util.h"
 #include "widgets.h"
@@ -75,6 +78,14 @@ int main(int argc, char **argv)
         bool fin = false;
         dst = join(HOME(), "copydst");
         fileops::start_ops(nullptr, {{"copy", D + "/copysrc", dst}}, "Copying", [&] { fin = true; });
+        wait_for([&] { return fin; });
+    } else if (test == "copy_at") {
+        bool fin = false;
+        prefs::set("copy_kernel", argc > 4 && QString(argv[4]) == "kernel");
+        dst = join(ARG, "copydst-kestrel");
+        t.restart();
+        fileops::start_ops(nullptr, {{"copy", join(ARG, argc > 5 ? QString(argv[5]) : QString("copysrc")), dst}}, "Copying",
+                           [&] { fin = true; });
         wait_for([&] { return fin; });
     } else if (test == "trash") {
         auto *w = new MainWindow({HOME()}, tm);

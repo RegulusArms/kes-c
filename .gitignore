@@ -8,6 +8,7 @@ build-*/
 CMakeLists.txt.user
 compile_commands.json
 .cache/
+.ccache/
 
 # Editors and IDEs
 .vscode/
@@ -20,6 +21,9 @@ compile_commands.json
 .claude/
 CLAUDE.md
 ROADMAP.md
+
+# Private to-do list (local only)
+PERSONAL-TODO.md
 
 # OS clutter
 .DS_Store

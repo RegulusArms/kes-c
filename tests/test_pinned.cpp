@@ -23,8 +23,7 @@ int main(int argc, char **argv)
     Pane *p = w->pane();
     FakeFlight fake;
     QString me = QString::fromUtf8(g_dbus_connection_get_unique_name(g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr)));
-    wait_for([&]() { return fake.tower_pid() != 0; });
-    fake.check_in();
+    fake.join();   // (until this Kestrel has the tower too, its reports aren't sent)
     p->sort_by(0, Qt::AscendingOrder);
     check(wait_for([&]() { return p->all_paths() == QStringList({fsub, fa, fb, fc}); }), "the folder lists by name");
 

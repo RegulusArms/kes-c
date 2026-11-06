@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QRegularExpression>
 #include <QMutex>
 #include <QPointer>
 #include <QSettings>
@@ -99,6 +100,20 @@ QList<Mount> mounts()
 
 static QMutex labels_lock;
 static QHash<QString, QString> labels;   // device -> its label, until the mount table changes (MountWatch)
+
+QString user_loop(const QString &device)
+{
+    static const QRegularExpression loop_re("^(loop\\d+)");
+    QRegularExpressionMatch m = loop_re.match(basename(realpath(device)));
+    if (!device.startsWith("/dev/") || !m.hasMatch())
+        return QString();
+    QString backing = QString::fromUtf8(read_file("/sys/block/" + m.captured(1) + "/loop/backing_file")).trimmed();
+    if (backing.endsWith(" (deleted)"))
+        backing.chop(10);
+    if (backing.isEmpty() || backing.contains("/snapd/") || backing.endsWith(".snap"))
+        return QString();
+    return backing;
+}
 
 static QString read_label(const QString &device);
 
@@ -349,8 +364,10 @@ bool statfs_(const QString &path, qint64 *total, qint64 *free)
 {
     // tests: a slow drive's statfs taking this long, as a busy tape's does
     int delay = qEnvironmentVariableIntValue("KESTREL_TEST_STATFS_DELAY_MS");
-    if (delay > 0 && slow_kind(path) != Slow::None)
+    if (delay > 0 && slow_kind(path) != Slow::None) {
+        util::note_test_wait();
         QThread::msleep(delay);
+    }
     struct statvfs sv;
     if (::statvfs(enc(path).constData(), &sv) != 0)
         return false;
@@ -525,11 +542,18 @@ void sync_tape_job(QWidget *parent, const QString &root)
 {
     QPointer<QWidget> p(parent);
     fileops::run_task(
-        parent, tx("Writing the tape's index"), [root]() { return QVariant(sync_tape(root)); },
-        [p, root](const QVariant &err) {
+        parent, tx("Writing the tape's index"),
+        [root]() {
+            QString err = sync_tape(root);
+            if (Task *t = Task::current())
+                t->log(err.isEmpty() ? tx("The index of the tape in %1 is written").arg(root) : tx("Failed: %1").arg(err));
+            return QVariant(err);
+        },
+        [p, root](const QVariant &err) {   // (told also when p has closed meanwhile)
             if (!err.toString().isEmpty())
                 warn(p, tx("Write Tape Index"), tx("The tape's index couldn't be written: %1").arg(err.toString()));
-        });
+        },
+        false, true);
 }
 
 // ---------------------------------------------------------------- sizes

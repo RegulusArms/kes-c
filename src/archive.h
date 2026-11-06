@@ -13,6 +13,7 @@
 // while the job runs.
 #pragma once
 
+#include "proc.h"
 #include "util.h"
 
 #include <QDateTime>
@@ -20,6 +21,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
 #include <optional>
 
 class Task;
@@ -166,5 +168,14 @@ bool can_keep_damaged(const QString &path);   // its tool tells which files are 
 // A symlink target that leads out of the folder an archive is extracted into: an absolute one, or one whose ".."s
 // climb above it. depth: how many folders below that folder the link is.
 bool link_escapes(int depth, const QByteArray &target);
+
+// gpg with a password, as password-encrypted tar archives use it (the password on its fd 3, not kept by its agent),
+// also for disk images (diskimage.h): encrypting stdin to stdout with AES-256, or decrypting path to stdout.
+// check_gpg after it exits: raises WrongPassword or Error if it failed.
+std::unique_ptr<proc::Process> spawn_gpg_encrypt(const QString &password, proc::Options o);
+// gpg with args and the password that way (Encrypt / Decrypt: pgp.h)
+std::unique_ptr<proc::Process> spawn_gpg(const QStringList &args, const QString &password, proc::Options o);
+std::unique_ptr<proc::Process> spawn_gpg_decrypt(const QString &path, const QString &password);
+void check_gpg(proc::Process *g);
 
 }  // namespace archive

@@ -9,7 +9,9 @@
 //            "error": "..."}
 //
 // Ops: delete(path) · copy/move(src, dst, merge) · rename(src, dst) · mkdir(path) · copyfile(src, dst) ·
-//      touch(path) · symlink(target, link) · hardlink(target, link) · write(path, text, mode) · chmod(path, mode)
+//      touch(path) · symlink(target, link) · hardlink(target, link) · write(path, text, mode) · chmod(path, mode) ·
+//      readdev(device, fifo) · tmpfs_mount(path, size_mb, remount) · tmpfs_unmount(path) ·
+//      tmpfs_unit(path, size_mb, enable)
 //
 // Safety: the files being worked on can change while root works on them (another user, or a program, swapping a
 // folder for a symlink). So the helper never trusts a path string:
@@ -27,10 +29,18 @@
 // - A copy root makes is root's, so it drops set-user-ID and set-group-ID from a file that wasn't root's (else a
 //   user's program would become a set-user-ID root program). A move between drives keeps the owner instead.
 // - A mount point is never deleted (that would empty the drive mounted there), nor is another drive inside a tree.
+// - RAM disks (Kestrel's ramdisk.h): tmpfs_mount mounts a tmpfs (nosuid, nodev, 0700, owned by the user) only on an
+//   empty folder of the session user's that isn't a mount point already; tmpfs_unmount unmounts only a tmpfs whose
+//   top folder is theirs; tmpfs_unit writes (or removes) a mount unit for such a folder in /etc/systemd/system, built
+//   here from the path and size alone (never text from Kestrel), and only replaces or removes a unit it made.
+// - readdev (Back Up Drive to Image) only reads: a block device and nothing else, opened read-only, its bytes written
+//   into a FIFO the user made (theirs, and a FIFO: never a file), from which Kestrel, as the user, makes the image.
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+
+#include "xattrs.h"
 
 #include <atomic>
 #include <cctype>
@@ -50,8 +60,16 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <linux/fs.h>
+#include <signal.h>
+#include <linux/magic.h>
+#include <pwd.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <sys/random.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/wait.h>
 #include <thread>
 #include <time.h>
 #include <unistd.h>
@@ -79,6 +97,10 @@ static const std::map<std::string, std::vector<std::pair<const char *, Kind>>> P
     {"hardlink", {{"target", READ}, {"link", CREATE}}},
     {"write", {{"path", CREATE}}},
     {"chmod", {{"path", CHANGE}}},
+    {"readdev", {{"device", READ}, {"fifo", READ}}},
+    {"tmpfs_mount", {{"path", CHANGE}}},
+    {"tmpfs_unmount", {{"path", CHANGE}}},
+    {"tmpfs_unit", {{"path", CHANGE}}},
 };
 
 static std::mutex out_lock, cancel_lock;
@@ -309,10 +331,26 @@ static uid_t session_uid()
     return uid >= 0 && end && *end == 0 ? uid_t(uid) : getuid();
 }
 
+// A string argument's bytes: "<key>_b64" (base64) where Kestrel sent it, which keeps a name that isn't valid UTF-8 as
+// it is; else the text (an older Kestrel's request)
+static std::string bytes_arg(const QJsonObject &req, const char *key)
+{
+    QJsonValue b64 = req.value(QString::fromLatin1(key) + "_b64");
+    if (b64.isString()) {
+        auto r = QByteArray::fromBase64Encoding(b64.toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
+        if (!r)
+            throw Failure(std::string("not base64: ") + key + "_b64");
+        if (r.decoded.contains('\0'))   // (a path or name never holds one: it would cut the name short)
+            throw Failure(std::string("a NUL byte in ") + key);
+        return r.decoded.toStdString();
+    }
+    QJsonValue v = req.value(key);
+    return v.isString() ? v.toString().toStdString() : std::string();
+}
+
 static std::string path_arg(const QJsonObject &req, const char *key)
 {
-    QJsonValue v = req.value(key);
-    std::string p = v.isString() ? v.toString().toStdString() : std::string();
+    std::string p = bytes_arg(req, key);
     if (p.empty() || p[0] != '/')
         throw Failure("not an absolute path: " + p);
     return p;
@@ -470,6 +508,22 @@ public:
     qint64 id;
     double done = 0, total = 0;
     bool to_tape = false;   // the destination is on an LTFS tape (on_tape): a new file is written straight to its name
+    bool xattrs = false;    // copies get their originals' extended attributes and ACLs too (Kestrel's "copy_xattrs")
+    std::set<std::string> left_out;   // attribute names a destination couldn't hold, told back with the answer
+    int left_items = 0;
+
+    // after copy_stat_fd: the owner set first (a chown clears security.capability), and an ACL set last agrees with
+    // the mode. As root, security.* and trusted.* are copied too.
+    void keep_xattrs(int from, int to)
+    {
+        if (!xattrs)
+            return;
+        std::vector<std::string> left = xattrs::copy(from, to);
+        if (left.empty())
+            return;
+        ++left_items;
+        left_out.insert(left.begin(), left.end());
+    }
 
     void check_cancel()
     {
@@ -546,6 +600,7 @@ public:
                 copy(in.get(), e, out.get(), e, merge, owner);
             Owner existing{owner.keep, dst_st.st_uid, dst_st.st_gid};   // a copy leaves the folder's owner as it was
             copy_stat_fd(out.get(), st, existing);
+            keep_xattrs(in.get(), out.get());
             done += 1;
             report(src);
             return;
@@ -578,6 +633,7 @@ public:
                 for (const std::string &e : list_dir(in.get()))
                     copy(in.get(), e, out.get(), e, false, owner, true);
                 copy_stat_fd(out.get(), st, owner);
+                keep_xattrs(in.get(), out.get());
             } else if (S_ISREG(st.st_mode)) {
                 check_cancel();
                 Fd in(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
@@ -607,6 +663,7 @@ public:
                 made = true;
                 copy_bytes(in.get(), out.get(), src);
                 copy_stat_fd(out.get(), st, owner);
+                keep_xattrs(in.get(), out.get());
                 // replacing something: on disk before the rename (a crash leaves the old or the new)
                 if (dst_exists && fsync(out.get()) != 0)
                     fail_errno();
@@ -632,6 +689,7 @@ public:
     void copy_bytes(int in, int out, const std::string &label)
     {
         std::vector<char> buf(1 << 20);
+        bool held = false;
         for (;;) {
             check_cancel();
             ssize_t n = read(in, buf.data(), buf.size());
@@ -651,6 +709,28 @@ public:
             }
             done += double(n);
             report(label);
+            if (!held) {
+                held = true;
+                test_hold();
+            }
+        }
+    }
+
+    // Tests (never as root, as KESTREL_TEST_SLOW): KESTREL_TEST_COPY_HOLD=<file> holds a copy after its first piece,
+    // part-way, while that file exists (making <file>.reached when it gets there), still answering a cancel; so a test
+    // can act part-way through a copy however fast the disk is
+    void test_hold()
+    {
+        const char *hold = geteuid() != 0 ? getenv("KESTREL_TEST_COPY_HOLD") : nullptr;
+        if (!hold || !*hold)
+            return;
+        std::string reached = std::string(hold) + ".reached";
+        int fd = ::open(reached.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
+        if (fd >= 0)
+            ::close(fd);
+        while (::access(hold, F_OK) == 0) {
+            check_cancel();
+            usleep(10000);
         }
     }
 
@@ -853,7 +933,180 @@ static void put_new(const Walk &w, const std::string &part)
         fail_errno();
 }
 
-static void handle(const QJsonObject &req)
+// ---------------------------------------------------------------- RAM disks (tmpfs)
+
+static const char *UNIT_DIR = "/etc/systemd/system";
+static const char *UNIT_MARK = "# Made by Kestrel Explorer's admin helper for a RAM disk; removed with it\n";
+
+// a tmpfs's mount options: its size (1 MB up to the computer's memory), only the session user's
+static std::string tmpfs_options(const QJsonObject &req)
+{
+    long long mb = (long long)req.value("size_mb").toDouble();
+    long pages = sysconf(_SC_PHYS_PAGES), page = sysconf(_SC_PAGESIZE);
+    long long ram_mb = pages > 0 && page > 0 ? (long long)pages * page / (1024 * 1024) : 0;
+    if (mb < 1 || (ram_mb > 0 && mb > ram_mb))
+        throw Failure("a RAM disk's size must be between 1 MB and the computer's memory");
+    uid_t uid = session_uid();
+    struct passwd *pw = getpwuid(uid);
+    gid_t gid = pw ? pw->pw_gid : uid;
+    return "size=" + std::to_string(mb) + "m,mode=0700,uid=" + std::to_string(uid) + ",gid=" + std::to_string(gid);
+}
+
+// the folder itself (never through a symlink), which must be the session user's
+static Fd users_folder(const Walk &p, struct stat &st)
+{
+    Fd fd(openat(p.dir.get(), p.name.c_str(), O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    if (fd.get() < 0 || fstat(fd.get(), &st) != 0)
+        fail_errno();
+    if (st.st_uid != session_uid())
+        throw Failure(p.path + " isn't your folder");
+    return fd;
+}
+
+static bool mount_point(const Walk &p, const struct stat &st)   // something else is mounted on it
+{
+    struct stat up;
+    return fstat(p.dir.get(), &up) == 0 && up.st_dev != st.st_dev;
+}
+
+static bool is_tmpfs(int fd)
+{
+    struct statfs sf;
+    return fstatfs(fd, &sf) == 0 && sf.f_type == TMPFS_MAGIC;
+}
+
+// systemd's name for a mount unit of `path` (systemd-escape --path)
+static std::string unit_name(const std::string &path)
+{
+    std::string out;
+    std::vector<std::string> parts = components(path);
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i)
+            out += '-';
+        for (size_t k = 0; k < parts[i].size(); ++k) {
+            unsigned char c = (unsigned char)parts[i][k];
+            if (std::isalnum(c) || c == ':' || c == '_' || (c == '.' && !(i == 0 && k == 0))) {
+                out += char(c);
+            } else {
+                char hex[8];
+                snprintf(hex, sizeof hex, "\\x%02x", c);
+                out += hex;
+            }
+        }
+    }
+    return out + ".mount";
+}
+
+static void run_systemctl(const std::vector<std::string> &args)
+{
+    const char *exe = access("/usr/bin/systemctl", X_OK) == 0 ? "/usr/bin/systemctl" : "/bin/systemctl";
+    std::vector<char *> argv{const_cast<char *>(exe)};
+    for (const std::string &a : args)
+        argv.push_back(const_cast<char *>(a.c_str()));
+    argv.push_back(nullptr);
+    char path[] = "PATH=/usr/sbin:/usr/bin:/sbin:/bin", lang[] = "LANG=C";
+    char *env[] = {path, lang, nullptr};
+    pid_t pid = fork();
+    if (pid < 0)
+        fail_errno();
+    if (pid == 0) {
+        int null = open("/dev/null", O_RDWR);
+        if (null >= 0)
+            dup2(null, 0), dup2(null, 1);   // (stdout is Kestrel's pipe: nothing but replies goes there)
+        execve(exe, argv.data(), env);
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        throw Failure("systemctl " + args[0] + " failed");
+}
+
+static void tmpfs_op(const std::string &op, const QJsonObject &req, const Walk &p)
+{
+    struct stat st;
+    if (op == "tmpfs_mount") {
+        std::string opts = tmpfs_options(req);
+        Fd fd = users_folder(p, st);
+        std::string at = "/proc/self/fd/" + std::to_string(fd.get());   // that folder, whatever its name is now
+        if (req.value("remount").toBool()) {
+            if (!mount_point(p, st) || !is_tmpfs(fd.get()))
+                throw Failure(p.path + " isn't a RAM disk");
+            if (mount(nullptr, at.c_str(), nullptr, MS_REMOUNT | MS_NOSUID | MS_NODEV, opts.c_str()) != 0)
+                fail_errno();
+            return;
+        }
+        if (mount_point(p, st))
+            throw Failure(p.path + " has something mounted on it already");
+        Fd list(openat(fd.get(), ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+        if (list.get() < 0)
+            fail_errno();
+        if (!list_dir(list.get()).empty())
+            throw Failure(p.path + " isn't empty");
+        if (mount("tmpfs", at.c_str(), "tmpfs", MS_NOSUID | MS_NODEV, opts.c_str()) != 0)
+            fail_errno();
+    } else if (op == "tmpfs_unmount") {
+        {
+            Fd fd = users_folder(p, st);
+            if (!mount_point(p, st) || !is_tmpfs(fd.get()))
+                throw Failure(p.path + " isn't a RAM disk");
+        }   // (closed: an open descriptor would keep it busy)
+        // the name in the folder walked (held open), the last part not followed
+        std::string at = "/proc/self/fd/" + std::to_string(p.dir.get()) + "/" + p.name;
+        if (umount2(at.c_str(), UMOUNT_NOFOLLOW) != 0) {
+            if (errno == EBUSY)
+                throw Failure("it's in use: close what's open in it (files, terminals, other windows), then try again");
+            fail_errno();
+        }
+    } else if (op == "tmpfs_unit") {
+        for (unsigned char c : p.path)
+            if (c < 0x20 || c == 0x7f || c == '%' || c == '\\' || c == '"')
+                throw Failure("a RAM disk's folder can't have %, \\, \" or control characters in its path");
+        std::string name = unit_name(p.path);
+        Walk unit = walk(std::string(UNIT_DIR) + "/" + name);
+        struct stat ust;
+        bool there = stat_at(unit.dir.get(), unit.name, &ust);
+        if (there) {   // only one of ours is replaced or removed
+            Fd in(openat(unit.dir.get(), unit.name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+            char head[128] = {0};
+            if (in.get() < 0 || read(in.get(), head, strlen(UNIT_MARK)) != ssize_t(strlen(UNIT_MARK)) ||
+                strncmp(head, UNIT_MARK, strlen(UNIT_MARK)) != 0)
+                throw Failure(std::string(UNIT_DIR) + "/" + name + " wasn't made by Kestrel; not changing it");
+        }
+        if (!req.value("enable").toBool()) {
+            if (!there)
+                return;
+            run_systemctl({"disable", name});   // (it stays mounted: tmpfs_unmount after)
+            if (unlinkat(unit.dir.get(), unit.name.c_str(), 0) != 0)
+                fail_errno();
+            run_systemctl({"daemon-reload"});
+            return;
+        }
+        std::string opts = tmpfs_options(req);
+        users_folder(p, st);
+        std::string text = std::string(UNIT_MARK) + "[Unit]\nDescription=Kestrel Explorer RAM disk\n\n[Mount]\nWhat=tmpfs\nWhere=" +
+                           p.path + "\nType=tmpfs\nOptions=" + opts + ",nosuid,nodev\n\n[Install]\nWantedBy=local-fs.target\n";
+        std::string part;
+        Fd fd = open_part(unit.dir.get(), part);
+        if (fd.get() < 0)
+            fail_errno();
+        if (write(fd.get(), text.data(), text.size()) != ssize_t(text.size()) || fchmod(fd.get(), 0644) != 0 ||
+            fsync(fd.get()) != 0 || close(fd.release()) != 0 ||
+            renameat(unit.dir.get(), part.c_str(), unit.dir.get(), unit.name.c_str()) != 0) {
+            int e = errno;
+            unlinkat(unit.dir.get(), part.c_str(), 0);
+            fail_errno(e);
+        }
+        run_systemctl({"daemon-reload"});
+        run_systemctl({"enable", name});
+        if (!mount_point(p, st))
+            run_systemctl({"start", name});
+    }
+}
+
+// reply: the answer sent when it succeeds ({"id", "ok"}), with anything it has to tell (a copy's attributes left out)
+static void handle(const QJsonObject &req, QJsonObject &reply)
 {
     std::string op = req.value("op").toString().toStdString();
     auto rules = POLICY.find(op);
@@ -865,6 +1118,10 @@ static void handle(const QJsonObject &req)
         Walk walked = walk(path_arg(req, key), op == "mkdir");
         check(walked, kind);
         w.emplace(key, std::move(walked));
+    }
+    if (op.rfind("tmpfs_", 0) == 0) {
+        tmpfs_op(op, req, w.at("path"));
+        return;
     }
     Job job(req.value("id").toVariant().toLongLong());
     if (op == "delete") {
@@ -894,10 +1151,18 @@ static void handle(const QJsonObject &req)
         // progress: every item, and the bytes copied; a move then deletes the items
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         job.to_tape = on_tape(dst.path);
+        job.xattrs = req.value("xattrs").toBool();
         if (op == "copy")
             job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else
             job.move(src, dst, merge, claim);
+        if (job.left_items) {
+            QJsonArray names;
+            for (const std::string &n : job.left_out)
+                names << QString::fromStdString(n);
+            reply["xattrs_left_out"] = names;
+            reply["xattrs_items"] = job.left_items;
+        }
     } else if (op == "rename") {
         const Walk &src = w.at("src"), &dst = w.at("dst");
         if (renameat2(src.dir.get(), src.name.c_str(), dst.dir.get(), dst.name.c_str(), RENAME_NOREPLACE) != 0) {
@@ -944,7 +1209,7 @@ static void handle(const QJsonObject &req)
             throw;
         }
     } else if (op == "symlink") {
-        std::string target = req.value("target").toString().toStdString();
+        std::string target = bytes_arg(req, "target");
         const Walk &link = w.at("link");
         if (symlinkat(target.c_str(), link.dir.get(), link.name.c_str()) != 0)
             fail_errno();
@@ -984,6 +1249,54 @@ static void handle(const QJsonObject &req)
             unlinkat(p.dir.get(), part.c_str(), 0);
             throw;
         }
+    } else if (op == "readdev") {
+        // the device: a block device, read only (never a file, never through a symlink)
+        const Walk &dev = w.at("device"), &fifo = w.at("fifo");
+        Fd in(openat(dev.dir.get(), dev.name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        struct stat st;
+        if (in.get() < 0 || fstat(in.get(), &st) != 0)
+            fail_errno();
+        if (!S_ISBLK(st.st_mode))
+            throw Failure("not a block device: " + dev.path);
+        uint64_t size = 0;
+        if (ioctl(in.get(), BLKGETSIZE64, &size) == 0)
+            job.total = double(size);
+        // the FIFO Kestrel reads: its reader may take a moment to open it (ENXIO until then)
+        Fd out;
+        for (int tries = 0;; ++tries) {
+            job.check_cancel();
+            out = Fd(openat(fifo.dir.get(), fifo.name.c_str(), O_WRONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+            if (out.get() >= 0)
+                break;
+            if (errno != ENXIO || tries > 600)
+                fail_errno();
+            usleep(100000);
+        }
+        if (fstat(out.get(), &st) != 0 || !S_ISFIFO(st.st_mode) || st.st_uid != session_uid())
+            throw Failure("not the user's FIFO: " + fifo.path);
+        int flags = fcntl(out.get(), F_GETFL);
+        if (flags < 0 || fcntl(out.get(), F_SETFL, flags & ~O_NONBLOCK) != 0)
+            fail_errno();
+        // (no progress from here: Kestrel counts what comes through the FIFO, with its speed)
+        std::vector<char> buf(4 << 20);
+        for (;;) {
+            job.check_cancel();
+            ssize_t n = read(in.get(), buf.data(), buf.size());
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n < 0)
+                fail_errno();
+            if (n == 0)
+                break;
+            for (ssize_t off = 0; off < n;) {
+                ssize_t wr = write(out.get(), buf.data() + off, size_t(n - off));
+                if (wr < 0 && errno == EINTR)
+                    continue;
+                if (wr < 0)
+                    fail_errno();   // EPIPE: Kestrel stopped reading
+                off += wr;
+            }
+        }
     } else if (op == "chmod") {
         // the file itself, opened without following a symlink; chmod through /proc/self/fd changes that inode
         const Walk &p = w.at("path");
@@ -1018,8 +1331,9 @@ static void worker()
         }
         qint64 id = req.value("id").toVariant().toLongLong();
         try {
-            handle(req);
-            send(QJsonObject{{"id", id}, {"ok", true}});
+            QJsonObject reply{{"id", id}, {"ok", true}};
+            handle(req, reply);
+            send(reply);
         } catch (const Cancelled &) {
             send(QJsonObject{{"id", id}, {"ok", false}, {"error", "cancelled"}, {"cancelled", true}});
         } catch (const std::exception &e) {
@@ -1036,6 +1350,7 @@ static void worker()
 int main()
 {
     umask(022);
+    signal(SIGPIPE, SIG_IGN);   // a reader gone (readdev's FIFO): EPIPE, not the helper killed
     std::thread(worker).detach();
     send(QJsonObject{{"hello", true}, {"uid", int(getuid())}, {"pid", int(getpid())}});
     std::string line;

@@ -3,11 +3,12 @@
 
 #include "overview.h"
 #include "search.h"
+#include "fsmodel.h"
 
-#include <QAbstractFileIconProvider>
 #include <QDate>
 #include <QFileSystemModel>
 #include <QFormLayout>
+#include <QHash>
 #include <QLabel>
 #include <QPointer>
 #include <QLineEdit>
@@ -42,22 +43,6 @@ enum Kind { KIND_DIR = 1, KIND_LINK = 2 };
 
 // ---------------------------------------------------------------- models
 
-// Type/icon lookup without touching the disk.
-//
-// The default provider sniffs file contents (opens every file) to name its type, and QFileSystemModel calls it on
-// the UI thread - thousands of opens on a slow disk freezes the window. Icons are drawn by FSModel::data(), so
-// return none here.
-class FastIconProvider : public QAbstractFileIconProvider {
-public:
-    QIcon icon(IconType) const override { return QIcon(); }
-    QIcon icon(const QFileInfo &) const override { return QIcon(); }
-    QString type(const QFileInfo &fi) const override;
-
-private:
-    mutable QHash<QString, QString> types;
-    mutable QMutex mutex;
-};
-
 // The dragged items' picture under the pointer, drawn by Kestrel in its own windows. On Wayland the compositor draws a
 // drag's picture, and GNOME doesn't show Qt's: so there Kestrel hands it none and draws its own while the drag is
 // over any of its windows, following the drag events Qt delivers to them (watched on the whole application). Made for
@@ -76,29 +61,7 @@ private:
     QPointer<QLabel> label;
 };
 
-// QFileSystemModel that serves thumbnails and folder previews.
-class FSModel : public QFileSystemModel {
-    Q_OBJECT
-public:
-    explicit FSModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
-                      const QModelIndex &parent) override;
-    QStringList mimeTypes() const override;   // files, and items dragged out of Open as Archive (archive::MEMBERS_MIME)
-
-    int thumb_size = 128;
-    bool folder_previews = true;
-    std::function<void(const QStringList &, const QString &, bool)> drop_handler;   // (paths, folder, copy only)
-    // items dragged out of Open as Archive, dropped into target (ArchiveWindow::drop_members)
-    std::function<void(const QMimeData *, const QString &)> members_handler;
-
-private:
-    QPixmap thumb(const QModelIndex &index) const;
-    QIcon plain_icon(const QModelIndex &index) const;
-    void thumb_ready(const QString &path);
-    ThumbnailManager *thumbs;
-    mutable QHash<QString, QIcon> suffix_icons;
-};
+// FSModel, the views' folder model: fsmodel.h
 
 // Between FSModel and the views: keeps the folder model's own order, or with "Pinned & Starred First" on puts the
 // pinned and starred items first, each group still in that order. The views' sort() goes on to the folder model.
@@ -129,13 +92,26 @@ class SearchModel : public QStandardItemModel {
     Q_OBJECT
 public:
     explicit SearchModel(ThumbnailManager *thumbs, QObject *parent = nullptr);
+    ~SearchModel() override;
     // add result rows; `locations` optionally maps a path to the text for its Location column; `matches` a path to
     // its matching lines ("12:text", content search), shown in the Match column (the first) and its tooltip (all)
+    // a file's [st_mode, mtime, size, is a link] (following links), or [] if it isn't there: on a thread (stats, update)
+    static QVariantList stat_of(const QString &p);
+    // `stats`: path → stat_of(path), as stat'ed where they were found (else stat'ed here; one missing: gone)
     void add_paths(const QStringList &paths, const QHash<QString, QString> &locations = {},
-                   const QVariantMap &matches = {});
+                   const QVariantMap &matches = {}, const QVariantMap &stats = {});
     void clear_results();
+    // Following the files: their paths, shown or gone (to be checked on a thread, as update() takes it); update(path →
+    // stat_of(path)) drops a row whose file has gone (kept aside: it comes back if
+    // the file does, as Undo brings back a trashed one) and refreshes its size and time; moved() follows a rename or a
+    // move by Kestrel
+    QStringList known_paths() const;
+    void update(const QHash<QString, QVariantList> &found);
+    void moved(const QString &from, const QString &to);
+    int generation = 0;   // bumps with every clear_results (a check from before is stale)
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<QString, QStandardItem *> rows;
+    QHash<QString, QList<QStandardItem *>> gone;   // rows whose file has gone, taken out of the model
     int thumb_size = 128;
     bool folder_previews = true;
 
@@ -156,12 +132,13 @@ public:
     QString error;    // why it found nothing it should have (a bad regular expression, …)
 
 Q_SIGNALS:
-    void found(const QStringList &paths, const QVariantMap &matches = {});
+    void found(const QStringList &paths, const QVariantMap &matches, const QVariantMap &stats);   // (stats: add_paths)
 
 protected:
     void run() override;
 
 private:
+    void send(const QStringList &batch, const QVariantMap &matches = {});
     bool match(const QString &name) const;
     bool keep(const QString &path) const;   // the filter
     int run_contents();   // the files found with the index; -1 if it couldn't be asked
@@ -201,6 +178,15 @@ public:
     // and each header this width
     QSize cell;
     int header_width = 0;
+    // A name wrapped into its lines (at most two: the first broken at a natural boundary if it can be, never inside a
+    // character; the rest elided), with each line's width. Kept per font, width and text (widgets.cpp says why);
+    // names_measured counts the names actually measured (not found kept).
+    struct Wrapped {
+        QStringList lines;
+        QList<int> widths;
+    };
+    const Wrapped &wrap(const QFont &font, const QString &text, int width) const;
+    mutable int names_measured = 0;
 
 private:
     struct Layout {
@@ -210,11 +196,13 @@ private:
         QPixmap anim;                    // (the frame, when one plays)
         QFont font;
         QStringList lines;
+        QList<int> widths;   // each line's (horizontalAdvance)
     };
     // paint: the animation's frame too (asking for it starts it playing); a hit test goes by the thumbnail
     Layout layout(const QStyleOptionViewItem &option, const QModelIndex &index, bool paint) const;
     QPainterPath shape(const Layout &l) const;
     QStringList lines(const QFontMetrics &fm, const QString &text, int width) const;
+    mutable QHash<QString, Wrapped> wrapped;
     static void play_badge(QPainter *p, const QRectF &rect);
     static void star_badge(QPainter *p, const QRectF &rect);
     static void pin_badge(QPainter *p, const QRectF &rect);
@@ -313,6 +301,7 @@ Q_SIGNALS:
     void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
     void find_duplicates(const QString &root);   // a drive's Find Duplicates…
+    void disk_usage(const QString &root);        // a drive's Disk Usage…
     void shred_trash_requested();   // Empty Trash with BleachBit
 
 protected:
@@ -412,9 +401,9 @@ private:
     void refresh();
     void add_details(const QList<QPair<QString, QString>> &basic, const QList<QPair<QString, QString>> &ai);
     ThumbnailManager *thumbs;
-    int gen = 0;   // a slow drive's details, read on a worker, are for the path shown when they were asked
-    // a slow drive's item, as the worker read it (nothing on a tape or floppy is asked from the window's thread: a busy
-    // tape answers only when it gets there)
+    int gen = 0;   // the details, read on a worker, are for the path shown when they were asked
+    // the item, as the worker read it (nothing is asked from the window's thread: a busy drive, or a tape seeking,
+    // answers only when it gets there)
     bool cached = false, cached_dir = false;
     qint64 cached_mtime = 0, cached_size = 0;
     QLabel *preview;
