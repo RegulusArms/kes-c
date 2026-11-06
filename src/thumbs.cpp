@@ -257,12 +257,15 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
     QString uri = file_uri(path);
     QString cache_dir = join(THUMB_DIR(), flavor);
     QString cache_path = join(cache_dir, md5(uri) + ".png");
-    bool in_cache_dir = path.startsWith(THUMB_DIR()) || path.startsWith(SHARED_THUMB_DIR());
-    // in private mode, those made before (the shared cache) are still used, and new ones go to the private RAM disk
-    QString shared_path = join(join(SHARED_THUMB_DIR(), flavor), md5(uri) + ".png");
-    QStringList cached_at{cache_path};
-    if (shared_path != cache_path)
-        cached_at << shared_path;
+    QStringList read_dirs = THUMB_READ_DIRS();
+    bool in_cache_dir = path.startsWith(SHARED_THUMB_DIR() + "/") || path.startsWith(OWN_THUMB_DIR() + "/") ||
+                        path.startsWith(THUMB_DIR() + "/");
+    // Those made before are still used where they're kept: in private mode the shared cache's (new ones go to the
+    // private RAM disk); after separate caching is turned off, Kestrel's own folder's until they're deleted (new
+    // ones go to the shared cache). With separate caching on the shared cache isn't read either.
+    QStringList cached_at;
+    for (const QString &d : read_dirs)
+        cached_at << join(join(d, flavor), md5(uri) + ".png");
     for (const QString &cached : cached_at) {
         if (in_cache_dir || fresh || !exists(cached))
             continue;
@@ -596,8 +599,9 @@ static bool made_by_us(const QString &png_path)
 
 QPair<qint64, qint64> purge_thumbnails(bool include_shared)
 {
-    // Always removes the folder-mosaic cache and the PNGs we tagged in the shared freedesktop cache. With
-    // include_shared, empties ~/.cache/thumbnails entirely (also thumbnails made by GNOME Files and other apps).
+    // Always removes the folder-mosaic cache, the thumbnails in Kestrel's own folders (separate caching's, private
+    // mode's) and the PNGs we tagged in the shared freedesktop cache. With include_shared, empties ~/.cache/thumbnails
+    // entirely (also thumbnails made by GNOME Files and other apps). In private mode the shared cache isn't touched.
     qint64 files = 0, size = 0;
     QStringList targets;
     auto collect = [&](const QString &dir) {
@@ -609,24 +613,32 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
     };
     collect(join(APP_CACHE(), "folders"));    // folder mosaics
     collect(join(APP_CACHE(), "animated"));   // looping video previews
-    for (const QString &flavor : FLAVORS) {
-        QString d = join(THUMB_DIR(), flavor);
-        if (!isdir(d))
-            continue;
-        QStringList names;
-        try {
-            names = listdir(d);
-        } catch (const OSError &) {
-            continue;
+    QString shared = SHARED_THUMB_DIR();
+    bool touch_shared = private_dir_in_use().isEmpty();
+    QStringList dirs{OWN_THUMB_DIR()};
+    if (!dirs.contains(THUMB_DIR()))
+        dirs << THUMB_DIR();
+    if (touch_shared && !dirs.contains(shared))
+        dirs << shared;
+    for (const QString &top : dirs)
+        for (const QString &flavor : FLAVORS) {
+            QString d = join(top, flavor);
+            if (!isdir(d))
+                continue;
+            QStringList names;
+            try {
+                names = listdir(d);
+            } catch (const OSError &) {
+                continue;
+            }
+            for (const QString &n : names) {
+                QString p = join(d, n);
+                if (n.endsWith(".png") && isfile(p) && (top != shared || include_shared || made_by_us(p)))
+                    targets << p;
+            }
         }
-        for (const QString &n : names) {
-            QString p = join(d, n);
-            if (n.endsWith(".png") && isfile(p) && (include_shared || made_by_us(p)))
-                targets << p;
-        }
-    }
-    if (include_shared)
-        collect(join(THUMB_DIR(), "fail"));
+    if (include_shared && touch_shared)
+        collect(join(shared, "fail"));
     for (const QString &t : targets) {
         struct stat st;
         if (stat_(t, st) && ::unlink(enc(t).constData()) == 0) {

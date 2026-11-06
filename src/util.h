@@ -73,9 +73,21 @@ extern const char *VERSION;
 QString HOME();
 QString CONFIG_DIR();      // ~/.config/kestrel-explorer
 QString CACHE_ROOT();      // ~/.cache
-QString THUMB_DIR();       // ~/.cache/thumbnails (in private mode: the private RAM disk's thumbnails)
+// where new thumbnails are written: ~/.cache/thumbnails; with separate caching ~/.cache/kestrel-explorer/thumbnails;
+// in private mode the private RAM disk's thumbnails
+QString THUMB_DIR();
 QString APP_CACHE();       // ~/.cache/kestrel-explorer (in private mode: the private RAM disk's cache)
 QString SHARED_THUMB_DIR();   // ~/.cache/thumbnails, also in private mode (read from there, never written)
+// ~/.cache/kestrel-explorer/thumbnails, also in private mode: separate caching's thumbnails (never the RAM disk's)
+QString OWN_THUMB_DIR();
+// The thumbnail folders to look in for a cached thumbnail, in order: separate caching's (while there are thumbnails
+// in it, also after it's turned off, until they're deleted), THUMB_DIR(), and the shared one unless separate caching
+// is on (it shares nothing with the desktop's other apps then, reading included).
+QStringList THUMB_READ_DIRS();
+// Separate caching (Preferences → Privacy): thumbnails kept in Kestrel's own cache folder instead of the desktop's
+// shared one. Any thread may read it while the UI thread changes it.
+void set_separate_cache(bool on);
+bool separate_cache();
 QString HISTORY_DIR();     // where history files go: CONFIG_DIR(), or in private mode the private RAM disk's history
 // Private mode (ramdisk.h): caches and histories in this folder (empty: back to the usual places). Any thread may
 // read the paths above while the UI thread changes this.

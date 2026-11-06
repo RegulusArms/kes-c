@@ -1,7 +1,8 @@
 // Asynchronous thumbnail generation.
 //
 // File thumbnails are read from / written to the shared freedesktop cache (~/.cache/thumbnails), so thumbnails
-// made by GNOME Files are reused and vice versa. Folder previews are a mosaic of the first images in the folder,
+// made by GNOME Files are reused and vice versa; with separate caching (Preferences → Privacy) they're kept in
+// ~/.cache/kestrel-explorer/thumbnails instead, and the shared cache isn't read (util THUMB_DIR, THUMB_READ_DIRS). Folder previews are a mosaic of the first images in the folder,
 // cached in ~/.cache/kestrel-explorer/folders.
 #pragma once
 

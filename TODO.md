@@ -59,6 +59,24 @@ into.
     bus with only dconf and gvfs, gvfs already running, `GTK_A11Y=none`/`NO_AT_BRIDGE=1`), to find the rest of the
     gap. Also check whether anything the GTK integration loads can wait until after the window is shown.
 
+- [ ] **A drag into a Brave page's "drop files here" box sometimes fails on the first try.** Dragging a file from
+  Kestrel onto a page's upload box often didn't work the first time; the second or third try did. Dropping onto an
+  empty Brave window (Brave opens the file) always worked. GNOME on Wayland, Brave running as a native Wayland app.
+  - Seen 2026-11-06. While it was being looked at, it stopped happening, in the window that had shown it too, with
+    nothing changed in Kestrel. Not reproduced since.
+  - A Wayland log of three working drags (`WAYLAND_DEBUG=client`): Kestrel offers `text/uri-list` (copy and move),
+    Brave asks for the data, the drop completes. Kestrel does the same in every drag, so nothing on its side explains
+    one try failing and the next working.
+  - Suspect (unconfirmed): while the pointer is over the page, Brave keeps telling GNOME which action it accepts as
+    the page answers, and the log shows it flipping between copy and none. A drop made while the last answer was none
+    is cancelled by GNOME, which would fit a quick first drop failing and a slower retry working.
+  - Not known yet: what a failure looks like (the picture flying back to Kestrel, nothing at all, or the box not
+    lighting up).
+  - Next time it happens: keep the failing window open, start `WAYLAND_DEBUG=client build/kes ~ 2> ~/kes-drag.log`,
+    and drag from that window until one fails. The log shows whether Brave refused the drop (it never accepted, or
+    its last action was none) or Kestrel did something wrong. If Brave refused it, compare with a drag from GNOME
+    Files into the same page.
+
 ## New features
 
 ### Jobs

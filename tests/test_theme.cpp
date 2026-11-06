@@ -303,6 +303,65 @@ int main(int argc, char **argv)
     check(named_accent("orange") == QColor("#ed5b00") && named_accent("slate") == QColor("#6f8396") &&
               !named_accent("olive").isValid(),
           "GNOME's accent colour names give libadwaita's colours");
+
+    // -- separate caching (Preferences → Privacy): thumbnails in Kestrel's own cache folder, the shared cache neither
+    // read nor written; turned off, the ones kept there are still used until deleted, and new ones go to the shared one
+    {
+        QString pics = home_path("sepcache");
+        makedirs(pics, true);
+        auto picture = [&](const QString &name, const QColor &c) {
+            QString f = join(pics, name);
+            QImage im(600, 400, QImage::Format_RGB32);
+            im.fill(c);
+            im.save(f, "PNG");
+            return f;
+        };
+        auto mtime_of = [](const QString &f) {
+            struct stat st;
+            return stat(f.toLocal8Bit().constData(), &st) == 0 ? qint64(st.st_mtime) : qint64(-1);
+        };
+        auto cached = [](const QString &top, const QString &f) {
+            return join(join(top, "normal"), md5(file_uri(f)) + ".png");
+        };
+        // a stand-in thumbnail of f with the right tags, in one colour, so it's seen whether it was used
+        auto plant = [&](const QString &top, const QString &f, const QColor &c) {
+            makedirs(dirname(cached(top, f)), true);
+            QImage im(128, 85, QImage::Format_RGB32);
+            im.fill(c);
+            im.setText("Thumb::URI", file_uri(f));
+            im.setText("Thumb::MTime", QString::number(mtime_of(f)));
+            return im.save(cached(top, f), "PNG");
+        };
+        auto colour = [](const QImage &im) { return im.isNull() ? QColor() : im.pixelColor(im.width() / 2, im.height() / 2); };
+        QString red = picture("red.png", Qt::red);
+        prefs::set("separate_cache", true);
+        check(wait_for([]() { return separate_cache(); }) && THUMB_DIR() == OWN_THUMB_DIR() &&
+                  OWN_THUMB_DIR().startsWith(APP_CACHE() + "/") && THUMB_DIR() != SHARED_THUMB_DIR(),
+              "separate caching on: new thumbnails go to Kestrel's own cache folder");
+        plant(SHARED_THUMB_DIR(), red, Qt::blue);
+        QImage made = thumbs::file_thumb(red, mtime_of(red), 128);
+        check(colour(made) == QColor(Qt::red) && colour(QImage(cached(OWN_THUMB_DIR(), red))) == QColor(Qt::red),
+              "...a thumbnail is made and kept there, not taken from the shared cache (another app's is ignored)");
+        check(colour(QImage(cached(SHARED_THUMB_DIR(), red))) == QColor(Qt::blue),
+              "...and the shared cache isn't written");
+        ::unlink(cached(SHARED_THUMB_DIR(), red).toLocal8Bit().constData());
+        plant(OWN_THUMB_DIR(), red, Qt::green);
+        prefs::set("separate_cache", false);
+        check(wait_for([]() { return !separate_cache(); }) && THUMB_DIR() == SHARED_THUMB_DIR() &&
+                  colour(thumbs::file_thumb(red, mtime_of(red), 128)) == QColor(Qt::green),
+              "separate caching off: a thumbnail kept in Kestrel's own folder is still used");
+        QString yellow = picture("yellow.png", Qt::yellow);
+        thumbs::file_thumb(yellow, mtime_of(yellow), 128);
+        check(exists(cached(SHARED_THUMB_DIR(), yellow)) && !exists(cached(OWN_THUMB_DIR(), yellow)),
+              "...and a new one goes to the shared cache");
+        thumbs::purge_thumbnails(false);
+        check(!exists(cached(OWN_THUMB_DIR(), red)) && !exists(cached(SHARED_THUMB_DIR(), yellow)),
+              "Delete All Thumbnails deletes those kept in Kestrel's own folder too (and its own in the shared cache)");
+        check(colour(thumbs::file_thumb(red, mtime_of(red), 128)) == QColor(Qt::red) &&
+                  exists(cached(SHARED_THUMB_DIR(), red)) && !exists(cached(OWN_THUMB_DIR(), red)),
+              "...after which they're made again, into the shared cache");
+        rmtree(pics);
+    }
     QString iface = "org.gnome.desktop.interface";
     if (desktop_schema(iface) == iface && has_schema_key(iface, "accent-color")) {
         GSettings *gs = g_settings_new("org.gnome.desktop.interface");

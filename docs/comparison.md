@@ -17,7 +17,7 @@ them. The numbers come from the benchmark ([Performance](performance.md)).
 Kestrel is an app of its own. It installs next to GNOME Files, Nemo or Dolphin instead of replacing them, and doesn't
 remove, reconfigure or disrupt them: they keep working as before, and you can use either one at any time.
 
-- **What's shared:** with GNOME Files and Nemo, the bookmarks, the thumbnails, the clipboard, the trash and Recent
+- **What's shared:** with GNOME Files and Nemo, the bookmarks, the thumbnails (unless Preferences → Privacy keeps them apart), the clipboard, the trash and Recent
   files, so either one carries on where the other left off. With Dolphin, the trash, the thumbnails, cut and paste
   (cutting in one and pasting in the other moves the files), and the files opened in KDE apps in Kestrel's Recent;
   Dolphin's Places are its own.

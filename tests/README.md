@@ -61,7 +61,7 @@ is a check that times the machine.
 | [`groups`](#groups) | 50 | Grouping by date |
 | [`slow`](#slow) | 50 | Tapes and floppy disks (slow drives) |
 | [`jobs`](#jobs) | 59 | The job queue, the Jobs window and the Tower window |
-| [`theme`](#theme) | 78 | Following the desktop's theme and settings; folder previews and thumbnails |
+| [`theme`](#theme) | 84 | Following the desktop's theme and settings; folder previews and thumbnails |
 | [`chooser`](#chooser) | 44 | Kestrel as the system's file chooser |
 | [`admin_helper`](#admin_helper) | 50 | The admin helper, the part that runs as root |
 | [`ui`](#ui) | 34 | Menus, shortcuts, accessibility, drag and drop |
@@ -473,6 +473,7 @@ is a check that times the machine.
   - a folder without images is drawn in the default folder colour like the others (the theme's icon only with folder previews off);
   - a special folder (Downloads, Home…) gets its symbol on it, in a shade that stands out on any colour, also white and black (skipped if the icon theme has no symbolic folder icons);
   - on the Overview, a bookmark that isn't there (a drive not connected, a folder that's gone) is a faded folder in the default colour, a network one a folder in it, not the theme's icon.
+- **Separate caching** (Preferences → Privacy): on, a thumbnail is made and kept in Kestrel's own cache folder, and the shared cache is neither read (another app's thumbnail of the file is ignored) nor written; off again, one kept in Kestrel's folder is still used and a new one goes to the shared cache; Delete All Thumbnails deletes those in Kestrel's folder too (and its own in the shared cache), after which they're made again into the shared cache.
 - **Generating folder previews:**
   - Generate Folder Previews makes previews for the folder and the folders directly in it (not deeper), and its recursive form for every folder below, both without a thumbnail for every image, as Generate Previews Recursively makes (Generate Previews: only the folder's own files');
   - a preview build finishes scanning the tree before most previews are made;

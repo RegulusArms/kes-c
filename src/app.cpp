@@ -1837,6 +1837,9 @@ void apply_settings(const QStringList &keys)
                 w->sync_private();
                 w->sidebar->refresh();
             }
+        } else if (key == "separate_cache") {
+            // where new thumbnails go, and whether the shared cache is read (util THUMB_DIR); those already shown stay
+            set_separate_cache(v.toBool());
         } else if (key == "ramdisk_wipe_warning") {
             // read when the last Kestrel closes, or private mode is left
         } else if (key.startsWith("history_")) {
@@ -1890,12 +1893,19 @@ void MainWindow::clear_cache()
 
 void MainWindow::purge_thumbnails()
 {
+    // where it wrote them: THUMB_DIR(), its own folder while separate caching's thumbnails are left there, and the
+    // shared cache it wrote to before separate caching was turned on (not in private mode: that one isn't touched)
+    QStringList wrote{THUMB_DIR()};
+    if (!wrote.contains(OWN_THUMB_DIR()) && isdir(OWN_THUMB_DIR()))
+        wrote << OWN_THUMB_DIR();
+    if (!wrote.contains(SHARED_THUMB_DIR()) && private_dir_in_use().isEmpty())
+        wrote << SHARED_THUMB_DIR();
     auto *box = new QMessageBox(QMessageBox::Warning, tx("Delete All Thumbnails"),
                                 tx("Delete every thumbnail and folder preview %1 has made?\n\n"
                                         "• Folder mosaics in %2\n"
                                         "• Image/video thumbnails it wrote to %3\n\n"
                                         "They will be regenerated as you browse.")
-                                    .arg(APP_NAME, join(APP_CACHE(), "folders"), THUMB_DIR()),
+                                    .arg(APP_NAME, join(APP_CACHE(), "folders"), wrote.join(", ")),
                                 QMessageBox::Cancel, this);
     QPushButton *go = box->addButton(tx("Delete"), QMessageBox::DestructiveRole);
     auto *shared = new QCheckBox(tx("Also delete thumbnails made by other apps (GNOME Files, etc.)"));
@@ -2199,6 +2209,7 @@ int kes_main(int argc, char **argv)
     QImageReader::setAllocationLimit(2048);
     settings();
     ramdisk::apply_private();   // before anything reads or writes a cache
+    set_separate_cache(prefs::get("separate_cache").toBool());
     ramdisk::prune();
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);

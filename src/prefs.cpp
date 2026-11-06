@@ -261,6 +261,13 @@ static QList<Pref> build()
         TX_NOOP("Remember the image viewer's Move To / Copy To folders (Ctrl+1–9, Alt+1–9)"), BOOL, true);
     add(TX_NOOP("Privacy"), history, "history_clear", TX_NOOP("Clear"), CUSTOM, QVariant(),
         TX_NOOP("Remove from Frequent Folders, Remove from Recent Servers (right-click one)"));
+    const QString separate = TX_NOOP("Separate caching");
+    add(TX_NOOP("Privacy"), separate, "separate_cache",
+        TX_NOOP("Keep thumbnails in Kestrel's own cache folder, apart from other apps"), BOOL, false, QString(),
+        TX_NOOP("Thumbnails are then neither read from nor written to the cache the desktop's apps share (GNOME Files "
+        "and others): Kestrel makes its own and keeps them in its cache folder, with its other caches. Turned off "
+        "again, the thumbnails kept there are still used until they're deleted (☰ → Delete All Thumbnails…), and new "
+        "ones go to the shared cache."));
     const QString priv = TX_NOOP("Private mode");
     add(TX_NOOP("Privacy"), priv, "private_mode", TX_NOOP("Private mode"), BOOL, false,
         TX_NOOP("☰ → Private Mode; the status bar's Private; the sidebar's Private (Leave Private Mode)"),

@@ -99,11 +99,27 @@ QString private_dir_in_use()
     return private_dir_;
 }
 
+static std::atomic<bool> separate_cache_{false};
+void set_separate_cache(bool on) { separate_cache_ = on; }
+bool separate_cache() { return separate_cache_; }
+
 QString SHARED_THUMB_DIR() { return join(CACHE_ROOT(), "thumbnails"); }
+QString OWN_THUMB_DIR() { return join(join(CACHE_ROOT(), APP_ID), "thumbnails"); }
 QString THUMB_DIR()
 {
     QString p = private_dir_in_use();
-    return p.isEmpty() ? SHARED_THUMB_DIR() : join(p, "thumbnails");
+    if (!p.isEmpty())
+        return join(p, "thumbnails");
+    return separate_cache() ? OWN_THUMB_DIR() : SHARED_THUMB_DIR();
+}
+QStringList THUMB_READ_DIRS()
+{
+    QStringList out{OWN_THUMB_DIR()};
+    if (!out.contains(THUMB_DIR()))
+        out << THUMB_DIR();
+    if (!separate_cache() && !out.contains(SHARED_THUMB_DIR()))
+        out << SHARED_THUMB_DIR();
+    return out;
 }
 QString APP_CACHE()
 {

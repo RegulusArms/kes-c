@@ -4,7 +4,16 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.3-alpha.17
+## 0.3.3-alpha.18
+
+- **Separate caching (Preferences → Privacy): Kestrel's thumbnails can be kept apart from other apps.** When it's on,
+  Kestrel no longer reads or writes the thumbnail cache the desktop's apps share (GNOME Files and others): it makes
+  its own thumbnails and keeps them in its cache folder (`~/.cache/kestrel-explorer/thumbnails`), with its other
+  caches. Turned off again, the thumbnails kept there are still used until they're deleted (☰ → Delete All
+  Thumbnails…, which now also clears that folder), and new ones go to the shared cache. BleachBit's Kestrel Cache
+  option already deletes them; run `kes-setup --bleachbit` again for its updated description.
+
+## 0.3.3-alpha.17 (2026-11-06)
 
 - **BleachBit: folder covers, folder colours and folder sorts are three options**, so each can be cleaned without
   the others (they used to be one, "Folder covers, colours and sorts"). Run `kes-setup --bleachbit` again to update

@@ -6,6 +6,15 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.3-alpha.18
+
+### Added
+
+- `theme`: separate caching (Preferences → Privacy). With it on, a thumbnail is made and kept in Kestrel's own cache
+  folder, and a thumbnail of the file in the shared cache is neither used nor overwritten; turned off, one kept in
+  Kestrel's folder is still used and a new one goes to the shared cache; Delete All Thumbnails clears Kestrel's folder
+  too. Guards the feature's promise that nothing is shared while it's on, and that turning it off loses nothing.
+
 ## 0.3.3-alpha.17
 
 ### Changed
