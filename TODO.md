@@ -85,22 +85,6 @@ into.
 
 ### Drives, the sidebar and the Overview
 
-- [ ] ~~**Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
-  **Rename in Kestrel…** to give it a name of your own, such as "Camera SD card" or "Backup HDD". Kestrel only shows
-  that name; the drive's own label is never changed.~~ *Struck for now.*
-  - ~~Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
-    `g_mount_get_uuid()`, or the volume's UUID identifier), so the name follows the drive to any port or mount point,
-    also before it's mounted. Phones and cameras have no UUID: use the most stable id GIO offers for them (the
-    device's serial, else its gvfs address), and say in the dialog when the name may not stick.~~
-  - ~~Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
-    drive's top folder, the window title, Properties. The real label stays visible where it matters (a tooltip, or
-    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").~~
-  - ~~Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
-    Kestrels through the tower (a new message, so bump PROTOCOL), and added to BleachBit's cleaner. **Reset Name**
-    puts the drive's own name back.~~
-  - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
-    guessing.~~
-
 - [ ] **Quick Look for every kind of file.** Space opens the image viewer for images, but Properties for anything
   else (`MainWindow::quick_view`, src/opening.cpp). Give other files a preview window too, opened and closed with
   Space, with arrow keys to step through the folder's files:
@@ -117,18 +101,7 @@ into.
 
 ### File tools
 
-- [ ] ~~**Find similar images** (the part of Find Duplicates left for later): the same photo at another size or
-  quality, not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates
-  window.~~ *Struck for now.*
-
 ### Images, video and audio
-
-- [ ] ~~**Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen
-  then:~~ *Struck for now.*
-  - ~~**Rate** images (stars 1–5, as XMP Rating), next to star / pin.~~
-  - ~~**Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default
-    app), with play/pause and a seek bar.~~
-  - ~~**Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.~~
 
 ### Desktops
 
@@ -282,3 +255,36 @@ or may not be returned to a normal to-do item.*
 *This list is the road map. More ideas are kept in a separate private list: provisional ones, thought experiments and
 other ideas that would take up too much room here, most of which won't be built. An idea is usually worked out fully
 there before it's added to this list.*
+
+### Drives, the sidebar and the Overview
+
+- [ ] ~~**Friendly names for drives and removable media.** Right-click a drive (Overview card or sidebar entry) →
+  **Rename in Kestrel…** to give it a name of your own, such as "Camera SD card" or "Backup HDD". Kestrel only shows
+  that name; the drive's own label is never changed.~~ *Struck for now.*
+  - ~~Recognised by a stable id, not by where it's mounted: the file system's UUID (GIO's `g_volume_get_uuid()` /
+    `g_mount_get_uuid()`, or the volume's UUID identifier), so the name follows the drive to any port or mount point,
+    also before it's mounted. Phones and cameras have no UUID: use the most stable id GIO offers for them (the
+    device's serial, else its gvfs address), and say in the dialog when the name may not stick.~~
+  - ~~Shown wherever the drive's name is: Overview cards, the sidebar's Devices, the path bar and tab title at the
+    drive's top folder, the window title, Properties. The real label stays visible where it matters (a tooltip, or
+    Properties: "Name in Kestrel: Camera SD card · Label: EOS_DIGITAL").~~
+  - ~~Saved in Kestrel's config folder (a list of id → name, written whole like the others), synced to other open
+    Kestrels through the tower (a new message, so bump PROTOCOL), and added to BleachBit's cleaner. **Reset Name**
+    puts the drive's own name back.~~
+  - ~~Two drives with the same UUID (a cloned disk): the name shows on both; say so in the dialog rather than
+    guessing.~~
+
+### File tools
+
+- [ ] ~~**Find similar images** (the part of Find Duplicates left for later): the same photo at another size or
+  quality, not identical bytes, e.g. by a perceptual hash of each image's thumbnail, grouped in the Find Duplicates
+  window.~~ *Struck for now.*
+
+### Images, video and audio
+
+- [ ] ~~**Image viewer: what's left of the quality-of-life ideas** (the rest is done, 0.3.2-alpha.7). Not chosen
+  then:~~ *Struck for now.*
+  - ~~**Rate** images (stars 1–5, as XMP Rating), next to star / pin.~~
+  - ~~**Video and animation:** GIF/WebP already animate; play short videos in place (or hand them to the default
+    app), with play/pause and a seek bar.~~
+  - ~~**Background:** choose black, grey, the theme's colour, or a checkerboard for transparency.~~
