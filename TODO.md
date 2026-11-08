@@ -113,6 +113,20 @@ into.
   - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
     `~/.config/baloofilerc`, `baloosearch`). Without it, Kestrel uses its own search, which is fine.
 
+- [ ] **Kestrel as the file chooser for native GTK apps too (opt-in), and say where it can't be.** `kes-setup
+  --default` makes Kestrel the portal's FileChooser, but native (non-Flatpak, non-Snap) GTK apps don't ask the portal:
+  GTK 3 sends a `GtkFileChooserNative` there only when sandboxed or with `GTK_USE_PORTAL=1`, GTK 4 only when sandboxed
+  or with `GDK_DEBUG=portals`. So gedit's Open and Save show GTK's own dialog.
+  - **Opt-in:** a separate kes-setup flag (not part of `--default`) that sets `GTK_USE_PORTAL=1` and
+    `GDK_DEBUG=portals` for the session (`~/.config/environment.d/`), recorded in install-state and taken out by
+    `--undo`; install.sh passes it through. Say that it takes effect at the next login, and that it sends other things
+    through the portal as well (opening links, the app chooser, printing in some GTK versions). Cover it in
+    tests/test_installer.sh.
+  - **Document the limit** (docs/install.md, kes-setup's message): which apps get Kestrel (Flatpak and Snap apps,
+    browsers using the portal, Qt apps using it, and with the opt-in native GTK apps that use the native chooser) and
+    which can't: apps that build `GtkFileChooserDialog` themselves, e.g. gedit's Save / Save As (its Open uses the
+    native one). Nothing outside the app can replace that dialog.
+
 ### Translations
 
 ### Packaging
