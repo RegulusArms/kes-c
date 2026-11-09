@@ -101,8 +101,12 @@ into.
 
 ### File tools
 
-- [ ] **Scripts that choose when they show, and run as jobs.** Scripts ▸ (src/sharing.cpp, `add_scripts_menu`) lists
-  every executable in `~/.local/share/nautilus/scripts` for every selection and runs it blind. Build on it:
+- [ ] **Scripts that choose when they show, and run as jobs.** This is Kestrel's form of plugins/extensions: users
+  connect Kestrel to outside tools and programs on their own terms, without changing Kestrel. So the header lines and
+  variables below are a public interface: documented as such, kept working across versions (new lines and variables
+  only added, never renamed or changed in meaning), with `KES_SCRIPT_API` (a number, starting at 1) telling a script
+  which version it's talking to. Scripts ▸ (src/sharing.cpp, `add_scripts_menu`) lists every executable in
+  `~/.local/share/nautilus/scripts` for every selection and runs it blind. Build on it:
   - **Folders:** also read `~/.local/share/kestrel-explorer/scripts` (`XDG_DATA_HOME`; not the cache, which BleachBit
     and users clear), merged with Nautilus's in the one menu (subfolders → submenus, as now).
   - **A header saying when a script shows:** comment lines Kestrel reads, e.g. `# kestrel-on: file files` (kinds:
@@ -120,9 +124,33 @@ into.
     script in Kestrel's folder with the header lines (commented, with every kind and an example type) and a block
     reading the arguments and variables, made executable, then opens it in the text editor. Written as a part and
     claimed with RENAME_NOREPLACE (never replaces a script of that name).
-  - docs/context-menus.md rows (both Scripts ▸ rows: the filtering, New Script…), a docs page or section on writing
-    scripts (header lines, variables, run modes), and tests: the filter per kind and type, the arguments and variables a
-    stub script receives, Cancel ending the job (the script held on a FIFO), New Script… not overwriting a name.
+  - **One way only: a script never controls Kestrel.** A Kestrel interaction starts a process (or several); the only
+    thing that comes back is its output, as the job's log in the Jobs window (verbose logging). No commands, no
+    selecting or opening files, no messages read from its output: whatever it prints is shown as text, never acted on.
+    The job ends when the script itself exits (a program it started and left running doesn't keep the job open, even
+    holding its output).
+  - docs/context-menus.md rows (both Scripts ▸ rows: the filtering, New Script…), a docs page on extending Kestrel
+    with scripts (header lines, variables, run modes, the compatibility promise, example scripts), and tests.
+    - Example, **Extract frames** (`kestrel-on: file files`, `kestrel-types: video/*`): makes a folder named after
+      each selected video without its extension (`holiday.mp4` → `holiday/`) and lets ffmpeg extract every frame into
+      it, its output in the job's log. Shows the header, the arguments and logging. Scripts are the user's own: Kestrel
+      starts them, but they (and the examples) don't follow Kestrel's rules or design (no part names, no atomic
+      writes); a tool does what it does.
+    - The tests: the filter per kind and type, the arguments and variables a stub script receives, Cancel ending the
+      job (the script held on a FIFO), New Script… not overwriting a name.
+  - The example script, for reference:
+    ```bash
+    #!/bin/bash
+    # kestrel-on: file files
+    # kestrel-types: video/*
+    # Extract every frame of each selected video into a folder named after it (holiday.mp4 → holiday/).
+
+    for video in "$@"; do
+        out="${video%.*}"
+        mkdir -p -- "$out"
+        ffmpeg -hide_banner -i "$video" "$out/frame_%06d.png"
+    done
+    ```
 
 ### Images, video and audio
 
