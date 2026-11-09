@@ -101,6 +101,29 @@ into.
 
 ### File tools
 
+- [ ] **Scripts that choose when they show, and run as jobs.** Scripts ▸ (src/sharing.cpp, `add_scripts_menu`) lists
+  every executable in `~/.local/share/nautilus/scripts` for every selection and runs it blind. Build on it:
+  - **Folders:** also read `~/.local/share/kestrel-explorer/scripts` (`XDG_DATA_HOME`; not the cache, which BleachBit
+    and users clear), merged with Nautilus's in the one menu (subfolders → submenus, as now).
+  - **A header saying when a script shows:** comment lines Kestrel reads, e.g. `# kestrel-on: file files` (kinds:
+    `file`, `files`, `folder`, `folders`, `mixed`, `background` for the folder's own menu) and `# kestrel-types:
+    image/* application/pdf` (MIME filter, matched against every selected item). A script with no header shows for
+    every selection, as now, so Nautilus scripts keep working. Kestrel never edits a script.
+  - **What the script gets:** the selected items as full paths in its arguments (today names in the current folder are
+    passed bare); `KES_KIND`, `KES_COUNT`, `KES_CURRENT_DIR`; `KES_SELECTION_FILE`, a NUL-separated list in a temp file
+    (names with newlines, selections too big for argv), removed when the script ends; the `NAUTILUS_SCRIPT_*`
+    variables as now.
+  - **Runs as a job:** a row in the job queue (src/jobs.cpp) with Cancel (SIGTERM to its process group), its
+    stdout/stderr in the job's log (saved by joblogs.cpp when that's on), failed on a non-zero exit. A header can ask
+    for `# kestrel-run: silent` (as today) or `terminal` (the user's terminal, for scripts that ask questions).
+  - **New Script…** at the end of Scripts ▸ (beside Open Scripts Folder): asks for a name (ask_text), writes a starter
+    script in Kestrel's folder with the header lines (commented, with every kind and an example type) and a block
+    reading the arguments and variables, made executable, then opens it in the text editor. Written as a part and
+    claimed with RENAME_NOREPLACE (never replaces a script of that name).
+  - docs/context-menus.md rows (both Scripts ▸ rows: the filtering, New Script…), a docs page or section on writing
+    scripts (header lines, variables, run modes), and tests: the filter per kind and type, the arguments and variables a
+    stub script receives, Cancel ending the job (the script held on a FIFO), New Script… not overwriting a name.
+
 ### Images, video and audio
 
 ### Desktops
