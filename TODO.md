@@ -138,6 +138,27 @@ into.
   - A free window (show_free); never reads files on a tape or floppy without the drive's previews allowed, as with
     thumbnails.
 
+- [ ] **Drop files and folders onto any sidebar entry.** Dragging files or folders onto a drive, bookmark, mount or
+  other place in the left panel should put them there, as a drop onto a folder does (move/copy/link by the keys held,
+  Alt for the menu; a job, undoable). Already there: `Sidebar::dragMoveEvent`/`dropEvent` (src/widgets.cpp) accept a
+  drop onto any entry whose path is an existing folder (mounted drives, bookmarks, Home, the user folders, mounted
+  images, Trash → trashed) and hand it to `MainWindow::handle_drop`. Still to do:
+  - Show which entry the drop goes to: highlight the row under the pointer while dragging (now only the pointer
+    changes), and a tooltip-like hint for what will happen (Move to / Copy to *name*).
+  - Entries without a folder: an unmounted drive or image (mount it, then drop; say so if it fails), a phone or
+    network share (a gvfs path, or a URI that isn't under `/`), Starred (star the dropped items), Recent and the
+    Overview (refuse, with the pointer showing it).
+  - A bookmark whose folder is gone, or a drive that's read-only: refuse with the reason rather than failing later
+    in the job.
+  - Hovering over an entry for a moment while dragging opens it in the pane (spring-loaded), so the drop can go into
+    a subfolder there.
+  - `dragMoveEvent` calls `isdir()` on every move: cache it per row for the drag, so a slow drive (tape, floppy,
+    network share) isn't asked over and over.
+  - The drop has to work from other apps too (Brave, the desktop), not only from Kestrel's panes; and dropping onto
+    the drive the files are already on moves, onto another drive copies, as in the panes.
+  - Tests (`ui`, the dropping-onto-folders checks): a drop onto a bookmark, a mounted drive and Trash runs the job;
+    an unmounted drive and Recent refuse. docs/features.md (the sidebar) to say so.
+
 ### File tools
 
 - [ ] **Scripts that choose when they show, and run as jobs.** This is Kestrel's form of plugins/extensions: users
