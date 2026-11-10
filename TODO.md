@@ -83,6 +83,45 @@ into.
 
 ### Archives
 
+- [ ] **Open as Archive, part 1: a mini Kestrel window, cached in RAM.** Open as Archive (src/archivewin.cpp) is
+  now a plain member list (a QTreeWidget); opening a member extracts it to a folder on disk
+  (`ArchiveWindow::temp_root()`, `APP_CACHE()/archive-files`, swept after a day). Make it a small Kestrel window
+  instead, and keep everything it extracts in RAM, never on disk:
+  - **Browsing like a pane:** the archive's folders browsed like real ones (icon and list views, zoom, sorting,
+    back/forward/up, a path bar inside the archive), reusing Pane's views where possible rather than a second copy of
+    them. Extract Here / To… / All and Test stay.
+  - **Thumbnails and previews:** members' thumbnails and the image viewer / Quick Look (Space), made from copies
+    extracted into the RAM cache. Their thumbnails stay in that cache too, never in `~/.cache/thumbnails` or the
+    folder-mosaic cache (the archive's names and pictures don't leak to disk).
+  - **The RAM cache:** a tmpfs Kestrel can use without root (a folder under `$XDG_RUNTIME_DIR` or `/dev/shm`, mode
+    0700; mounting a tmpfs of its own needs root), with a size limit (a setting in src/prefs.cpp, e.g. a share of RAM;
+    `$XDG_RUNTIME_DIR` is usually capped at 10% of RAM by logind). When it's full it works first in, first out: the
+    oldest extracted files are removed to make room for what's being browsed now. Never evict a file that's still in
+    use: one open in another app, being dragged, on the clipboard, or being copied out (pin those until they're done;
+    if everything is pinned, say the cache is full rather than evicting). A member bigger than the whole cache is
+    extracted on request for that one use (or refused with a message), not cached. The cache is removed when the
+    window closes and swept at start-up after a crash. Encrypted archives: the password from the keyring as now
+    (src/keyring.cpp); their extracted members also only in RAM.
+  - **Getting files out:** drag from the archive window into a Kestrel window, the desktop or another app, and Copy
+    (Ctrl+C) then Paste in a Kestrel window or the desktop; both extract into the RAM cache and hand over those paths,
+    and a paste/drop into Kestrel runs as a normal copy job (part names, renamed into place). Cut / Move / Delete
+    aren't offered (read-only until part 2). The extraction on demand for drags (`MembersMime`) moves to the cache.
+  - **The basic window stays as an option:** a setting in Preferences (src/prefs.cpp; e.g. "Open as Archive opens:
+    the archive browser / the simple list") makes Open as Archive open today's plain member list instead of the new
+    window. The new window is the default. The simple list keeps working as now, including its disk cache
+    (`archive-files`) for opening members, dragging out and Extract.
+  - The disk cache (`archive-files`) is then only for the simple list: keep it in kes-setup's BleachBit cleaner and
+    tests/test_installer.sh's expectations.
+  - docs/context-menus.md (the archive window's menu), the Open as Archive part of the docs, and tests (FIFO eviction,
+    pinned files kept, a cancelled extraction leaves no half file under a member's name).
+- [ ] **Open as Archive, part 2: changing an archive.** After part 1: for formats whose tools can add (and, for some,
+  remove) members, e.g. zip, 7z, tar (uncompressed), let the archive window add files (drop or paste into it, Add
+  Files…) and delete members, and make folders inside it. Read-only formats (rar without a rar licence, compressed
+  tars, isos…) keep it read-only, with the reason shown. Failure-atomic: the tools write the archive in place, so
+  the change is made to a copy under a part name beside it and swapped in when the tool succeeds (a failure or
+  cancel leaves the original as it was); never edit an archive on a tape in place. Which formats and tools (7z, zip,
+  bsdtar…) support what to be worked out when part 1 is done.
+
 ### Drives, the sidebar and the Overview
 
 - [ ] **Quick Look for every kind of file.** Space opens the image viewer for images, but Properties for anything
@@ -284,6 +323,28 @@ into.
 
 
 ### Security
+
+- [ ] **Every cache inside Kestrel's cache folder.** Everything Kestrel caches or keeps temporarily on disk goes under
+  `APP_CACHE()` (`~/.cache/kestrel-explorer`, or the private RAM disk's in private mode), so it's in one place that
+  users, BleachBit (kes-setup's cleaner) and Clear Cache can find and empty. The one exception is thumbnails while the
+  shared thumbnail cache is in use (the default, not "separate caching"): those go to `~/.cache/thumbnails` like
+  every other app's.
+  - Audit src/ for anything written outside it: `/tmp`, `QDir::tempPath()`, `QTemporaryFile`/`QTemporaryDir`,
+    `mkstemp`/`mkdtemp`, `$XDG_RUNTIME_DIR`, other `~/.cache` folders, and caches written by tools Kestrel runs
+    (ffmpeg, exiftool, thumbnailers, 7z…, via their environment or output paths). Known so far:
+    - Thumbnailer output in `/tmp/gnome-desktop-thumbnailer-*.png` (src/thumbs.cpp `run_thumbnailer`): kept there
+      because Ubuntu's AppArmor profiles only let thumbnailers such as evince/papers write to that name. Find a way
+      that works with those profiles (e.g. a pipe or the thumbnailer's stdout where it supports it), or keep it as a
+      documented exception, removed at once after reading as now.
+    - Back Up Drive to Image's FIFO folder in `$XDG_RUNTIME_DIR` / the temp dir (src/diskimage.cpp): a pipe, not a
+      cache; decide whether it moves or is listed as an exception.
+  - Things that aren't caches (settings, histories, bookmarks, sockets, runtime state) stay where they belong
+    (`~/.config`, `$XDG_RUNTIME_DIR`); the rule is about caches and temporary copies.
+  - Anything that does have to stay outside gets a comment saying why, and is listed in docs (with BleachBit's
+    cleaner covering it if it can outlive Kestrel). A test (like test_prefs's checks on src/) that fails on a new
+    temp/cache path in src/ outside `APP_CACHE()` and the allowed exceptions.
+  - The RAM cache planned for Open as Archive part 1 (New features → Archives) is RAM, not disk: it follows that
+    item's own rules.
 
 - [ ] **Security review of the admin helper (kes-admin-helper).** It runs as root (through pkexec) and does what
   Kestrel's JSON requests on its stdin ask (src/admin_helper.cpp, its header comment lists the ops and the safety
