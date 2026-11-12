@@ -77,6 +77,14 @@ into.
     its last action was none) or Kestrel did something wrong. If Brave refused it, compare with a drag from GNOME
     Files into the same page.
 
+- [ ] **The file chooser should use the same caches and follow the same preferences as the rest of Kestrel.** A
+  chooser window (src/chooser.cpp, a MainWindow with `chooser_mode`) should use the same thumbnail and folder-mosaic
+  caches and cache settings (the separate cache, private mode's RAM disk, cache size and clean-up), and follow every
+  other preference the main windows do, including changes made while a chooser is open (apply_settings in
+  src/app.cpp). The only exceptions are its own `chooser/…` keys (view, icon sizes, hidden files, sidebar, info
+  panel) and `chooser_start` / `chooser_places`. Check each setting in src/prefs.cpp against a chooser window, and
+  fix any that it ignores or reads from somewhere else.
+
 ## New features
 
 ### Jobs
