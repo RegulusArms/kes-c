@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Suggest a feature
+    url: https://github.com/RegulusArms/kes-c/discussions/new?category=ideas
+    about: Something Kestrel could do, or do better. Ideas are discussed in Discussions, not filed as issues.
+  - name: Ask a question
+    url: https://github.com/RegulusArms/kes-c/discussions/new?category=q-a
+    about: How to do something, or whether it's a bug. Ask here first if you're not sure.
+  - name: Installing Kestrel
+    url: https://github.com/RegulusArms/kes-c/blob/DEV/docs/install.md
+    about: How to install it from apt or a .deb, on each Ubuntu release and Linux Mint.
+  - name: What Kestrel can do
+    url: https://github.com/RegulusArms/kes-c/blob/DEV/docs/features.md
+    about: Every feature, and where to find it.

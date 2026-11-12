@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The one version to bump. project() gets only its numbers (no "-alpha.N"); the .deb's version is set below.
-set(KES_VERSION "0.3.1-alpha.4")
+set(KES_VERSION "0.3.4-alpha.0")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" KES_VERSION_NUMBER "${KES_VERSION}")
 project(kestrel-explorer VERSION ${KES_VERSION_NUMBER} LANGUAGES CXX)
 
@@ -12,16 +12,18 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)   # focus.cpp: activating a drop target on X11
+pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)   # keyring.cpp: remembered archive passwords
 
 # GLib headers use "signals" as an identifier, so Qt's lowercase keywords are off (Q_SIGNALS, Q_EMIT, ...)
-add_compile_definitions(QT_NO_KEYWORDS KES_VERSION="${KES_VERSION}")
+add_compile_definitions(QT_NO_KEYWORDS)
 
-add_executable(kes
-    src/main.cpp
+# The app's code, compiled once: kes is it plus main.cpp and the version (src/version.cpp); the tests (KES_BUILD_TESTS)
+# link the same objects with their own version.
+add_library(kes_objs OBJECT
     src/util.cpp
     src/proc.cpp
     src/uwp.cpp
@@ -31,6 +33,7 @@ add_executable(kes
     src/chooser.cpp
     src/places.cpp
     src/sharing.cpp
+    src/windows.cpp
     src/undo.cpp
     src/admin.cpp
     src/animate.cpp
@@ -38,27 +41,76 @@ add_executable(kes
     src/thumbs.cpp
     src/metadata.cpp
     src/viewer.cpp
+    src/imgedit.cpp
     src/widgets.cpp
+    src/fsmodel.cpp
+    src/groups.cpp
+    src/drives.cpp
+    src/jobs.cpp
+    src/joblogs.cpp
+    src/keyring.cpp
+    src/archivewin.cpp
+    src/prefs.cpp
+    src/prefswin.cpp
+    src/menus.cpp
+    src/tapebuf.cpp
+    src/windiag.cpp
+    src/jobswin.cpp
+    src/towerwin.cpp
     src/overview.cpp
+    src/health.cpp
+    src/media.cpp
+    src/convert.cpp
     src/dialogs.cpp
     src/archive.cpp
     src/archive_ui.cpp
     src/hashcheck.cpp
+    src/dupes.cpp
+    src/diskusage.cpp
+    src/compare.cpp
+    src/pgp.cpp
+    src/ramdisk.cpp
+    src/ramdiskwin.cpp
+    src/signature.cpp
+    src/links.cpp
+    src/linkwin.cpp
+    src/diskimage.cpp
     src/app.cpp
     src/actions.cpp
     src/opening.cpp
     src/incoming.cpp
     src/pane.cpp
     src/stats.cpp
-    data/kestrel.qrc
+    src/i18n.cpp
 )
-target_link_libraries(kes PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
+target_include_directories(kes_objs PUBLIC src)
+target_link_libraries(kes_objs PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)
+target_compile_options(kes_objs PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+add_executable(kes src/main.cpp src/version.cpp data/kestrel.qrc)
+target_link_libraries(kes PRIVATE kes_objs)
+target_compile_definitions(kes PRIVATE KES_VERSION="${KES_VERSION}")
 target_compile_options(kes PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+# Translations (src/i18n.h): each translations/kestrel_<language>.ts built into kes as :/i18n/kestrel_<language>.qm,
+# so adding a language is adding its .ts. `cmake --build build --target update_translations` refreshes them from the
+# code (translations/update.sh).
+file(GLOB KES_TS_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/translations/kestrel_*.ts)
+qt_add_lrelease(kes_objs TS_FILES ${KES_TS_FILES} QM_FILES_OUTPUT_VARIABLE KES_QM_FILES)
+qt_add_resources(kes_objs kes_translations PREFIX /i18n BASE ${CMAKE_CURRENT_BINARY_DIR} FILES ${KES_QM_FILES})
+add_custom_target(update_translations COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/translations/update.sh
+                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} VERBATIM)
 
 # The small root helper for the admin session (started through pkexec). Qt Core only, for JSON.
 add_executable(kes-admin-helper src/admin_helper.cpp)
 target_link_libraries(kes-admin-helper PRIVATE Qt6::Core)
 target_compile_options(kes-admin-helper PRIVATE -Wall -Wextra)
+
+# The test programs (tests/README.md), built into build/tests by tests/run.sh; not for install.sh or the .deb
+option(KES_BUILD_TESTS "Build the test programs" OFF)
+if(KES_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS kes kes-admin-helper RUNTIME DESTINATION bin)
 install(PROGRAMS kes-setup DESTINATION bin)   # kes-setup --default: what install.sh --default does, for the .deb
@@ -88,11 +140,21 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "File manager with archive, admin, permiss
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RegulusArms/kes-c")
 set(CPACK_DEBIAN_PACKAGE_SECTION utils)
 # Depends written out rather than from dpkg-shlibdeps: the libraries' package names differ between releases
-# (Ubuntu 24.04 has libqt6gui6t64, 26.04 libqt6gui6 again), and one .deb is built for all of them
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.34), libgcc-s1, libstdc++6 (>= 13.1), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libqt6core6t64 (>= 6.4) | libqt6core6 (>= 6.4), libqt6gui6t64 (>= 6.4) | libqt6gui6 (>= 6.4), libqt6widgets6t64 (>= 6.4) | libqt6widgets6 (>= 6.4), qt6-qpa-plugins")
+# (Ubuntu 24.04 has libqt6gui6t64, 26.04 libqt6gui6 again). Each Ubuntu release gets a .deb built on it, which needs
+# that release's C library, C++ library and Qt or newer (a build on 26.04 uses symbols 24.04's don't have), so those
+# minimums are the build system's own: a .deb installed on an older release than its own is refused, not broken.
+execute_process(COMMAND getconf GNU_LIBC_VERSION OUTPUT_VARIABLE KES_LIBC_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(REGEX MATCH "[0-9]+\\.[0-9]+" KES_LIBC_VERSION "${KES_LIBC_VERSION}")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+" KES_CXX_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+" KES_QT_VERSION "${Qt6_VERSION}")
+if(NOT KES_LIBC_VERSION OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(WARNING "The .deb's Depends need glibc and GCC to work out their minimums")
+endif()
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= ${KES_LIBC_VERSION}), libgcc-s1, libstdc++6 (>= ${KES_CXX_VERSION}), libglib2.0-0t64 (>= 2.40) | libglib2.0-0 (>= 2.40), libxcb1, libsecret-1-0, libqt6core6t64 (>= ${KES_QT_VERSION}) | libqt6core6 (>= ${KES_QT_VERSION}), libqt6gui6t64 (>= ${KES_QT_VERSION}) | libqt6gui6 (>= ${KES_QT_VERSION}), libqt6widgets6t64 (>= ${KES_QT_VERSION}) | libqt6widgets6 (>= ${KES_QT_VERSION}), qt6-qpa-plugins")
 # install.sh's RECOMMENDED list
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
-set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "pkexec, libglib2.0-bin, xdg-utils, gvfs, gvfs-backends, udisks2, qt6-image-formats-plugins, qt6-svg-plugins | libqt6svg6, kimageformat6-plugins, adwaita-icon-theme, qt6-gtk-platformtheme, qt6-translations-l10n, 7zip | p7zip-full, unrar, zip, unzip, pigz, zpaq, zstd, xz-utils, bzip2, lzip")
+# kes-setup's OPTIONAL_PACKAGES and the Optional table in docs/dependencies.md
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libimage-exiftool-perl, ffmpeg, bleachbit, rar, pbzip2 | lbzip2, plzip, lz4, ripgrep, libjpeg-turbo-progs, gnupg, rsync, libheif-examples, zfsutils-linux")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_STRIP_FILES ON)
 set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS

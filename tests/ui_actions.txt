@@ -57,11 +57,18 @@ button "Menu" > Go > Next Tab [Ctrl+PgDown, Ctrl+Tab]
 button "Menu" > Go > Previous Tab [Ctrl+PgUp, Ctrl+Shift+Tab]
 button "Menu" > ---
 button "Menu" > Preferences… [Ctrl+,]
+button "Menu" > Jobs… [Ctrl+Shift+J]
+button "Menu" > Sync Folders…
+button "Menu" > New RAM Disk…
+button "Menu" > Private Mode (toggle)
+button "Menu" > Tower…
 button "Menu" > Start Admin Session…
 button "Menu" > Clear Folder Preview Cache
 button "Menu" > Delete All Thumbnails…
 button "Menu" > Keyboard Shortcuts [F1]
 button "Menu" > About
+button "Private mode: Kestrel's caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder." > Open the Private Folder
+button "Private mode: Kestrel's caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder." > Leave Private Mode
 button "Admin session open: administrator actions don't ask for your password again." > End Admin Session
 shortcut > Back [Alt+Left, Backspace]
 shortcut > Bookmark This Location [Ctrl+D]
@@ -78,6 +85,7 @@ shortcut > Grid View [Ctrl+1]
 shortcut > Homepage [Alt+Home]
 shortcut > Info Panel [F3]
 shortcut > Invert Selection [Ctrl+Shift+I]
+shortcut > Jobs… [Ctrl+Shift+J]
 shortcut > Keyboard Shortcuts [F1]
 shortcut > List View [Ctrl+2]
 shortcut > Move to Trash [Del]
@@ -112,25 +120,43 @@ context menu, empty space > New Document > Empty File…
 context menu, empty space > ---
 context menu, empty space > Paste
 context menu, empty space > Paste as Link
+context menu, empty space > Link…
 context menu, empty space > Select All
 context menu, empty space > ---
 context menu, empty space > Sort By
-context menu, empty space > Sort By > Name
-context menu, empty space > Sort By > Size
-context menu, empty space > Sort By > Type
-context menu, empty space > Sort By > Modified
+context menu, empty space > Sort By > Name (toggle)
+context menu, empty space > Sort By > Size (toggle)
+context menu, empty space > Sort By > Type (toggle)
+context menu, empty space > Sort By > Modified (toggle)
 context menu, empty space > Sort By > ---
-context menu, empty space > Sort By > Ascending
-context menu, empty space > Sort By > Descending
+context menu, empty space > Sort By > Ascending (toggle)
+context menu, empty space > Sort By > Descending (toggle)
 context menu, empty space > Sort By > ---
 context menu, empty space > Sort By > Pinned & Starred First (toggle)
+context menu, empty space > Sort By > ---
+context menu, empty space > Sort By > Group by Period (toggle)
+context menu, empty space > Sort By > Group by Day (toggle)
+context menu, empty space > Sort By > Date to Group By
+context menu, empty space > Sort By > Date to Group By > Date Modified (toggle)
+context menu, empty space > Sort By > Date to Group By > Date Created (toggle)
+context menu, empty space > Sort By > Date to Group By > Date Taken (Metadata) (toggle)
+context menu, empty space > Sort By > ---
+context menu, empty space > Sort By > Set as Default
+context menu, empty space > Sort By > Apply to Subfolders
 context menu, empty space > Show Hidden Files (toggle)
 context menu, empty space > ---
 context menu, empty space > Open in Terminal
 context menu, empty space > Bookmark This Folder
-context menu, empty space > Generate Previews Recursively
-context menu, empty space > Generate Folder Previews
-context menu, empty space > Generate Folder Previews Recursively
+context menu, empty space > Previews
+context menu, empty space > Previews > Generate Previews
+context menu, empty space > Previews > Generate Previews Recursively
+context menu, empty space > Previews > Generate Folder Previews
+context menu, empty space > Previews > Generate Folder Previews Recursively
+context menu, empty space > Previews > ---
+context menu, empty space > Previews > Regenerate Previews
+context menu, empty space > Previews > Regenerate Previews Recursively
+context menu, empty space > Previews > Regenerate Folder Previews
+context menu, empty space > Previews > Regenerate Folder Previews Recursively
 context menu, empty space > ---
 context menu, empty space > Properties
 context menu, a file > Open
@@ -141,6 +167,7 @@ context menu, a file > Copy
 context menu, a file > Move To…
 context menu, a file > Copy To…
 context menu, a file > Duplicate
+context menu, a file > New Folder with Selection…
 context menu, a file > Rename…
 context menu, a file > Copy Path / Name
 context menu, a file > Copy Path / Name > Copy Full Path
@@ -152,14 +179,13 @@ context menu, a file > Links & Shortcuts
 context menu, a file > Links & Shortcuts > Create Symbolic Link Here
 context menu, a file > Links & Shortcuts > Create Relative Symbolic Link Here
 context menu, a file > Links & Shortcuts > Create Hard Link Here
-context menu, a file > Links & Shortcuts > Create Symbolic Link In…
+context menu, a file > Links & Shortcuts > Link…
 context menu, a file > Links & Shortcuts > ---
 context menu, a file > Links & Shortcuts > Send Link to Desktop
-context menu, a file > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, a file > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, a file > ---
 context menu, a file > Compress…
 context menu, a file > Create Checksum File…
+context menu, a file > Encrypt…
 context menu, a file > ---
 context menu, a file > Move to Trash
 context menu, a file > Delete Permanently…
@@ -176,6 +202,7 @@ context menu, a folder > Paste Into Folder
 context menu, a folder > Move To…
 context menu, a folder > Copy To…
 context menu, a folder > Duplicate
+context menu, a folder > New Folder with Selection…
 context menu, a folder > Rename…
 context menu, a folder > Copy Path / Name
 context menu, a folder > Copy Path / Name > Copy Full Path
@@ -186,16 +213,19 @@ context menu, a folder > Pin
 context menu, a folder > Links & Shortcuts
 context menu, a folder > Links & Shortcuts > Create Symbolic Link Here
 context menu, a folder > Links & Shortcuts > Create Relative Symbolic Link Here
-context menu, a folder > Links & Shortcuts > Create Symbolic Link In…
+context menu, a folder > Links & Shortcuts > Link…
 context menu, a folder > Links & Shortcuts > ---
 context menu, a folder > Links & Shortcuts > Send Link to Desktop
-context menu, a folder > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, a folder > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, a folder > Links & Shortcuts > ---
 context menu, a folder > Links & Shortcuts > Add to Bookmarks
 context menu, a folder > ---
 context menu, a folder > Compress…
 context menu, a folder > Create Checksum File…
+context menu, a folder > Find Duplicates…
+context menu, a folder > Disk Usage…
+context menu, a folder > Compare With…
+context menu, a folder > Sync To…
+context menu, a folder > Convert Audio…
 context menu, a folder > Folder Colour
 context menu, a folder > Folder Colour > Red (toggle)
 context menu, a folder > Folder Colour > Orange (toggle)
@@ -211,14 +241,22 @@ context menu, a folder > Folder Colour > ---
 context menu, a folder > Folder Colour > Default (toggle)
 context menu, a folder > Show Image Previews (toggle)
 context menu, a folder > Regenerate Preview
-context menu, a folder > Generate Previews Recursively
-context menu, a folder > Generate Folder Previews
-context menu, a folder > Generate Folder Previews Recursively
+context menu, a folder > Previews
+context menu, a folder > Previews > Generate Previews
+context menu, a folder > Previews > Generate Previews Recursively
+context menu, a folder > Previews > Generate Folder Previews
+context menu, a folder > Previews > Generate Folder Previews Recursively
+context menu, a folder > Previews > ---
+context menu, a folder > Previews > Regenerate Previews
+context menu, a folder > Previews > Regenerate Previews Recursively
+context menu, a folder > Previews > Regenerate Folder Previews
+context menu, a folder > Previews > Regenerate Folder Previews Recursively
 context menu, a folder > Open in Terminal
 context menu, a folder > ---
 context menu, a folder > Move to Trash
 context menu, a folder > Delete Permanently…
 context menu, a folder > ---
+context menu, a folder > Calculate Folder Size
 context menu, a folder > Properties
 context menu, two files > Open
 context menu, two files > ---
@@ -227,6 +265,7 @@ context menu, two files > Copy
 context menu, two files > Move To…
 context menu, two files > Copy To…
 context menu, two files > Duplicate
+context menu, two files > New Folder with Selection…
 context menu, two files > Rename 2 Items…
 context menu, two files > Copy Path / Name
 context menu, two files > Copy Path / Name > Copy Full Path
@@ -238,14 +277,13 @@ context menu, two files > Links & Shortcuts
 context menu, two files > Links & Shortcuts > Create Symbolic Link Here
 context menu, two files > Links & Shortcuts > Create Relative Symbolic Link Here
 context menu, two files > Links & Shortcuts > Create Hard Link Here
-context menu, two files > Links & Shortcuts > Create Symbolic Link In…
+context menu, two files > Links & Shortcuts > Link…
 context menu, two files > Links & Shortcuts > ---
 context menu, two files > Links & Shortcuts > Send Link to Desktop
-context menu, two files > Links & Shortcuts > Create Desktop Shortcut (.desktop) Here
-context menu, two files > Links & Shortcuts > Send Shortcut (.desktop) to Desktop
 context menu, two files > ---
 context menu, two files > Compress…
 context menu, two files > Create Checksum File…
+context menu, two files > Encrypt…
 context menu, two files > ---
 context menu, two files > Move to Trash
 context menu, two files > Delete Permanently…

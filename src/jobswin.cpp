@@ -1,0 +1,643 @@
+#include "jobswin.h"
+
+#include "atc.h"
+#include "fileops.h"
+#include "jobs.h"
+#include "prefs.h"
+#include "thumbs.h"
+#include "util.h"
+#include "windows.h"
+
+#include <QCheckBox>
+#include <QSignalBlocker>
+#include <QCloseEvent>
+#include <QComboBox>
+#include <QGuiApplication>
+#include <QClipboard>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QListWidget>
+#include <QPainter>
+#include <QPlainTextEdit>
+#include <QPointer>
+#include <QPushButton>
+#include <QScrollBar>
+#include <QSettings>
+#include <QSplitter>
+#include <QStyledItemDelegate>
+#include <QTreeWidget>
+#include <QVBoxLayout>
+
+using namespace util;
+
+namespace {
+
+enum { KeyRole = Qt::UserRole, FractionRole = Qt::UserRole + 1 };
+
+// the Progress column: a bar (or "…" while it has no percentage)
+class ProgressDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::paint(p, option, index);
+        QVariant f = index.data(FractionRole);
+        if (!f.isValid())
+            return;
+        double frac = f.toDouble();
+        QRect r = option.rect.adjusted(4, option.rect.height() / 2 - 4, -4, -(option.rect.height() / 2 - 4));
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        p->setPen(option.palette.color(QPalette::Mid));
+        p->setBrush(option.palette.color(QPalette::Base));
+        p->drawRoundedRect(QRectF(r), 3, 3);
+        if (frac >= 0) {
+            QRectF done(r.x() + 1, r.y() + 1, (r.width() - 2) * std::min(frac, 1.0), r.height() - 2);
+            p->setPen(Qt::NoPen);
+            p->setBrush(option.palette.color(QPalette::Highlight));
+            p->drawRoundedRect(done, 2, 2);
+        }
+        p->restore();
+    }
+};
+
+QString clock_text(qint64 ms)
+{
+    qint64 s = ms / 1000;
+    return s >= 3600 ? QString("%1:%2:%3").arg(s / 3600).arg(s / 60 % 60, 2, 10, QChar('0')).arg(s % 60, 2, 10, QChar('0'))
+                     : QString("%1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'));
+}
+
+}  // namespace
+
+static QPointer<JobsWindow> the_window;
+
+JobsWindow *JobsWindow::open(QWidget *parent)
+{
+    if (the_window && the_window->isVisible()) {   // (a closed one is about to be deleted)
+        the_window->raise();
+        the_window->activateWindow();
+        return the_window;
+    }
+    Q_UNUSED(parent);
+    auto *w = new JobsWindow(nullptr);
+    the_window = w;
+    show_free(w);
+    atc::announce("jobs_window");   // one for every Kestrel: another Kestrel's closes (this one shows its jobs too)
+    return w;
+}
+
+bool JobsWindow::is_open() { return the_window && the_window->isVisible(); }
+
+JobsWindow::JobsWindow(QWidget *parent) : QDialog(parent)
+{
+    setWindowTitle(tx("Jobs"));
+    setAttribute(Qt::WA_DeleteOnClose);
+    auto *lay = new QVBoxLayout(this);
+
+    auto *top = new QHBoxLayout;
+    top->addWidget(new QLabel(tx("Run jobs:")));
+    mode = new QComboBox;
+    mode->addItem(tx("By drive: jobs on different drives at the same time"), "drive");
+    mode->addItem(tx("One at a time, in order"), "one");
+    mode->addItem(tx("All at once: every job starts as it's queued"), "all");
+    mode->setCurrentIndex(mode->findData(jobs::mode()));
+    mode->setAccessibleName(tx("How jobs run"));
+    connect(mode, &QComboBox::currentIndexChanged, this, [this]() { jobs::set_mode(mode->currentData().toString()); });
+    top->addWidget(mode);
+    start_paused = new QCheckBox(tx("Start new jobs paused"));
+    start_paused->setChecked(jobs::Queue::instance()->start_paused());
+    connect(start_paused, &QCheckBox::toggled, this, [](bool on) { jobs::Queue::instance()->set_start_paused(on); });
+    top->addWidget(start_paused);
+    top->addStretch(1);
+    auto *pause_all = new QPushButton(tx("Pause All"));
+    connect(pause_all, &QPushButton::clicked, this, []() { jobs::Queue::instance()->pause_all(true); });
+    auto *resume_all = new QPushButton(tx("Resume All"));
+    connect(resume_all, &QPushButton::clicked, this, []() { jobs::Queue::instance()->pause_all(false); });
+    top->addWidget(pause_all);
+    top->addWidget(resume_all);
+    lay->addLayout(top);
+
+    split = new QSplitter;
+    auto *left = new QWidget;
+    auto *ll = new QVBoxLayout(left);
+    ll->setContentsMargins(0, 0, 0, 0);
+    list = new QTreeWidget;
+    list->setAccessibleName(tx("Jobs"));
+    list->setRootIsDecorated(false);
+    list->setUniformRowHeights(true);
+    list->setHeaderLabels({tx("Job"), tx("State"), tx("Progress"), tx("Time")});
+    list->header()->setStretchLastSection(false);
+    list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    list->setColumnWidth(1, 110);
+    list->setColumnWidth(2, 130);
+    list->setColumnWidth(3, 150);
+    list->setItemDelegateForColumn(2, new ProgressDelegate(list));
+    connect(list, &QTreeWidget::currentItemChanged, this, &JobsWindow::show_details);
+    lists = new QSplitter(Qt::Vertical);
+    lists->setChildrenCollapsible(false);
+    auto *jbox = new QWidget;   // the jobs and their buttons
+    auto *jl = new QVBoxLayout(jbox);
+    jl->setContentsMargins(0, 0, 0, 0);
+    jl->addWidget(list, 1);
+    auto *controls = new QHBoxLayout;
+    pause_btn = new QPushButton(tx("Pause"));
+    connect(pause_btn, &QPushButton::clicked, this, [this]() {
+        const Row *r = selected_row();
+        act(r && r->state == "paused" ? "resume" : "pause");
+    });
+    stop_btn = new QPushButton(tx("Stop"));
+    stop_btn->setToolTip(tx("Cancel the job (Delete)"));
+    connect(stop_btn, &QPushButton::clicked, this, [this]() { act("cancel"); });
+    now_btn = new QPushButton(tx("Start Now"));
+    now_btn->setToolTip(tx("Start it without waiting for its turn"));
+    connect(now_btn, &QPushButton::clicked, this, [this]() { act("start_now"); });
+    up_btn = new QPushButton(tx("Up"));
+    connect(up_btn, &QPushButton::clicked, this, [this]() { act("up"); });
+    down_btn = new QPushButton(tx("Down"));
+    connect(down_btn, &QPushButton::clicked, this, [this]() { act("down"); });
+    auto *clear = new QPushButton(tx("Clear Finished"));
+    clear->setToolTip(tx("Forget the finished jobs of every Kestrel"));
+    connect(clear, &QPushButton::clicked, this, []() { TaskBoard::instance()->clear_finished(); });
+    for (QPushButton *b : {pause_btn, stop_btn, now_btn, up_btn, down_btn, clear})
+        controls->addWidget(b);
+    verify_box = new QCheckBox(tx("Verify copies"));
+    verify_box->setToolTip(tx("Read each file back once it's copied and compare it with the original (for the files "
+                              "copied from now on). Its default is in Preferences → Files."));
+    connect(verify_box, &QCheckBox::toggled, this, [this](bool on) {
+        Task *t = local_task(selected_row());
+        if (!t || t->verify.load() < 0 || t->verify.load() == int(on))
+            return;
+        t->verify = int(on);
+        t->log(on ? tx("Verify copies turned on (Jobs window): each file copied from now on is read back and checked.")
+                  : tx("Verify copies turned off (Jobs window)."));
+    });
+    controls->addWidget(verify_box);
+    controls->addStretch(1);
+    jl->addLayout(controls);
+    lists->addWidget(jbox);
+    auto *tbox = new QWidget;
+    auto *tl = new QVBoxLayout(tbox);
+    tl->setContentsMargins(0, 0, 0, 0);
+    thumb_list = new QTreeWidget;
+    thumb_list->setAccessibleName(tx("Thumbnail jobs"));
+    thumb_list->setRootIsDecorated(false);
+    thumb_list->setUniformRowHeights(true);
+    thumb_list->setHeaderLabels({tx("Thumbnails and folder previews"), tx("For"), tx("State"), tx("Progress")});
+    thumb_list->header()->setStretchLastSection(false);
+    thumb_list->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    thumb_list->setColumnWidth(1, 150);
+    thumb_list->setColumnWidth(2, 190);
+    thumb_list->setColumnWidth(3, 130);
+    thumb_list->setItemDelegateForColumn(3, new ProgressDelegate(thumb_list));
+    tl->addWidget(thumb_list, 1);
+    auto *tc = new QHBoxLayout;
+    thumb_pause = new QPushButton(tx("Pause"));
+    thumb_stop = new QPushButton(tx("Stop"));
+    thumb_stop->setToolTip(tx("Stop making this folder's previews (those made stay)"));
+    auto thumb_act = [this](bool stop) {
+        ThumbnailManager *t = ThumbnailManager::instance();
+        QTreeWidgetItem *it = thumb_list->currentItem();
+        if (!t || !it)
+            return;
+        QString key = it->data(0, Qt::UserRole).toString(), flight = key.section('/', 0, 0), id = key.section('/', 1);
+        bool paused = it->data(0, Qt::UserRole + 1).toBool();
+        if (flight.isEmpty()) {
+            if (stop)
+                t->stop_job(id.toULongLong());
+            else
+                t->pause_job(id.toULongLong(), !paused);
+        } else {   // another Kestrel's: it pauses or stops it
+            t->control_remote(RemoteThumbJob{flight, id}, stop ? "stop" : paused ? "resume" : "pause");
+        }
+    };
+    connect(thumb_pause, &QPushButton::clicked, this, [thumb_act]() { thumb_act(false); });
+    connect(thumb_stop, &QPushButton::clicked, this, [thumb_act]() { thumb_act(true); });
+    connect(thumb_list, &QTreeWidget::currentItemChanged, this, &JobsWindow::refresh_thumbs);
+    tc->addWidget(thumb_pause);
+    tc->addWidget(thumb_stop);
+    tc->addSpacing(12);
+    tc->addWidget(new QLabel(tx("Thumbnailing:")));
+    thumb_mode = new QComboBox;
+    thumb_mode->setAccessibleName(tx("How thumbnailing runs"));
+    for (const auto &[label, value] : prefs::find("thumb_mode")->choices)
+        thumb_mode->addItem(tx(label), value);
+    thumb_mode->setToolTip(tx("%1\nFor every Kestrel window (also Preferences → Images & Videos).").arg(tx(prefs::find("thumb_mode")->tip)));
+    auto show_mode = [this]() {
+        QSignalBlocker quiet(thumb_mode);
+        thumb_mode->setCurrentIndex(thumb_mode->findData(ThumbnailManager::known_mode(prefs::get("thumb_mode").toString())));
+    };
+    show_mode();
+    connect(thumb_mode, &QComboBox::currentIndexChanged, this,
+            [this]() { prefs::set("thumb_mode", thumb_mode->currentData()); });
+    connect(prefs::Notifier::instance(), &prefs::Notifier::changed, this, [show_mode](const QStringList &keys) {
+        if (keys.contains("thumb_mode"))
+            show_mode();
+    });
+    tc->addWidget(thumb_mode);
+    tc->addStretch(1);
+    tl->addLayout(tc);
+    lists->addWidget(tbox);
+    lists->setStretchFactor(0, 3);   // three quarters: the jobs; a quarter: the thumbnails
+    lists->setStretchFactor(1, 1);
+    ll->addWidget(lists, 1);
+    split->addWidget(left);
+
+    auto *right = new QWidget;
+    auto *rl = new QVBoxLayout(right);
+    rl->setContentsMargins(0, 0, 0, 0);
+    head = new QLabel(tx("Choose a job to see what it's doing."));
+    head->setWordWrap(true);
+    head->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    rl->addWidget(head);
+    rl->addWidget(new QLabel(tx("<b>Steps</b>")));
+    steps = new QListWidget;
+    steps->setAccessibleName(tx("Steps"));
+    steps->setMaximumHeight(140);
+    rl->addWidget(steps);
+    rl->addWidget(new QLabel(tx("<b>Log and output</b>")));
+    log = new QPlainTextEdit;
+    log->setAccessibleName(tx("Log"));
+    log->setReadOnly(true);
+    log->setLineWrapMode(QPlainTextEdit::NoWrap);
+    QFont mono("monospace");
+    mono.setStyleHint(QFont::Monospace);
+    log->setFont(mono);
+    rl->addWidget(log, 1);
+    auto *lb = new QHBoxLayout;
+    auto *copy = new QPushButton(tx("Copy"));
+    connect(copy, &QPushButton::clicked, this, [this]() { QGuiApplication::clipboard()->setText(log->toPlainText()); });
+    auto *save = new QPushButton(tx("Save Log…"));
+    connect(save, &QPushButton::clicked, this, &JobsWindow::save_log);
+    lb->addStretch(1);
+    lb->addWidget(copy);
+    lb->addWidget(save);
+    rl->addLayout(lb);
+    split->addWidget(right);
+    lay->addWidget(split, 1);
+
+    QSettings &s = settings();
+    if (!restoreGeometry(s.value("jobs_window_geometry").toByteArray()))
+        resize(1000, 560);
+    if (!split->restoreState(s.value("jobs_window_split").toByteArray()))
+        split->setSizes({560, 440});
+    if (!lists->restoreState(s.value("jobs_window_lists").toByteArray()))
+        lists->setSizes({300, 100});
+    if (ThumbnailManager *t = ThumbnailManager::instance())
+        connect(t, &ThumbnailManager::jobs_changed, this, &JobsWindow::refresh_thumbs);
+    refresh_thumbs();
+
+    connect(TaskBoard::instance(), &TaskBoard::changed, this, [this]() {
+        if (!timer.isActive())
+            timer.start();
+    });
+    connect(jobs::Queue::instance(), &jobs::Queue::changed, this, [this]() {
+        if (!timer.isActive())
+            timer.start();
+    });
+    timer.setInterval(300);   // also while nothing is said: the log and the times move on
+    connect(&timer, &QTimer::timeout, this, &JobsWindow::refresh);
+    timer.start();
+    // opened in another Kestrel: that one is the Jobs window now (it shows our jobs too)
+    connect(atc::radio(), &atc::Radio::heard, this, [this](const QJsonObject &m) {
+        if (m.value("type").toString() == "jobs_window" && !m.value("own").toBool())
+            close();
+    });
+    refresh();
+}
+
+void JobsWindow::closeEvent(QCloseEvent *ev)
+{
+    settings().setValue("jobs_window_geometry", saveGeometry());
+    settings().setValue("jobs_window_split", split->saveState());
+    settings().setValue("jobs_window_lists", lists->saveState());
+    QDialog::closeEvent(ev);
+}
+
+void JobsWindow::refresh_thumbs()
+{
+    // ours, then every other Kestrel's (as each reported them)
+    ThumbnailManager *t = ThumbnailManager::instance();
+    QList<RemoteThumbJob> now;
+    if (t) {
+        for (const ThumbJob &j : t->thumb_jobs())
+            now << RemoteThumbJob{QString(), QString::number(j.id), j.title(), j.folder, j.window, j.state(), j.done, j.total,
+                                  j.paused};
+        now << t->remote_jobs();
+    }
+    QString current = thumb_list->currentItem() ? thumb_list->currentItem()->data(0, Qt::UserRole).toString() : QString();
+    bool same = thumb_list->topLevelItemCount() == now.size();
+    for (int i = 0; same && i < now.size(); ++i)
+        same = thumb_list->topLevelItem(i)->data(0, Qt::UserRole).toString() == now[i].flight + "/" + now[i].id;
+    if (!same) {   // came, went or moved: made again
+        thumb_list->blockSignals(true);
+        thumb_list->clear();
+        for (const RemoteThumbJob &j : now) {
+            auto *it = new QTreeWidgetItem(thumb_list);
+            it->setData(0, Qt::UserRole, j.flight + "/" + j.id);
+            if (j.flight + "/" + j.id == current)
+                thumb_list->setCurrentItem(it);
+        }
+        thumb_list->blockSignals(false);
+    }
+    for (int i = 0; i < now.size(); ++i) {
+        const RemoteThumbJob &j = now[i];
+        QTreeWidgetItem *it = thumb_list->topLevelItem(i);
+        it->setText(0, tx("%1, %2 of %3").arg(j.title, group_digits(j.done), group_digits(j.total)));
+        it->setToolTip(0, j.folder);
+        it->setText(1, j.window);
+        it->setText(2, j.state);
+        it->setData(0, Qt::UserRole + 1, j.paused);
+        it->setData(3, Qt::UserRole + 1, j.total ? double(j.done) / j.total : -1.0);
+    }
+    QTreeWidgetItem *cur = thumb_list->currentItem();
+    thumb_pause->setEnabled(cur);
+    thumb_stop->setEnabled(cur);
+    thumb_pause->setText(cur && cur->data(0, Qt::UserRole + 1).toBool() ? tx("Resume") : tx("Pause"));
+}
+
+void JobsWindow::keyPressEvent(QKeyEvent *ev)
+{
+    if (ev->key() == Qt::Key_Delete) {
+        act("cancel");
+        return;
+    }
+    QDialog::keyPressEvent(ev);
+}
+
+QList<JobsWindow::Row> JobsWindow::rows() const
+{
+    QList<Row> out;
+    QHash<QString, TaskInfo> running;
+    for (const TaskInfo &t : TaskBoard::instance()->all())
+        running.insert(t.flight + "/" + t.id, t);
+    QSet<QString> seen;
+    // the queue, in its order (every Kestrel's through the tower), then the jobs that aren't queued
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs()) {
+        Row r;
+        r.key = j.flight + "/" + j.id;
+        r.flight = j.flight;
+        r.id = j.id;
+        r.title = j.title;
+        r.state = j.state;
+        r.admin = j.admin;
+        r.local = j.local != nullptr;
+        if (running.contains(r.key)) {
+            r.text = running[r.key].text;
+            r.fraction = running[r.key].fraction;
+            r.elapsed = running[r.key].elapsed;
+        }
+        if (j.local) {
+            r.text = j.local->text;
+            r.fraction = j.local->fraction;
+            r.elapsed = j.local->elapsed_ms();
+        }
+        seen << r.key;
+        out << r;
+    }
+    for (auto it = running.begin(); it != running.end(); ++it) {
+        if (seen.contains(it.key()))
+            continue;
+        const TaskInfo &t = it.value();
+        Row r{it.key(), t.flight, t.id, t.title, t.state.isEmpty() ? QString("running") : t.state, t.text, t.fraction,
+              t.local ? t.local->elapsed_ms() : t.elapsed, t.admin, t.local != nullptr};
+        out << r;
+    }
+    // the finished jobs, ours and every other Kestrel's, the newest first
+    QList<FinishedTask> done = TaskBoard::instance()->finished;
+    for (const QList<FinishedTask> &l : TaskBoard::instance()->remote_finished)
+        done << l;
+    std::stable_sort(done.begin(), done.end(), [](const FinishedTask &a, const FinishedTask &b) { return a.ended > b.ended; });
+    for (const FinishedTask &f : done) {
+        Row r;
+        r.key = QString("done:%1:%2").arg(f.flight, f.id);
+        r.flight = f.flight;
+        r.id = f.id;
+        r.title = f.title;
+        r.state = f.state;
+        r.elapsed = f.took_ms;
+        r.admin = f.admin;
+        r.local = f.flight.isEmpty();
+        r.finished = true;
+        out << r;
+    }
+    return out;
+}
+
+const FinishedTask *JobsWindow::finished_task(const Row &r) const
+{
+    TaskBoard *b = TaskBoard::instance();
+    const QList<FinishedTask> &l = r.flight.isEmpty() ? b->finished : b->remote_finished[r.flight];
+    for (const FinishedTask &f : l)
+        if (f.id == r.id)
+            return &f;
+    return nullptr;
+}
+
+void JobsWindow::refresh()
+{
+    QString current = list->currentItem() ? list->currentItem()->data(0, KeyRole).toString() : QString();
+    QList<Row> now = rows();
+    QStringList keys, old;
+    for (const Row &r : now)
+        keys << r.key;
+    for (const Row &r : shown)
+        old << r.key;
+    if (keys != old) {   // jobs came, went or moved: the list is made again
+        list->blockSignals(true);
+        list->clear();
+        for (const Row &r : now) {
+            auto *it = new QTreeWidgetItem(list);
+            it->setData(0, KeyRole, r.key);
+        }
+        list->blockSignals(false);
+    }
+    shown = now;
+    for (int i = 0; i < now.size(); ++i) {
+        const Row &r = now[i];
+        QTreeWidgetItem *it = list->topLevelItem(i);
+        QString where = r.local || r.finished ? QString() : tx("  (another Kestrel)");
+        it->setText(0, (r.admin ? "🛡 " : "") + r.title + where);
+        it->setToolTip(0, r.title + (r.text.isEmpty() ? QString() : "\n" + r.text));
+        it->setText(1, fileops::state_label(r.state));
+        bool active = r.state == "running" || r.state == "paused";
+        it->setData(2, FractionRole, active ? QVariant(r.fraction) : QVariant());
+        it->setText(2, r.state == "waiting" ? QString("…") : QString());
+        QString time;
+        if (r.elapsed > 0) {
+            time = clock_text(r.elapsed);
+            if (r.state == "running" && r.fraction > 0.02 && r.fraction < 1)
+                time = tx("%1 · %2 left").arg(time, clock_text(qint64(r.elapsed * (1 - r.fraction) / r.fraction)));
+        }
+        it->setText(3, time);
+        if (r.key == current && list->currentItem() != it)
+            list->setCurrentItem(it);
+    }
+    show_details();
+}
+
+const JobsWindow::Row *JobsWindow::selected_row() const
+{
+    QString key = list->currentItem() ? list->currentItem()->data(0, KeyRole).toString() : QString();
+    for (const Row &r : shown)
+        if (r.key == key)
+            return &r;
+    return nullptr;
+}
+
+Task *JobsWindow::local_task(const Row *r) const
+{
+    if (!r || r->finished)
+        return nullptr;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        if (j.flight + "/" + j.id == r->key && j.local)
+            return j.local;
+    for (const TaskInfo &t : TaskBoard::instance()->all())
+        if (t.flight + "/" + t.id == r->key && t.local)
+            return t.local;
+    return nullptr;
+}
+
+void JobsWindow::show_details()
+{
+    const Row *r = selected_row();
+    bool queued = r && !r->finished && !r->flight.isEmpty();
+    pause_btn->setText(r && r->state == "paused" ? tx("Resume") : tx("Pause"));
+    pause_btn->setEnabled(r && !r->finished && !(r->admin && r->state != "waiting"));
+    pause_btn->setToolTip(r && r->admin && r->state != "waiting" ? tx("An administrator job can't be paused") : QString());
+    stop_btn->setEnabled(r && !r->finished);
+    now_btn->setEnabled(queued && r->state == "waiting");
+    up_btn->setEnabled(queued && r->state == "waiting");
+    down_btn->setEnabled(queued && r->state == "waiting");
+    {
+        Task *t = r && !r->finished ? local_task(r) : nullptr;
+        int v = t ? t->verify.load() : -1;
+        QSignalBlocker block(verify_box);
+        verify_box->setChecked(v == 1);
+        verify_box->setEnabled(v >= 0);
+        verify_box->setToolTip(r && !r->finished && !t
+                                   ? tx("Only for this Kestrel's own jobs: set it in the Kestrel that started the job")
+                                   : tx("Read each file back once it's copied and compare it with the original (for the "
+                                        "files copied from now on). Its default is in Preferences → Files."));
+    }
+    if (!r) {
+        head->setText(tx("Choose a job to see what it's doing."));
+        steps->clear();
+        log->clear();
+        log_key.clear();
+        return;
+    }
+    Task *task = nullptr;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        if (j.flight + "/" + j.id == r->key)
+            task = j.local;
+    if (!task && !r->finished)
+        for (const TaskInfo &t : TaskBoard::instance()->all())
+            if (t.flight + "/" + t.id == r->key)
+                task = t.local;
+    QStringList drives;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        if (j.flight + "/" + j.id == r->key)
+            drives = j.drives;
+    QString text = "<b>" + r->title.toHtmlEscaped() + "</b> — " + fileops::state_label(r->state);
+    if (!r->text.isEmpty())
+        text += "<br>" + r->text.toHtmlEscaped();
+    if (!drives.isEmpty())
+        text += "<br><small>" + tx("Drives: %1").arg(drives.join(", ")).toHtmlEscaped() + "</small>";
+    head->setText(text);
+    // another Kestrel's job (running, waiting or finished): its steps and log come from it, asked for again each second
+    // while it's chosen
+    const FinishedTask *fin = r->finished ? finished_task(*r) : nullptr;
+    bool theirs = !r->local && !task;
+    bool closed = theirs && r->finished && TaskBoard::instance()->has_left(r->flight);   // nobody to ask
+    JobDetail d;
+    if (theirs && !closed) {
+        d = TaskBoard::instance()->detail(r->flight, r->id);
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (now - asked.value(r->key) >= 1000 && !(r->finished && d.at)) {   // (a finished one doesn't change)
+            asked.insert(r->key, now);
+            TaskBoard::instance()->ask_detail(r->flight, r->id);
+        }
+    }
+    // steps: done ✔, on it ▶, still to do •; a window of them around where it is
+    QStringList st = theirs ? d.steps : fin ? fin->steps : task ? task->steps : QStringList();
+    int at = theirs ? d.step : task ? task->step.load() : (fin ? int(st.size()) : -1);
+    int total = theirs ? d.steps_total : int(st.size());
+    int offset = theirs ? d.steps_from : 0;   // (theirs come as a window already)
+    QStringList shown_steps;
+    int from = theirs ? offset : std::max(0, at - 200), to = theirs ? offset + int(st.size()) : std::min<int>(st.size(), from + 500);
+    for (int i = from; i < to; ++i)
+        shown_steps << (i < at ? "✔ " : i == at ? "▶ " : "• ") + st[i - offset];
+    if (to < total)
+        shown_steps << txn("… and %Ln more", total - to);
+    QStringList cur;
+    for (int i = 0; i < steps->count(); ++i)
+        cur << steps->item(i)->text();
+    if (cur != shown_steps) {
+        steps->clear();
+        steps->addItems(shown_steps);
+        if (at >= from && at - from < steps->count())
+            steps->scrollToItem(steps->item(at - from));
+    }
+    QString body = closed ? (d.at ? d.log : tx("The Kestrel it ran in has closed, so its log isn't available."))
+                   : theirs ? (d.at ? d.log : tx("Asking the Kestrel it runs in for its log…"))
+                   : fin  ? fin->log
+                   : task ? task->log_text()
+                          : QString();
+    if (body.isEmpty() && !r->finished)
+        body = r->state == "waiting" ? tx("Waiting for its turn: nothing done yet.") : QString();
+    if (r->key != log_key || body != log->toPlainText()) {
+        QScrollBar *sb = log->verticalScrollBar();
+        bool at_end = r->key != log_key || sb->value() >= sb->maximum() - 4;
+        log->setPlainText(body);
+        if (at_end)
+            sb->setValue(sb->maximum());
+        log_key = r->key;
+    }
+}
+
+void JobsWindow::act(const QString &action)
+{
+    const Row *r = selected_row();
+    if (!r || r->finished)
+        return;
+    bool in_queue = false;
+    for (const jobs::Job &j : jobs::Queue::instance()->jobs())
+        in_queue = in_queue || j.flight + "/" + j.id == r->key;
+    if (in_queue) {
+        jobs::Queue::instance()->control(r->flight, r->id, action);
+    } else {   // a job outside the queue (it uses no drive lanes): only these
+        for (const TaskInfo &t : TaskBoard::instance()->all()) {
+            if (t.flight + "/" + t.id != r->key)
+                continue;
+            if (action == "cancel")
+                TaskBoard::instance()->cancel(t);
+            else if (action == "pause" || action == "resume")   // (another Kestrel's: it pauses it)
+                TaskBoard::instance()->pause(t, action == "pause");
+        }
+    }
+    refresh();
+}
+
+void JobsWindow::save_log()
+{
+    const Row *r = selected_row();
+    if (!r)
+        return;
+    QString text = log->toPlainText(), title = r->title;
+    QPointer<JobsWindow> self(this);
+    choose_folder(this, tx("Save Log In"), HOME(), [self, text, title](const QString &dir) {
+        QString name = tx("%1 log").arg(QString(title).replace('/', '-')) + ".txt";
+        QString path = unique_path(dir, name, "num");
+        try {
+            write_text(path, text.toUtf8());
+            if (self)
+                inform(self, tx("Save Log"), tx("Saved as %1").arg(path));
+        } catch (const OSError &e) {
+            if (self)
+                warn(self, tx("Save Log"), e.message());
+        }
+    });
+}

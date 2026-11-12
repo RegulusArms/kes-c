@@ -1,15 +1,19 @@
 #include "places.h"
 
 #include "atc.h"
+#include "prefs.h"
+#include "drives.h"
 #include "util.h"
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QTimer>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -29,12 +33,12 @@ static const QString NS_BOOKMARK = "http://www.freedesktop.org/standards/desktop
 static const QString NS_MIME = "http://www.freedesktop.org/standards/shared-mime-info";
 
 bool is_virtual(const QString &place) { return place == STARRED || place == RECENT; }
-QString title(const QString &place) { return place == STARRED ? "Starred" : "Recent"; }
+QString title(const QString &place) { return place == STARRED ? tx("Starred") : tx("Recent"); }
 QString icon_name(const QString &place) { return place == STARRED ? "starred" : "document-open-recent"; }
 
 QString empty_text(const QString &place)
 {
-    return place == STARRED ? "No starred items — right-click a file or folder and choose Star" : "No recent files";
+    return place == STARRED ? tx("No starred items — right-click a file or folder and choose Star") : tx("No recent files");
 }
 
 Signals *signals_()
@@ -167,6 +171,65 @@ void reload_starred()
     Q_EMIT signals_()->starred_changed();
 }
 
+// ---------------------------------------------------------------- folder sorts
+
+static QString sorts_file() { return join(CONFIG_DIR(), "sorts.json"); }
+
+static std::optional<QHash<QString, FolderSort>> sort_map;
+
+static QHash<QString, FolderSort> &sorts()
+{
+    if (!sort_map) {
+        bool ok = false;
+        QHash<QString, FolderSort> m;
+        QJsonObject o = QJsonDocument::fromJson(read_file(sorts_file(), &ok)).object();
+        for (auto it = o.begin(); it != o.end(); ++it) {
+            QJsonArray a = it.value().toArray();
+            if (a.size() < 2 || !a[0].isDouble() || !a[1].isDouble())
+                continue;
+            int col = a[0].toInt(-1), order = a[1].toInt(-1);
+            if (col >= 0 && col < 4 && (order == Qt::AscendingOrder || order == Qt::DescendingOrder))
+                m.insert(it.key(), FolderSort{col, order, std::clamp(a.at(2).toInt(), 0, 2), std::clamp(a.at(3).toInt(), 0, 2)});
+        }
+        sort_map = m;
+    }
+    return *sort_map;
+}
+
+std::optional<FolderSort> folder_sort(const QString &dir)
+{
+    auto &m = sorts();
+    auto it = m.constFind(dir);
+    if (it == m.constEnd())
+        return std::nullopt;
+    return *it;
+}
+
+void set_folder_sort(const QStringList &dirs, FolderSort sort)
+{
+    sort_map.reset();   // another Kestrel may have changed it since
+    QHash<QString, FolderSort> m = sorts();
+    for (const QString &d : dirs)
+        m.insert(d, sort);
+    sort_map = m;
+    QJsonObject o;
+    for (auto it = m.begin(); it != m.end(); ++it)
+        o.insert(it.key(), QJsonArray{it->column, it->order, it->group, it->group_by});
+    try {
+        makedirs(dirname(sorts_file()), true);
+        write_atomic(sorts_file(), QJsonDocument(o).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {
+    }
+    Q_EMIT signals_()->sorts_changed();
+    atc::announce("sorts");
+}
+
+void reload_sorts()
+{
+    sort_map.reset();
+    Q_EMIT signals_()->sorts_changed();
+}
+
 QList<QPair<QString, QString>> items(const QString &place)
 {
     QStringList paths;
@@ -226,7 +289,11 @@ QStringList recent_files(int limit)
 
 static bool remember_recent()
 {
-    // the desktop's "File History" privacy switch (GNOME's, or Cinnamon's own)
+    // the desktop's "File History" privacy switch (GNOME's, or Cinnamon's own); on KDE Plasma, System Settings →
+    // Recent Files → "Don't remember" (what-to-remember 2; 0 and 1 remember all apps' or some apps' files)
+    if (is_kde())
+        return kde_setting("kactivitymanagerd-pluginsrc", "Plugin-org.kde.ActivityManager.Resources.Scoring",
+                           "what-to-remember") != "2";
     QString schema = desktop_schema("org.gnome.desktop.privacy");
     if (!has_schema_key(schema, "remember-recent-files"))
         return true;
@@ -234,6 +301,108 @@ static bool remember_recent()
     bool on = g_settings_get_boolean(s, "remember-recent-files");
     g_object_unref(s);
     return on;
+}
+
+// ---------------------------------------------------------------- frequent folders
+
+static QString frequent_file() { return join(HISTORY_DIR(), "frequent.json"); }
+
+struct Visits {
+    qint64 count = 0, last = 0;
+};
+static QHash<QString, Visits> pending_visits;   // counted here, not yet written
+static const int FREQUENT_KEPT = 200;
+
+static QHash<QString, Visits> read_frequent()
+{
+    QHash<QString, Visits> m;
+    bool ok = false;
+    QJsonObject o = QJsonDocument::fromJson(read_file(frequent_file(), &ok)).object();
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        QJsonArray a = it.value().toArray();
+        if (it.key().startsWith('/') && a.size() >= 2 && a[0].toDouble() > 0)
+            m.insert(it.key(), {qint64(a[0].toDouble()), qint64(a[1].toDouble())});
+    }
+    return m;
+}
+
+static QList<QPair<QString, Visits>> ranked(const QHash<QString, Visits> &m)
+{
+    QList<QPair<QString, Visits>> l;
+    for (auto it = m.begin(); it != m.end(); ++it)
+        l << qMakePair(it.key(), it.value());
+    std::sort(l.begin(), l.end(), [](const auto &a, const auto &b) {
+        return a.second.count != b.second.count ? a.second.count > b.second.count : a.second.last > b.second.last;
+    });
+    return l;
+}
+
+static QHash<QString, Visits> merged()
+{
+    QHash<QString, Visits> m = read_frequent();
+    for (auto it = pending_visits.begin(); it != pending_visits.end(); ++it) {
+        Visits &v = m[it.key()];
+        v.count += it.value().count;
+        v.last = std::max(v.last, it.value().last);
+    }
+    return m;
+}
+
+static void write_frequent(const QHash<QString, Visits> &m)
+{
+    QJsonObject o;
+    for (const auto &[dir, v] : ranked(m).mid(0, FREQUENT_KEPT))
+        o.insert(dir, QJsonArray{double(v.count), double(v.last)});
+    try {
+        makedirs(dirname(frequent_file()), true);
+        write_atomic(frequent_file(), QJsonDocument(o).toJson(QJsonDocument::Compact));
+    } catch (const OSError &) {
+    }
+}
+
+void save_frequent()
+{
+    if (pending_visits.isEmpty())
+        return;
+    QHash<QString, Visits> m = merged();
+    pending_visits.clear();
+    write_frequent(m);
+}
+
+bool remembers_history() { return remember_recent(); }
+
+void visit_folder(const QString &dir)
+{
+    if (!dir.startsWith('/') || !remember_recent() || !prefs::get("history_frequent").toBool())
+        return;
+    if (pending_visits.isEmpty()) {
+        static bool hooked = false;
+        if (!hooked && QCoreApplication::instance()) {
+            hooked = true;
+            QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, []() { save_frequent(); });
+        }
+        QTimer::singleShot(5000, []() { save_frequent(); });
+    }
+    Visits &v = pending_visits[dir];
+    v.count += 1;
+    v.last = QDateTime::currentSecsSinceEpoch();
+}
+
+QStringList frequent_folders(int limit)
+{
+    QStringList out;
+    for (const auto &[dir, v] : ranked(merged()).mid(0, limit))
+        out << dir;
+    return out;
+}
+
+void forget_frequent(const QStringList &dirs)
+{
+    QHash<QString, Visits> m = merged();
+    pending_visits.clear();
+    for (const QString &d : dirs)
+        m.remove(d);
+    write_frequent(m);
 }
 
 static void write_new_bookmark(QXmlStreamWriter &w, const QString &href, const QString &mime, const QString &now)
@@ -263,10 +432,11 @@ static void write_new_bookmark(QXmlStreamWriter &w, const QString &href, const Q
 void add_recent(const QStringList &paths_in)
 {
     QHash<QString, QString> wanted;   // href -> path
-    for (const QString &p : paths_in)
-        if (isfile(p))
+    for (const QString &p : paths_in)   // (files already; a tape's aren't asked again: it may be busy seeking)
+        if (drives::slow_kind(p) != drives::Slow::None || isfile(p))
             wanted.insert(file_uri(p), p);
-    if (wanted.isEmpty() || !remember_recent())
+    // (private mode: the desktop's Recent is on disk and shared, so nothing is added to it)
+    if (wanted.isEmpty() || !remember_recent() || !prefs::get("history_recent").toBool() || !private_dir_in_use().isEmpty())
         return;
     QString now = QDateTime::currentDateTimeUtc().toString("yyyy-MM-ddTHH:mm:ss.zzz000Z");
     bool ok = false;
@@ -360,6 +530,44 @@ void add_recent(const QStringList &paths_in)
         }, false, true);
     } catch (const OSError &) {
     }
+}
+
+// ---------------------------------------------------------------- clearing (Preferences → Privacy)
+
+void clear_history()
+{
+    // what BleachBit's History option deletes (kes-setup's cleaner); another Kestrel's visits not yet written are
+    // still added when it writes them, within a few seconds
+    pending_visits.clear();
+    write_frequent({});
+    for (const char *key : {"recent_servers", "chooser_folder", "viewer_recent_folders"})
+        history_settings().remove(key);
+    history_settings().sync();
+    if (!private_dir_in_use().isEmpty()) {   // in private mode, what's kept on disk too
+        ::unlink(enc(join(CONFIG_DIR(), "frequent.json")).constData());
+        for (const char *key : {"recent_servers", "chooser_folder", "viewer_recent_folders"})
+            settings().remove(key);
+        settings().sync();
+    }
+    atc::announce("sidebar");   // the sidebars' recent servers, here and in other Kestrels
+}
+
+bool clear_recent()
+{
+    // the whole list, every app's (as the desktop's Clear History does): an empty one in its place, whole
+    static const char *EMPTY = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                               "<xbel version=\"1.0\"\n"
+                               "      xmlns:bookmark=\"http://www.freedesktop.org/standards/desktop-bookmarks\"\n"
+                               "      xmlns:mime=\"http://www.freedesktop.org/standards/shared-mime-info\"\n"
+                               ">\n</xbel>\n";
+    if (!lexists(recent_file()))
+        return true;
+    try {
+        write_atomic(recent_file(), EMPTY);
+    } catch (const OSError &) {
+        return false;
+    }
+    return true;
 }
 
 }  // namespace places

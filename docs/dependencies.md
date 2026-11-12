@@ -1,6 +1,6 @@
 # Dependencies
 
-[← Back to the README](../README.md)
+← Back to [the README](../README.md) · [Archives](archives.md) · [Design philosophy](design-philosophy.md) · [Features](features.md) · [Install guide](install.md)
 
 Package names below are Ubuntu's; Linux Mint uses the same ones.
 
@@ -12,42 +12,54 @@ Package names below are Ubuntu's; Linux Mint uses the same ones.
 |---|---|
 | `g++`, `cmake`, `pkg-config` | Compiling |
 | `qt6-base-dev` | The whole user interface (Qt 6 Widgets), image decoding, settings |
+| `qt6-tools-dev`, `qt6-l10n-tools` | Building the translations into `kes` (`lrelease`), and refreshing them from the code (`lupdate`, `translations/update.sh`) |
 | `libglib2.0-dev` | GIO: default and "Open With" apps, file type detection, trash, drive and network mounting, D-Bus for UWP |
+| `libxcb1-dev` | Giving the focus to the app files are dropped into, on X11 |
+| `libsecret-1-dev` | Remembering archive passwords in the desktop's keyring (GNOME Keyring, KWallet) |
 
-At run time these become the ordinary `libqt6widgets6` and `libglib2.0` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed (only on Qt 6.4 systems is the system's `python3` used, to read the GTK theme's colours; see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)).
+At run time these become the ordinary `libqt6widgets6`, `libglib2.0`, `libxcb1` and `libsecret-1-0` libraries, which every Ubuntu desktop already has. PyQt6 and Pillow are not needed. The system's `python3` (with `python3-gi`) is used only to read the GTK theme's colours: always on Qt 6.4 (see [Linux Mint 22 and Ubuntu 24.04](install.md#linux-mint-22-and-ubuntu-2404)), and on newer Qt when the desktop wants the dark style but Qt's own colours are light. Without it, Kestrel uses its built-in dark colours there.
 
 **Recommended**: run `./install.sh --install-recommended` to install any of these you're missing. Ubuntu already includes most of them. The ones you'll usually need to add are `kimageformat6-plugins` (RAW and HEIC previews) and some of the archive tools, such as `unrar`, `pigz`, `zpaq` and `lzip`.
 
 | Package | Used for |
 |---|---|
 | `libglib2.0-bin` | `gio` (launching `.desktop` shortcuts, unmounting) and `gsettings` (icon theme, set as wallpaper) |
-| `xdg-utils` | `xdg-open` (opening files if GIO can't) and `xdg-mime` (making Kestrel the default folder app) |
+| `xdg-utils` | `xdg-open` (opening files if GIO can't), `xdg-mime` (making Kestrel the default folder app) and `xdg-email` (**Send To** → Email) |
 | `gvfs`, `gvfs-backends` | Network locations (`smb://`, `sftp://`, `nfs://`, `ftp://`…), the drive list on the Overview page, and phones and cameras (iPhone, Android, PTP cameras; iPhones also use `usbmuxd`, which comes with them) |
-| `udisks2` | Mounting, unlocking and ejecting drives from the Overview page |
+| `udisks2` | Mounting, unlocking and ejecting drives from the Overview page, each drive's health (S.M.A.R.T.), and **Mount Image** (disk images set up as drives, LUKS inside them unlocked) |
 | `qt6-image-formats-plugins` | WebP, TIFF, TGA, ICNS and MNG images |
 | `qt6-svg-plugins` (in `libqt6svg6` on Ubuntu 24.04 / Linux Mint 22) | SVG images |
 | `kimageformat6-plugins` | Camera RAW (`.raf`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`…), HEIC, AVIF, JPEG XL and PSD. Without it these files get no preview and don't open in the viewer |
 | `adwaita-icon-theme` | Fallback icons when your icon theme is missing one |
-| `qt6-gtk-platformtheme` | The desktop's theme on GTK desktops (GNOME, Cinnamon, MATE, Xfce, Budgie): its colours, accent, light or dark mode and fonts. Without it Qt uses its own generic look there. KDE Plasma has its own (`plasma-integration`) |
+| `qt6-gtk-platformtheme` | The desktop's theme on GTK desktops (GNOME, Cinnamon, MATE, Xfce, Budgie): its colours, accent and fonts. Without it Qt uses its own generic look there, though Kestrel still follows the desktop's light or dark style. KDE Plasma has its own (`plasma-integration`) |
+| `qt6-translations-l10n` | Qt's own texts (standard buttons such as OK and Cancel, the colour and font pickers) in the desktop's language, when Kestrel is shown in one other than English |
 | `7zip` (or `p7zip-full` on older releases) | Creating and extracting 7z and zip (with AES-256 passwords and split volumes), and extracting iso, cab, deb, rpm and other formats |
 | `unrar` (in Ubuntu's multiverse section) | Extracting `.rar`, including encrypted and multi-volume archives. 7-Zip on Ubuntu can't decompress RAR |
 | `zip`, `unzip` | zip archives without 7-Zip |
 | `pigz` | Fast multi-core `.gz` / `.tar.gz` (falls back to `gzip`) |
 | `zpaq` | `.zpaq` journaling archives, with very high compression and passwords |
-| `zstd`, `xz-utils`, `bzip2`, `lzip` | `.tar.zst`, `.tar.xz`, `.tar.bz2`, `.tar.lz` and single-file `.zst`/`.xz`/`.bz2`/`.lz` |
+| `zstd`, `xz-utils`, `bzip2`, `lzip` | `.tar.zst`, `.tar.xz`, `.tar.bz2`, `.tar.lz` and single-file `.zst`/`.xz`/`.bz2`/`.lz`; compressed drive images (Back Up Drive to Image, Mount Image) |
 | A terminal (`ptyxis`, `gnome-terminal`, `kgx`, `konsole` or `xfce4-terminal`) | "Open in Terminal" (not installed by `install.sh`; any one of these works) |
 
 **Optional** (features are hidden or fall back when missing)
 
-`kes-setup --install-optional` installs the ones apt has that are missing (`zfsutils-linux` only when a ZFS file system is mounted; `rar` needs Ubuntu's multiverse section). UWP isn't an apt package.
+`kes-setup --install-optional` installs the ones apt has that are missing (`zfsutils-linux` only when a ZFS file system is mounted; `rar` needs Ubuntu's multiverse section), except `pkexec`, `localsearch`, `samba` and `gnome-bluetooth-sendto`, which are part of the desktop or a choice of your own. UWP isn't an apt package.
 
 | Package | Used for |
 |---|---|
-| `libimage-exiftool-perl` | The full Metadata tab, plus editing, adding and clearing metadata |
-| `ffmpeg` | Video thumbnails and video stills in folder previews (`ffmpeg` and `ffprobe`) |
+| `libimage-exiftool-perl` | The full Metadata tab, plus editing, adding and clearing metadata; in the image viewer, saving the rotation of a JPEG that has no orientation tag |
+| `ffmpeg` | Video thumbnails and video stills in folder previews (`ffmpeg` and `ffprobe`); **Convert Video…**, **Extract Audio…** and **Convert Audio…**; reading images for Convert Image… that Qt's plugins can't |
 | `zfsutils-linux` | Showing a ZFS pool as one card with pool-level usage on the Overview page |
-| `pkexec` | The **admin session**: retrying operations that fail with "permission denied" as administrator (usually already installed) |
+| `pkexec` | The **admin session**: retrying operations that fail with "permission denied" as administrator, and reading a drive for **Back Up Drive to Image** (usually already installed; the .deb recommends it) |
 | `rar` (non-free, multiverse; a trial version of WinRAR's command-line tool) | Creating `.rar` archives (passwords, volumes, recovery records) |
 | `bleachbit` | **Shred with BleachBit…** and **Empty Trash with BleachBit…**, and the cleaner `kes-setup --bleachbit` adds to it |
 | `pbzip2` or `lbzip2`, `plzip`, `lz4` | Multi-core `.bz2` and `.lz`, and `.lz4` archives. Kestrel offers whichever are installed |
+| `localsearch` (Ubuntu 26.04's desktop search index, usually already installed) | Searching inside files with the index (search bar → *File contents* → *Search index*, and *Automatic* where the index covers the folder). Ubuntu 24.04's index (`tracker3`) isn't used: there Kestrel reads the files |
+| `ripgrep` | Searching inside files by reading them (search bar → *File contents*), much faster than `grep`, which is used without it |
+| `gnupg` (usually already installed) | A password for tar archives (`.tar.gz.gpg`…): Compress… encrypts them with `gpg`, and opening, testing and extracting them needs it; **Verify Signature** (`.sig`, `.asc`, `.gpg`); password-encrypted drive images (Back Up Drive to Image, Mount Image) |
+| `rsync` (usually already installed) | **Sync To…** / Sync Folders copies with it: an interrupted sync resumes, and only what changed is sent. Without it, Kestrel's own copy does the syncing |
+| `libjpeg-turbo-progs` | The image viewer's **Straighten** and the right-click menu's **Rotate** (`jpegtran`): turning a JPEG's pixels without losing quality (without it, Rotate only sets a JPEG's orientation tag) |
+| `libheif-examples` | **Convert Image…** to HEIC and AVIF (`heif-enc`), where Qt's image plugins can't write them |
+| `samba` | **Network Sharing…** for folders (Samba usershares, through its `net` command) |
+| `gnome-bluetooth-sendto` | **Send To** → Bluetooth Device… (`bluetooth-sendto`) |
 | [UWP](https://github.com/RegulusArms/UWP) (not an apt package; install with its `install.sh`) | "Set as Wallpaper" through UWP profiles, and "Add to Selected UWP Monitor". Found as `uwp` on your PATH or in `~/.local/bin` |

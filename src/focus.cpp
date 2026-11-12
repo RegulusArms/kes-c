@@ -1,4 +1,5 @@
 #include "focus.h"
+#include "util.h"
 
 #include <QGuiApplication>
 
@@ -81,10 +82,98 @@ static void activate_gnome_shell()
     g_object_unref(bus);
 }
 
+// KWin (KDE Plasma): a script, loaded into KWin over D-Bus for each drop, run once and unloaded. It activates the
+// topmost window under the pointer on the current desktop, as the GNOME Shell extension does.
+static const char *KWIN_SCRIPT = R"(// Kestrel Explorer drop focus: the window under the pointer gets the focus
+(function () {
+    var pos = workspace.cursorPos, windows = workspace.stackingOrder;   // bottom to top
+    var desktop = workspace.currentDesktop;
+    for (var i = windows.length - 1; i >= 0; i--) {
+        var w = windows[i];
+        if (w.minimized || w.hidden || !(w.normalWindow || w.dialog || w.utility))
+            continue;
+        if (!w.onAllDesktops && !w.desktops.some(function (d) { return d.id == desktop.id; }))
+            continue;
+        var g = w.frameGeometry;
+        if (pos.x >= g.x && pos.x < g.x + g.width && pos.y >= g.y && pos.y < g.y + g.height) {
+            if (workspace.activeWindow !== w)
+                workspace.activeWindow = w;
+            return;
+        }
+    }
+})();
+)";
+
+static void kwin_unload(GDBusConnection *bus, const QByteArray &name)
+{
+    g_dbus_connection_call(bus, "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "unloadScript",
+                           g_variant_new("(s)", name.constData()), nullptr, G_DBUS_CALL_FLAGS_NO_AUTO_START, 2000, nullptr,
+                           nullptr, nullptr);
+}
+
+static void activate_kwin()
+{
+    // the script's file, in the user's runtime folder (written once per Kestrel; the same text from every Kestrel)
+    static QString file;
+    if (file.isEmpty()) {
+        QString dir = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (dir.isEmpty() || !util::isdir(dir))
+            return;
+        try {
+            util::write_atomic(util::join(dir, "kestrel-focus.js"), KWIN_SCRIPT);
+        } catch (const std::exception &) {
+            return;
+        }
+        file = util::join(dir, "kestrel-focus.js");
+    }
+    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+    if (!bus)
+        return;
+    // load (it gives the script's number), run, unload: each call answered before the next, none waited for
+    auto *name = new QByteArray("kestrel-focus-" + QByteArray::number(QCoreApplication::applicationPid()));
+    g_dbus_connection_call(
+        bus, "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "loadScript",
+        g_variant_new("(ss)", util::enc(file).constData(), name->constData()), G_VARIANT_TYPE("(i)"),
+        G_DBUS_CALL_FLAGS_NO_AUTO_START, 2000, nullptr,
+        [](GObject *src, GAsyncResult *res, gpointer data) {
+            auto *bus = G_DBUS_CONNECTION(src);
+            auto *name = static_cast<QByteArray *>(data);
+            GVariant *r = g_dbus_connection_call_finish(bus, res, nullptr);
+            gint32 id = -1;
+            if (r) {
+                g_variant_get(r, "(i)", &id);
+                g_variant_unref(r);
+            }
+            if (id < 0) {   // no KWin, or a script of that name left loaded: unloaded for the next drop
+                if (r)
+                    kwin_unload(bus, *name);
+                delete name;
+                g_object_unref(bus);
+                return;
+            }
+            g_dbus_connection_call(
+                bus, "org.kde.KWin", ("/Scripting/Script" + QByteArray::number(id)).constData(), "org.kde.kwin.Script",
+                "run", nullptr, nullptr, G_DBUS_CALL_FLAGS_NO_AUTO_START, 2000, nullptr,
+                [](GObject *src, GAsyncResult *res, gpointer data) {
+                    auto *bus = G_DBUS_CONNECTION(src);
+                    auto *name = static_cast<QByteArray *>(data);
+                    if (GVariant *r = g_dbus_connection_call_finish(bus, res, nullptr))
+                        g_variant_unref(r);
+                    kwin_unload(bus, *name);
+                    delete name;
+                    g_object_unref(bus);
+                },
+                name);
+        },
+        name);
+}
+
 void activate_at_pointer()
 {
     if (QGuiApplication::platformName() == "xcb")
         activate_x11();
+    else if (QGuiApplication::platformName().startsWith("wayland") && util::is_kde())
+        activate_kwin();
     else if (QGuiApplication::platformName().startsWith("wayland"))
         activate_gnome_shell();
 }

@@ -1,5 +1,8 @@
 #include "thumbs.h"
 
+#include "drives.h"
+#include "fileops.h"
+#include "jobs.h"
 #include "proc.h"
 #include "atc.h"
 #include "stats.h"
@@ -15,8 +18,12 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QPainterPath>
+#include <QWidget>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <fcntl.h>
 #include <gio/gio.h>
 #include <unistd.h>
@@ -39,8 +46,9 @@ QString covers_file() { return join(CONFIG_DIR(), "covers.json"); }
 QString styles_file() { return join(CONFIG_DIR(), "folder_styles.json"); }
 
 const QList<QPair<QString, QString>> FOLDER_COLORS = {
-    {"Red", "#e01b24"},  {"Orange", "#ff7800"}, {"Yellow", "#f6d32d"}, {"Green", "#33d17a"}, {"Teal", "#2aa198"},
-    {"Blue", "#3584e4"}, {"Purple", "#9141ac"}, {"Pink", "#e66ba5"},   {"Brown", "#986a44"}, {"Grey", "#77767b"}};
+    {TX_NOOP("Red"), "#e01b24"},  {TX_NOOP("Orange"), "#ff7800"}, {TX_NOOP("Yellow"), "#f6d32d"}, {TX_NOOP("Green"), "#33d17a"},
+    {TX_NOOP("Teal"), "#2aa198"}, {TX_NOOP("Blue"), "#3584e4"},   {TX_NOOP("Purple"), "#9141ac"}, {TX_NOOP("Pink"), "#e66ba5"},
+    {TX_NOOP("Brown"), "#986a44"}, {TX_NOOP("Grey"), "#77767b"}};   // (translated where shown)
 
 QIcon color_swatch(const QString &color, int size)
 {
@@ -175,6 +183,12 @@ QStringList thumbnailers_for(const QString &path)
     return {};
 }
 
+bool in_app_cache(const QString &path)
+{
+    QString root = APP_CACHE();
+    return path == root || path.startsWith(root + '/');
+}
+
 bool can_thumbnail(const QString &path)
 {
     return is_image(path) || is_video(path) || !thumbnailers_for(path).isEmpty();
@@ -237,15 +251,25 @@ QImage system_thumb(const QString &path, int size)
     return QImage();
 }
 
-QImage file_thumb(const QString &path, qint64 mtime, int size)
+QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
 {
     QString flavor = FLAVORS.value(bucket_for(size));
     QString uri = file_uri(path);
     QString cache_dir = join(THUMB_DIR(), flavor);
     QString cache_path = join(cache_dir, md5(uri) + ".png");
-    bool in_cache_dir = path.startsWith(THUMB_DIR());
-    if (!in_cache_dir && exists(cache_path)) {
-        QImage img(cache_path);
+    QStringList read_dirs = THUMB_READ_DIRS();
+    bool in_cache_dir = path.startsWith(SHARED_THUMB_DIR() + "/") || path.startsWith(OWN_THUMB_DIR() + "/") ||
+                        path.startsWith(THUMB_DIR() + "/");
+    // Those made before are still used where they're kept: in private mode the shared cache's (new ones go to the
+    // private RAM disk); after separate caching is turned off, Kestrel's own folder's until they're deleted (new
+    // ones go to the shared cache). With separate caching on the shared cache isn't read either.
+    QStringList cached_at;
+    for (const QString &d : read_dirs)
+        cached_at << join(join(d, flavor), md5(uri) + ".png");
+    for (const QString &cached : cached_at) {
+        if (in_cache_dir || fresh || !exists(cached))
+            continue;
+        QImage img(cached);
         if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
             stats::count("thumbnails from the disk cache");
             return img;
@@ -266,9 +290,9 @@ QImage file_thumb(const QString &path, qint64 mtime, int size)
     if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
         try {
             makedirs(cache_dir, true, 0700);
-            img.setText("Thumb::URI", uri);
-            img.setText("Thumb::MTime", QString::number(mtime));
-            img.setText("Software", APP_NAME);
+            img.setText("Thumb::URI", uri);   // notr: a PNG text key
+            img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
+            img.setText("Software", APP_NAME);   // notr: a PNG text key
             QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
             int fd = ::mkstemps(tmpl.data(), 4);
             if (fd >= 0) {
@@ -308,20 +332,37 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             if (!n.startsWith('.') && VIDEO_EXTS.contains(ext_of(n)))
                 images << n;
     }
-    bool newest = order == "newest";
+    // name: first by name; last: last by name; newest / oldest: by modification time; spread: by name, from the
+    // beginning, middle and end (evenly spaced)
+    bool by_time = order == "newest" || order == "oldest";
+    bool reverse = order == "newest" || order == "last";
     auto mtime = [&](const QString &n) -> double {
         struct stat st;
         return stat_(join(folder, n), st) ? st.st_mtim.tv_sec + st.st_mtim.tv_nsec / 1e9 : 0;
     };
     auto sort_list = [&](QStringList &l) {
-        if (newest) {
+        if (by_time) {
             QHash<QString, double> m;
             for (const QString &n : l)
                 m[n] = mtime(n);
-            std::stable_sort(l.begin(), l.end(), [&](const QString &a, const QString &b) { return m[a] > m[b]; });
+            natural_sort(l);   // equal times in name order
+            std::stable_sort(l.begin(), l.end(), [&](const QString &a, const QString &b) {
+                return reverse ? m[a] > m[b] : m[a] < m[b];
+            });
         } else {
             natural_sort(l);
+            if (reverse)
+                std::reverse(l.begin(), l.end());
         }
+    };
+    // spread: k of the list, evenly spaced from its first to its last (the first alone when k is 1)
+    auto spaced = [&](const QStringList &l, int k) {
+        if (order != "spread" || k <= 0 || l.size() <= k)
+            return l;
+        QStringList out;
+        for (int i = 0; i < k; ++i)
+            out << l.at(k == 1 ? 0 : int(std::lround(double(i) * (l.size() - 1) / (k - 1))));
+        return out;
     };
     sort_list(images);
     if (picks.isEmpty()) {
@@ -333,11 +374,15 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             }
         }
     }
-    for (const QString &name : images) {
+    QStringList rest;
+    for (const QString &name : images)
+        if (!picks.contains(join(folder, name)))
+            rest << name;
+    for (const QString &name : spaced(rest, count - int(picks.size()))) {
         if (picks.size() >= count)
             break;
         QString p = join(folder, name);
-        if (!picks.contains(p) && isfile(p))
+        if (isfile(p))
             picks << p;
     }
     if (picks.isEmpty()) {   // look one level down for nested galleries
@@ -346,7 +391,7 @@ QStringList pick_folder_images(const QString &folder, int count, const QString &
             if (!n.startsWith('.') && isdir(join(folder, n)))
                 dirs << n;
         sort_list(dirs);
-        for (const QString &d : dirs.mid(0, 12)) {
+        for (const QString &d : spaced(dirs, count).mid(0, 12)) {
             if (picks.size() >= count)
                 break;
             picks += pick_folder_images(join(folder, d), 1, order).mid(0, 1);
@@ -469,11 +514,11 @@ QImage add_folder_symbol(const QImage &folder, const QString &icon, const QStrin
     return out;
 }
 
-QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts)
+QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts, bool fresh)
 {
     QString tag = QString("v2|%1|%2|%3|%4|%5").arg(mtime).arg(opts.count).arg(opts.order, opts.color, opts.cover);
     QString cache = join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size));
-    if (exists(cache)) {
+    if (!fresh && exists(cache)) {
         QImage img(cache);
         if (!img.isNull() && img.text("FE::Tag") == tag) {
             stats::count("folder previews from the disk cache");
@@ -490,7 +535,7 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
         struct stat st;
         if (!stat_(pth, st))
             continue;
-        QImage im = file_thumb(pth, st.st_mtime, tile);
+        QImage im = file_thumb(pth, st.st_mtime, tile, fresh);
         if (!im.isNull()) {
             images << im;
             videos << is_video(pth);
@@ -514,12 +559,12 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
     if (images.isEmpty()) {
         QImage marker(1, 1, QImage::Format_ARGB32);
         marker.fill(Qt::transparent);
-        marker.setText("FE::Tag", "empty|" + tag);
+        marker.setText("FE::Tag", "empty|" + tag);   // notr: a PNG text key
         save(marker);
         return QImage();
     }
     QImage img = compose_folder(images, size, opts.color, videos);
-    img.setText("FE::Tag", tag);
+    img.setText("FE::Tag", tag);   // notr: a PNG text key
     save(img);
     stats::count("folder previews made");
     return img;
@@ -554,8 +599,9 @@ static bool made_by_us(const QString &png_path)
 
 QPair<qint64, qint64> purge_thumbnails(bool include_shared)
 {
-    // Always removes the folder-mosaic cache and the PNGs we tagged in the shared freedesktop cache. With
-    // include_shared, empties ~/.cache/thumbnails entirely (also thumbnails made by GNOME Files and other apps).
+    // Always removes the folder-mosaic cache, the thumbnails in Kestrel's own folders (separate caching's, private
+    // mode's) and the PNGs we tagged in the shared freedesktop cache. With include_shared, empties ~/.cache/thumbnails
+    // entirely (also thumbnails made by GNOME Files and other apps). In private mode the shared cache isn't touched.
     qint64 files = 0, size = 0;
     QStringList targets;
     auto collect = [&](const QString &dir) {
@@ -567,24 +613,32 @@ QPair<qint64, qint64> purge_thumbnails(bool include_shared)
     };
     collect(join(APP_CACHE(), "folders"));    // folder mosaics
     collect(join(APP_CACHE(), "animated"));   // looping video previews
-    for (const QString &flavor : FLAVORS) {
-        QString d = join(THUMB_DIR(), flavor);
-        if (!isdir(d))
-            continue;
-        QStringList names;
-        try {
-            names = listdir(d);
-        } catch (const OSError &) {
-            continue;
+    QString shared = SHARED_THUMB_DIR();
+    bool touch_shared = private_dir_in_use().isEmpty();
+    QStringList dirs{OWN_THUMB_DIR()};
+    if (!dirs.contains(THUMB_DIR()))
+        dirs << THUMB_DIR();
+    if (touch_shared && !dirs.contains(shared))
+        dirs << shared;
+    for (const QString &top : dirs)
+        for (const QString &flavor : FLAVORS) {
+            QString d = join(top, flavor);
+            if (!isdir(d))
+                continue;
+            QStringList names;
+            try {
+                names = listdir(d);
+            } catch (const OSError &) {
+                continue;
+            }
+            for (const QString &n : names) {
+                QString p = join(d, n);
+                if (n.endsWith(".png") && isfile(p) && (top != shared || include_shared || made_by_us(p)))
+                    targets << p;
+            }
         }
-        for (const QString &n : names) {
-            QString p = join(d, n);
-            if (n.endsWith(".png") && isfile(p) && (include_shared || made_by_us(p)))
-                targets << p;
-        }
-    }
-    if (include_shared)
-        collect(join(THUMB_DIR(), "fail"));
+    if (include_shared && touch_shared)
+        collect(join(shared, "fail"));
     for (const QString &t : targets) {
         struct stat st;
         if (stat_(t, st) && ::unlink(enc(t).constData()) == 0) {
@@ -644,8 +698,16 @@ ThumbnailManager *ThumbnailManager::instance() { return first_manager; }
 
 ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
 {
-    if (!first_manager)
+    if (!first_manager) {
         first_manager = this;
+        // the app's thumbnail jobs, for the one Jobs window (in whichever Kestrel has it open), and the others'
+        connect(this, &ThumbnailManager::jobs_changed, this, &ThumbnailManager::publish_jobs);
+        connect(atc::radio(), &atc::Radio::heard, this, &ThumbnailManager::on_heard);
+        connect(atc::radio(), &atc::Radio::reset, this, [this]() {
+            remote.clear();
+            Q_EMIT jobs_changed();
+        });
+    }
     pool.setMaxThreadCount(std::max(2, std::min(6, QThread::idealThreadCount() / 2)));
     dir_pool.setMaxThreadCount(2);   // folder mosaics (directory scans)
     device_pool.setMaxThreadCount(1);   // phones and cameras serve one request at a time (is_device_path)
@@ -655,6 +717,14 @@ ThumbnailManager::ThumbnailManager(QObject *parent) : QObject(parent)
     progress_timer.setInterval(100);
     connect(&progress_timer, &QTimer::timeout, this, &ThumbnailManager::emit_progress);
     connect(this, &ThumbnailManager::job_done, this, &ThumbnailManager::on_done, Qt::QueuedConnection);
+    said_timer.setSingleShot(true);
+    said_timer.setInterval(200);
+    connect(&said_timer, &QTimer::timeout, this, &ThumbnailManager::jobs_changed);
+    // another job taking or leaving a drive holds or frees the thumbnail jobs there; lowered ones time out
+    jobs_timer.setInterval(2000);
+    connect(&jobs_timer, &QTimer::timeout, this, &ThumbnailManager::check_jobs);
+    jobs_timer.start();
+    connect(jobs::Queue::instance(), &jobs::Queue::changed, this, &ThumbnailManager::check_jobs);
     load_covers();
 }
 
@@ -741,10 +811,11 @@ QPixmap ThumbnailManager::plain_folder(const QString &color, int size, const QSt
     return *it;
 }
 
-QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews)
+QPixmap ThumbnailManager::folder_pixmap(const QString &path, qint64 mtime, int size, bool previews,
+                                       const QObject *owner)
 {
     if (previews && previews_for(path)) {
-        QPixmap pm = get(path, mtime, true, size);
+        QPixmap pm = get(path, mtime, true, size, 0, owner);
         if (!pm.isNull())
             return pm;
     }
@@ -790,7 +861,8 @@ static const qint64 DEVICE_MAX_BYTES = 30000000;   // larger files on a phone ar
 
 static QString key_path(const QString &key) { return key.section('\x1f', 0, 0); }
 
-QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize)
+QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize,
+                              const QObject *owner)
 {
     QString k = key(path, mtime, is_dir, size);
     auto it = cache.find(k);
@@ -800,8 +872,41 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
     }
     if (failed.contains(k))
         return QPixmap();
-    if (!pending.contains(k)) {
+    // a thumbnail job of owner's that was stopped: nothing more for it here until it leaves the folder
+    if (owner && stopped.contains(qMakePair(owner, dirname(path))))
+        return QPixmap();
+    // the job (owner and folder) it's part of: its progress, and the request's priority
+    auto join_job = [&](ThumbRequest &req) {
+        if (!owner)
+            return;
+        ThumbJob *j = job_for(owner, dirname(path));
+        if (!req.jobs.contains(j->id)) {
+            req.jobs << j->id;
+            j->keys << k;
+            j->total += 1;
+            jobs_said();
+        }
+        req.prio = std::max(req.prio, j->prio);
+    };
+    if (auto p = pending.constFind(k); p != pending.constEnd()) {
+        add_owner(**p, owner);   // another view wants it too
+        int before = (*p)->prio;
+        bool was_held = held(**p);
+        join_job(**p);
+        if ((*p)->prio != before || held(**p) != was_held) {
+            QMutexLocker l(&run_lock);
+            place(**p);
+        }
+    } else {
+        // Kestrel's own cache (folder previews, animated previews, copies): thumbnails of it would only fill
+        // ~/.cache/thumbnails and its folders with previews of previews
+        if (thumbs::in_app_cache(path))
+            return QPixmap();
         bool device = is_device_path(path);
+        // a tape or floppy: no thumbnails or folder mosaics unless the user allowed them for that drive (each one
+        // makes a tape seek, a floppy read for seconds). Not remembered as failed, so allowing them takes effect
+        if (!drives::reads_allowed(path))
+            return QPixmap();
         if (!is_dir && fsize > qint64(max_file_mb) * 1000000 && !is_video(path)) {
             failed << k;
             return QPixmap();
@@ -811,14 +916,24 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             failed << k;
             return QPixmap();
         }
-        pending << k;
+        auto req = std::make_shared<ThumbRequest>();
+        req->id = ++next_id;
+        req->prio = owner ? std::numeric_limits<int>::min() : ++job_prio;   // no owner: no job, as the newest
+        add_owner(*req, owner);
+        join_job(*req);
+        pending.insert(k, req);
         stats::count("thumbnails not in memory");
         stats::peak("thumbnail queue", pending.size());
-        prio += 1;
         thumbs::FolderOpts opts{folder_count, folder_order, color_for(path), covers.value(path)};
         int b = thumbs::bucket_for(size);
         QString uri = device ? device_uri(path) : QString();
-        auto job = [this, k, path, mtime, is_dir, b, opts, device, uri, fsize]() {
+        auto job = [this, req, k, path, mtime, is_dir, b, opts, device, uri, fsize]() {
+            {
+                QMutexLocker l(&run_lock);
+                req->queued = nullptr;   // started: no longer in the queue for drop() to take
+            }
+            if (req->cancelled)   // no one wants it any more (cancel_for), and the queue couldn't give it back
+                return;
             QImage img;
             try {
                 if (device) {
@@ -832,18 +947,25 @@ QPixmap ThumbnailManager::get(const QString &path, qint64 mtime, bool is_dir, in
             } catch (...) {
                 img = QImage();
             }
-            Q_EMIT job_done(k, path, img, mtime, is_dir);
+            Q_EMIT job_done(k, path, img, mtime, is_dir, req->id);
         };
-        (device ? device_pool : is_dir ? dir_pool : pool).start(job, prio);
+        req->pool = device ? &device_pool : is_dir ? &dir_pool : &pool;
+        QRunnable *r = QRunnable::create(std::move(job));   // auto-deleted after it has run
+        {
+            QMutexLocker l(&run_lock);
+            req->queued = r;   // before start(): the job clears it when it begins
+            place(*req);       // into the pool, unless its job is paused or waiting for its drive
+        }
         batch_total += 1;
         schedule_progress();
     }
     return QPixmap();
 }
 
-QIcon ThumbnailManager::get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize)
+QIcon ThumbnailManager::get_icon(const QString &path, qint64 mtime, bool is_dir, int size, qint64 fsize,
+                                 const QObject *owner)
 {
-    QPixmap pm = get(path, mtime, is_dir, size, fsize);
+    QPixmap pm = get(path, mtime, is_dir, size, fsize, owner);
     if (pm.isNull())
         return QIcon();
     QString k = key(path, mtime, is_dir, size);
@@ -871,12 +993,420 @@ QPixmap ThumbnailManager::scaled(const QPixmap &pm, int size)
 
 void ThumbnailManager::cancel_pending()
 {
-    pool.clear();
-    dir_pool.clear();
-    device_pool.clear();
+    {
+        QMutexLocker l(&run_lock);
+        for (const auto &req : std::as_const(pending)) {
+            req->cancelled = true;
+            if (req->queued && !req->in_pool)   // held back: ours to delete
+                delete req->queued;
+            req->queued = nullptr;   // clear() deletes the queued ones
+        }
+        pool.clear();
+        dir_pool.clear();
+        device_pool.clear();
+    }
     pending.clear();
+    jobs.clear();
+    job_ids.clear();
+    jobs_said();
     batch_total = batch_done = 0;
     schedule_progress();
+}
+
+void ThumbnailManager::add_owner(ThumbRequest &req, const QObject *owner)
+{
+    if (!owner) {
+        req.shared = true;
+        return;
+    }
+    req.owners.insert(owner);
+    if (!watched.contains(owner)) {   // a view closed or replaced without cancelling: its requests go with it
+        watched.insert(owner);
+        connect(owner, &QObject::destroyed, this, [this, owner]() {
+            watched.remove(owner);
+            cancel_for(owner);
+        });
+    }
+}
+
+void ThumbnailManager::drop(const std::shared_ptr<ThumbRequest> &req)
+{
+    req->cancelled = true;
+    QMutexLocker l(&run_lock);
+    // still queued (it clears queued under this lock when it starts, so the pointer is alive): take it back; one the
+    // pool is just handing to a thread isn't there any more, and skips itself (cancelled)
+    if (req->queued && (!req->in_pool || req->pool->tryTake(req->queued))) {
+        delete req->queued;
+        req->queued = nullptr;
+    }
+}
+
+bool ThumbnailManager::held(const ThumbRequest &req) const
+{
+    if (thumb_mode == "paused")   // all of it: also what no job asked for
+        return true;
+    if (req.shared || req.jobs.isEmpty())
+        return false;
+    for (quint64 id : req.jobs) {
+        auto j = jobs.constFind(id);
+        if (j != jobs.constEnd() && !j->paused && !j->waiting && !j->behind)
+            return false;
+    }
+    return true;
+}
+
+void ThumbnailManager::place(ThumbRequest &req)
+{
+    if (!req.queued)   // running or done
+        return;
+    if (req.in_pool) {
+        if (!req.pool->tryTake(req.queued))
+            return;   // a thread is just taking it: it runs
+        req.in_pool = false;
+    }
+    if (!held(req)) {
+        req.pool->start(req.queued, req.prio);
+        req.in_pool = true;
+    }
+}
+
+void ThumbnailManager::release_jobs(const QString &k, const std::shared_ptr<ThumbRequest> &req, bool done)
+{
+    bool ended = false;
+    for (quint64 id : std::as_const(req->jobs)) {
+        auto j = jobs.find(id);
+        if (j == jobs.end())
+            continue;
+        j->keys.remove(k);
+        if (done)
+            j->done += 1;
+        if (j->keys.isEmpty()) {   // all made (or no longer wanted): the job is over
+            job_ids.remove(qMakePair(j->owner, j->folder));
+            jobs.erase(j);
+            ended = true;
+        }
+    }
+    req->jobs.clear();
+    if (ended)   // the next on its drive may start
+        update_holds();
+    jobs_said();
+}
+
+static QString window_of(const QObject *owner)
+{
+    for (const QObject *o = owner; o; o = o->parent())
+        if (auto *w = qobject_cast<const QWidget *>(o))
+            return w->window()->windowTitle();
+    return QString();
+}
+
+ThumbJob *ThumbnailManager::job_for(const QObject *owner, const QString &folder)
+{
+    auto id = job_ids.constFind(qMakePair(owner, folder));
+    if (id != job_ids.constEnd()) {
+        ThumbJob &j = jobs[*id];
+        if (j.lowered) {   // back in that folder: first again
+            j.lowered = false;
+            set_prio(j, ++job_prio);
+            jobs_said();
+        }
+        return &j;
+    }
+    ThumbJob j;
+    j.id = ++next_id;
+    j.owner = owner;
+    j.folder = folder;
+    j.window = window_of(owner);
+    j.prio = ++job_prio;
+    QStringList ids = drives::drive_ids(folder);
+    j.drive = ids.value(0);
+    job_ids.insert(qMakePair(owner, folder), j.id);
+    jobs.insert(j.id, j);
+    update_holds();   // (it has no requests yet: only its own flags, and no one else's, change)
+    jobs_said();
+    return &jobs[j.id];
+}
+
+void ThumbnailManager::set_prio(ThumbJob &job, int p)
+{
+    job.prio = p;
+    QMutexLocker l(&run_lock);
+    for (const QString &k : std::as_const(job.keys)) {
+        auto req = pending.value(k);
+        if (!req)
+            continue;
+        int best = std::numeric_limits<int>::min();
+        for (quint64 id : std::as_const(req->jobs))
+            if (auto j = jobs.constFind(id); j != jobs.constEnd())
+                best = std::max(best, j->prio);
+        if (req->prio != best) {
+            req->prio = best;
+            place(*req);   // taken back and queued again at its new place
+        }
+    }
+}
+
+void ThumbnailManager::lower(const QObject *owner)
+{
+    if (!owner)
+        return;
+    for (auto it = stopped.begin(); it != stopped.end();)   // coming back later makes them again
+        it = it->first == owner ? stopped.erase(it) : std::next(it);
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (ThumbJob &j : jobs)
+        if (j.owner == owner && !j.lowered) {
+            j.lowered = true;
+            j.lowered_at = now;
+            set_prio(j, j.prio - 1000000000 / 2);   // below every job that isn't lowered, still newest first
+        }
+    update_holds();   // "drive": a job still shown takes over its drive
+    jobs_said();
+}
+
+QList<ThumbJob> ThumbnailManager::thumb_jobs() const
+{
+    QList<ThumbJob> out = jobs.values();
+    std::sort(out.begin(), out.end(), [](const ThumbJob &a, const ThumbJob &b) { return a.prio > b.prio; });
+    return out;
+}
+
+void ThumbnailManager::publish_jobs()
+{
+    QJsonArray list;
+    for (const ThumbJob &j : thumb_jobs())
+        list << QJsonObject{{"id", QString::number(j.id)}, {"title", j.title()}, {"folder", j.folder}, {"window", j.window},
+                            {"state", j.state()},           {"done", j.done},     {"total", j.total},   {"paused", j.paused}};
+    QByteArray now = QJsonDocument(list).toJson(QJsonDocument::Compact);
+    if (now == published)   // (hearing the others' lists says jobs_changed too: not told again for that)
+        return;
+    published = now;
+    atc::announce("thumbs", {{"jobs", list}}, true);
+}
+
+void ThumbnailManager::on_heard(const QJsonObject &m)
+{
+    if (m.value("own").toBool())
+        return;
+    QString type = m.value("type").toString(), from = m.value("from").toString();
+    if (type == "thumbs") {
+        QList<RemoteThumbJob> l;
+        for (const QJsonValue &v : m.value("jobs").toArray()) {
+            QJsonObject o = v.toObject();
+            l << RemoteThumbJob{from, o.value("id").toString(), o.value("title").toString(), o.value("folder").toString(),
+                                o.value("window").toString(), o.value("state").toString(), o.value("done").toInt(),
+                                o.value("total").toInt(), o.value("paused").toBool()};
+        }
+        if (l.isEmpty())
+            remote.remove(from);
+        else
+            remote[from] = l;
+        Q_EMIT jobs_changed();
+    } else if (type == "left") {
+        if (remote.remove(from))
+            Q_EMIT jobs_changed();
+    } else if (type == "thumb_control" && m.value("flight").toString() == atc::radio()->flight()) {
+        quint64 id = m.value("id").toString().toULongLong();
+        QString action = m.value("action").toString();
+        if (action == "stop")
+            stop_job(id);
+        else if (action == "pause" || action == "resume")
+            pause_job(id, action == "pause");
+    }
+}
+
+QList<RemoteThumbJob> ThumbnailManager::remote_jobs() const
+{
+    QList<RemoteThumbJob> out;
+    for (const QList<RemoteThumbJob> &l : remote)
+        out << l;
+    return out;
+}
+
+void ThumbnailManager::control_remote(const RemoteThumbJob &job, const QString &action)
+{
+    atc::announce("thumb_control", {{"flight", job.flight}, {"id", job.id}, {"action", action}});
+}
+
+void ThumbnailManager::pause_job(quint64 id, bool on)
+{
+    auto j = jobs.find(id);
+    if (j == jobs.end() || j->paused == on)
+        return;
+    j->paused = on;
+    {
+        QMutexLocker l(&run_lock);
+        for (const QString &k : std::as_const(j->keys))
+            if (auto req = pending.value(k))
+                place(*req);
+    }
+    update_holds();   // "drive": a paused job lets the next on its drive run
+    jobs_said();
+}
+
+void ThumbnailManager::stop_job(quint64 id) { end_job(id, true); }
+
+void ThumbnailManager::end_job(quint64 id, bool by_user)
+{
+    auto j = jobs.find(id);
+    if (j == jobs.end())
+        return;
+    if (by_user)   // the view still showing that folder doesn't start it again as it's drawn
+        stopped.insert(qMakePair(j->owner, j->folder));
+    QSet<QString> keys = j->keys;
+    job_ids.remove(qMakePair(j->owner, j->folder));
+    jobs.erase(j);
+    int n = 0;
+    for (const QString &k : keys) {
+        auto req = pending.value(k);
+        if (!req)
+            continue;
+        req->jobs.remove(id);
+        if (req->jobs.isEmpty() && !req->shared) {   // no one else's job wants it
+            pending.remove(k);
+            drop(req);
+            n += 1;
+        } else {
+            QMutexLocker l(&run_lock);
+            place(*req);
+        }
+    }
+    if (n) {
+        batch_total = std::max(batch_done, batch_total - n);
+        schedule_progress();
+    }
+    update_holds();   // "drive": the next on its drive may start
+    jobs_said();
+}
+
+QString ThumbnailManager::known_mode(const QString &m) { return m == "drive" || m == "paused" ? m : QString("wait"); }
+
+void ThumbnailManager::set_mode(const QString &m)
+{
+    QString now = known_mode(m);
+    if (now == thumb_mode)
+        return;
+    thumb_mode = now;
+    update_holds();
+    QMutexLocker l(&run_lock);   // held or let go: also what no job asked for ("paused" holds that too)
+    for (const auto &req : std::as_const(pending))
+        place(*req);
+    l.unlock();
+    jobs_said();
+}
+
+void ThumbnailManager::update_holds()
+{
+    bool wait = thumb_mode == "wait", per_drive = thumb_mode == "drive", all = thumb_mode == "paused";
+    // "drive": each drive's runner keeps it while it runs (the others wait behind it, as in the job queue); a new one
+    // is the newest job not paused, one still shown before a lowered one
+    QHash<QString, quint64> pick;
+    if (per_drive) {
+        for (const ThumbJob &j : std::as_const(jobs)) {
+            if (j.paused)
+                continue;
+            auto cur = pick.constFind(j.drive);
+            quint64 had = runners.value(j.drive);
+            auto better = [&](const ThumbJob &a, const ThumbJob &b) {   // a before b
+                if (a.lowered != b.lowered)
+                    return !a.lowered;
+                if ((a.id == had) != (b.id == had))
+                    return a.id == had;
+                return a.prio > b.prio;
+            };
+            if (cur == pick.constEnd() || better(j, *jobs.constFind(*cur)))
+                pick[j.drive] = j.id;
+        }
+    }
+    runners = pick;
+    for (ThumbJob &j : jobs) {
+        bool waiting = wait && jobs::Queue::instance()->busy(j.folder);   // another job on its drive
+        bool behind = per_drive && !j.paused && pick.value(j.drive) != j.id;
+        if (waiting == j.waiting && behind == j.behind && all == j.held_all)
+            continue;
+        j.waiting = waiting;
+        j.behind = behind;
+        j.held_all = all;
+        QMutexLocker l(&run_lock);
+        for (const QString &k : std::as_const(j.keys))
+            if (auto req = pending.value(k))
+                place(*req);
+        l.unlock();
+        jobs_said();
+    }
+}
+
+void ThumbnailManager::check_jobs()
+{
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QList<quint64> timed_out;
+    for (ThumbJob &j : jobs)
+        if (j.lowered && now - j.lowered_at > qint64(job_minutes) * 60000)
+            timed_out << j.id;
+    update_holds();
+    for (quint64 id : timed_out)   // left behind long enough: stopped, what it made kept
+        end_job(id, false);
+}
+
+void ThumbnailManager::jobs_said()
+{
+    if (!said_timer.isActive())
+        said_timer.start();
+}
+
+QString ThumbJob::title() const
+{
+    QString home = HOME();
+    QString where = folder == home ? tx("Home") : folder.startsWith(home + "/") ? folder.mid(home.size() + 1) : folder;
+    return tx("Thumbnails: %1").arg(where);
+}
+
+QString ThumbJob::state() const
+{
+    return paused     ? tx("Paused")
+           : held_all ? tx("Paused (all thumbnailing)")
+           : waiting  ? tx("Waiting for the drive")
+           : behind   ? tx("Waiting for another thumbnail job on its drive")
+           : lowered  ? tx("Lowered (folder left)")
+                      : tx("Running");
+}
+
+void ThumbnailManager::cancel_for(const QObject *owner)
+{
+    if (!owner)
+        return;
+    int n = 0;
+    QSet<quint64> its;   // owner's jobs: they end with it
+    for (const ThumbJob &j : std::as_const(jobs))
+        if (j.owner == owner)
+            its << j.id;
+    for (auto it = pending.begin(); it != pending.end();) {
+        std::shared_ptr<ThumbRequest> req = it.value();
+        bool was = req->owners.remove(owner);
+        req->jobs.subtract(its);
+        if (was && req->owners.isEmpty() && !req->shared) {
+            it = pending.erase(it);
+            drop(req);
+            n += 1;
+        } else {
+            if (was) {
+                QMutexLocker l(&run_lock);
+                place(*req);
+            }
+            ++it;
+        }
+    }
+    for (quint64 id : its) {
+        job_ids.remove(qMakePair(owner, jobs.value(id).folder));
+        jobs.remove(id);
+    }
+    for (auto it = stopped.begin(); it != stopped.end();)
+        it = it->first == owner ? stopped.erase(it) : std::next(it);
+    if (!its.isEmpty())
+        jobs_said();
+    if (n) {
+        batch_total = std::max(batch_done, batch_total - n);
+        schedule_progress();
+    }
 }
 
 void ThumbnailManager::schedule_progress()
@@ -939,9 +1469,13 @@ void ThumbnailManager::cache_put(const QString &k, const QPixmap &pm)
     }
 }
 
-void ThumbnailManager::on_done(const QString &k, const QString &path, const QImage &img, qint64 mtime, bool is_dir)
+void ThumbnailManager::on_done(const QString &k, const QString &path, const QImage &img, qint64 mtime, bool is_dir,
+                               quint64 id)
 {
-    if (pending.remove(k)) {
+    // (a cancelled one that was already being made still counts: it's cached; a newer request for it stays pending)
+    if (auto p = pending.find(k); p != pending.end() && (*p)->id == id) {
+        release_jobs(k, *p, true);
+        pending.erase(p);
         batch_done += 1;
         schedule_progress();
     }
@@ -961,9 +1495,9 @@ void ThumbnailManager::on_done(const QString &k, const QString &path, const QIma
 // ---------------------------------------------------------------- recursive pre-generation
 
 RecursiveBuilder::RecursiveBuilder(const QString &root, int size, ThumbnailManager *manager, QObject *parent,
-                                   int workers, bool folders_only, int depth)
-    : QThread(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
-      depth(depth), current(root)
+                                   int workers, bool folders_only, int depth, bool fresh)
+    : QObject(parent), root(root), size(thumbs::bucket_for(size)), workers(workers), folders_only(folders_only),
+      depth(depth), fresh(fresh), current(root)
 {
     max_bytes = qint64(manager->max_file_mb) * 1000000;
     opts = {manager->folder_count, manager->folder_order, manager->folder_color, QString()};
@@ -993,35 +1527,60 @@ void RecursiveBuilder::emit_progress(bool force)
         c = current;
     }
     Q_EMIT progress(d, t, s, c);
+    if (task) {
+        QString name = basename(rstrip(root, '/'));
+        task->report(d, s ? 0 : t,
+                     QString("%1 — %2 of %3%4").arg(name.isEmpty() ? root : name, group_digits(d), group_digits(t),
+                                                    s ? QString("+, scanning…") : QString()) +
+                         (c.isEmpty() ? QString() : " — " + basename(c)));
+    }
 }
 
 void RecursiveBuilder::one(char kind, const QString &path)
 {
-    if (!stop) {
+    while (task && task->paused() && !stop && !task->cancelled)   // the job is paused: so are its workers
+        QThread::msleep(50);
+    if (task && task->cancelled)
+        stop = true;
+    if (stop)   // skipped: not counted as done
+        return;
+    enum { MADE_FILE, MADE_FOLDER, NONE, BIG, GONE } how = GONE;
+    {
         struct stat st;
         if (stat_(path, st)) {
             if (kind == 'd') {
                 thumbs::FolderOpts o = opts;
                 o.cover = covers.value(path);
                 o.color = colors.value(path, opts.color);
-                thumbs::folder_thumb(path, st.st_mtime, size, o);
+                thumbs::folder_thumb(path, st.st_mtime, size, o, fresh);
+                how = MADE_FOLDER;
             } else if (st.st_size <= max_bytes || is_video(path)) {
-                thumbs::file_thumb(path, st.st_mtime, size);
+                bool made = !thumbs::file_thumb(path, st.st_mtime, size, fresh).isNull();
                 if (size != 128)   // mosaic tiles use the small size
-                    thumbs::file_thumb(path, st.st_mtime, 128);
+                    thumbs::file_thumb(path, st.st_mtime, 128, fresh);
+                how = made ? MADE_FILE : NONE;
+            } else {
+                how = BIG;
             }
         }
     }
+    if (task && how == NONE)   // (thread-safe: a line in its log)
+        task->log(tx("No preview could be made of %1").arg(path));
     {
         QMutexLocker g(&lock);
         done += 1;
         current = path;
+        files_made += how == MADE_FILE;
+        folders_made += how == MADE_FOLDER;
+        no_preview += how == NONE;
+        too_big += how == BIG;
     }
     emit_progress();
 }
 
-void RecursiveBuilder::run()
+bool RecursiveBuilder::run(Task *job)
 {
+    task = job;
     QSet<QString> exts = image_exts();
     exts.unite(VIDEO_EXTS);
     QThreadPool workers_pool;
@@ -1040,19 +1599,27 @@ void RecursiveBuilder::run()
         return true;
     };
     QString top = rstrip(root, '/');
+    if (thumbs::in_app_cache(top)) {   // Kestrel's own cache: no previews made in it (ThumbnailManager::get)
+        task = nullptr;
+        return false;
+    }
+    if (task)
+        task->log(tx("Looking through %1").arg(root));
     walk(root, [&](const QString &dir, QStringList &dirs, QStringList &files) {
+        if (task && task->cancelled)
+            stop = true;
         if (stop)
             return false;
         QStringList keep;
         int level = rstrip(dir, '/') == top ? 0 : QStringView(dir).mid(top.size()).count('/');
         if (depth < 0 || level < depth)
             for (const QString &d : dirs)
-                if (!d.startsWith('.'))
+                if (!d.startsWith('.') && !thumbs::in_app_cache(join(dir, d)))
                     keep << d;
         natural_sort(keep);
         dirs = keep;
         natural_sort(files);
-        if (!folders_only)
+        if (!folders_only && (depth < 0 || level == 0))   // files' thumbnails: the whole tree, or just root's
             for (const QString &f : files)
                 if (!f.startsWith('.') && exts.contains(ext_of(f)))
                     if (!submit('f', join(dir, f)))
@@ -1071,5 +1638,14 @@ void RecursiveBuilder::run()
         workers_pool.clear();
     workers_pool.waitForDone();
     emit_progress(true);
-    Q_EMIT finished_build(done, total, stop);
+    if (task) {
+        QStringList parts{txn("%Ln file preview(s) made", files_made), txn("%Ln folder preview(s) made", folders_made)};
+        if (no_preview)
+            parts << txn("%Ln file(s) with no preview", no_preview);
+        if (too_big)
+            parts << txn("%Ln file(s) too big for a preview (Preferences → Images & Videos)", too_big);
+        task->log(tx("%1 of %2 done: %3").arg(group_digits(done), group_digits(total), parts.join(", ")));
+    }
+    task = nullptr;
+    return stop;
 }

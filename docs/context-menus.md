@@ -1,0 +1,337 @@
+# Right-click menus
+
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md)
+
+Every right-click menu in Kestrel, what each entry does, and what it works on. An entry only shows when it applies
+(the **Shows** column); otherwise it's left out of the menu.
+
+The first six menus below can be rearranged in **Preferences → Menus**: untick an entry to hide it, drag entries to
+reorder them or move them into or out of a submenu, and add separators and submenus of your own (see
+[Features](features.md#preferences)). The order here is the default one.
+
+- [A file](#a-file)
+- [A folder](#a-folder)
+- [An archive](#an-archive)
+- [Several items](#several-items)
+- [Empty space in a folder](#empty-space-in-a-folder)
+- [The image viewer](#the-image-viewer)
+- [Items in the Trash](#items-in-the-trash)
+- [Empty space in Starred or Recent](#empty-space-in-starred-or-recent)
+- [A tab](#a-tab)
+- [The sidebar](#the-sidebar)
+- [Overview cards](#overview-cards)
+- [Open as Archive window](#open-as-archive-window)
+- [Properties → Metadata](#properties--metadata)
+- [Dropping with Alt held](#dropping-with-alt-held)
+
+## Shared entries
+
+These entries are on the file, folder, archive and several-items menus. The sections below list only what differs.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Open** | Opens the item(s): folders in this tab, files in their default app (or the app chosen in Preferences for images and videos); an archive gets Kestrel's Extract dialog, or is extracted as **Extract Here** does when it's encrypted and a password saved in the keyring (for it or for another archive) opens it | Always |
+| **Show in Folder** | Goes to the folder the item is in and selects it | In search results |
+| **Collapse This Group** | Collapses the date group the item is in | When the folder is grouped by date |
+| **Cut** / **Copy** | Puts the item(s) on the clipboard to paste elsewhere (also into GNOME Files and other apps) | Always |
+| **Move To…** / **Copy To…** | Asks for a folder and moves or copies the item(s) there | Always |
+| **Duplicate** | Makes a copy beside each item, under the next free name | Always |
+| **New Folder with Selection…** | Makes a folder beside the item(s), named as you choose, and moves them into it | Always |
+| **Rename…** | Renames the item; with several selected it's **Rename N Items…**, a batch rename | Always |
+| **Copy Path / Name ▸** | **Copy Full Path**, **Copy Name** or **Copy URI** (`file://…`) as text, one per line for several | Always |
+| **Star** / **Unstar** | Adds to or removes from Starred in the sidebar (★ on the icon) | Always |
+| **Pin** / **Unpin** | Pins the item in its own folder (a red pin); with Pinned & Starred First it sorts to the top | Always |
+| **Links & Shortcuts ▸** | See below | Always |
+| **Compress to “name.ext”** | Compresses straight away, in the format you used last, named after the item | Once you've compressed something |
+| **Compress…** | Opens the compress window: format, name, password, level (see [Archives](archives.md)) | Always |
+| **Create Checksum File…** | Writes `md5sum` / `sha256sum`-style checksum files for the files (inside folders too) | Always |
+| **Scripts ▸** | Runs one of your scripts on the selection (Nautilus-style, from `~/.local/share/nautilus/scripts`); **Open Scripts Folder** at the end | When you have scripts |
+| **Move to Trash** | Moves the item(s) to the trash (Ctrl+Z puts them back) | Always |
+| **Delete Permanently…** | Asks, then deletes without the trash | Always |
+| **Shred with BleachBit…** | Asks, then overwrites and deletes the item(s) so they can't be recovered | With BleachBit installed |
+| **Calculate Folder Size** | Opens Properties and counts the size afresh (a job in the Jobs window), also when a size was remembered | Folders, or several items when all are folders (not links to folders) |
+| **Open Metadata** | Opens Properties on its Metadata tab | Files: images; with exiftool also videos, audio, PDFs, e-books and office documents |
+| **Properties** | Opens the Properties window (size, permissions, metadata, checksums…) | Always |
+
+**Links & Shortcuts ▸**
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Create Symbolic Link Here** | Makes a symbolic link to each item in this folder | In a real folder (not Starred or Recent) |
+| **Create Relative Symbolic Link Here** | The same, with a relative target, so the link keeps working if both are moved together | In a real folder |
+| **Create Hard Link Here** | Makes a hard link to each file in this folder | Files only (not folders or links), in a real folder |
+| **Link…** | Opens the Link window with the items picked on the left and this folder on the right: links of any kind (symbolic, relative, hard, `.desktop` shortcut) to make in any folders, renamed as they're listed, all made with OK as one job and undone as one step | Always |
+| **Send Link to Desktop** | Makes a symbolic link on the Desktop | Always |
+| **Edit Link…** | Opens the Link window with the selected symbolic links in its list, to change what they point to, switch between absolute and relative, or rename or move them | When a symbolic link is selected |
+| **Open Link Target Location** | Goes to the folder of what the link points to and selects it | When a symbolic link is selected |
+| **Add to Bookmarks** | Adds the folder to the sidebar's bookmarks | Folders only |
+
+## A file
+
+The shared entries, plus:
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **View Image** | Opens the image in Kestrel's own viewer, whatever app images open with | Images |
+| **Open With ▸** | The apps that can open it (up to 8), and **Other Application…** to pick any | Always |
+| **Mount Image** | Sets the disk image up as a drive (through udisks) and mounts its file systems read-only, so they show in the sidebar and on the Overview; a LUKS-encrypted one asks for its password. A compressed (`.img.zst`, `.xz`, `.gz`) or encrypted (`.img.gpg`) image is first expanded into a copy in the cache (asked first), deleted once unmounted. Unmounting the last of its file systems detaches it. Double-clicking an `.img` does the same | Disk images (`.img`, `.iso`, `.raw`; compressed or `.gpg` too) |
+| **Mount Image for Writing** | The same, mounted so it can be changed | Plain `.img` and `.raw` images you can write to |
+| **Verify Signature** | Checks the signature with `gpg` against the file it signs (the same name without the extension; a clearsigned file against itself) and says plainly what it means: valid and by whom (and whether that's a key you've verified), a bad signature, or the signer's key missing (with **Fetch Key…**, asking first). A signed checksum file's files are checked next | Signatures (`.sig`, `.asc`, `.gpg`, `.sign`), not encrypted archives |
+| **Encrypt…** | Makes an encrypted copy beside the file with `gpg` (`name.gpg`, or `name.asc` as text), the original left as it is: with a password (typed twice; AES-256) or to people's public keys picked from your keyring (each one marked verified or not; your own key too, if you have one, so you can open it). Runs as a job; a cancel or failure leaves no file behind (see [Features](features.md#encrypting-and-decrypting)) | Files (archives too), not folders |
+| **Decrypt** | Decrypts it with `gpg` into a copy beside it, under its name without the extension (or the next free one): asks for the password when it was encrypted with one (one saved in the keyring for it is tried first, and it can be saved there), or lets gpg ask for your key's passphrase when it was encrypted to your key; one encrypted only to other people's keys says so. Says who signed what was inside, if anyone. Double-clicking an encrypted `.gpg`, `.pgp` or `.asc` does the same | `.gpg`, `.pgp` and `.asc` files (not encrypted tar archives, which Extract opens) |
+| **Add to Selected UWP Monitor** | Puts the image or video on the monitors selected in UWP's editor | Images and videos, while UWP's editor is open |
+| **Set as Wallpaper (UWP)** | Makes the video the wallpaper on every monitor, through UWP | Videos, with UWP installed |
+| **Image ▸** | **Set as Wallpaper** (UWP's when installed, otherwise the desktop background), **Use as Folder Cover** (this image on its folder's icon), **Copy Image to Clipboard** (the picture itself, to paste into other apps) | Images |
+| **Rotate ▸** | **Rotate 90° Clockwise**, **Rotate 180°**, **Rotate 90° Counter-clockwise**, **Flip Horizontally**, **Flip Vertically**: turns the picture in the file. A JPEG is turned without re-compressing it (jpegtran; with only its orientation tag when jpegtran isn't installed), one that isn't whole JPEG blocks asks first (trim the odd edge pixels, or set the orientation tag only); PNG, BMP, TIFF and lossless WebP are written again losslessly; HEIC, AVIF and lossy WebP ask first, since saving them again loses a little quality. Metadata kept, the orientation set to normal | Images |
+| **Convert Image…** | Converts it to JPEG, PNG, WebP, AVIF, HEIC or TIFF (the formats something installed can write), with a quality, a new size, the metadata kept or not, and a background for transparency; beside it or into a folder, never replacing a file (see [Features](features.md)) | Images |
+| **Convert Video…** | Converts it with ffmpeg: presets (MP4, smaller H.265, WebM, sound only, GIF, the same format smaller) and every option in plain terms, the command shown (see [Features](features.md)) | Videos, with ffmpeg installed |
+| **Extract Audio…** | Saves the video's sound: as it is (instant, lossless) or converted to MP3, M4A, Opus, OGG, FLAC, WAV or ALAC; one track or every track | Videos, with ffmpeg installed |
+| **Convert Audio…** | Converts it to MP3, M4A, Opus, OGG, FLAC, WAV or ALAC, with a quality, sample rate and channels, tags and cover kept, and the volume evened out if chosen | Audio files, with ffmpeg installed |
+| **Wipe Metadata…** | Takes out all of the image's metadata (camera details, GPS location, dates, comments, image-generation prompts), the pixels untouched: by default as a copy beside it (`photo (no metadata).jpg`; Undo trashes the copy), or from the original with no backup (asks first), as set in Preferences → Images & Videos. Greyed out as **Wipe Metadata (install exiftool)** without exiftool | Images (JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, GIF, TIFF; not camera raw files) |
+| **Send To ▸** | **Email…** (attaches it in your mail app) or **Bluetooth Device…** | With `xdg-email` or `bluetooth-sendto` installed |
+
+## A folder
+
+The shared entries, plus:
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Open in New Tab** / **Open in New Window** | Opens the folder in a new tab or window | Always |
+| **Open in (code editor)** | Opens the folder in VS Code, VSCodium, Cursor, Zed or Sublime Text | Each one that's installed |
+| **Open With ▸** | Other apps that open folders (not file managers), and **Other Application…** | Always |
+| **Paste Into Folder** | Pastes the clipboard's files into this folder | Enabled when files are on the clipboard |
+| **Find Duplicates…** | Finds the files with the same contents in the folder (and its subfolders), to keep some and move the others to the trash or replace them with hard links (see [Features](features.md)) | Always |
+| **Disk Usage…** | Shows what fills the folder as a map: each subfolder a block sized by what it holds, its biggest files and subfolders inside it (see [Features](features.md)) | Always |
+| **Compare With…** | Asks for another folder and lists what differs between the two: only on one side, newer on one side, other contents; copy across or trash from the list | Always |
+| **Sync To…** | Makes another folder match this one (copying, replacing and, if chosen, deleting), after a preview; with rsync when installed. Pairs can be saved to run again. A folder synced before (as the source or the destination) opens filled in as its last sync was run, the right way round, with the other syncs it took part in under **Last synced**; a remembered folder that isn't there now is said | Always |
+| **Folder Colour ▸** | Gives the folder's icon one of 10 colours, or **Default** | Always |
+| **Show Image Previews** | Turns the mosaic of images on the folder's icon on or off for this folder | Always |
+| **Reset Folder Cover** | Removes the cover image you chose, back to the automatic mosaic | When it has a chosen cover |
+| **Network Sharing…** | Shares the folder on the local network (Samba): name, comment, write access, guests | With Samba (`net`) installed |
+| **Regenerate Preview** | Rebuilds this folder's mosaic | Always |
+| **Previews ▸** | Builds thumbnails and folder previews ahead of time, as a job (see [Previews](#previews)) | Always |
+| **Open in Terminal** | Opens a terminal in the folder | Always |
+| **Convert Audio…** | Converts every audio file in the folder and its subfolders, into a folder beside it (`Music (converted)`) with the same subfolders, or beside each file | With ffmpeg installed |
+
+Folders have no Send To.
+
+### Previews
+
+The **Previews ▸** submenu, on a folder and on empty space in one. *Generate* makes only what isn't made yet;
+*Regenerate* makes everything again, replacing the cached copies (for previews that look wrong or old). *Folder
+previews* are only the folders' mosaics; without *Recursively*, it's this folder and the folders directly in it.
+
+| Entry | What it does |
+|---|---|
+| **Generate Previews** | Thumbnails and previews in this folder that aren't made yet |
+| **Generate Previews Recursively** | Thumbnails and folder previews for everything below the folder |
+| **Generate Folder Previews** | Mosaics for this folder and the folders directly in it |
+| **Generate Folder Previews Recursively** | Mosaics for every folder below |
+| **Regenerate Previews** | Thumbnails and previews in this folder, made again |
+| **Regenerate Previews Recursively** | The same for everything below |
+| **Regenerate Folder Previews** | Mosaics for this folder and the folders directly in it, made again |
+| **Regenerate Folder Previews Recursively** | Mosaics for every folder below, made again |
+
+## An archive
+
+A single archive (zip, 7z, rar, tar…), or a split set (`x.part1.rar`, `x.part2.rar`…) selected whole. The file
+menu's entries, with these after Links & Shortcuts:
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Extract Here** | Extracts beside the archive into a new folder named after it (or the archive's own single top folder); asks for a password when needed | Always |
+| **Extract To…** | Asks where to extract, with options | Always |
+| **Open as Archive** | Opens a window listing what's inside, to open or extract single items (see [below](#open-as-archive-window)) | When its program can list it |
+| **Test Archive** | Checks the archive for damage without extracting | Always |
+| **Extract (install …)** | Greyed out in place of the above, naming the package that extracts this format | When that program is missing |
+| **Encrypt…** | As for a file | Always |
+| **Mount Image** | As for a file: an `.iso`, or a compressed disk image (`.img.xz`…), set up as a drive and mounted (an `.iso` still opens as an archive when double-clicked) | Disk images |
+
+See [Archives](archives.md) for formats, passwords and limits.
+
+## Several items
+
+The shared entries, plus:
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Open in New Tab** / **Open in New Window** | One new tab (or one window with a tab each) per folder | When all are folders |
+| **View Images** | Opens the selected images in the viewer | When images are selected |
+| **Extract Here** / **Extract To…** / **Open as Archive** / **Test Archive** | As for one archive | A split set selected whole |
+| **Extract All Here** / **Extract All To…** | Extracts each archive, one after another | When all are archives |
+| **Test Archives** | Tests each archive | When all are archives |
+| **Find Duplicates…** | As for one folder, in all of them together | When all are folders |
+| **Compare in Viewer** | Opens the two in the image viewer over each other, with a slider to drag across (A: the first in the folder's order) | When two images are selected |
+| **Rotate ▸** / **Convert Image…** | As for one image, for each of them, as one job | When all are images |
+| **Convert Video…** / **Extract Audio…** | As for one video, for each of them, one after another as one job with one summary | When all are videos, with ffmpeg installed |
+| **Convert Audio…** | As for one audio file or one folder, for all of them | When all are audio files or all are folders, with ffmpeg installed |
+| **Wipe Metadata…** | As for one image, for each image selected (other files are left alone), as one job | When images are selected |
+| **Folder Colour ▸** / **Show Image Previews** | As for one folder, for all of them | When all are folders |
+| **Encrypt…** | As for a file: an encrypted copy beside each, all with the same password or to the same keys, as one job | No folders selected |
+| **Send To ▸** | As for a file, with all of them | No folders selected, with an app to send to |
+
+## Empty space in a folder
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **New Folder…** | Makes a folder here, named as you choose | Always |
+| **New Document ▸** | **Empty File…**, and a new file from each template in your Templates folder | Always |
+| **Paste** | Pastes the clipboard's files here; an image on the clipboard (a screenshot) is saved as a file | Enabled with files or an image on the clipboard |
+| **Paste as Link** | Makes symbolic links here to the clipboard's files | Enabled with files on the clipboard |
+| **Link…** | Opens the Link window with this folder on the right ("Link goes in"): pick on the left what the links point to, of any kind, and make them all with OK as one job, undone as one step | Not in the Trash |
+| **Select All** | Selects everything in the folder | Always |
+| **Sort By ▸** | The column (Name, Size, Type, Modified) and order; **Pinned & Starred First**; **Group by Period** / **Group by Day** and **Date to Group By**; **Set as Default** (this sort for folders without their own); **Apply to Subfolders** | Always |
+| **Show Hidden Files** | Shows or hides dot files (Ctrl+H) | Always |
+| **Collapse All Groups** / **Expand All Groups** | Collapses or expands every date group | When grouped by date |
+| **Open in Terminal** | Opens a terminal here | Always |
+| **Bookmark This Folder** | Adds this folder to the sidebar's bookmarks | Always |
+| **Previews ▸** | As on a folder ([Previews](#previews)), for this folder | Always |
+| **Empty Trash** | Empties the trash, asking first | In the Trash |
+| **Empty Trash with BleachBit…** | Shreds everything in the trash, on every drive | In the Trash, with BleachBit installed |
+| **Scripts ▸** | Runs one of your scripts in this folder | When you have scripts |
+| **Properties** | Properties of this folder | Always |
+
+## The image viewer
+
+Right-click the picture in Kestrel's image viewer. The keys are shown in the menu too.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Next** / **Previous** | The next or previous image (Right, Left) | Always |
+| **View ▸** | **Fullscreen** (F); **Start / Stop Slideshow** (S); **Fit to Window** (0); **Actual Size** (1); **Keep Zoom Between Images** (K); **Filmstrip** (T), **Info Panel** (I), **Info Line** (Tab); **Compare With the Next Image** (X) side by side, **One at a Time (A/B)** (V) and **Over Each Other, With a Slider** (D) while comparing, and **Show A / Show B** (B) when comparing one at a time | Always |
+| **Rotate and Edit ▸** | **Rotate Right** (R), **Rotate Left** (L), **Flip Horizontally** (H); **Save Rotation / Save Changes…** (Ctrl+S, lossless for JPEGs where possible); **Undo the Edits** (Esc) when there are crops or resizes not saved; **Crop…** (Shift+C), **Resize…** (Shift+S); **Straighten** (Shift+O: turns a JPEG's pixels the way its orientation tag says) | Always |
+| **Star** / **Unstar** | As in a folder (*) | Always |
+| **Pin in Its Folder** / **Unpin** | As in a folder (P) | Always |
+| **Copy To ▸** / **Move To ▸** | The last folders used (Alt+1–9 copies, Ctrl+1–9 moves), and **Other Folder…** (C, M) | Always |
+| **Show in Folder** | Shows the image in its folder in a Kestrel window (G) | When opened from Kestrel |
+| **Open With Default Application** | Opens the image in the system's image app | Always |
+| **Open With…** | Picks an app to open it with (O) | When opened from Kestrel |
+| **Copy Image** | Copies the picture and the file to the clipboard (Ctrl+C): image apps paste the picture, a folder pastes a copy of the file. Turned or edited and not saved, a copy as shown | Always |
+| **Copy Path** | Copies the image's full path as text | Always |
+| **Set as Wallpaper** | Sets it as the wallpaper (through UWP when installed) | Always |
+| **Add to Selected UWP Monitor** | Puts it on the monitors selected in UWP's editor | While UWP's editor is open |
+| **Properties** | The image's Properties window (Alt+Return) | When opened from Kestrel |
+| **Move to Trash** | Trashes the image and goes to the next one (Delete) | When opened from Kestrel |
+| **Undo** | Undoes the last action, putting a trashed image back in the viewer (Ctrl+Z) | When opened from Kestrel |
+
+## Items in the Trash
+
+When everything selected is in the trash (a mix with other files gets the usual menus):
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Restore** | Puts the item(s) back where they were | Always |
+| **Delete Permanently** | Deletes them from the trash | Always |
+| **Shred with BleachBit…** | Overwrites and deletes them | With BleachBit installed |
+| **Properties** | Properties | Always |
+
+## Empty space in Starred or Recent
+
+| Entry | What it does |
+|---|---|
+| **Select All** | Selects everything listed |
+
+## A tab
+
+Right-click a tab's title.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Duplicate Tab** | Opens a copy of the tab, at the same place | Always |
+| **Open in New Window** | Moves the tab into a window of its own | Not in Open / Save windows |
+| **Close Tab** | Closes the tab | Always |
+
+## The sidebar
+
+| Entry | What it does | Works on |
+|---|---|---|
+| **Open** / **Open in New Tab** | Opens the place here or in a new tab | Every entry |
+| **Open in Terminal** | Opens a terminal there | Folders, drives and mounted shares (not phones or servers) |
+| **Find Duplicates…** | Finds the files with the same contents on the drive (as for a folder) | Drives |
+| **Disk Usage…** | What's using the drive's space, as a map (as for a folder; on a tape or floppy it counts only when asked) | Drives |
+| **Back Up Drive to Image…** | Copies the drive (that partition, or its whole disk) byte for byte into an image file, optionally compressed (zstd) and encrypted with a password (gpg), as a job; reading it asks for the administrator password. Refuses to save onto the drive being read, checks the free space, and asks first while it's mounted for writing | Drives (not tapes or floppies) |
+| **Edit Bookmark…** | Changes the bookmark's name and location | Bookmarks |
+| **Remove Bookmark** | Removes the bookmark (the folder stays) | Bookmarks |
+| **Move Up** / **Move Down** | Moves the bookmark in the list | Bookmarks |
+| **Empty Trash** / **Empty Trash with BleachBit…** | As on the Trash's empty space | Trash (BleachBit's when installed) |
+| **Write Tape Index Now** | Writes the LTFS index to the tape now, so what's written so far is kept if the drive loses power | LTFS tapes |
+| **Show Previews on This Drive** | Allows thumbnails, folder previews and image details, which make the drive seek (off by default) | Tapes and floppies |
+| **Unmount** | Unmounts the drive (a tape writes its index first); asks first while a job still uses it | Drives, mounted network shares |
+| **Remove from Recent Servers** | Forgets a recently used server | Servers not connected |
+| **Eject** / **Unmount** | Disconnects the phone or camera | Mounted phones and cameras |
+| **Bring Back into Memory** | Makes the RAM disk again (mounting one with a size limit asks for your password once), and loads its saved files if it keeps them | RAM disks not in memory now (greyed; a click does the same) |
+| **Save to Disk Now** | Saves the RAM disk's files to its folder on disk now, as a job (only what changed) | RAM disks that save their files to disk, while in memory |
+| **Edit RAM Disk…** | Changes its name, size limit, how long it lasts, and where and how often it's saved | RAM disks |
+| **Remove RAM Disk…** | Asks, then takes it down for good: saved one last time first if it keeps its files (that copy stays), its files deleted from memory, its startup units removed | RAM disks |
+| **New RAM Disk…** | Makes a RAM disk (also ☰ → New RAM Disk…) | RAM disks, Private |
+| **Leave Private Mode** | Turns private mode off in every Kestrel; its RAM disk, with the files saved in Private, is deleted (said first, unless that's turned off) | Private (while private mode is on) |
+| **Hide from Sidebar** | Takes the place out of the sidebar, in every window; Preferences → Sidebar → Places shown brings it back | Places (Overview, Home, Recent, Starred, the user folders, Trash) |
+
+## Overview cards
+
+On the Overview page.
+
+| Entry | What it does | Works on |
+|---|---|---|
+| **Open** / **Open in New Tab** | Opens it here or in a new tab | Drives, bookmarks, save locations, frequent folders, starred folders |
+| **Open** / **Show in Folder** | Opens the file in its app, or shows it selected in its folder | Starred files |
+| **Open in Terminal** | Opens a terminal at the drive | Mounted drives |
+| **Add to Bookmarks** | Bookmarks the drive or folder | Mounted drives, frequent folders |
+| **Properties** | The drive's Properties | Mounted drives |
+| **Find Duplicates…** | As in the sidebar | Mounted drives |
+| **Disk Usage…** | As in the sidebar; also the button beside the card's usage bar ("What's using this space?") | Mounted drives (not phones) |
+| **Mount** | Mounts the drive (as clicking its card does) | Drives not mounted |
+| **Back Up Drive to Image…** | As in the sidebar | Drives, mounted or not (not phones, network shares, tapes or floppies) |
+| **Drive Health…** | What the drive reports about itself (S.M.A.R.T., through udisks), in plain words; also opened by clicking the card's health line | Drives with a health line (Preferences → Overview → Show each drive's health) |
+| **Write Tape Index Now** / **Show Previews on This Drive** | As in the sidebar | Tapes (both), floppies (Show Previews) |
+| **Unmount** / **Eject** | Unmounts or ejects it | Drives that can be |
+| **Edit Bookmark…** / **Remove Bookmark** | As in the sidebar | Bookmarks |
+| **Move Earlier** / **Move Later** | Reorders the save locations | Save locations (a Save window's Overview) |
+| **Remove from Save Locations** | Takes the folder off the list (the folder stays) | Save locations |
+| **Unstar** | Takes it off the Starred list | Starred items |
+| **Remove from Frequent Folders** | Forgets how often the folder was opened, so it leaves the section until it's opened often again | Frequent folders |
+
+## Disk Usage window
+
+Right-click a block in the map, or a row in the list beside it.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Go Into** | Shows that folder in the map (as clicking it does) | Folders with their contents mapped (not small ones) |
+| **Open** | Opens the file in its app, or the folder in the Kestrel window it was opened from | Files and folders (not "smaller files") |
+| **Show in Folder** | Shows it selected in its folder, in that Kestrel window | Files and folders |
+| **Move to Trash** | Moves it to the trash and takes it off the map (Undo in a Kestrel window brings it back) | Files and folders |
+| **Properties** | Its Properties | Files and folders |
+
+## Open as Archive window
+
+Right-click items listed inside an archive.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Open** | Extracts a read-only temporary copy of the file and opens it with its app | One file selected |
+| **Extract Here** | Extracts the selected items beside the archive | Always |
+| **Extract To…** | Asks for a folder and extracts them there | Always |
+
+## Properties → Metadata
+
+Right-click a row on the Metadata tab of the Properties window.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Copy Value** | Copies the tag's value | Always |
+| **Copy Row** | Copies `group:tag = value` | Always |
+| **View Value…** | Shows the whole value in a window (for long ones) | Always |
+| **Edit Value…** | Changes the value | Files whose metadata can be written, on tags that can be edited |
+| **Remove Tag…** / **Remove N Tags…** | Removes the selected tags | Files whose metadata can be written, with tags selected |
+| **Add Tag…** | Adds a tag | Files whose metadata can be written |
+
+## Dropping with Alt held
+
+Not a right-click, but a menu of its own: drop files while holding **Alt** to choose (onto a folder, empty space, the sidebar or a tab).
+
+| Entry | What it does |
+|---|---|
+| **Move Here** | Moves the files to where they're dropped (not offered for an image dragged out of the image viewer, which is only ever copied) |
+| **Copy Here** | Copies them |
+| **Link Here** | Makes symbolic links to them |

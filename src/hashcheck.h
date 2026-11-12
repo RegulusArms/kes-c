@@ -4,12 +4,16 @@
 
 #include <QDialog>
 #include <QList>
+#include <QMutex>
 #include <QPointer>
 #include <QString>
 
 #include <functional>
+#include <memory>
+#include <vector>
 
 class MainWindow;
+class QCryptographicHash;
 class QCheckBox;
 class QLabel;
 class QLineEdit;
@@ -25,6 +29,7 @@ namespace hashcheck {
 // (lowercase hex) and the algorithm: "crc32", "md5", "sha1", "sha224", "sha256", "sha384", "sha512" or "blake2b".
 struct Entry {
     QString path, name, expected, algo;
+    qint64 size = -1;   // read with the checksum file, in the background (-1: not known)
 };
 
 bool is_hash_file(const QString &path);   // by its name: .sfv, .md5, .sha256, …, SHA256SUMS, …-CHECKSUM
@@ -44,39 +49,62 @@ QStringList hash_files(const QString &path, const QStringList &algos,
                        const std::function<void(qint64, qint64)> &progress = nullptr,
                        const std::function<void()> &check = nullptr);
 QString algo_label(const QString &algo);   // "SHA256", "CRC32", "BLAKE2b"
+// Hashes of data given piece by piece, with several algorithms at once (bytes on their way somewhere: an archive as it's
+// written). Not thread-safe.
+class Hasher {
+public:
+    explicit Hasher(const QStringList &algos);
+    ~Hasher();
+    void add(const char *data, qint64 n);
+    QStringList results();   // lowercase hex, in algos' order
+private:
+    std::vector<std::unique_ptr<QCryptographicHash>> hashes;   // nullptr for CRC32
+    quint32 crc = 0;
+};
 
 // Each listed file's result: "ok", "failed", "missing" or "error" (with the message).
 struct Result {
     QString status, actual, error;
 };
-Result verify(const Entry &e, Task *task = nullptr);
+// task: progress and a log line for it. before, total: bytes already checked and in all (a job checking several
+// files shows its progress over all of them); total 0: this file's own.
+Result verify(const Entry &e, Task *task = nullptr, qint64 before = 0, qint64 total = 0);
 
-// Shows the checksum file's entries and checks them one after another, with progress; Verify Again, Stop, Close.
+// What a checksum file's check has found so far, shared by its job and the window showing it (the job fills it).
+struct VerifyState {
+    QMutex mtx;
+    QList<Result> results;   // in entries' order; empty status while not checked yet
+};
+// Checks every file a checksum file lists, in order, as one job: each file's result in its log, the ones that failed
+// listed at its end (and the job ends "done with errors"). Not tied to a window: closing the one that started it (or
+// its Kestrel window) doesn't stop it, and it keeps Kestrel running until it ends, as copies do. parent: whose status
+// bar shows it. state (may be null) gets each result as it's known. on_done(valid: finished, invalid: stopped) runs
+// on the UI thread, also when parent has gone (it mustn't need it).
+Task *verify_job(QWidget *parent, const QString &path, const QList<Entry> &entries, std::shared_ptr<VerifyState> state,
+                 std::function<void(const QVariant &)> on_done = nullptr);
+
+// Shows the checksum file's entries and the results of their check (verify_job), with progress; Verify Again, Stop,
+// Close. The window only shows the job: closing it, or the Kestrel window it belongs to, leaves the job running (the
+// Jobs window has it and its log).
 class VerifyDialog : public QDialog {
     Q_OBJECT
 public:
     VerifyDialog(QWidget *parent, const QString &path, const QList<Entry> &entries);
-    ~VerifyDialog() override;
     QList<Result> results;   // in entries' order; empty status while not checked yet
-    bool complete() const { return next >= entries.size() && !task; }   // every file checked
-
-protected:
-    void hideEvent(QHideEvent *ev) override;
+    bool complete() const { return finished; }   // every file checked
+    Task *job() const { return task; }           // the check running (nullptr once it has ended)
 
 private:
     void start();
-    void step();
-    void on_result(const QVariant &res);
-    void stop();
+    void update_rows();   // the results the job has found since the last time
+    void on_done(const QVariant &res);
     void show_row(int i);
     void summary();
 
     QString path;
     QList<Entry> entries;
-    QList<qint64> sizes;
-    qint64 total = 0, before = 0;   // bytes in all files; in the files already checked
-    int next = 0;
-    int gen = 0;   // which run a task's result belongs to
+    std::shared_ptr<VerifyState> state;
+    bool finished = false;
     QPointer<Task> task;
     QTreeWidget *tree;
     QLabel *status;
@@ -84,8 +112,9 @@ private:
     QPushButton *again, *stop_btn;
 };
 
-// Opening a checksum file: the Verify Checksums dialog, or false if it lists nothing (open it as a text file).
-bool open_dialog(QWidget *parent, const QString &path);
+// Verify Checksums for path: the file is read and parsed on a worker (a checksum file on a tape or floppy can take long to
+// read), then the window opens; one that lists nothing calls not_listing() instead (it opens as an ordinary file).
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing);
 
 // ---- making checksum files
 
@@ -102,6 +131,10 @@ QString format_line(const QString &name, const QString &algo, const QString &hex
 // be read are left out and named in *errors. Returns the files written. On a thread (task may be nullptr).
 QStringList create(Task *task, const QStringList &paths, const QString &dir, const QString &stem,
                    const QStringList &algos, bool one_file, QStringList *errors);
+// Write output_paths() for files already hashed: (name relative to dir, hashes in algos' order). Each file is written
+// in one step, replacing an older one. Returns the files written.
+QStringList write_checksums(const QString &dir, const QString &stem, const QList<QPair<QString, QStringList>> &hashed,
+                            const QStringList &algos, bool one_file);
 
 // Pick the algorithms, one file or one per algorithm, the name and the folder; settings remember the first two.
 class CreateDialog : public QDialog {

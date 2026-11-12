@@ -1,15 +1,18 @@
 #include "util.h"
 
 #include "atc.h"
+#include "drives.h"
 
 #include "proc.h"
 #include "uwp.h"
 
+#include <QThread>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QJsonDocument>
 #include <QPalette>
 #include <QProcess>
+#include <QStyleHints>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -21,10 +24,13 @@
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QMutex>
+#include <QMutexLocker>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
+#include <atomic>
+#include <memory>
 #include <gio/gdesktopappinfo.h>
 #include <gio/gio.h>
 
@@ -60,10 +66,10 @@ namespace util {
 
 const char *APP_NAME = "Kestrel Explorer";
 const char *APP_ID = "kestrel-explorer";
+const char *COPY_ONLY_MIME = "application/x-kestrel-copy-only";
 const char *APP_COMMAND = "kes";
 const QStringList LEGACY_NAMES = {"Folder Explorer"};
 const char *LEGACY_ID = "folder-explorer";
-const char *VERSION = KES_VERSION;
 
 static QString env_or(const char *var, const QString &fallback)
 {
@@ -78,8 +84,53 @@ QString HOME()
 }
 QString CONFIG_DIR() { return join(env_or("XDG_CONFIG_HOME", HOME() + "/.config"), APP_ID); }
 QString CACHE_ROOT() { return env_or("XDG_CACHE_HOME", HOME() + "/.cache"); }
-QString THUMB_DIR() { return join(CACHE_ROOT(), "thumbnails"); }
-QString APP_CACHE() { return join(CACHE_ROOT(), APP_ID); }
+static QMutex private_lock;
+static QString private_dir_;   // private mode's RAM disk (ramdisk.h), empty when it's off
+
+void set_private_dir(const QString &dir)
+{
+    QMutexLocker g(&private_lock);
+    private_dir_ = dir;
+}
+
+QString private_dir_in_use()
+{
+    QMutexLocker g(&private_lock);
+    return private_dir_;
+}
+
+static std::atomic<bool> separate_cache_{false};
+void set_separate_cache(bool on) { separate_cache_ = on; }
+bool separate_cache() { return separate_cache_; }
+
+QString SHARED_THUMB_DIR() { return join(CACHE_ROOT(), "thumbnails"); }
+QString OWN_THUMB_DIR() { return join(join(CACHE_ROOT(), APP_ID), "thumbnails"); }
+QString THUMB_DIR()
+{
+    QString p = private_dir_in_use();
+    if (!p.isEmpty())
+        return join(p, "thumbnails");
+    return separate_cache() ? OWN_THUMB_DIR() : SHARED_THUMB_DIR();
+}
+QStringList THUMB_READ_DIRS()
+{
+    QStringList out{OWN_THUMB_DIR()};
+    if (!out.contains(THUMB_DIR()))
+        out << THUMB_DIR();
+    if (!separate_cache() && !out.contains(SHARED_THUMB_DIR()))
+        out << SHARED_THUMB_DIR();
+    return out;
+}
+QString APP_CACHE()
+{
+    QString p = private_dir_in_use();
+    return p.isEmpty() ? join(CACHE_ROOT(), APP_ID) : join(p, "cache");
+}
+QString HISTORY_DIR()
+{
+    QString p = private_dir_in_use();
+    return p.isEmpty() ? CONFIG_DIR() : join(p, "history");
+}
 QString TRASH_DIR() { return join(env_or("XDG_DATA_HOME", HOME() + "/.local/share"), "Trash"); }
 QString GTK_BOOKMARKS() { return HOME() + "/.config/gtk-3.0/bookmarks"; }
 
@@ -150,10 +201,105 @@ QSettings &settings()
     return s;
 }
 
+QSettings &history_settings()
+{
+    static std::unique_ptr<QSettings> priv;
+    static QString priv_dir;
+    QString dir = private_dir_in_use();
+    if (dir.isEmpty())
+        return settings();
+    if (!priv || priv_dir != dir) {
+        priv = std::make_unique<QSettings>(join(join(dir, "history"), "history.ini"), QSettings::IniFormat);
+        priv_dir = dir;
+    } else {
+        priv->sync();   // another Kestrel may have added to it
+    }
+    return *priv;
+}
+
 // ---------------------------------------------------------------- paths
 
-QByteArray enc(const QString &path) { return QFile::encodeName(path); }
-QString dec(const char *path) { return QFile::decodeName(path); }
+// Qt's QFile::encodeName/decodeName turn a byte that isn't UTF-8 into U+FFFD, which can't be turned back: such a file
+// (an old archive's Latin-1 name, say) was listed but then "No such file or directory" to everything done to it.
+static bool escaped_byte(const QString &s, qsizetype i)   // a lone U+DC80–U+DCFF: one byte dec() couldn't decode
+{
+    char16_t u = s[i].unicode();
+    return u >= 0xDC80 && u <= 0xDCFF && !(i > 0 && QChar::isHighSurrogate(s[i - 1].unicode()));
+}
+
+static QByteArray enc_bytes(const QString &path)
+{
+    QByteArray out;
+    qsizetype from = 0;
+    for (qsizetype i = 0; i < path.size(); ++i) {
+        if (escaped_byte(path, i)) {
+            out += QStringView(path).sliced(from, i - from).toUtf8();
+            out += char(path[i].unicode() - 0xDC00);
+            from = i + 1;
+        }
+    }
+    return from ? out + QStringView(path).sliced(from).toUtf8() : path.toUtf8();
+}
+
+// A path from Qt (QFileSystemModel lists names with QFile::decodeName): each name holding U+FFFD that isn't there as
+// written is looked for among its folder's entries, by Qt's decoding. Only a single match counts (two names that
+// differ only in their undecodable bytes look the same: neither is guessed); otherwise the path is left as it was.
+static QByteArray find_lossy(const QString &path, const QByteArray &plain)
+{
+    struct stat st;
+    if (::lstat(plain.constData(), &st) == 0 || errno != ENOENT)
+        return plain;
+    QByteArray out;
+    const QStringList parts = path.split('/');
+    for (qsizetype i = 0; i < parts.size(); ++i) {
+        QByteArray name = enc_bytes(parts[i]);
+        if (i > 0)
+            out += '/';
+        if (parts[i].contains(QChar(0xFFFD)) && ::lstat((out + name).constData(), &st) != 0) {
+            DIR *d = ::opendir(out.isEmpty() ? "." : out.constData());
+            if (!d)
+                return plain;
+            QByteArray found;
+            int matches = 0;
+            while (struct dirent *e = ::readdir(d))
+                if (QString::fromUtf8(e->d_name) == parts[i] && ++matches == 1)
+                    found = e->d_name;
+            ::closedir(d);
+            if (matches != 1)
+                return plain;
+            name = found;
+        }
+        out += name;
+    }
+    return out;
+}
+
+QByteArray enc(const QString &path)
+{
+    QByteArray out = enc_bytes(path);
+    return path.contains(QChar(0xFFFD)) ? find_lossy(path, out) : out;
+}
+
+QString dec(const char *path)
+{
+    QByteArrayView b(path);
+    if (b.isValidUtf8())
+        return QString::fromUtf8(b);
+    QString out;
+    out.reserve(b.size());
+    for (qsizetype i = 0; i < b.size();) {
+        uchar c = uchar(b[i]);
+        qsizetype n = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+        if (n && i + n <= b.size() && b.sliced(i, n).isValidUtf8()) {
+            out += QString::fromUtf8(b.sliced(i, n));
+            i += n;
+        } else {
+            out += QChar(char16_t(0xDC00 + c));
+            ++i;
+        }
+    }
+    return out;
+}
 
 QString dirname(const QString &p)
 {
@@ -294,8 +440,47 @@ QString ext_of(const QString &p) { return splitext_ext(p).toLower(); }
 
 // ---------------------------------------------------------------- file system
 
-bool stat_(const QString &p, struct stat &st) { return ::stat(enc(p).constData(), &st) == 0; }
-bool lstat_(const QString &p, struct stat &st) { return ::lstat(enc(p).constData(), &st) == 0; }
+// the tests: a drive busy seeking (set_test_busy), every stat under it waits as LTFS's do
+static std::atomic<bool> busy_on{false};
+static QString busy_prefix;
+static int busy_ms = 0;
+
+void set_test_busy(const QString &prefix, int ms)
+{
+    busy_prefix = rstrip(prefix, '/') + "/";
+    busy_ms = ms;
+    busy_on = !prefix.isEmpty() && ms > 0;
+}
+
+static std::atomic<int> ui_waits{0};
+
+void note_test_wait()
+{
+    if (QCoreApplication *app = QCoreApplication::instance(); app && QThread::currentThread() == app->thread())
+        ++ui_waits;
+}
+
+int test_ui_waits() { return ui_waits.load(); }
+
+static void busy_wait(const QString &p)
+{
+    if (busy_on.load(std::memory_order_relaxed) && (p + "/").startsWith(busy_prefix)) {
+        note_test_wait();
+        QThread::msleep(busy_ms);
+    }
+}
+
+bool stat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::stat(enc(p).constData(), &st) == 0;
+}
+
+bool lstat_(const QString &p, struct stat &st)
+{
+    busy_wait(p);
+    return ::lstat(enc(p).constData(), &st) == 0;
+}
 
 bool exists(const QString &p)
 {
@@ -614,25 +799,52 @@ void write_parts(const QString &path_in, const std::function<void(int)> &fill, b
     }
 }
 
+static bool test_no_link() { return qEnvironmentVariableIntValue("KESTREL_TEST_NO_LINK") == 1; }
+
+int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EINVAL;
+        return -1;
+    }
+    return ::renameat2(src_dir, src, dst_dir, dst, RENAME_NOREPLACE);
+}
+
+int link_at(int src_dir, const char *src, int dst_dir, const char *dst)
+{
+    if (test_no_link()) {
+        errno = EPERM;
+        return -1;
+    }
+    return ::linkat(src_dir, src, dst_dir, dst, 0);
+}
+
+bool no_link_support(int err) { return err == EPERM || err == ENOTSUP || err == EOPNOTSUPP || err == ENOSYS || err == EMLINK; }
+
 void put_new(const QString &part, const QString &path)
 {
-    if (::renameat2(AT_FDCWD, enc(part).constData(), AT_FDCWD, enc(path).constData(), RENAME_NOREPLACE) == 0)
+    QByteArray p = enc(part), d = enc(path);
+    if (rename_noreplace(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0)
         return;
     if (errno != EINVAL)
         throw_errno(path);
-    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken; a folder can't be linked, so
-    // there it's check, then rename
+    // a filesystem without RENAME_NOREPLACE: a hard link fails if the name is taken
     struct stat st;
-    if (::lstat(enc(part).constData(), &st) == 0 && S_ISDIR(st.st_mode)) {
-        if (lexists(path))
-            throw OSError(EEXIST, errno_text(EEXIST, path));
-        if (::rename(enc(part).constData(), enc(path).constData()) != 0)
+    bool dir = ::lstat(p.constData(), &st) == 0 && S_ISDIR(st.st_mode);
+    if (!dir) {
+        if (link_at(AT_FDCWD, p.constData(), AT_FDCWD, d.constData()) == 0) {
+            ::unlink(p.constData());
+            return;
+        }
+        if (!no_link_support(errno))
             throw_errno(path);
-        return;
     }
-    if (::link(enc(part).constData(), enc(path).constData()) != 0)
+    // a folder can't be linked, and some file systems link nothing (LTFS): check, then rename. Not atomic: a file
+    // another program makes under that name between the two could be replaced; the best these allow
+    if (lexists(path))
+        throw OSError(EEXIST, errno_text(EEXIST, path));
+    if (::rename(p.constData(), d.constData()) != 0)
         throw_errno(path);
-    ::unlink(enc(part).constData());
 }
 
 void write_atomic(const QString &path, const QByteArray &data)
@@ -647,8 +859,12 @@ void write_text(const QString &p, const QByteArray &data, bool exclusive)
 
 QByteArray read_file(const QString &p, bool *ok)
 {
-    QFile f(p);
-    if (!f.open(QIODevice::ReadOnly)) {
+    // opened by enc(): QFile(p) encodes the name its own way, which can't reach a name that isn't UTF-8
+    int fd = ::open(enc(p).constData(), O_RDONLY | O_CLOEXEC);
+    QFile f;
+    if (fd < 0 || !f.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        if (fd >= 0)
+            ::close(fd);
         if (ok)
             *ok = false;
         return QByteArray();
@@ -760,7 +976,7 @@ QString uri_to_path(const QString &uri)
         if (cut >= 0)
             rest = rest.left(cut);
     }
-    return QString::fromUtf8(QByteArray::fromPercentEncoding(rest.toUtf8()));
+    return dec(QByteArray::fromPercentEncoding(rest.toUtf8()).constData());   // a name's bytes: as listed
 }
 
 QString md5(const QString &s)
@@ -768,29 +984,23 @@ QString md5(const QString &s)
     return QString::fromLatin1(QCryptographicHash::hash(enc(s), QCryptographicHash::Md5).toHex());
 }
 
+// In decimal units (1 kB = 1000 bytes, as GNOME Files counts), with the system's decimal mark (i18n.h)
 QString human_size(double n)
 {
-    const char *units[] = {"bytes", "kB", "MB", "GB", "TB", "PB"};
-    for (int i = 0; i < 6; ++i) {
-        if (n < 1000 || i == 5) {
-            if (i == 0)
-                return QString("%1 bytes").arg(qint64(n));
-            return QString("%1 %2").arg(n, 0, 'f', 1).arg(units[i]);
-        }
+    static const char *const units[] = {TX_NOOP("%1 kB"), TX_NOOP("%1 MB"), TX_NOOP("%1 GB"), TX_NOOP("%1 TB"), TX_NOOP("%1 PB")};
+    if (n < 1000)
+        return txn("%Ln byte(s)", qint64(n));
+    for (int i = 0; i < 5; ++i) {
         n /= 1000;
+        if (n < 1000 || i == 4)
+            return tx(units[i]).arg(i18n::decimal(n, 1));
     }
     return QString();
 }
 
 QString human_size(qint64 n) { return human_size(double(n)); }
 
-QString group_digits(qint64 n)
-{
-    QString s = QString::number(n < 0 ? -n : n);
-    for (int i = s.size() - 3; i > 0; i -= 3)
-        s.insert(i, ',');
-    return n < 0 ? "-" + s : s;
-}
+QString group_digits(qint64 n) { return i18n::number(n); }
 
 // natural_key: compare runs of digits by value and other text case-insensitively
 bool natural_less(const QString &a, const QString &b)
@@ -853,10 +1063,10 @@ QPair<QString, QString> split_ext(const QString &name)
     return {stem, ext};
 }
 
-QString unique_path(const QString &directory, const QString &name, const QString &style)
+QString unique_path(const QString &directory, const QString &name, const QString &style, const QSet<QString> &taken)
 {
     QString target = join(directory, name);
-    if (!lexists(target))
+    if (!lexists(target) && !taken.contains(target))
         return target;
     auto [stem, ext] = split_ext(name);
     static const QRegularExpression suffix_re(R"( \((copy|copy \d+|\d+)\)$)");
@@ -866,9 +1076,9 @@ QString unique_path(const QString &directory, const QString &name, const QString
         if (style == "copy")
             suffix = i == 1 ? QString(" (copy)") : QString(" (copy %1)").arg(i);
         else
-            suffix = QString(" (%1)").arg(i + 1);
+            suffix = QString(" (%1)").arg(style == "download" ? i : i + 1);
         target = join(directory, stem + suffix + ext);
-        if (!lexists(target))
+        if (!lexists(target) && !taken.contains(target))
             return target;
     }
 }
@@ -1136,6 +1346,37 @@ QString desktop_schema(const QString &gnome_schema)
     return gnome_schema;
 }
 
+bool is_kde()
+{
+    return QString::fromLocal8Bit(qgetenv("XDG_CURRENT_DESKTOP")).toLower().split(':').contains("kde");
+}
+
+QString kde_setting(const QString &file, const QString &group, const QString &key)
+{
+    QStringList dirs = {env_or("XDG_CONFIG_HOME", HOME() + "/.config")};
+    dirs += env_or("XDG_CONFIG_DIRS", "/etc/xdg").split(':', Qt::SkipEmptyParts);
+    for (const QString &dir : dirs) {
+        bool ok = false;
+        QByteArray data = read_file(join(dir, file), &ok);
+        if (!ok)
+            continue;
+        QString section;
+        for (const QString &raw : QString::fromUtf8(data).split('\n')) {
+            QString line = raw.trimmed();
+            if (line.startsWith('[') && line.endsWith(']')) {
+                section = line.mid(1, line.size() - 2);   // "[A][B]", a group in a group: "A][B"
+                continue;
+            }
+            int eq = line.indexOf('=');
+            QString name = line.left(eq).trimmed();
+            name = name.left(name.indexOf('['));   // "Theme[$e]": KDE's flags on a key
+            if (section == group && eq > 0 && name == key)
+                return line.mid(eq + 1).trimmed();
+        }
+    }
+    return QString();
+}
+
 void setup_icon_theme()
 {
     QStringList paths = QIcon::themeSearchPaths();
@@ -1149,10 +1390,15 @@ void setup_icon_theme()
     QIcon::setThemeSearchPaths(paths);
     if (QIcon::themeName().isEmpty() || QIcon::themeName() == "hicolor") {
         QString theme = "Adwaita";
-        auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
-        QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
-        if (r.rc == 0 && !out.isEmpty())
-            theme = out;
+        if (is_kde()) {   // Qt asks Plasma itself when KDE's Qt integration is installed; without it, Plasma's setting
+            QString kde = kde_setting("kdeglobals", "Icons", "Theme");
+            theme = kde.isEmpty() ? "breeze" : kde;
+        } else {
+            auto r = proc::run({"gsettings", "get", desktop_schema("org.gnome.desktop.interface"), "icon-theme"}, 2000);
+            QString out = strip(QString::fromUtf8(r.out).trimmed(), "'");
+            if (r.rc == 0 && !out.isEmpty())
+                theme = out;
+        }
         QIcon::setThemeName(theme);
     }
     QIcon::setFallbackThemeName("Adwaita");
@@ -1299,10 +1545,13 @@ void on_palette_change(QObject *owner, std::function<void()> fn)
 
 // ---------------------------------------------------------------- the GTK theme's colours (Qt < 6.5)
 
-// prints the theme's named colours as JSON (GTK 3 reads the desktop's current theme when it starts)
-const char *GTK_COLORS_SCRIPT = R"(import json, gi
+// prints the theme's named colours as JSON (GTK 3 reads the desktop's current theme when it starts); with the argument
+// "dark", its dark variant's (Adwaita and Yaru are light themes with one, which GNOME's dark style asks for)
+const char *GTK_COLORS_SCRIPT = R"(import json, sys, gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
+if "dark" in sys.argv[1:]:
+    Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
 ctx = Gtk.Window().get_style_context()
 out = {}
 for name in ("theme_bg_color", "theme_fg_color", "theme_base_color", "theme_text_color", "theme_selected_bg_color",
@@ -1353,43 +1602,110 @@ QPalette gtk_palette_from(const QJsonObject &colors, bool *ok)
     return p;
 }
 
+QPalette theme_palette(const QJsonObject &colors, bool dark, bool *ok)
+{
+    QPalette p = gtk_palette_from(colors, ok);
+    if (!dark || (*ok && p.color(QPalette::Window).lightness() < 128))
+        return p;
+    // Adwaita's dark colours (GTK 3)
+    return gtk_palette_from(
+        QJsonObject{{"theme_bg_color", "#353535"}, {"theme_fg_color", "#eeeeec"}, {"theme_base_color", "#2d2d2d"},
+                    {"theme_text_color", "#ffffff"}, {"theme_selected_bg_color", "#15539e"},
+                    {"theme_selected_fg_color", "#ffffff"}, {"insensitive_fg_color", "#919190"},
+                    {"link_color", "#3584e4"}},
+        ok);
+}
+
+static GSettings *interface_settings()   // GNOME's, or Cinnamon's own; null if neither is installed
+{
+    static GSettings *s = nullptr;   // kept for the life of the app
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        QString schema = desktop_schema("org.gnome.desktop.interface");
+        if (has_schema_key(schema))
+            s = g_settings_new(schema.toUtf8().constData());
+    }
+    return s;
+}
+
+bool desktop_prefers_dark()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark)   // the portal's setting (KDE too)
+        return true;
+#endif
+    GSettings *s = interface_settings();
+    if (!s || !has_schema_key(desktop_schema("org.gnome.desktop.interface"), "color-scheme"))
+        return false;
+    gchar *scheme = g_settings_get_string(s, "color-scheme");
+    bool dark = qstrcmp(scheme, "prefer-dark") == 0;
+    g_free(scheme);
+    return dark;
+}
+
+static bool gtk_palette_set = false;   // the palette is Kestrel's, from the GTK theme, rather than Qt's own
+
 static void apply_gtk_palette(bool wait)
 {
     // read the theme's colours with GTK in a helper process (Kestrel itself doesn't link GTK)
+    bool dark = desktop_prefers_dark();
     auto *proc = new QProcess(qApp);
-    auto apply = [proc]() {
+    auto apply = [proc, dark]() {
         bool ok = false;
-        QPalette p = gtk_palette_from(QJsonDocument::fromJson(proc->readAllStandardOutput()).object(), &ok);
-        if (ok && p != QGuiApplication::palette())
+        QPalette p = theme_palette(QJsonDocument::fromJson(proc->readAllStandardOutput()).object(), dark, &ok);
+        if (ok && p != QGuiApplication::palette()) {
+            gtk_palette_set = true;
             QApplication::setPalette(p);   // on_palette_change() then updates what was drawn in the old colours
+        }
         proc->deleteLater();
     };
+    QStringList args = {"-c", GTK_COLORS_SCRIPT};
+    if (dark)
+        args << "dark";
     if (wait) {   // at startup: the first window opens in the theme's colours
-        proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+        proc->start("/usr/bin/python3", args);
         proc->waitForFinished(3000);
-        apply();
+        apply();   // no python3 or GTK bindings: the built-in dark colours, if dark is wanted
         return;
     }
     QObject::connect(proc, &QProcess::finished, qApp, apply);
-    QObject::connect(proc, &QProcess::errorOccurred, proc, &QObject::deleteLater);
-    proc->start("/usr/bin/python3", {"-c", GTK_COLORS_SCRIPT});
+    QObject::connect(proc, &QProcess::errorOccurred, qApp, [proc, apply](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart)
+            apply();
+    });
+    proc->start("/usr/bin/python3", args);
+}
+
+// Qt before 6.5 always needs the GTK theme's colours. Newer Qt reads them itself, but follows GNOME's dark style only
+// when the GTK theme is a dark one (Yaru-dark, not Adwaita or Yaru with the dark style), and not at all without its
+// GTK plugin (qt6-gtk-platformtheme): there they're used once the desktop wants dark and Qt's colours are light.
+static void sync_gtk_palette(bool wait)
+{
+    if (gtk_palette_set || needs_gtk_palette(QString::fromLatin1(qVersion())) ||
+        (desktop_prefers_dark() && !dark_theme()))
+        apply_gtk_palette(wait);
 }
 
 void follow_gtk_theme()
 {
     QString platform = QGuiApplication::platformName();
-    if (!needs_gtk_palette(QString::fromLatin1(qVersion())) || (platform != "xcb" && platform != "wayland"))
+    if (platform != "xcb" && platform != "wayland")
         return;
-    apply_gtk_palette(true);
+    sync_gtk_palette(true);
     static QTimer *later = nullptr;   // the desktop changes several settings at once; GTK picks them up shortly after
     later = new QTimer(qApp);
     later->setSingleShot(true);
     later->setInterval(600);
-    QObject::connect(later, &QTimer::timeout, qApp, []() { apply_gtk_palette(false); });
-    QString schema = desktop_schema("org.gnome.desktop.interface");   // GNOME's, or Cinnamon's own
-    if (!has_schema_key(schema))
+    QObject::connect(later, &QTimer::timeout, qApp, []() { sync_gtk_palette(false); });
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, later,
+                     [](Qt::ColorScheme) { later->start(); });
+#endif
+    QString schema = desktop_schema("org.gnome.desktop.interface");
+    GSettings *s = interface_settings();
+    if (!s)
         return;
-    GSettings *s = g_settings_new(schema.toUtf8().constData());   // kept for the life of the app
     for (const char *key : {"gtk-theme", "color-scheme"})
         if (has_schema_key(schema, key))
             g_signal_connect(s, QString("changed::%1").arg(key).toUtf8().constData(),
@@ -1449,7 +1765,22 @@ static QString take_gerror(GError *err)
 bool open_default(const QString &path)
 {
     GError *err = nullptr;
-    if (g_app_info_launch_default_for_uri(file_uri(path).toUtf8().constData(), nullptr, &err))
+    QByteArray uri = file_uri(path).toUtf8();
+    if (drives::slow_kind(path) != drives::Slow::None) {
+        // a tape or floppy: GIO's own launch would read the file here to tell its type (the window waits while a tape
+        // seeks); the app for its type by name is started instead, and reads the file itself
+        if (AppRef app = default_app_for_type(content_type(path))) {
+            GList *uris = g_list_append(nullptr, uri.data());
+            bool ok = g_app_info_launch_uris(app.get(), uris, nullptr, &err);
+            g_list_free(uris);
+            if (ok)
+                return true;
+            if (err)
+                g_clear_error(&err);
+        }
+        return proc::start_detached({"xdg-open", path});
+    }
+    if (g_app_info_launch_default_for_uri(uri.constData(), nullptr, &err))
         return true;
     if (err)
         g_error_free(err);
@@ -1458,6 +1789,10 @@ bool open_default(const QString &path)
 
 QString content_type(const QString &path)
 {
+    // on a tape or floppy, by its name only: GIO reads a file's start to tell its type, and on a tape that read waits
+    // until the drive gets there (Recent, Open With and opening it all ask, on the window's thread)
+    if (drives::slow_kind(path) != drives::Slow::None)
+        return mime_for(path, 0).name();
     GFile *f = g_file_new_for_path(enc(path).constData());
     GFileInfo *info = g_file_query_info(f, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE, G_FILE_QUERY_INFO_NONE,
                                         nullptr, nullptr);
@@ -1552,9 +1887,9 @@ void set_default_for_type(const AppRef &app, const QString &ct)
 QString which_path(const QString &name) { return QStandardPaths::findExecutable(name); }
 bool which(const QString &name) { return !which_path(name).isEmpty(); }
 
-bool open_terminal(const QString &directory)
+QList<QStringList> terminal_commands(const QString &directory)
 {
-    const QList<QStringList> candidates = {
+    QList<QStringList> candidates = {
         {"ptyxis", "--new-window", "--working-directory=" + directory},
         {"gnome-terminal", "--working-directory=" + directory},
         {"kgx", "--working-directory=" + directory},
@@ -1562,7 +1897,14 @@ bool open_terminal(const QString &directory)
         {"xfce4-terminal", "--working-directory=" + directory},
         {"x-terminal-emulator"},
     };
-    for (const QStringList &cmd : candidates) {
+    if (is_kde())   // Plasma's own, even with a GNOME terminal installed too
+        candidates.move(3, 0);
+    return candidates;
+}
+
+bool open_terminal(const QString &directory)
+{
+    for (const QStringList &cmd : terminal_commands(directory)) {
         if (which(cmd[0])) {
             proc::start_detached(cmd, directory);
             return true;
@@ -1571,16 +1913,26 @@ bool open_terminal(const QString &directory)
     return false;
 }
 
+QList<QStringList> wallpaper_commands(const QString &path)
+{
+    if (is_kde())   // every screen; Plasma keeps it in its own config, not GSettings
+        return {{"plasma-apply-wallpaperimage", path}};
+    QList<QStringList> cmds;
+    QString uri = file_uri(path);
+    QString schema = desktop_schema("org.gnome.desktop.background");
+    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
+        if (has_schema_key(schema, key))
+            cmds.append({"gsettings", "set", schema, key, uri});
+    return cmds;
+}
+
 void set_wallpaper(const QString &path)
 {
     // through UWP when it's installed (a new UWP profile with the image on every monitor), else the desktop's own
     if (uwp::set_wallpaper(path))
         return;
-    QString uri = file_uri(path);
-    QString schema = desktop_schema("org.gnome.desktop.background");
-    for (const char *key : {"picture-uri", "picture-uri-dark"})   // Cinnamon has no -dark one
-        if (has_schema_key(schema, key))
-            proc::run({"gsettings", "set", schema, key, uri}, 5000);
+    for (const QStringList &cmd : wallpaper_commands(path))
+        proc::run(cmd, 5000);
 }
 
 void trash(const QString &path)
@@ -1670,7 +2022,7 @@ QString trash_original_path(const QString &trashed)
     for (const QByteArray &line : text.split('\n')) {
         if (!line.startsWith("Path="))
             continue;
-        QString orig = QString::fromUtf8(QByteArray::fromPercentEncoding(line.mid(5).trimmed()));
+        QString orig = dec(QByteArray::fromPercentEncoding(line.mid(5).trimmed()).constData());   // raw bytes, as listed
         if (orig.startsWith('/'))
             return orig;
         QString root = trash_root(trashed);

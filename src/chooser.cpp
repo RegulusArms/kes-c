@@ -1,7 +1,9 @@
 #include "chooser.h"
 
 #include "app.h"
+#include "drives.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -84,6 +86,7 @@ Request parse(const QString &method, const QString &title, GVariant *options)
     if (!current_file.isEmpty()) {
         r.current_folder = dirname(current_file);
         r.current_name = basename(current_file);
+        r.replacing = r.method == "SaveFile";
     }
     if (GVariant *fs = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"))) {
         for (gsize i = 0; i < g_variant_n_children(fs); ++i) {
@@ -178,8 +181,8 @@ QString button_text(const Request &req)
         return t.replace("__", "\x01").remove('_').replace('\x01', '_');   // GTK mnemonics: _Save
     }
     if (req.method == "SaveFiles" || req.directory)
-        return "Select";
-    return req.saving() ? "Save" : "Open";
+        return tx("Select");
+    return req.saving() ? tx("Save") : tx("Open");
 }
 
 // ---------------------------------------------------------------- the D-Bus service
@@ -314,19 +317,17 @@ ChooserBar::ChooserBar(MainWindow *win, const chooser::Request &req, std::functi
     auto *lay = new QHBoxLayout(this);
     lay->setContentsMargins(8, 6, 8, 6);
     if (req.method == "SaveFile") {
-        lay->addWidget(new QLabel("Name:"));
+        lay->addWidget(new QLabel(tx("Name:")));
         name = new QLineEdit(req.current_name);
         name->setMinimumWidth(320);
         connect(name, &QLineEdit::returnPressed, this, &ChooserBar::accept);
         connect(name, &QLineEdit::textChanged, this, &ChooserBar::update_button);
+        connect(name, &QLineEdit::textEdited, this, [this]() { name_theirs = true; });
         lay->addWidget(name, 1);
-        // select the name without its extension, ready to type over
-        int dot = req.current_name.lastIndexOf('.');
-        name->setSelection(0, dot > 0 ? dot : req.current_name.size());
+        set_name(req.current_name);
     } else if (req.method == "SaveFiles") {
-        lay->addWidget(new QLabel(QString("Choose a folder for %1 file%2")
-                                      .arg(QString::number(req.files.size()), req.files.size() == 1 ? "" : "s")),
-                       1);
+        files_label = new QLabel;
+        lay->addWidget(files_label, 1);
     } else {
         lay->addStretch(1);
     }
@@ -341,7 +342,7 @@ ChooserBar::ChooserBar(MainWindow *win, const chooser::Request &req, std::functi
         });
         lay->addWidget(filter);
     }
-    auto *cancel = new QPushButton("Cancel");
+    auto *cancel = new QPushButton(tx("Cancel"));
     connect(cancel, &QPushButton::clicked, this, [this]() { finish(false); });
     ok_btn = new QPushButton(chooser::button_text(req));
     ok_btn->setDefault(true);
@@ -370,11 +371,56 @@ void ChooserBar::update_button()
 
 void ChooserBar::selection_changed()
 {
-    // saving: picking a file puts its name in the box (to save over it, or to start from it)
+    // saving: picking a file puts its name in the box (to save over it, or to start from it); the name is then theirs
     if (name && win->pane()) {
         QStringList sel = win->pane()->selected_paths();
-        if (sel.size() == 1 && !isdir(sel[0]))
+        if (sel.size() == 1 && !isdir(sel[0])) {
             name->setText(basename(sel[0]));
+            name_theirs = true;
+        }
+    }
+    update_button();
+}
+
+void ChooserBar::set_name(const QString &n)
+{
+    name->setText(n);
+    int dot = n.lastIndexOf('.');   // the name without its extension selected, ready to type over
+    name->setSelection(0, dot > 0 ? dot : n.size());
+}
+
+// names are only looked up where that can't hold the window: not on a tape or floppy (drives.h)
+static bool can_look(const QString &dir) { return !dir.isEmpty() && drives::slow_kind(dir) == drives::Slow::None; }
+
+QStringList ChooserBar::save_targets(const QString &folder) const
+{
+    QStringList out;
+    QSet<QString> given;   // two of the files may want the same free name
+    for (const QString &f : req.files) {
+        QString t = can_look(folder) ? unique_path(folder, f, "download", given) : join(folder, f);
+        given << t;
+        out << t;
+    }
+    return out;
+}
+
+void ChooserBar::folder_changed()
+{
+    QString dir = win->cur_dir();
+    if (name && !name_theirs && !req.replacing && !req.current_name.isEmpty() && can_look(dir)) {
+        QString free = basename(unique_path(dir, req.current_name, "download"));
+        if (free != name->text())
+            set_name(free);
+    }
+    if (files_label) {
+        int n = req.files.size(), renamed = 0;
+        QStringList targets = can_look(dir) ? save_targets(dir) : QStringList();
+        for (int i = 0; i < targets.size(); ++i)
+            renamed += basename(targets[i]) != req.files[i];
+        QString text = txn("Choose a folder for %Ln file(s)", n);
+        if (renamed)
+            text = txn("%1 (%Ln get(s) a new name: the folder has a file of the same name)", renamed).arg(text);
+        files_label->setText(text);
     }
     update_button();
 }
@@ -389,17 +435,18 @@ void ChooserBar::activated(const QStringList &files)
     }
 }
 
-static bool confirm_replace(QWidget *parent, const QStringList &existing)
+static void confirm_replace(QWidget *parent, const QStringList &existing, std::function<void()> yes)
 {
     QString text = existing.size() == 1
-                       ? QString("A file named “%1” already exists. Do you want to replace it?").arg(basename(existing[0]))
-                       : QString("%1 of these files already exist in this folder. Do you want to replace them?")
-                             .arg(existing.size());
-    QMessageBox box(QMessageBox::Question, "Replace File", text, QMessageBox::NoButton, parent);
-    QPushButton *replace = box.addButton("Replace", QMessageBox::DestructiveRole);
-    box.addButton(QMessageBox::Cancel);
-    box.exec();
-    return box.clickedButton() == replace;
+                       ? tx("A file named “%1” already exists. Do you want to replace it?").arg(basename(existing[0]))
+                       : txn("%Ln of these files already exist in this folder. Do you want to replace them?", existing.size());
+    auto *box = new QMessageBox(QMessageBox::Question, tx("Replace File"), text, QMessageBox::NoButton, parent);
+    QPushButton *replace = box->addButton(tx("Replace"), QMessageBox::DestructiveRole);
+    box->addButton(QMessageBox::Cancel);
+    ask_box(box, [replace, yes](QAbstractButton *b) {
+        if (b == replace)
+            yes();
+    });
 }
 
 void ChooserBar::accept()
@@ -417,23 +464,25 @@ void ChooserBar::accept()
             return;
         }
         if (!isdir(dirname(target))) {
-            QMessageBox::warning(this, "Save", QString("The folder “%1” doesn't exist.").arg(dirname(target)));
+            warn(this, tx("Save"), tx("The folder “%1” doesn't exist.").arg(dirname(target)));
             return;
         }
-        if (lexists(target) && !confirm_replace(this, {target}))
-            return;
-        finish(true, {target});
+        if (lexists(target))
+            confirm_replace(this, {target}, [this, target]() { finish(true, {target}); });
+        else
+            finish(true, {target});
     } else if (req.method == "SaveFiles") {
+        // each under a free name (the portal lets the names change), so nothing there is replaced; on a tape or
+        // floppy, where names aren't looked up, Replace is asked about as before
         QString folder = sel.size() == 1 && isdir(sel[0]) ? sel[0] : dir;
-        QStringList targets, existing;
-        for (const QString &f : req.files) {
-            targets << join(folder, f);
-            if (lexists(targets.last()))
-                existing << targets.last();
-        }
-        if (!existing.isEmpty() && !confirm_replace(this, existing))
-            return;
-        finish(true, targets);
+        QStringList targets = save_targets(folder), existing;
+        for (const QString &t : targets)
+            if (!can_look(folder) && lexists(t))
+                existing << t;
+        if (!existing.isEmpty())
+            confirm_replace(this, existing, [this, targets]() { finish(true, targets); });
+        else
+            finish(true, targets);
     } else if (req.directory) {
         QStringList dirs;
         for (const QString &p : sel)
@@ -466,7 +515,7 @@ void ChooserBar::finish(bool ok, const QStringList &paths)
     res.filter = filter ? filter->currentIndex() : -1;
     if (ok && !paths.isEmpty()) {
         QString folder = req.directory && !req.saving() ? paths[0] : dirname(paths[0]);
-        settings().setValue("chooser_folder", folder);   // the next chooser starts here
+        history_settings().setValue("chooser_folder", folder);   // the next chooser starts here
     }
     done(res);
     win->close();

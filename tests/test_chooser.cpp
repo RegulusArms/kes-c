@@ -116,9 +116,9 @@ int main(int argc, char **argv)
                 w->close();
         });
     });
-    QTimer boxes;   // question boxes are modal: answer them
+    QTimer boxes;   // question boxes: answer them
     QObject::connect(&boxes, &QTimer::timeout, []() {
-        if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+        if (auto *m = shown_window<QMessageBox>()) {
             box_seen = true;
             for (QAbstractButton *b : m->buttons())
                 if (b->text() == answer_box)
@@ -126,7 +126,18 @@ int main(int argc, char **argv)
         }
     });
     boxes.start(50);
-    spin(500);   // own the name
+    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+    wait_for([bus]() {   // the portal's name is ours (asked for on the bus: it comes in its own time)
+        GVariant *v = g_dbus_connection_call_sync(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                                  "NameHasOwner", g_variant_new("(s)", "org.freedesktop.impl.portal.desktop.kestrel"),
+                                                  G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, nullptr);
+        gboolean has = FALSE;
+        if (v) {
+            g_variant_get(v, "(b)", &has);
+            g_variant_unref(v);
+        }
+        return bool(has);
+    });
     Reply r;
 
     // -- the request
@@ -153,12 +164,15 @@ int main(int argc, char **argv)
           "the chosen file goes back to the app as a file:// URI");
     check(wait_for([]() { return chooser_window() == nullptr; }), "the window closes after choosing");
 
-    call("SaveFile", options({{"current_folder", folder(dir)}, {"current_name", g_variant_new_string("a.png")}}), &r);
+    call("SaveFile", options({{"current_folder", folder(dir)}, {"current_name", g_variant_new_string("new.png")}}), &r);
     w = wait_window();
     answer_box = "Cancel";
     box_seen = false;
-    if (w)
+    if (w) {
+        w->chooser->name->setText("a.png");   // the user types a name that's taken
+        Q_EMIT w->chooser->name->textEdited("a.png");
         w->chooser->accept();
+    }
     spin(300);
     check(box_seen && !r.got && chooser_window(), "saving over a file asks first, and Cancel keeps the dialog open");
     answer_box = "Replace";
@@ -181,6 +195,152 @@ int main(int argc, char **argv)
     check(wait_for([&]() { return r.got; }) && r.uris == QStringList{file_uri(join(dir, "sub/x.png"))},
           "...and the file is saved there");
     check(settings().value("chooser_folder").toString() == join(dir, "sub"), "the next chooser starts where the last one saved");
+
+    // Save follows the place shown: off on the Overview and Starred (no folder to save in), on again in a folder,
+    // also when nothing is selected there (nothing else re-checks it then)
+    call("SaveFile", options({{"current_folder", folder(dir)}, {"current_name", g_variant_new_string("moved.png")}}), &r);
+    w = wait_window();
+    QPushButton *save = nullptr;
+    if (w)
+        for (QPushButton *b : w->chooser->findChildren<QPushButton *>())
+            if (b->text() == "Save")
+                save = b;
+    bool on_first = save && save->isEnabled();
+    bool off_overview = false, off_starred = false, on_again = false;
+    if (w && save) {
+        w->pane()->set_path(OVERVIEW);
+        off_overview = !save->isEnabled();
+        w->pane()->set_path(places::STARRED);
+        off_starred = !save->isEnabled();
+        w->pane()->set_path(join(dir, "sub"));
+        w->pane()->view()->clearSelection();
+        on_again = save->isEnabled();
+    }
+    check(on_first && off_overview && off_starred && on_again,
+          "Save is off on the Overview and Starred, and on again on going back to a folder with nothing selected");
+    if (save)
+        save->click();
+    check(wait_for([&]() { return r.got; }) && r.uris == QStringList{file_uri(join(dir, "sub/moved.png"))},
+          "...and clicking it saves there");
+
+    // -- free names: as browsers name repeated downloads
+    QString dl = home_path("dl");
+    makedirs(join(dl, "empty"), true);
+    write_text(join(dl, "photo.jpg"), "x");
+    check(unique_path(dl, "photo.jpg", "download") == join(dl, "photo (1).jpg") &&
+              unique_path(dl, "new.jpg", "download") == join(dl, "new.jpg") &&
+              unique_path(dl, "photo.jpg", "download", {join(dl, "photo (1).jpg")}) == join(dl, "photo (2).jpg"),
+          "download numbering starts at (1), a free name stays, and names given out in a batch count as taken");
+    auto save_in = [&](const QString &name, const QString &where, bool replacing = false) {
+        call("SaveFile",
+             replacing ? options({{"current_file", folder(join(where, name))}})
+                       : options({{"current_folder", folder(where)}, {"current_name", g_variant_new_string(name.toUtf8().constData())}}),
+             &r);
+        return wait_window();
+    };
+    auto go = [](MainWindow *w, const QString &to) {
+        if (w)
+            w->pane()->set_path(to);
+    };
+    auto shown_name = [](MainWindow *w) { return w ? w->chooser->name->text() : QString(); };
+    w = save_in("photo.jpg", dl);
+    QString at_start = shown_name(w);
+    go(w, join(dl, "empty"));
+    QString where_free = shown_name(w);
+    write_text(join(dl, "photo (1).jpg"), "x");
+    go(w, dl);
+    QString back = shown_name(w);
+    check(at_start == "photo (1).jpg", "a suggested name that's taken where the window opens becomes the next free one");
+    check(where_free == "photo.jpg", "...going to a folder where it's free puts the original name back");
+    check(back == "photo (2).jpg", "...and coming back finds the next free one there");
+    if (w) {
+        w->chooser->name->setText("photo.jpg");   // the user's own name: theirs from now on
+        Q_EMIT w->chooser->name->textEdited("photo.jpg");
+    }
+    go(w, join(dl, "empty"));
+    go(w, dl);
+    check(shown_name(w) == "photo.jpg", "a name the user typed isn't changed when changing folders");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    w = save_in("photo.jpg", dl, true);
+    check(shown_name(w) == "photo.jpg", "an app saving over a file (current_file) keeps its name");
+    answer_box = "Cancel";
+    box_seen = false;
+    if (w)
+        w->chooser->accept();
+    spin(300);
+    check(box_seen && !r.got, "...and Save asks before replacing it");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    call("SaveFiles", options({{"current_folder", folder(dl)},
+                               {"files", g_variant_new_parsed("[b'photo.jpg', b'photo.jpg', b'other.txt']")}}), &r);
+    w = wait_window();
+    QString told;
+    for (QLabel *l : w ? w->chooser->findChildren<QLabel *>() : QList<QLabel *>())
+        told += l->text();
+    box_seen = false;
+    if (w)
+        w->chooser->accept();
+    bool batch_back = wait_for([&]() { return r.got; });
+    check(batch_back && !box_seen &&
+              r.uris == QStringList({file_uri(join(dl, "photo (2).jpg")), file_uri(join(dl, "photo (3).jpg")),
+                                     file_uri(join(dl, "other.txt"))}),
+          "saving several files: each taken name made free, also from each other, without asking to replace (" +
+              r.uris.join(", ") + ")");
+    check(told.contains("2 get a new name"), "...and the window said how many get a new name (" + told + ")");
+
+    // -- a Save window's own Overview and its save locations
+    prefs::set("chooser_places", QStringList({dl, dir}));
+    MainWindow *main_win = open_window({HOME()});
+    main_win->pane()->set_path(OVERVIEW);
+    check(main_win->pane()->overview_page()->save_place_cards().isEmpty(),
+          "a main window's Overview has no save locations");
+    w = save_in("new.png", dir);
+    check(w && w->cur_dir() == dir, "a Save window starts in the app's folder unless set to start on its Overview");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    prefs::set("chooser_start", "overview");
+    w = save_in("new.png", dir);
+    OverviewPage *page = w ? w->pane()->overview_page() : nullptr;
+    check(w && w->pane()->is_overview() && page->save_place_cards() == QStringList({dl, dir}),
+          "set to, a Save window starts on its own Overview, with the save locations first");
+    if (page) {
+        page->add_save_place(join(dl, "empty"));
+        page->move_save_place(dir, -1);
+    }
+    check(page && page->save_place_cards() == QStringList({dir, dl, join(dl, "empty")}) &&
+              prefs::get("chooser_places").toStringList() == page->save_place_cards(),
+          "a location added and one moved earlier on the page are saved, and the page shows them");
+    if (page)
+        page->remove_save_place(dl);
+    check(page && page->save_place_cards() == QStringList({dir, join(dl, "empty")}), "...and one removed goes");
+    BookmarkCard *card = nullptr;
+    for (BookmarkCard *c : page ? page->findChildren<BookmarkCard *>() : QList<BookmarkCard *>())
+        if (c->target == join(dl, "empty"))
+            card = c;
+    if (card)
+        Q_EMIT card->clicked();
+    check(card && wait_for([&]() { return w->cur_dir() == join(dl, "empty"); }) && shown_name(w) == "new.png",
+          "clicking one goes there, ready to save");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    w = save_in("photo.jpg", dl, true);
+    check(w && w->cur_dir() == dl, "...but an app saving over a file opens in its folder");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
+    w = wait_window();
+    check(w && w->cur_dir() == dir, "...and an Open window in the app's folder");
+    if (w)
+        w->chooser->finish(false);
+    wait_for([&]() { return r.got; });
+    prefs::set("chooser_start", QVariant());
+    main_win->close();
 
     // -- opening
     call("OpenFile", options({{"current_folder", folder(dir)}, {"filters", png_filter()}}), &r);

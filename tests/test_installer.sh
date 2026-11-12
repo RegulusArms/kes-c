@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installer test: --default (folders, trash:///, the file chooser, the drop focus extension, PATH), --dock, asking
-# about the dock, and --uninstall putting it all back; kes-setup on its own, and its BleachBit cleaner (checked by
+# about the dock, and --uninstall putting it all back; kes-setup on its own (also on KDE), and its BleachBit cleaner (checked by
 # BleachBit itself when it's installed). Runs ../install.sh with a throwaway HOME and a keyfile GSettings backend (never
 # your real settings or dock), with the portal definition going to a throwaway folder, and with stub `pgrep`, `sudo`
 # and `systemctl` so it can't close a running GNOME Files, install packages or restart your desktop portal. run.sh
@@ -11,7 +11,7 @@ INSTALL="$HERE/../install.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/kestrel-installer-test.XXXXXX")"
 trap 'case "$WORK" in */kestrel-installer-test.*) rm -rf "$WORK" ;; esac' EXIT
 mkdir -p "$WORK/stubs"
-printf '#!/bin/sh\nexit 1\n' > "$WORK/stubs/pgrep"
+printf '#!/bin/sh\n[ -n "$RUNNING" ] && [ "$2" = "$RUNNING" ]\n' > "$WORK/stubs/pgrep"   # only $RUNNING runs
 printf '#!/bin/sh\necho "sudo is disabled in the installer test" >&2\nexit 1\n' > "$WORK/stubs/sudo"
 printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$WORK" > "$WORK/stubs/systemctl"
 chmod +x "$WORK/stubs/pgrep" "$WORK/stubs/sudo" "$WORK/stubs/systemctl"
@@ -166,34 +166,94 @@ check '[[ -f "$WORK/portals/kestrel.portal" ]]' "kes-setup --undo: leaves the pa
 dock_check '[[ "$(exts)" == "$EXTS_BEFORE" && -d "$WORK/extensions/$FOCUS_UUID" ]]' \
     "kes-setup --undo: disables the drop focus extension and leaves the package's copy"
 
+# kes-setup on KDE Plasma (Kubuntu): Dolphin opens folders, and nothing opens trash:/// until Kestrel does
+fresh
+rm "$HOME/.local/share/applications/xfce4-file-manager.desktop"
+sed -i '/^x-scheme-handler\/trash=/d' "$HOME/.config/mimeapps.list"
+printf '[Desktop Entry]\nType=Application\nName=Dolphin\nExec=true\nMimeType=inode/directory;\n' \
+    > "$HOME/.local/share/applications/org.kde.dolphin.desktop"
+xdg-mime default org.kde.dolphin.desktop inode/directory
+printf '[preferred]\ndefault=kde\norg.freedesktop.impl.portal.Secret=kwallet\n' > "$WORK/xdg/xdg-desktop-portal/kde-portals.conf"
+# Plasma's taskbar: a stand-in gdbus answers plasmashell's evaluateScript with $PLASMA (what the script would print
+# there: swapped, already, follows, none) and keeps each script; other calls go to the real gdbus
+mkdir -p "$WORK/plasma-stubs"
+printf '#!/bin/bash\nif [[ " $* " == *" org.kde.PlasmaShell.evaluateScript "* ]]; then\n' > "$WORK/plasma-stubs/gdbus"
+printf '    [[ -n "$PLASMA" ]] || exit 1\n    printf "%%s\\n---\\n" "${@: -1}" >> "%s/plasma-scripts"\n' "$WORK" >> "$WORK/plasma-stubs/gdbus"
+printf '    echo "('"'"'$PLASMA'"'"',)"\n    exit 0\nfi\nexec /usr/bin/gdbus "$@"\n' >> "$WORK/plasma-stubs/gdbus"
+chmod +x "$WORK/plasma-stubs/gdbus"
+kde() { XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true KDE_SESSION_VERSION=6 PATH="$WORK/plasma-stubs:$PATH" "$SETUP" --kes /usr/bin/kes "$@"; }
+RUNNING=dolphin kde --default </dev/null >"$WORK/out-kde" 2>&1
+check '[[ "$(folder_handler)" == kestrel-explorer.desktop && "$(trash_handler)" == kestrel-explorer.desktop ]]' \
+    "kes-setup --default on KDE: folders and trash:/// open in Kestrel"
+check 'grep -qx "org.freedesktop.impl.portal.FileChooser=kestrel;kde;" "$HOME/.config/xdg-desktop-portal/kde-portals.conf" &&
+       grep -qx "org.freedesktop.impl.portal.Secret=kwallet" "$HOME/.config/xdg-desktop-portal/kde-portals.conf"' \
+    "kes-setup --default on KDE: the file chooser is Kestrel, then KDE's (not GNOME's), and the rest of KDE's portals.conf stays"
+check 'grep -q "Dolphin is open: until its windows are closed" "$WORK/out-kde"' \
+    "kes-setup --default on KDE: says an open Dolphin keeps \"Show in folder\" until it's closed"
+rm -f "$WORK/plasma-scripts"
+PLASMA=swapped kde --dock </dev/null >"$WORK/out-dock" 2>&1
+check 'grep -q "in the taskbar in place of Dolphin" "$WORK/out-dock" && grep -qx "dock=plasma" "$(STATE_FILE)" &&
+       grep -q "from = '"'"'applications:org.kde.dolphin.desktop'"'"', to = '"'"'applications:kestrel-explorer.desktop'"'"', dry = false" "$WORK/plasma-scripts"' \
+    "kes-setup --dock on KDE: swaps Dolphin for Kestrel in Plasma's taskbar, through plasmashell, and remembers it"
+check '[[ -s "$WORK/plasma-scripts" ]] && ! grep -qF "\\" "$WORK/plasma-scripts"' "...with no backslash in the script (gdbus would read it as an escape)"
+PLASMA=follows kde --dock </dev/null >"$WORK/out-dock2" 2>&1
+check 'grep -q "already opens Kestrel" "$WORK/out-dock2"' \
+    "kes-setup --dock on KDE: says a \"default file manager\" pin already opens Kestrel"
+rm -f "$WORK/plasma-scripts"
+PLASMA=swapped kde --undo >>"$WORK/out-kde" 2>&1
+check 'grep -q "Put Dolphin back in the taskbar" "$WORK/out-kde" &&
+       grep -q "from = '"'"'applications:kestrel-explorer.desktop'"'"', to = '"'"'applications:org.kde.dolphin.desktop'"'"', dry = false" "$WORK/plasma-scripts"' \
+    "kes-setup --undo on KDE: puts Dolphin back in Plasma's taskbar"
+check '[[ "$(folder_handler)" == org.kde.dolphin.desktop ]]' "kes-setup --undo on KDE: folders open in Dolphin again"
+check '! grep -q "^x-scheme-handler/trash=" "$HOME/.config/mimeapps.list"' \
+    "kes-setup --undo on KDE: trash:/// isn't handed to GNOME Files when no app had it before (Kestrel's entries are taken out)"
+# xdg-mime (26.04's) runs qtpaths on KDE, which Ubuntu only installs as qtpaths6 (and in Qt's own folder)
+if grep -q qtpaths "$(command -v xdg-mime)" && ! command -v qtpaths >/dev/null && [[ -x /usr/lib/qt6/bin/qtpaths ]]; then
+    check '! grep -q "qtpaths" "$WORK/out-kde"' "kes-setup on KDE: xdg-mime finds qtpaths (no \"qtpaths: not found\")"
+else
+    echo "SKIP kes-setup on KDE: xdg-mime finds qtpaths (this xdg-mime doesn't run it, qtpaths is on PATH, or Qt 6's isn't installed)"
+fi
+
 # kes-setup --bleachbit: Kestrel's cleaner for BleachBit. Checked as text (it may only touch Kestrel's own files), against
 # BleachBit's schema, and by BleachBit itself in this throwaway home: a dry run (--preview) must list exactly Kestrel's
 # files and change nothing, then a real clean must leave everything else (other apps' caches, GNOME's thumbnails, a
 # folder linked from the cache, the settings it doesn't name) as it was.
 fresh
 CLEANER="$HOME/.config/bleachbit/cleaners/kestrel-explorer.xml"
-"$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1
+# under umask 000 (as docker exec gives): BleachBit ignores a world-writable cleaner, so it must not come out as one
+(umask 000; "$SETUP" --bleachbit </dev/null >"$WORK/out8" 2>&1)
 check '[[ -f "$CLEANER" ]] && python3 -c "import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$CLEANER"' \
     "kes-setup --bleachbit: writes BleachBit's cleaner, as well-formed XML"
+check '[[ "$(stat -c %a "$CLEANER")" == 644 && "$(stat -c %a "$(dirname "$CLEANER")")" == 755 &&
+         "$(stat -c %a "$HOME/.config/bleachbit")" == 755 && -z "$(ls -A "$(dirname "$CLEANER")" | grep -v "^kestrel-explorer.xml$")" ]]' \
+    "...only the user can change it, also under umask 000 (BleachBit ignores a world-writable cleaner), and no part file is left"
+check 'grep -q "asks whether to trust the new cleaner" "$WORK/out8"' \
+    "...and says BleachBit will ask once whether to trust it"
 cleaner_actions() {   # each action as "command path [parameter]", sorted
     grep -o '<action [^>]*>' "$CLEANER" | sed -E 's/.*command="([^"]*)".*path="([^"]*)"( section="[^"]*" parameter="([^"]*)")?.*/\1 \2 \4/' |
         sed 's/ *$//' | LC_ALL=C sort | tr '\n' ';'
 }
-EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CONFIG_HOME/kestrel-explorer/covers.json;'
-EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
-EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/starred.json;'
+EXPECTED_ACTIONS='delete $XDG_CACHE_HOME/kestrel-explorer;delete $XDG_CACHE_HOME/kestrel-explorer/job-logs;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/covers.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/folder_styles.json;delete $XDG_CONFIG_HOME/kestrel-explorer/frequent.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/pinned.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sorts.json;delete $XDG_CONFIG_HOME/kestrel-explorer/starred.json;'
+EXPECTED_ACTIONS+='delete $XDG_CONFIG_HOME/kestrel-explorer/sync-history.json;delete $XDG_CONFIG_HOME/kestrel-explorer/sync-pairs.json;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_folder;'
+EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf chooser_places;'
 EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf recent_servers;'
-check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 7 ]]' \
-    "the cleaner only deletes Kestrel's cache and lists, and only the history keys from its settings"
+EXPECTED_ACTIONS+='ini $XDG_CONFIG_HOME/kestrel-explorer/kestrel-explorer.conf viewer_recent_folders;'
+check '[[ "$(cleaner_actions)" == "$EXPECTED_ACTIONS" && "$(grep -c "<action " "$CLEANER")" == 14 ]]' \
+    "the cleaner only deletes Kestrel's cache, its saved job logs and lists, and only the history and save locations keys from its settings"
 BLEACHBIT_XSD=/usr/share/doc/bleachbit/examples/cleaner_markup_language.xsd
 if command -v xmllint >/dev/null && [[ -f "$BLEACHBIT_XSD" ]]; then
     check 'xmllint --noout --schema "$BLEACHBIT_XSD" "$CLEANER" 2>/dev/null' "the cleaner follows BleachBit's CleanerML schema"
 else
     echo "SKIP the cleaner follows BleachBit's CleanerML schema (needs xmllint and BleachBit's schema)"
 fi
-BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.history kestrel_explorer.starred kestrel_explorer.pinned
-            kestrel_explorer.folder_looks)
+BB_OPTIONS=(kestrel_explorer.cache kestrel_explorer.job_logs kestrel_explorer.history kestrel_explorer.starred
+            kestrel_explorer.pinned kestrel_explorer.save_places kestrel_explorer.folder_covers
+            kestrel_explorer.folder_colours kestrel_explorer.folder_sorts kestrel_explorer.sync_pairs)
 # BleachBit's command line, started without its launcher: BleachBit 4.6's (Ubuntu 24.04) asks loginctl about the
 # login session first, and fails when there is none (CI, containers)
 bleachbit_cli() {
@@ -204,19 +264,26 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     # what Kestrel writes, and what must stay: GNOME's thumbnails, another app's cache, a folder a link in the cache
     # points to, Kestrel's other settings and its install state
     KC="$HOME/.cache/kestrel-explorer" KCONF="$HOME/.config/kestrel-explorer"
-    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$HOME/.cache/thumbnails/normal" \
+    mkdir -p "$KC/folders" "$KC/animated" "$KC/device-files/phone" "$KC/archive-files/1a2b" "$KC/job-logs/2026-10-30" \
+             "$HOME/.cache/thumbnails/normal" \
              "$HOME/.cache/other-app" "$HOME/Documents" "$KCONF"
     for f in "$KC/folders/1a2b-256.png" "$KC/animated/clip.webm" "$KC/device-files/phone/IMG_0001.MOV" \
-             "$KC/exiftool-tagdb-13.50.json" "$HOME/.cache/thumbnails/normal/3c4d.png" "$HOME/.cache/other-app/data"; do
+             "$KC/exiftool-tagdb-13.50.json" "$KC/folder-sizes.json" "$KC/archive-files/1a2b/readme.txt" \
+             "$KC/job-logs/2026-10-30/101500-4242-3-Copying.log" \
+             "$HOME/.cache/thumbnails/normal/3c4d.png" "$HOME/.cache/other-app/data"; do
         echo data > "$f"
     done
     echo "my own file" > "$HOME/Documents/notes.txt"
     ln -s "$HOME/Documents" "$KC/folders/linked"
     printf '[General]\nchooser_folder=/home/someone/Private\ngeometry=@ByteArray(\\x1\\xd9\\xd0\\xcb)\nhomepage=overview\n' \
         > "$KCONF/kestrel-explorer.conf"
-    printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n\n[archive]\nformat=7z\n' \
+    printf 'chooser_places=/home/someone/Downloads, /home/someone/Saved\n' >> "$KCONF/kestrel-explorer.conf"
+    printf 'recent_servers=smb://nas/photos, sftp://host/home\nsidebar_sections=places, devices\n' >> "$KCONF/kestrel-explorer.conf"
+    printf 'viewer_recent_folders=/home/someone/Photos/Keep, /home/someone/Photos/Print\n\n[archive]\nformat=7z\n' \
         >> "$KCONF/kestrel-explorer.conf"
-    for f in starred.json pinned.json covers.json folder_styles.json; do echo '{}' > "$KCONF/$f"; done
+    for f in starred.json pinned.json covers.json folder_styles.json sorts.json frequent.json; do echo '{}' > "$KCONF/$f"; done
+    echo '[]' > "$KCONF/sync-pairs.json"
+    echo '[]' > "$KCONF/sync-history.json"
     echo "chooser_conf=created" > "$KCONF/install-state"
     cp "$KCONF/kestrel-explorer.conf" "$WORK/conf.before"
     snapshot() { (cd "$HOME" && find . -path ./.config/bleachbit -prune -o -print0 | LC_ALL=C sort -z | xargs -0 ls -ld --time-style=+%s.%N | md5sum); }
@@ -224,30 +291,48 @@ if [[ -f /usr/share/bleachbit/bleachbit/CLI.py ]]; then
     bleachbit_cli --preview "${BB_OPTIONS[@]}" >"$WORK/bb-preview" 2>&1
     listed() { sed -nE 's/^(Delete|Clean file) [^ ]+ //p' "$WORK/bb-preview" | sed "s#^$HOME/##" | LC_ALL=C sort -u | tr '\n' ' '; }
     EXPECTED_LISTED=".cache/kestrel-explorer/animated .cache/kestrel-explorer/animated/clip.webm"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/archive-files .cache/kestrel-explorer/archive-files/1a2b"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/archive-files/1a2b/readme.txt"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/device-files .cache/kestrel-explorer/device-files/phone"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/device-files/phone/IMG_0001.MOV .cache/kestrel-explorer/exiftool-tagdb-13.50.json"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/folder-sizes.json"
     EXPECTED_LISTED+=" .cache/kestrel-explorer/folders .cache/kestrel-explorer/folders/1a2b-256.png"
-    EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked .config/kestrel-explorer/covers.json"
-    EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/kestrel-explorer.conf"
-    EXPECTED_LISTED+=" .config/kestrel-explorer/pinned.json"
-    EXPECTED_LISTED+=" .config/kestrel-explorer/starred.json "
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/folders/linked"
+    EXPECTED_LISTED+=" .cache/kestrel-explorer/job-logs/2026-10-30 .cache/kestrel-explorer/job-logs/2026-10-30/101500-4242-3-Copying.log"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/covers.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/folder_styles.json .config/kestrel-explorer/frequent.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/kestrel-explorer.conf"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/pinned.json .config/kestrel-explorer/sorts.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/starred.json .config/kestrel-explorer/sync-history.json"
+    EXPECTED_LISTED+=" .config/kestrel-explorer/sync-pairs.json "
     check '[[ "$(listed)" == "$EXPECTED_LISTED" ]]' \
         "BleachBit's dry run with Kestrel's cleaner lists exactly Kestrel's cache, lists and settings file$(
             [[ "$(listed)" == "$EXPECTED_LISTED" ]] || echo " (listed: $(listed); output: $(tail -3 "$WORK/bb-preview" | tr '\n' ' '))")"
     check '[[ "$(snapshot)" == "$before" ]]' "BleachBit's dry run changes nothing"
+    # the saved job logs are an option of their own: the cache option keeps them, and theirs takes nothing else
+    bleachbit_cli --preview kestrel_explorer.cache >"$WORK/bb-preview" 2>&1
+    cache_only="$(listed)"
+    bleachbit_cli --preview kestrel_explorer.job_logs >"$WORK/bb-preview" 2>&1
+    logs_only="$(listed)"
+    check '[[ "$cache_only" == *".cache/kestrel-explorer/folders/1a2b-256.png"* && "$cache_only" != *job-logs* &&
+           "$logs_only" == ".cache/kestrel-explorer/job-logs/2026-10-30 .cache/kestrel-explorer/job-logs/2026-10-30/101500-4242-3-Copying.log " ]]' \
+        "...Cache keeps the saved job logs, and Job logs deletes only them$(
+            [[ "$cache_only" != *job-logs* ]] || echo " (Cache listed: $cache_only)")"
     if /usr/bin/pgrep -x kes >/dev/null; then
         echo "SKIP BleachBit's clean with Kestrel's cleaner (a Kestrel is running, and BleachBit won't clean while it is)"
     else
         bleachbit_cli --clean "${BB_OPTIONS[@]}" >"$WORK/bb-clean" 2>&1
-        check '[[ -d "$KC" && -z "$(ls -A "$KC")" && ! -e "$KCONF/starred.json" && ! -e "$KCONF/covers.json" &&
-               ! -e "$KCONF/folder_styles.json" && ! -e "$KCONF/pinned.json" ]]' "BleachBit's clean empties Kestrel's cache and deletes its lists"
+        check '[[ -d "$KC" && "$(ls -A "$KC")" == job-logs && -z "$(ls -A "$KC/job-logs")" && ! -e "$KCONF/starred.json" && ! -e "$KCONF/covers.json" &&
+               ! -e "$KCONF/folder_styles.json" && ! -e "$KCONF/pinned.json" && ! -e "$KCONF/sorts.json" &&
+               ! -e "$KCONF/sync-pairs.json" && ! -e "$KCONF/sync-history.json" && ! -e "$KCONF/frequent.json" ]]' \
+            "BleachBit's clean empties Kestrel's cache and its saved job logs (their folder stays) and deletes its lists"
         check '[[ "$(cat "$HOME/Documents/notes.txt")" == "my own file" && -f "$HOME/.cache/thumbnails/normal/3c4d.png" &&
                -f "$HOME/.cache/other-app/data" && -f "$KCONF/install-state" && -f "$CLEANER" ]]' \
             "...and leaves everything else (a folder linked from the cache, GNOME's thumbnails, other apps' caches)"
         settings() { sed -E 's/^([^=[]*[^ ]) = /\1=/' "$1" | grep -v '^$'; }
-        check '! grep -qE "^(recent_servers|chooser_folder) ?=" "$KCONF/kestrel-explorer.conf" &&
-               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder)=")" ]]' \
-            "...and removes the history from Kestrel's settings, keeping every other setting as it was"
+        check '! grep -qE "^(recent_servers|chooser_folder|chooser_places|viewer_recent_folders) ?=" "$KCONF/kestrel-explorer.conf" &&
+               [[ "$(settings "$KCONF/kestrel-explorer.conf")" == "$(settings "$WORK/conf.before" | grep -vE "^(recent_servers|chooser_folder|chooser_places|viewer_recent_folders)=")" ]]' \
+            "...and removes the history and the save locations from Kestrel's settings, keeping every other setting as it was"
     fi
 else
     echo "SKIP BleachBit's dry run and clean with Kestrel's cleaner (BleachBit isn't installed)"
@@ -269,7 +354,7 @@ printf '#!/bin/sh\necho "$@" >> "%s/sudo.log"\n' "$WORK" > "$WORK/apt-stubs/sudo
 chmod +x "$WORK/apt-stubs"/*
 rm -f "$WORK/sudo.log"
 PATH="$WORK/apt-stubs:$PATH" "$SETUP" --install-optional </dev/null >"$WORK/out9" 2>&1
-check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4" ]] &&
+check '[[ "$(cat "$WORK/sudo.log")" == "apt-get install -y ffmpeg bleachbit pbzip2 lbzip2 plzip lz4 ripgrep libjpeg-turbo-progs gnupg rsync libheif-examples" ]] &&
        grep -q "Not available on this system (skipped): rar" "$WORK/out9" && grep -q "multiverse" "$WORK/out9"' \
     "kes-setup --install-optional: installs the missing optional packages apt has, and names the ones it hasn't"
 rm -f "$WORK/sudo.log"

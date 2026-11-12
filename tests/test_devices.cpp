@@ -55,7 +55,7 @@ int main(int argc, char **argv)
           "an iPhone that won't mount asks to tap Trust");
     check(overview::phone_hint("mtp", "Pixel 8").contains("File transfer"), "an Android phone asks for File transfer");
     check(overview::phone_hint("gphoto2", "Canon EOS R6").contains("PTP"), "a camera asks for PTP mode");
-    check(overview::NO_PHONES_HINT.contains("Trust") && overview::NO_PHONES_HINT.contains("File transfer"),
+    check(tx(overview::NO_PHONES_HINT).contains("Trust") && tx(overview::NO_PHONES_HINT).contains("File transfer"),
           "the Overview explains how to connect a phone when none is connected");
 
     // -- thumbnails on a phone

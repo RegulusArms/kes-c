@@ -2,15 +2,17 @@
 // hash), hashing with progress, and the Verify Checksums dialog.
 #include "hashcheck.h"
 
+#include "drives.h"
+
 #include "app.h"
 #include "fileops.h"
 #include "pane.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QCryptographicHash>
 #include <QDialogButtonBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -18,7 +20,6 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
@@ -120,8 +121,9 @@ bool is_hash_file(const QString &path)
 
 QString file_filter()
 {
-    return "Checksum files (*.sfv *.md5 *.sha1 *.sha224 *.sha256 *.sha384 *.sha512 *.b2 *.md5sum *.sha1sum *.sha256sum "
-           "*.sha512sum *SUMS *sums *CHECKSUM *CHECKSUMS *checksum *checksums);;All files (*)";
+    return tx("Checksum files (%1);;All files (*)")
+        .arg("*.sfv *.md5 *.sha1 *.sha224 *.sha256 *.sha384 *.sha512 *.b2 *.md5sum *.sha1sum *.sha256sum *.sha512sum *SUMS "
+             "*sums *CHECKSUM *CHECKSUMS *checksum *checksums");
 }
 
 QList<Entry> parse_text(const QString &text, const QString &path)
@@ -197,23 +199,46 @@ QString algo_label(const QString &algo)
     return algo == "blake2b" ? QString("BLAKE2b") : algo.toUpper();
 }
 
-QStringList hash_files(const QString &path, const QStringList &algos,
-                       const std::function<void(qint64, qint64)> &progress, const std::function<void()> &check)
+Hasher::Hasher(const QStringList &algos)
 {
     static const QMap<QString, QCryptographicHash::Algorithm> ALGOS = {
         {"md5", QCryptographicHash::Md5},       {"sha1", QCryptographicHash::Sha1},
         {"sha224", QCryptographicHash::Sha224}, {"sha256", QCryptographicHash::Sha256},
         {"sha384", QCryptographicHash::Sha384}, {"sha512", QCryptographicHash::Sha512},
         {"blake2b", QCryptographicHash::Blake2b_512}};
+    for (const QString &a : algos)
+        hashes.emplace_back(a == "crc32" ? nullptr : new QCryptographicHash(ALGOS.value(a, QCryptographicHash::Md5)));
+}
+
+Hasher::~Hasher() = default;
+
+void Hasher::add(const char *data, qint64 n)
+{
+    for (auto &h : hashes) {
+        if (h)
+            h->addData(QByteArrayView(data, n));
+        else
+            crc = crc32_update(crc, data, n);
+    }
+}
+
+QStringList Hasher::results()
+{
+    QStringList out;
+    for (auto &h : hashes)
+        out << (h ? QString::fromLatin1(h->result().toHex()) : QString("%1").arg(crc, 8, 16, QChar('0')));
+    return out;
+}
+
+QStringList hash_files(const QString &path, const QStringList &algos,
+                       const std::function<void(qint64, qint64)> &progress, const std::function<void()> &check)
+{
     int fd = ::open(enc(path).constData(), O_RDONLY | O_CLOEXEC);
     if (fd < 0)
         throw_errno(path);
     struct stat st;
     qint64 size = ::fstat(fd, &st) == 0 ? st.st_size : 0;
-    std::vector<std::unique_ptr<QCryptographicHash>> hashes;   // nullptr for CRC32
-    for (const QString &a : algos)
-        hashes.emplace_back(a == "crc32" ? nullptr : new QCryptographicHash(ALGOS.value(a, QCryptographicHash::Md5)));
-    quint32 crc = 0;
+    Hasher hasher(algos);
     QByteArray buf(4 << 20, Qt::Uninitialized);
     qint64 done = 0;
     for (;;) {
@@ -229,21 +254,13 @@ QStringList hash_files(const QString &path, const QStringList &algos,
         }
         if (n == 0)
             break;
-        for (auto &h : hashes) {
-            if (h)
-                h->addData(QByteArrayView(buf.constData(), n));
-            else
-                crc = crc32_update(crc, buf.constData(), n);
-        }
+        hasher.add(buf.constData(), n);
         done += n;
         if (progress)
             progress(done, size);
     }
     ::close(fd);
-    QStringList out;
-    for (auto &h : hashes)
-        out << (h ? QString::fromLatin1(h->result().toHex()) : QString("%1").arg(crc, 8, 16, QChar('0')));
-    return out;
+    return hasher.results();
 }
 
 QString hash_file(const QString &path, const QString &algo, const std::function<void(qint64, qint64)> &progress,
@@ -252,25 +269,133 @@ QString hash_file(const QString &path, const QString &algo, const std::function<
     return hash_files(path, {algo}, progress, check).first();
 }
 
-Result verify(const Entry &e, Task *task)
+Result verify(const Entry &e, Task *task, qint64 before, qint64 total)
 {
-    if (!lexists(e.path))
+    if (!lexists(e.path)) {
+        if (task)
+            task->log(tx("Missing: %1").arg(e.path));
         return {"missing", {}, {}};
+    }
     try {
         QString actual = hash_file(
             e.path, e.algo,
-            [task, &e](qint64 done, qint64 size) {
-                if (task)
-                    task->report(done, size, "Verifying " + e.name);
+            [task, &e, before, total](qint64 done, qint64 size) {
+                if (task && task->due())
+                    task->report(before + done, total > 0 ? total : size,
+                                 tx("Verifying %1 · %2 of %3 · %4")
+                                     .arg(e.name, human_size(done), human_size(size), task->speed(before + done)));
             },
             [task]() {
                 if (task)
                     task->check();
             });
-        return {actual == e.expected ? "ok" : "failed", actual, {}};
+        bool ok = actual == e.expected;
+        if (task)
+            task->log(ok ? tx("OK: %1 (%2 %3)").arg(e.path, e.algo, actual)
+                         : tx("Doesn't match: %1\n  expected %2 %3\n  found    %2 %4").arg(e.path, e.algo, e.expected, actual));
+        return {ok ? "ok" : "failed", actual, {}};
     } catch (const OSError &err) {
+        if (task)
+            task->log(tx("Couldn't be read: %1: %2").arg(e.path, QString::fromLocal8Bit(strerror(err.code))));
         return {"error", {}, QString::fromLocal8Bit(strerror(err.code))};
     }
+}
+
+namespace {
+
+struct Counts {
+    int ok = 0, failed = 0, missing = 0, errors = 0, checked = 0;
+    QStringList parts;   // "1 doesn't match", "2 missing", "3 OK"
+};
+
+Counts count_results(const QList<Result> &results)
+{
+    Counts c;
+    for (const Result &r : results) {
+        c.checked += !r.status.isEmpty();
+        c.ok += r.status == "ok";
+        c.failed += r.status == "failed";
+        c.missing += r.status == "missing";
+        c.errors += r.status == "error";
+    }
+    if (c.failed)
+        c.parts << txn("%Ln doesn't match", c.failed);   // (English: "1 doesn't match", "2 don't match")
+    if (c.missing)
+        c.parts << txn("%Ln missing", c.missing);
+    if (c.errors)
+        c.parts << txn("%Ln couldn't be read", c.errors);
+    if (c.ok)
+        c.parts << txn("%Ln OK", c.ok);
+    return c;
+}
+
+}   // namespace
+
+Task *verify_job(QWidget *parent, const QString &path, const QList<Entry> &entries, std::shared_ptr<VerifyState> state,
+                 std::function<void(const QVariant &)> on_done)
+{
+    if (!state)
+        state = std::make_shared<VerifyState>();
+    {
+        QMutexLocker lock(&state->mtx);
+        state->results = QList<Result>(entries.size());
+    }
+    QStringList paths, steps;
+    for (const Entry &e : entries) {
+        paths << e.path;
+        steps << e.name;
+    }
+    paths.removeDuplicates();
+    auto work = [entries, state](Task *t) -> QVariant {
+        QList<qint64> sizes;   // for the progress over all of them (read with the checksum file, or here)
+        qint64 total = 0, before = 0;
+        for (const Entry &e : entries) {
+            struct stat st;
+            sizes << (e.size >= 0 ? e.size : stat_(e.path, st) ? qint64(st.st_size) : 0);
+            total += sizes.last();
+        }
+        QList<Result> results(entries.size());
+        for (int i = 0; i < entries.size(); ++i) {
+            t->check();
+            t->step = i;
+            const Entry &e = entries[i];
+            Result r;
+            try {
+                r = verify(e, t, before, total);
+            } catch (const Cancelled &) {
+                throw;
+            } catch (const std::exception &err) {   // (an unexpected one: this file's result, the others still checked)
+                r = {"error", {}, QString::fromStdString(err.what())};
+                t->log(tx("Couldn't be read: %1: %2").arg(e.path, r.error));
+            }
+            results[i] = r;
+            {
+                QMutexLocker lock(&state->mtx);
+                state->results[i] = r;
+            }
+            before += sizes[i];
+            t->report(before, total, tx("Checked %1 of %2: %3").arg(group_digits(i + 1), group_digits(entries.size()), e.name));
+        }
+        Counts c = count_results(results);
+        t->log(txn("Checked %Ln file(s): %1.", entries.size()).arg(c.parts.join(", ")));
+        if (c.ok < entries.size()) {
+            t->had_errors = true;
+            t->log(tx("These didn't pass:"));
+            for (int i = 0; i < entries.size(); ++i) {
+                const Result &r = results[i];
+                if (r.status == "failed")
+                    t->log(tx("  ✘ Doesn't match: %1").arg(entries[i].path));
+                else if (r.status == "missing")
+                    t->log(tx("  ✘ Missing: %1").arg(entries[i].path));
+                else if (r.status == "error")
+                    t->log(tx("  ✘ Couldn't be read: %1: %2").arg(entries[i].path, r.error));
+            }
+        }
+        return QVariant(true);
+    };
+    return fileops::queue_job(parent, tx("Verifying checksums in %1").arg(basename(path)), paths, work,
+                              std::move(on_done), true, entries.size() > 1 ? steps : QStringList(), false,
+                              {tx("Checking the files listed in %1").arg(path)}, true);
 }
 
 // ---------------------------------------------------------------- the dialog
@@ -278,14 +403,14 @@ Result verify(const Entry &e, Task *task)
 VerifyDialog::VerifyDialog(QWidget *parent, const QString &path, const QList<Entry> &entries)
     : QDialog(parent), path(path), entries(entries)
 {
-    setWindowTitle("Verify Checksums — " + basename(path));
+    setWindowTitle(tx("Verify Checksums — %1").arg(basename(path)));
     resize(640, 400);
     auto *lay = new QVBoxLayout(this);
-    auto *head = new QLabel(QString("Checking the files listed in “%1”.").arg(basename(path)));
+    auto *head = new QLabel(tx("Checking the files listed in “%1”.").arg(basename(path)));
     head->setWordWrap(true);
     lay->addWidget(head);
     tree = new QTreeWidget;
-    tree->setHeaderLabels({"File", "Algorithm", "Result"});
+    tree->setHeaderLabels({tx("File"), tx("Algorithm"), tx("Result")});
     tree->setRootIsDecorated(false);
     tree->setUniformRowHeights(true);
     tree->header()->setStretchLastSection(false);
@@ -299,115 +424,88 @@ VerifyDialog::VerifyDialog(QWidget *parent, const QString &path, const QList<Ent
     lay->addWidget(tree, 1);
     bar = new QProgressBar;
     bar->setRange(0, 1000);
-    bar->setAccessibleName("Progress");
+    bar->setAccessibleName(tx("Progress"));
     lay->addWidget(bar);
     status = new QLabel;
     status->setWordWrap(true);
     status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     lay->addWidget(status);
+    auto *note = new QLabel(tx("Closing this window doesn't stop the check: it goes on in the Jobs window."));
+    note->setWordWrap(true);
+    note->setEnabled(false);
+    lay->addWidget(note);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    again = bb->addButton("Verify Again", QDialogButtonBox::ActionRole);
-    stop_btn = bb->addButton("Stop", QDialogButtonBox::ActionRole);
+    again = bb->addButton(tx("Verify Again"), QDialogButtonBox::ActionRole);
+    stop_btn = bb->addButton(tx("Stop"), QDialogButtonBox::ActionRole);
     connect(again, &QPushButton::clicked, this, &VerifyDialog::start);
     connect(stop_btn, &QPushButton::clicked, this, [this]() {
-        stop();
-        summary();
+        if (task)
+            task->cancel();   // (its on_done says where it stopped)
     });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     lay->addWidget(bb);
     start();
 }
 
-VerifyDialog::~VerifyDialog() { stop(); }
-
-void VerifyDialog::hideEvent(QHideEvent *ev)
-{
-    stop();   // closed: nothing more to read
-    QDialog::hideEvent(ev);
-}
-
 void VerifyDialog::start()
 {
-    stop();
+    if (task)   // (Verify Again is off while it runs)
+        return;
+    finished = false;
+    state = std::make_shared<VerifyState>();
     results = QList<Result>(entries.size());
-    sizes.clear();
-    total = before = 0;
-    for (const Entry &e : entries) {
-        struct stat st;
-        sizes << (stat_(e.path, st) ? qint64(st.st_size) : 0);
-        total += sizes.last();
-    }
     for (int i = 0; i < entries.size(); i++)
         show_row(i);
-    next = 0;
     bar->setValue(0);
-    step();
-}
-
-void VerifyDialog::step()
-{
     again->setEnabled(false);
     stop_btn->setEnabled(true);
-    if (next >= entries.size()) {
-        summary();
-        return;
-    }
-    int i = next, g = gen;
-    QTreeWidgetItem *it = tree->topLevelItem(i);
-    it->setText(2, "Checking…");
-    tree->scrollToItem(it);
     status->setStyleSheet(QString());
-    status->setText(QString("Checking %1 of %2: %3").arg(QString::number(i + 1), QString::number(entries.size()),
-                                                          entries[i].name));
-    Entry e = entries[i];
-    // no parent: closing the dialog mustn't destroy a thread that is still reading. The result comes through
-    // on_done, not a connection made afterwards, which a quick file could finish before.
+    status->setText(tx("Waiting for the drive…"));
     QPointer<VerifyDialog> self(this);
-    task = fileops::run_job(
-        nullptr, "Verifying " + e.name,
-        [e](Task *t) -> QVariant {
-            try {
-                Result r = verify(e, t);
-                return QVariantList{r.status, r.actual, r.error};
-            } catch (const Cancelled &) {
-                throw;
-            } catch (const std::exception &err) {   // as a result: run_job connects on_done before the thread starts
-                return QVariantList{"error", "", QString::fromStdString(err.what())};
-            }
-        },
-        [self, g](const QVariant &res) {
-            if (self && g == self->gen)
-                self->on_result(res);
-        },
-        true, true);
-    connect(task, &Task::progress, this, [this, g, i](double f, const QString &) {
-        if (g != gen)
+    std::shared_ptr<VerifyState> st = state;
+    // the job doesn't need this window: it goes on when it closes, and the result comes here only while it's open
+    // (through on_done, not a connection made afterwards, which a quick check could finish before)
+    task = verify_job(this, path, entries, st, [self, st](const QVariant &res) {
+        if (self && self->state == st)
+            self->on_done(res);
+    });
+    connect(task, &Task::progress, this, [this, st](double f, const QString &text) {
+        if (st != state)
             return;
-        qint64 here = before + qint64(std::max(f, 0.0) * sizes[i]);
-        bar->setValue(total ? int(1000 * here / total) : 1000 * i / entries.size());
+        if (f >= 0)
+            bar->setValue(int(f * 1000));
+        if (!text.isEmpty())
+            status->setText(text);
+        update_rows();
     });
 }
 
-void VerifyDialog::on_result(const QVariant &res)
+void VerifyDialog::update_rows()
 {
-    task = nullptr;
-    if (!res.isValid())   // stopped
-        return;
-    QVariantList r = res.toList();
-    results[next] = {r.value(0).toString(), r.value(1).toString(), r.value(2).toString()};
-    show_row(next);
-    before += sizes[next];
-    next++;
-    bar->setValue(total ? int(1000 * before / total) : 1000 * next / entries.size());
-    step();
+    QList<Result> now;
+    {
+        QMutexLocker lock(&state->mtx);
+        now = state->results;
+    }
+    QTreeWidgetItem *last = nullptr;
+    for (int i = 0; i < std::min(now.size(), results.size()); ++i)
+        if (now[i].status != results[i].status) {
+            results[i] = now[i];
+            show_row(i);
+            last = tree->topLevelItem(i);
+        }
+    if (last)
+        tree->scrollToItem(last);
 }
 
-void VerifyDialog::stop()
+void VerifyDialog::on_done(const QVariant &res)
 {
-    gen++;   // results still on their way are for the old run
-    if (task)
-        task->cancel();
     task = nullptr;
+    update_rows();
+    finished = res.isValid();
+    if (finished)
+        bar->setValue(1000);
+    summary();
 }
 
 void VerifyDialog::show_row(int i)
@@ -417,13 +515,13 @@ void VerifyDialog::show_row(int i)
     const Entry &e = entries[i];
     QString text, tip;
     if (r.status == "ok") {
-        text = "✔ OK";
+        text = tx("✔ OK");
     } else if (r.status == "failed") {
-        text = "✘ Doesn't match";
-        tip = QString("Expected: %1\nActual: %2").arg(e.expected, r.actual);
+        text = tx("✘ Doesn't match");
+        tip = tx("Expected: %1\nActual: %2").arg(e.expected, r.actual);
     } else if (r.status == "missing") {
-        text = "✘ Missing";
-        tip = "Not found: " + e.path;
+        text = tx("✘ Missing");
+        tip = tx("Not found: %1").arg(e.path);
     } else if (r.status == "error") {
         text = "✘ " + r.error;
         tip = r.error;
@@ -439,50 +537,50 @@ void VerifyDialog::summary()
 {
     again->setEnabled(true);
     stop_btn->setEnabled(false);
-    int ok = 0, failed = 0, missing = 0, errors = 0, checked = 0;
-    for (const Result &r : results) {
-        checked += !r.status.isEmpty();
-        ok += r.status == "ok";
-        failed += r.status == "failed";
-        missing += r.status == "missing";
-        errors += r.status == "error";
-    }
-    QStringList parts;
-    if (failed)
-        parts << QString(failed == 1 ? "%1 doesn't match" : "%1 don't match").arg(failed);
-    if (missing)
-        parts << QString("%1 missing").arg(missing);
-    if (errors)
-        parts << QString("%1 couldn't be read").arg(errors);
-    if (ok)
-        parts << QString("%1 OK").arg(ok);
+    Counts c = count_results(results);
     QString text;
-    if (checked < entries.size())
-        text = QString("Stopped after %1 of %2 files").arg(checked).arg(entries.size()) +
-               (parts.isEmpty() ? QString(".") : ": " + parts.join(", ") + ".");
-    else if (ok == entries.size())
-        text = entries.size() == 1 ? QString("✔ The file is OK.") : QString("✔ All %1 files are OK.").arg(ok);
+    if (c.checked < entries.size())
+        text = c.parts.isEmpty() ? txn("Stopped after %1 of %Ln file(s).", entries.size()).arg(group_digits(c.checked))
+                                 : txn("Stopped after %1 of %Ln file(s): %2.", entries.size()).arg(group_digits(c.checked), c.parts.join(", "));
+    else if (c.ok == entries.size())
+        text = entries.size() == 1 ? tx("✔ The file is OK.") : txn("✔ All %Ln files are OK.", c.ok);
     else
-        text = "✘ " + parts.join(", ") + ".";
-    bool good = checked == entries.size() && ok == entries.size();
-    bool bad = failed || missing || errors;
+        text = tx("✘ %1.").arg(c.parts.join(", "));
+    bool good = c.checked == entries.size() && c.ok == entries.size();
+    bool bad = c.failed || c.missing || c.errors;
     status->setText(text);
     status->setStyleSheet(good  ? QString("color: %1").arg(ok_color().name())
                           : bad ? QString("color: %1").arg(error_color().name())
                                 : QString());
 }
 
-bool open_dialog(QWidget *parent, const QString &path)
+void open_dialog(QWidget *parent, const QString &path, std::function<void()> not_listing)
 {
-    QList<Entry> entries = parse(path);
-    if (entries.isEmpty())
-        return false;
-    auto *d = new VerifyDialog(parent, path, entries);
-    d->setAttribute(Qt::WA_DeleteOnClose);
-    d->show();
-    d->raise();
-    d->activateWindow();
-    return true;
+    QPointer<QWidget> p(parent);
+    fileops::run_task(
+        parent, tx("Reading %1").arg(basename(path)),
+        [path]() {
+            QVariantList out;
+            for (const Entry &e : parse(path)) {   // and the files' sizes (for the progress), here too
+                struct stat st;
+                out << QVariant(QStringList{e.path, e.name, e.expected, e.algo,
+                                            QString::number(stat_(e.path, st) ? qint64(st.st_size) : 0)});
+            }
+            return QVariant(out);
+        },
+        [p, path, not_listing](const QVariant &res) {
+            QList<Entry> entries;
+            for (const QVariant &v : res.toList()) {
+                QStringList f = v.toStringList();
+                entries << Entry{f.value(0), f.value(1), f.value(2), f.value(3), f.value(4).toLongLong()};
+            }
+            if (entries.isEmpty()) {
+                if (res.isValid() && not_listing)
+                    not_listing();
+                return;
+            }
+            show_free(new VerifyDialog(p, path, entries));
+        });
 }
 
 }   // namespace hashcheck
@@ -563,7 +661,7 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
             task->check();
     };
     if (task)
-        task->report(0, 0, "Listing files…");
+        task->report(0, 0, tx("Listing files…"));
     QStringList outputs = output_paths(dir, stem, algos, one_file), files, skip;
     for (const QString &o : outputs)
         skip << normpath(o);
@@ -571,7 +669,7 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
         if (!skip.contains(normpath(f)))   // an older copy of what's being written
             files << f;
     if (files.isEmpty())
-        throw Error("There are no files to make checksums of.");
+        throw Error(tx("There are no files to make checksums of."));
     qint64 total = 0, before = 0;
     QList<qint64> sizes;
     for (const QString &f : files) {
@@ -579,6 +677,9 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
         sizes << (stat_(f, st) ? qint64(st.st_size) : 0);
         total += sizes.last();
     }
+    if (task)
+        task->log(tx("%1 (%2) to hash with %3")
+                      .arg(txn("%Ln file(s)", files.size()), human_size(total), algos.join(", ").toUpper()));
     QList<QPair<QString, QStringList>> hashed;   // relative name, hashes in algos' order
     for (int i = 0; i < files.size(); i++) {
         QString name = relpath(files[i], dir);
@@ -586,20 +687,40 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
             QStringList h = hash_files(
                 files[i], algos,
                 [&](qint64 done, qint64) {
-                    if (task)
-                        task->report(before + done, std::max<qint64>(total, 1), "Hashing " + basename(files[i]));
+                    if (task && task->due())
+                        task->report(before + done, std::max<qint64>(total, 1),
+                                     tx("Hashing %1 (%2 of %3) · %4")
+                                         .arg(basename(files[i]), group_digits(i + 1), group_digits(files.size()),
+                                              task->speed(before + done)));
                 },
                 check);
             hashed << qMakePair(name, h);
+            if (task)
+                task->log(tx("  %1").arg(name));
         } catch (const OSError &e) {
             if (errors)
                 *errors << name + ": " + QString::fromLocal8Bit(strerror(e.code));
+            if (task) {
+                task->log(tx("Couldn't be read, left out: %1: %2").arg(name, QString::fromLocal8Bit(strerror(e.code))));
+                task->had_errors = true;
+            }
         }
         before += sizes[i];
     }
     if (hashed.isEmpty())
-        throw Error("None of the files could be read.");
+        throw Error(tx("None of the files could be read."));
     check();
+    QStringList written = write_checksums(dir, stem, hashed, algos, one_file);
+    if (task)
+        for (const QString &w : written)
+            task->log(tx("Wrote %1").arg(w));
+    return written;
+}
+
+QStringList write_checksums(const QString &dir, const QString &stem, const QList<QPair<QString, QStringList>> &hashed,
+                            const QStringList &algos, bool one_file)
+{
+    QStringList outputs = output_paths(dir, stem, algos, one_file);
     if (one_file) {
         QString text;
         for (const auto &[name, h] : hashed)
@@ -622,17 +743,17 @@ QStringList create(Task *task, const QStringList &paths, const QString &dir, con
 
 CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(parent), paths(paths)
 {
-    setWindowTitle("Create Checksum File");
+    setWindowTitle(tx("Create Checksum File"));
     auto *lay = new QVBoxLayout(this);
     QString first = rstrip(paths.first(), '/');
     bool folders = std::any_of(paths.begin(), paths.end(), [](const QString &p) { return isdir(p); });
-    auto *head = new QLabel((paths.size() == 1 ? QString("Checksums for “%1”.").arg(basename(first))
-                                               : QString("Checksums for %1 items.").arg(paths.size())) +
-                            (folders ? QString(" The files inside folders are included.") : QString()));
+    auto *head = new QLabel((paths.size() == 1 ? tx("Checksums for “%1”.").arg(basename(first))
+                                               : txn("Checksums for %Ln item(s).", paths.size())) +
+                            (folders ? " " + tx("The files inside folders are included.") : QString()));
     head->setWordWrap(true);
     lay->addWidget(head);
 
-    auto *algo_box = new QGroupBox("Algorithms");
+    auto *algo_box = new QGroupBox(tx("Algorithms"));
     auto *grid = new QGridLayout(algo_box);
     QStringList saved = settings().value("checksum_algorithms", "sha256").toString().split(',', Qt::SkipEmptyParts);
     int i = 0;
@@ -646,10 +767,10 @@ CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(
     }
     lay->addWidget(algo_box);
 
-    auto *files_box = new QGroupBox("Checksum files");
+    auto *files_box = new QGroupBox(tx("Checksum files"));
     auto *fl = new QVBoxLayout(files_box);
-    each = new QRadioButton("One file for each algorithm (as md5sum, sha256sum… write them)");
-    single = new QRadioButton("One file with every algorithm (BSD tags, like Fedora's CHECKSUM files)");
+    each = new QRadioButton(tx("One file for each algorithm (as md5sum, sha256sum… write them)"));
+    single = new QRadioButton(tx("One file with every algorithm (BSD tags, like Fedora's CHECKSUM files)"));
     (settings().value("checksum_one_file", false).toBool() ? single : each)->setChecked(true);
     fl->addWidget(each);
     fl->addWidget(single);
@@ -659,21 +780,19 @@ CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(
     auto *form = new QFormLayout;
     name = new QLineEdit(paths.size() == 1 ? basename(first) : basename(dirname(first)));
     if (name->text().isEmpty())
-        name->setText("checksums");
-    form->addRow("Name:", name);
+        name->setText(tx("checksums"));
+    form->addRow(tx("Name:"), name);
     auto *row = new QHBoxLayout;
     folder = new QLineEdit(dirname(first));
-    auto *browse = new QPushButton("Browse…");
+    auto *browse = new QPushButton(tx("Browse…"));
     row->addWidget(folder, 1);
     row->addWidget(browse);
-    form->addRow("Save in:", row);
+    form->addRow(tx("Save in:"), row);
     lay->addLayout(form);
     connect(name, &QLineEdit::textChanged, this, &CreateDialog::update);
     connect(folder, &QLineEdit::textChanged, this, &CreateDialog::update);
     connect(browse, &QPushButton::clicked, this, [this]() {
-        QString d = QFileDialog::getExistingDirectory(this, "Save Checksum File In", folder->text());
-        if (!d.isEmpty())
-            folder->setText(d);
+        choose_folder(this, tx("Save Checksum File In"), folder->text(), [this](const QString &d) { folder->setText(d); });
     });
 
     preview = new QLabel;
@@ -682,7 +801,7 @@ CreateDialog::CreateDialog(QWidget *parent, const QStringList &paths) : QDialog(
     lay->addWidget(preview);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     create_btn = bb->button(QDialogButtonBox::Ok);
-    create_btn->setText("Create");
+    create_btn->setText(tx("Create"));
     connect(bb, &QDialogButtonBox::accepted, this, &CreateDialog::ok);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
     lay->addWidget(bb);
@@ -706,11 +825,11 @@ void CreateDialog::update()
 {
     QString problem;
     if (algos().isEmpty())
-        problem = "Choose at least one algorithm.";
+        problem = tx("Choose at least one algorithm.");
     else if (stem().isEmpty() || stem().contains('/'))
-        problem = "Enter a name (without “/”).";
+        problem = tx("Enter a name (without “/”).");
     else if (!isdir(dir()))
-        problem = "The folder to save in doesn't exist.";
+        problem = tx("The folder to save in doesn't exist.");
     create_btn->setEnabled(problem.isEmpty());
     if (!problem.isEmpty()) {
         preview->setText(problem);
@@ -722,8 +841,8 @@ void CreateDialog::update()
         if (lexists(o))
             existing << basename(o);
     }
-    preview->setText("Creates: " + names.join(", ") +
-                     (existing.isEmpty() ? QString() : "\nReplaces: " + existing.join(", ")));
+    preview->setText(tx("Creates: %1").arg(names.join(", ")) +
+                     (existing.isEmpty() ? QString() : "\n" + tx("Replaces: %1").arg(existing.join(", "))));
 }
 
 void CreateDialog::ok()
@@ -732,20 +851,24 @@ void CreateDialog::ok()
     for (const QString &o : outputs())
         if (lexists(o))
             existing << basename(o);
-    if (!existing.isEmpty() &&
-        QMessageBox::question(this, "Create Checksum File",
-                              "Replace " + existing.join(", ") + "?") != QMessageBox::Yes)
-        return;
-    settings().setValue("checksum_algorithms", algos().join(','));
-    settings().setValue("checksum_one_file", one_file());
-    accept();
+    auto go = [this]() {
+        settings().setValue("checksum_algorithms", algos().join(','));
+        settings().setValue("checksum_one_file", one_file());
+        accept();
+    };
+    if (!existing.isEmpty())
+        ask_yes(this, tx("Create Checksum File"), tx("Replace %1?").arg(existing.join(", ")), go);
+    else
+        go();
 }
 
 void create_dialog(MainWindow *win, const QStringList &paths)
 {
-    CreateDialog dlg(win, paths);
-    if (dlg.exec())
-        run_create(win, paths, dlg.dir(), dlg.stem(), dlg.algos(), dlg.one_file());
+    auto *dlg = new CreateDialog(win, paths);
+    QObject::connect(dlg, &QDialog::accepted, win, [win, dlg, paths]() {
+        run_create(win, paths, dlg->dir(), dlg->stem(), dlg->algos(), dlg->one_file());
+    });
+    show_free(dlg);
 }
 
 void run_create(MainWindow *win, const QStringList &paths, const QString &dir, const QString &stem,
@@ -761,27 +884,25 @@ void run_create(MainWindow *win, const QStringList &paths, const QString &dir, c
         if (!w)
             return;
         if (!r.isValid()) {
-            w->statusBar()->showMessage("Creating checksums cancelled", 4000);
+            w->statusBar()->showMessage(tx("Creating checksums cancelled"), 4000);
             return;
         }
         QStringList written = r.toList().value(0).toStringList(), errors = r.toList().value(1).toStringList();
         QStringList names;
         for (const QString &o : written)
             names << basename(o);
-        w->statusBar()->showMessage("Created " + names.join(", "), 6000);
+        w->statusBar()->showMessage(tx("Created %1").arg(names.join(", ")), 6000);
         if (w->pane() && w->pane()->dir() == dir && !written.isEmpty())
             w->pane()->select_later(written.first());
         if (!errors.isEmpty()) {
             QStringList shown = errors.mid(0, 10);
             if (errors.size() > 10)
-                shown << QString("…and %1 more").arg(errors.size() - 10);
-            QString head = errors.size() == 1
-                               ? QString("1 file couldn't be read and was left out:")
-                               : QString("%1 files couldn't be read and were left out:").arg(errors.size());
-            QMessageBox::warning(w, "Create Checksum File", head + "\n\n" + shown.join("\n"));
+                shown << txn("…and %Ln more", errors.size() - 10);
+            warn(w, tx("Create Checksum File"),
+                 txn("%Ln file(s) couldn't be read and were left out:\n\n%1", errors.size()).arg(shown.join("\n")));
         }
     };
-    fileops::run_job(win, "Creating checksums", work, done);
+    fileops::queue_job(win, tx("Creating checksums"), paths + QStringList{dir}, work, done);
 }
 
 }   // namespace hashcheck

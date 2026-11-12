@@ -19,6 +19,10 @@ extern char **environ;
 
 namespace proc {
 
+static thread_local Watcher *watcher = nullptr;
+
+void set_watcher(Watcher *w) { watcher = w; }
+
 Process::~Process()
 {
     for (int fd : {in, out, err})
@@ -33,6 +37,8 @@ Process::~Process()
 void Process::set_status(int status)
 {
     done = true;
+    if (watcher)
+        watcher->ended(pid);
     if (WIFEXITED(status))
         returncode = WEXITSTATUS(status);
     else if (WIFSIGNALED(status))
@@ -243,6 +249,8 @@ std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts)
         setup(opts.in, pin[0], 0);
         setup(opts.out, pout[1], 1);
         setup(opts.err, perr[1], 2);
+        if (opts.fd3 >= 0)   // after 0-2: a pipe end at 3 has been copied there by now
+            setup(opts.fd3, -1, 3);
         ::signal(SIGPIPE, SIG_DFL);
         if (!cwd.isEmpty() && ::chdir(cwd.constData()) != 0) {
             int e = errno;
@@ -281,6 +289,8 @@ std::unique_ptr<Process> spawn(const QStringList &argv, const Options &opts)
         p->wait();
         throw OSError(child_errno, errno_text(child_errno, argv[0]));
     }
+    if (watcher && opts.new_session)   // its own process group (pgid = pid): a paused job stops the whole group
+        watcher->started(pid);
     return p;
 }
 

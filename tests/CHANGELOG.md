@@ -1,0 +1,1401 @@
+# Test changelog
+
+← Back to [the README](../README.md) · [Changelog](../CHANGELOG.md) · [Tests](README.md)
+
+What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workflows/deb.yml`) for each version,
+newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
+under the version whose change it covers. What each test checks today is in [README.md](README.md).
+
+## 0.3.4-alpha.0
+
+No test changes.
+
+## 0.3.3-alpha.18
+
+### Added
+
+- `theme`: separate caching (Preferences → Privacy). With it on, a thumbnail is made and kept in Kestrel's own cache
+  folder, and a thumbnail of the file in the shared cache is neither used nor overwritten; turned off, one kept in
+  Kestrel's folder is still used and a new one goes to the shared cache; Delete All Thumbnails clears Kestrel's folder
+  too. Guards the feature's promise that nothing is shared while it's on, and that turning it off loses nothing.
+
+## 0.3.3-alpha.17
+
+### Changed
+
+- `installer`: the BleachBit checks preview and clean the new Folder covers, Folder colours and Folder sorts options
+  (one option before), so all three are checked to delete their own file and nothing else.
+
+## 0.3.3-alpha.16
+
+No test changes.
+
+## 0.3.3-alpha.15
+
+Every test now checks the code, never how fast the machine running it is: CI's `sanitizers-noble` failed "a pin is
+reported to other Kestrels", and a search of the whole suite found the same kind of check elsewhere. A check that
+waited a fixed time for something that happens later (a slow runner can need longer), compared a time with a limit
+(a slow runner takes longer; a fast one finishes before a cancel), or caught work part-way by its being big enough,
+now waits for what it checks, counts instead of timing, or holds the work at a known point.
+
+Added:
+- `fileops`, `admin_helper`: a copy held part-way by the code itself, however fast the disk. Kestrel's copy pauses
+  itself once a file has passed `KESTREL_TEST_COPY_HOLD_AT` bytes (as Pause does: before its next piece), and the
+  admin helper (not as root) holds after a copy's first piece while `KESTREL_TEST_COPY_HOLD`'s file is there, still
+  answering a cancel. The "another program saves the name meanwhile" checks, and the helper's cancel, ending the
+  session and "replace: false" checks, act there; they used to watch for the part file (a fast disk could copy
+  32 MB between two looks), or count on a 2 GB or 256 MB copy not finishing first.
+- `slow`: "doesn't hold the window" is now a count: how many of the busy drive's simulated waits (and the slow
+  `statfs`'s) ran on the UI thread (`util::test_ui_waits`), which must be none. It was the window's longest pause
+  under 0.6 or 1 s, which the sanitizers' slower painting could pass. The pauses are still shown in the check's text.
+- `ui`: 1,500 folders dropped into a sibling: what would hold the window is counted against the time the move took:
+  the view's row removals (at most one per 150 ms, as the folder's changes are looked at together, each a run of
+  rows) and the status line's updates (`stats::counted`, at most one per 30 ms), both far fewer than one per folder
+  (the freeze was one of each per folder: with rows taken out one at a time, it fails with 1,500 of each). It was
+  "the window is never held more than 2.5 s".
+- `common.h`: `FakeFlight::join()` (waits until this Kestrel has caught up with the tower, then checks the fake in)
+  and `FakeFlight::sync()` (waits until this Kestrel has heard everything passed on before it: a marker sent after),
+  `finished_task()` (waits for a finished job's record).
+
+Changed:
+- `common.h`: `wait_for` never gives up before 30 s (it gave up at 5 s by default, some checks 2 to 4 s). The limit
+  is only how long a failing check takes to say so; a slow runner made some checks fail that were only taking their
+  time.
+- `pinned`, `sidebar`: they wait for `join()`, not for the tower to be on the bus: this Kestrel only sends its
+  reports once its own name watch has seen the tower, a moment later, so "a pin is reported to other Kestrels" failed
+  when the pin came first (CI's `sanitizers-noble`, 0.3.3-alpha.14).
+- `atc_tabs`: a launched Kestrel "kept its own window" when it tells the tower it has one, not when it's still running
+  after 2.5 s (a slow start that would have handed its folder over counted as its own window); the window waits until
+  it has checked in before the hand-offs.
+- `atc_undo`: "on: Ctrl+Z offers the newest action" and the links batch wait for the label instead of 300 ms; "off",
+  "refuses \"->\"" and the push before the tower is stopped wait for `sync()`, so they can fail when the wrong label
+  comes late; after the new tower is up, they wait until it's caught up.
+- `atc_sync`: "isn't passed on" for another protocol's flights waits for a good message sent after theirs.
+- `atc_tasks`: the progress reports' throttle is measured against the time that actually passed (at most one per
+  500 ms of it), not "at most 6 in 2 s" of a sleep a loaded runner stretches.
+- `fileops`: Shred's ✕ waits until BleachBit has started (it was 500 ms), with no 5 s limit; a program's timeout is
+  told by `timed_out` (the program sleeps 60 s), not by its ending within 2 s; a move failing part-way waits for the
+  job to end before the folder's permission is put back (500 ms could be before it tried, and then it moved); the
+  Verify copies message, Recalculate's held drive: waited for.
+- `jobs`: a job holding a drive is waited for until it runs before the next is queued (it was 150 ms); Exit and Open
+  the Jobs Window waits for the Jobs window.
+- `slow`: opening a checksum file "doesn't wait for it to be read" is told by order (the FIFO is written only once
+  opening has returned), not by opening in under 500 ms; finished jobs' logs are waited for (`finished_task`), not
+  read 300 ms later; the cancelled tape copy's file is waited for until gone; the paused buffer's reading is
+  measured once reading has stopped (a piece being read when it paused may take longer than 300 ms), and reading
+  again after the resume is waited for; the info panel's "not read from this tape", waited for.
+- `sidebar`: "no drive is asked anything over 7 seconds" starts once two seconds pass with no answers (it was 2 s
+  after the mounts went, however long the first answers took); a drive mounted while other mounts keep changing must
+  show, the changes going on until it does, with no 1 s limit.
+- `theme`: Stop ends a thumbnail job at its first preview (on the UI thread), not 200 ms after it was asked for (a
+  fast machine made more than the 250 allowed by then); the jobs and their states are waited for before they're read.
+- `search`: the grep a stopped search ran is waited for until gone (it was 300 ms).
+- `overview`, `tools`: a mount's password and question windows, and Encrypt's refusal, are waited for.
+- `archives`: GIO is waited for until it has the test's default application (it was 500 ms); `chooser`: until the
+  portal's bus name is the chooser's (500 ms).
+- `admin_helper`: the cancel's "within 2 s" is gone: `cancelled`, with the file kept, says it stopped part-way.
+- `ci-local.sh`: `--only` takes `i18n` (test names with digits were refused); `--repeat` works for the 26.04 jobs (their
+  second run stopped at `useradd`: the user made by the first run was there already).
+
+## 0.3.3-alpha.14
+
+Added:
+- `ui`: hit tests over the grid (as a mouse moving over its items makes) don't measure an item's name again once it's
+  been wrapped, in a folder of long names with a colour emoji; and a long name's first line is the longest start that
+  fits, never cut inside a character, at widths a pixel apart around an emoji and a joined family emoji. Covers the
+  fix for a folder of long emoji names freezing the window: each name was measured anew, a character at a time, on
+  every paint and mouse movement.
+- `ci-local.sh`: runs CI's test jobs on this machine as a GitHub runner runs them: each job's own steps read from
+  `deb.yml`, 4 CPUs and 16 GB per job (a runner's size), the 24.04 jobs as the runner's user with the runner image's
+  tools and their files on a real disk rather than overlayfs, fresh containers each time, and a warning about changes
+  not committed yet. Local runs passed while CI failed, mostly on timing: they had all of this machine's cores, the
+  24.04 jobs ran in a container unlike the runner's VM, and each run was set up by hand, differently each time.
+  `--cpus` and `--repeat` help bring out timing races before a push, and `--only` runs some of the tests.
+- `run.sh`: the installer test may take 30 minutes before it's stopped (other tests still 10). It runs `install.sh`,
+  which builds the app again in the test's build folder, all of it when the compiler cache is empty: with the
+  sanitizers on a 4-CPU runner that took 502 of the 600 s limit (CI's first run with a compiler cache), and over 600
+  on a fresh `ci-local.sh` run, which then failed both sanitizer jobs though nothing was wrong.
+
+## 0.3.3-alpha.13
+
+Changed:
+- `fileops`: the Wipe Metadata check waits for the job's Undo to be recorded, not only for the copy to appear,
+  before it presses Undo. The copy is renamed into place by the job's thread and Undo is recorded once the job has
+  ended, so on a fast runner Undo came first and found nothing to undo; the next check ("wipe the original") then
+  failed too, as the copy was still there (it failed on CI's 24.04 runner).
+
+## 0.3.3-alpha.12
+
+Added:
+- `fileops`: the folder view opens a folder whose name isn't valid UTF-8 and lists what's in it byte for byte
+  (folders first, a stray byte shown as U+FFFD), follows a file made and one deleted in it, and opens its subfolder.
+  Qt's QFileSystemModel, which the view used before, listed nothing there.
+- `admin_helper`: names that aren't valid UTF-8 (a folder, a file, a symlink's target) reach the helper byte for byte
+  through Kestrel's request (rename, mkdir, symlink); sent only as JSON text they don't survive; a path holding a NUL
+  byte is refused.
+- `jobs`: jobs go on when the Kestrel window that started them closes part-way, and what they do at their end still
+  happens: Verify Checksums (one job for the whole checksum file, each file's result in its log and the ones that
+  didn't pass at its end; also when only the Verify window closes), Find Duplicates, Disk Usage, Compare With… and
+  Sync To… (their windows stay open and get their results), Move to Trash (still undoable) and Apply Sort to
+  Subfolders (the subfolders get the sort). Verify Checksums used to stop with its window, the tool windows closed
+  with theirs, and the other two dropped what they did at their end.
+
+Changed:
+- `viewer`: the drop into a folder asks the folder model for that folder's own index, with the model showing the
+  folder above it. Kestrel's new folder model knows only the folder it shows and its items (Qt's made an index for
+  any path).
+
+## 0.3.3-alpha.11
+
+Added:
+- `tools`: a RAM disk save cancelled in the middle of a file (the cancel is asked once its part file exists) leaves
+  no part file and the saved file as it was. The cancelled-save check that was there only cut into a file when the
+  folder listed its files in a certain order, so it failed in CI only some of the time; this one does it every time.
+
+Changed:
+- `tools`: in the RAM disk saving check, the saved `a.txt` is dated an hour back. It's the same size as the RAM
+  disk's, so when both were written within one timestamp tick it looked already saved and wasn't copied (it failed
+  on CI's 26.04 runner).
+
+## 0.3.3-alpha.10
+
+Added:
+- `tools`: RAM disks and private mode (new): saving a persistent RAM disk makes its folder on disk match (changed
+  files replaced, links as links, what's gone deleted, a copy still being made in it left out; again: nothing copied),
+  a load deletes nothing; a save failing part-way (RLIMIT_FSIZE) or cancelled leaves each saved file whole and no part
+  file; one that came up without its files isn't saved over them, and after loading it is; its systemd units quote the
+  program and expand nothing in a name or path; New RAM Disk is a free window and refuses saving into memory and
+  mounting on a folder that isn't empty; RAM disks whose time is over are forgotten at start; the sidebar lists them;
+  private mode moves the caches, thumbnails and histories into memory (shown in the sidebar, status bar and title),
+  keeps a server connected to off the disk, and leaving it (or the last Kestrel going) deletes its RAM disk.
+- `admin_helper`: the RAM disk ops refuse a folder that isn't empty or isn't yours, a size outside 1 MB to the memory,
+  unmounting what isn't a RAM disk, and a mount unit for a path with `%` in it, before mounting or writing anything.
+
+Changed:
+- `run.sh`: each test gets its own `/dev/shm` folder (`KESTREL_SHM_DIR`), so a test's tower landing never deletes the
+  private RAM disk of a Kestrel you're running.
+- `sidebar`: the default section order includes the new RAM Disks section.
+- `ui`: the menu list has ☰ → New RAM Disk… and Private Mode, and the status bar's Private button.
+
+## 0.3.3-alpha.9
+
+Added:
+- `tools`: Encrypt… and Decrypt (new): gpg's key list read as the keys that can encrypt (yours first, a sign-only,
+  revoked or disabled key left out) and its packet list as how a file opens (a password, your key, only someone
+  else's, not encrypted); with real keys, encrypting with a password and decrypting it (a wrong password says so and
+  leaves nothing; again, the next free name, nothing replaced), to your own key as text, and to someone else's (seen as
+  theirs; decrypting fails, leaving nothing); an encryption failing part-way (RLIMIT_FSIZE) or cancelled leaves no file
+  and no part; Encrypt… in files' menus (one or several, not folders), Decrypt in encrypted files'; double-clicking an
+  encrypted `.gpg` asks for its password, not Verify Signature; the Encrypt window lists the keys, refuses two
+  passwords that differ, and encrypts to a key and your own under the next free name.
+- `tools`: remembered syncs (new): each sync that ran is kept once per pair and found from either folder; Sync To… on
+  the source or the destination opens filled in as last run, the right way round (so a sync can't be run backwards by
+  accident); a folder never synced opens as before; a remembered folder that's gone is filled in with a warning naming
+  it, the older sync a click away; folders chosen before the lookup ends aren't overwritten; only the last five per
+  folder are kept, the same pair run again moves to the top, and the saved pairs stay as they were.
+
+- `fileops`: Keep extended attributes and ACLs (new, off by default): nothing copied while off; on, a file's and a
+  folder's `user.*` attributes and an ACL (where setfacl and the file system allow) arrive; a destination that can't
+  hold them (`KESTREL_TEST_XATTRS_UNSUPPORTED`, a new hook) still gets the copy, and the log says once for the job
+  which were left out.
+- `fileops`: Verify copies (new, off by default): on, a copy is read back and matches its original, both where Kestrel
+  hashed the source while copying and where the system copied it (the source read again); a copy that reads back
+  different (`KESTREL_TEST_CORRUPT_COPY`, a new hook changing a byte of it before it's read back) is named in the log
+  and the job's failures, and kept.
+- `admin_helper`: a copy keeps a file's and a folder's extended attributes when Kestrel asks (`"xattrs"`), and not
+  otherwise.
+- `jobs`: the Jobs window's Verify copies: off for a copy by default, turned on for a waiting one, which then reads its
+  copy back; not offered for a job that copies nothing.
+
+Changed:
+- `ui` (`ui_actions.txt`): Encrypt… in the file and two-file menus.
+- `viewer`: the check that several images open in the folder's order waits until the folder shows them sorted (a
+  before d) before opening them, picked as d, a. It waited only for d to be listed: a folder's listing arrives in the
+  order the drive reads it and is sorted a moment later, so now and then (2 runs in 5 under the sanitizers) the
+  viewer rightly followed an unsorted d, a, and the check failed, taking the viewer's Move to Trash check with it.
+  Its message now names the order the viewer got and the folder's.
+- `installer`: the BleachBit cleaner's History option also deletes the remembered syncs (`sync-history.json`): in the
+  expected actions (14 now), the dry run's list and the clean.
+
+## 0.3.3-alpha.8
+
+Changed:
+- The build (`run.sh`, `tests/CMakeLists.txt`, `common.h`): the app's code is compiled once, for `kes` and the tests
+  alike. The tests were a CMake project of their own that compiled all of `src/` a second time (`kes_core`), and
+  `app.cpp` once more in each of the 24 programs, as `common.h` included it. Now the root project builds them with
+  `-DKES_BUILD_TESTS=ON` into `build/tests/`, linking the same objects as `kes` (`kes_objs`); only the version
+  (`src/version.cpp`, "test") is compiled per program, and `common.h` includes the app's headers instead of `app.cpp`.
+  A clean build of the app and the tests takes half the processor time, which is most of each CI test job. The checks
+  themselves are unchanged.
+- `run.sh` builds through ccache when it's installed, and prints how long each test took, to find the slow ones.
+- CI (`deb.yml`): the four test jobs install ccache and keep its cache between runs (`actions/cache`, one per job, so
+  each release and the sanitizer builds keep their own), so a push compiles only what changed since the last passing run.
+- `tools`: the disk image checks fill their stand-in device with an unsigned counter. The pattern's multiplication
+  overflowed an int past the first 271 KB, which UBSAN stops on, so CI's sanitizer jobs failed there and the rest of
+  the file never ran under them.
+- `archives`: the big-archive checks make their 25,000 and 60,000 small files as new files (`write_text(…, true)`), with
+  no fsync each. Replacing-style writes fsync every file, which cost about 5 ms each on a Docker container's storage:
+  the 60,000-file check took over 300 s there and the test hit run.sh's 600 s limit, while GitHub's runners did it in
+  under a minute. What the checks test is unchanged.
+
+## 0.3.3-alpha.7
+
+Changed:
+- `tools`: the check that a Back Up Drive to Image cancelled part-way leaves nothing feeds its stream without blocking.
+  Once the cancel stopped the reading, the pipe filled and held the feeder thread, which the test waits for: CI's
+  24.04 job timed out there.
+- `i18n`: a text left untranslated is named with where it was shown (its window and widget, a list's column). CI's
+  26.04 job once found "Created:" untranslated, which didn't happen again in a clean 26.04 container, and the check
+  said only the text, so there was no telling which window showed it.
+
+## 0.3.3-alpha.6
+
+Added:
+- `fileops`: the Link window. Link… opens a free window with its two browsers embedded (not Kestrel windows of their
+  own), the picks previewed in the folder with nothing made; a preview renamed in place and the kind chosen are kept by
+  Add to List; a name taken in the folder shows in the list and OK makes nothing; OK's summary names what will be
+  made, and its OK makes it (relative path, no part names left), closes the window and offers Undo. Edit Link… lists
+  a link, changes its kind and name in the list only, then renames and repoints it in one step, and Undo puts it back.
+  Also: a hard link to a folder is refused and a broken target is only a warning; a link changed by another program
+  after it was listed isn't overwritten; a new link never replaces what has its name; a link whose replacement can't
+  be made (a read-only folder) keeps what it held with no part left; a file's other names (hard links) are found.
+- `tools`: Back Up Drive to Image's stream (write_image): the image byte for byte, for the user alone, no part left;
+  none made when the drive wasn't read to its end or gave fewer bytes than it holds; none, and no part, when a write
+  fails part-way (a file size limit) or it's cancelled part-way; compressed and encrypted, it opens with its password
+  to the drive's bytes and holds none of them as they were. Which names are disk images, which are mounted from a copy
+  and which can be mounted for writing; Mount Image in an image's menu only; an image can't be saved on the drive being
+  read (skipped where the test's folder isn't on a block device).
+- `admin_helper`: readdev reads block devices only (a file or /dev/null is refused) and writes only into a FIFO of
+  the user's, never a file (skipped without a block device the user can read).
+- `atc_undo`: the tower takes the undo kind "links" with a link's old contents ("->" + text), refuses "->" in other
+  kinds, and Ctrl+Z puts another Kestrel's changed link back.
+
+- `ui`: the Link window is a free window, with its two browsers inside it, not windows of their own nor native ones
+  (which glitch on Wayland).
+
+Changed:
+- `ui`: `ui_actions.txt` has Link… in the empty space's menu, and in place of Create Symbolic Link In…, and no longer the two `.desktop` shortcut
+  entries (now in the Link window).
+
+## 0.3.3-alpha.5
+
+Changed:
+- `jobs`: the check that a stopped job's log ends with when it was stopped accepts a log of that line alone (a job
+  that logs nothing else has no line before it). It wanted a line break before it, so it failed in CI.
+- `tools`: Disk Usage on a tape asks for the mount list to be read again after marking the folder as a tape (and after
+  unmarking it). The list read under a second earlier, without the tape, was used, so the window counted at once and
+  the check failed in CI.
+
+## 0.3.3-alpha.4
+
+Added:
+- `tools`: Disk Usage. Its count matches Properties' (sizes, files, folders; a folder that can't be read counts as
+  empty and is named), biggest first, a folder's small files as one block and small folders kept as totals only;
+  taking an item out shrinks the folders above it; the treemap's blocks stay inside the map, sized by their share,
+  apart and not long and thin. The window from a folder's menu (only a single folder's) counts, maps and lists the
+  folder and remembers its folders' sizes for Properties; going in and Back; an item's menu; Move to Trash takes it
+  off the map and can be undone; the sizes remembered make a map at once; on a tape it counts only when asked; a
+  drive's Overview card has the button that opens it (a phone's hasn't). Covers the new Disk Usage window.
+- `ui`: the folder menu's new Disk Usage… entry is in the list of the window's actions (`ui_actions.txt`).
+- `jobs`: every job's log says more. A size count's log says what it counted and found (it had only the folder's
+  name); Move to Trash logs each item; a job that only reports progress gets it in its log now and then while the log
+  is quiet (not every report); a stopped job's log ends with when it was stopped.
+- `jobs`: saving finished jobs' logs: off by default, nothing saved; on, a file for each job in a folder for the day,
+  with its title (a slash in it doesn't make a folder), outcome, times, steps and log; a write that fails part-way
+  (a file size limit) leaves nothing under the log's name and no part file; pruning deletes days older than 90, then
+  the oldest days while they take too much, never today's or anything that isn't a day's folder.
+- `installer`: the BleachBit cleaner's new Job logs option: the dry run lists the saved logs, the Cache option alone
+  keeps them and the Job logs option alone deletes only them, and a clean leaves their empty folder.
+
+- `fileops`: how a file is copied (the new Preferences → Files → Copying): Kestrel's own loop (setting off), the
+  kernel's copy_file_range and a clone each copy a file whole and say so in the job's log, and each failing part-way
+  (a file size limit; a read error after the first piece or once a clone is in; a cancel between pieces) keeps the
+  file it would have replaced and leaves no part file. The clone checks run only where the test's drive can clone
+  (Btrfs, XFS, ZFS 2.2+), and are skipped on CI's ext4 and overlayfs. New test hooks in the copy:
+  `KESTREL_TEST_NO_CLONE`, `KESTREL_TEST_COPY_FAIL_AT`.
+
+Changed:
+- `jobs`: a finished copy's log is checked to end with how long it took ("Finished in 2 s", which every job's log now
+  ends with) instead of the copy's own "Finished.".
+
+## 0.3.3-alpha.3
+
+Added:
+- `slow`: an ordinary drive kept busy by another program (every stat on it waiting 1.5 s) doesn't hold the window
+  when a folder there is opened or refreshed (the Info Panel open), an item's right-click menu is built, or a file's path is opened (its
+  folder shown with it selected once the drive answers); a folder there that isn't there is said to be missing once
+  it answers. Guards the freeze until GNOME's "not responding" dialog.
+- `search`: the results follow their files: a result moved to the trash leaves them and the count, Undo brings it back,
+  a rename renames it, and one deleted by another program leaves them too.
+- `jobs`: a quiet queued job (Properties' first size count) stays among the finished jobs once it ends, also when
+  Properties was closed while it waited, and is never in the status bar. Such jobs used to vanish from the Jobs window.
+
+Changed:
+- `i18n`: the untranslated-text check reads every row of a tree, also those inside others, and every menu kind in
+  Preferences → Menus, not just the first 50 top-level rows of the first one. It missed View Image's "for images" and
+  "Rotate 180°" (inside the Rotate submenu, and in menus not shown first).
+
+## 0.3.3-alpha.2
+
+Changed:
+- `archives`: the check that an archive window with encrypted files asks for the password once now waits for the
+  first extraction's job to finish, not just for its file to appear. The window learns the password when the job ends,
+  so on a slow runner the second extraction could start first and ask again (CI's test-noble failed this way).
+
+## 0.3.3-alpha.1
+
+Added:
+- `fileops`: names that aren't valid UTF-8 survive `dec()`/`enc()` (stray bytes, an encoded surrogate, and a
+  character whose UTF-16 low surrogate falls in the range kept for stray bytes), and a folder holding such names is
+  copied byte for byte and deleted whole; a path as Qt lists it (U+FFFD) reaches its file only when one name matches.
+  Guards against Qt's lossy decoding, which made such a folder impossible to delete, even from the trash.
+- `fileops`: in the trash, Delete Permanently deletes such a folder and its record; a trashed file with such a name
+  keeps its original place; a Delete Permanently cancelled part-way keeps the record of what's left; deleting an item
+  with no record doesn't crash; Empty Trash deletes each record after its item (a stray one as a job of its own).
+  Covers the record being deleted after a failed delete, and the crash on the missing record that followed.
+- `fileops`: undoing New Folder with Selection keeps the folder when something else is in it (it crashed: the
+  "only if empty" rmdir threw).
+
+## 0.3.3-alpha.0
+
+Added:
+- `i18n`: each desktop language loads its own translation (`pt_BR` and `pt_PT` their own Portuguese, `de_AT` the
+  German, `zh_TW`, which has none, English), guarding against a bare `kestrel_pt` file that Qt would pick for Brazil
+  before it tries `pt_BR`; and the Russian translation picks its three plural forms by count (1, 2, 5, 11, 21), the
+  first language whose plural rules differ from English's.
+
+Changed:
+- `run.sh` runs every test with `LANGUAGE=en`: Kestrel now ships other languages and shows the desktop's, so on a
+  machine in another language the tests would get its texts instead of the English ones they check.
+
+## 0.3.2-alpha.34
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes the benchmark (`bench/`) no longer starts the workflow, as
+  for Markdown: nothing the tests, the build or the package use is in it, so the runs only cost time.
+
+## 0.3.2-alpha.33
+
+Added:
+- `installer`: kes-setup on KDE Plasma (Kubuntu), where Dolphin opens folders and no app opens `trash:///`.
+  `--default` takes both, makes Kestrel the file chooser with KDE's as the fallback (it was GNOME's, which Kubuntu
+  doesn't have) and says an open Dolphin keeps "Show in folder"; `--dock` swaps Dolphin for Kestrel in Plasma's taskbar
+  and says when a "default file manager" pin already opens it; `--undo` puts Dolphin back in the taskbar and for
+  folders, and doesn't hand `trash:///` to GNOME Files (it did, though GNOME Files isn't installed there); xdg-mime
+  finds `qtpaths` (26.04's xdg-mime runs it on KDE, which Ubuntu only installs as `qtpaths6`: it printed "qtpaths: not
+  found" for each change; skipped where xdg-mime doesn't run it, as on 24.04). Plasma isn't in CI, so a stand-in
+  `gdbus` answers for plasmashell; the script itself was run against a real plasmashell.
+- `theme`: KDE Plasma's settings, read from its config files (user's first, then the system's; groups, KDE's key
+  flags): the icon theme without KDE's Qt integration, Set as Wallpaper through `plasma-apply-wallpaperimage`, Konsole
+  first for Open Terminal, and Recent Files' "Do not remember" turning File History off; and that GNOME keeps its own.
+
+Changed:
+- `installer`: the stand-in `pgrep` reports `$RUNNING` as running (Dolphin, for the KDE case); otherwise nothing runs,
+  as before.
+- `overview`: "with the desktop's File History off, folders opened aren't counted" sets the desktop to GNOME for its
+  check, since it turns GNOME's switch off: run with `XDG_CURRENT_DESKTOP=KDE` it failed, as Kestrel now reads Plasma's.
+
+## 0.3.2-alpha.32
+
+Changed:
+- `fileops`: "decompressing a single file: one another program saves under its name meanwhile is kept" no longer races
+  the decompression: the job starts paused, so it waits once its hidden part file is there until the test has saved
+  the other program's file, then resumes. It failed in CI's `sanitizers` job on alpha.31 when the decompression
+  finished before the test saw the part file (nothing wrong in Kestrel). Its file is 4 MB instead of 48 MB, which
+  only made that race less likely.
+- CI's 24.04 jobs are named after their release like the 26.04 ones: `test` is `test-noble`, `sanitizers` is
+  `sanitizers-noble` (`deb` needs `test-noble`).
+
+## 0.3.2-alpha.31
+
+Added:
+- `prefs`: Preferences → Sidebar → Places shown (an unticked place leaves every window's sidebar, Hide from Sidebar
+  shows unticked there), and the new Privacy tab: each history switch (Recent, Frequent Folders, recent servers) keeps
+  it from being recorded when off, the desktop's File History is shown, and Clear Kestrel's History / Clear Recent
+  Files ask, then clear. The tab list now includes Privacy.
+- `atc_tasks`: finished jobs stay until Clear Finished: another Kestrel's newer list adds to its older one, a Kestrel
+  that closes leaves its finished jobs listed (saying its log is gone), and 60 of our own all stay listed and told
+  (only 50 were kept before).
+- `theme`: Generate Previews (the new non-recursive entry) makes thumbnails of the folder's own files only, and the
+  Previews submenu lists it first; `ui`'s list of every menu entry has it.
+
+## 0.3.2-alpha.30
+
+Changed:
+- `i18n` no longer counts any installed app's name as untranslated English, wherever it's listed: Preferences' image
+  and video opener lists name every app that opens JPEGs and MP4s (on GitHub's 24.04 runner Firefox, Chrome and
+  Edge), which alpha.29's fix (only the apps for a text file and a folder) missed. Its check failed again in CI's
+  `test` job on alpha.29 though nothing was untranslated.
+
+## 0.3.2-alpha.29
+
+Changed:
+- `i18n` no longer counts the names of installed apps as untranslated English: Properties' Open With lists the apps
+  that open the file (on GitHub's 24.04 runner Firefox, Chrome, Edge and Vim), named by the apps themselves. Its check
+  failed in CI's `test` job on alpha.28 though nothing was untranslated.
+
+## 0.3.2-alpha.28
+
+Added:
+- `i18n` checks that Properties → Metadata's Remove removes the tag a row stands for when the row shows its group
+  under another name, as a translation could. Covers the fix that keeps the tag apart from the row's text (it was
+  read back from what the row showed).
+- `atc_tasks` checks the one Jobs window across Kestrels (a stand-in second Kestrel): opening it tells the others and
+  one opened elsewhere closes ours; another Kestrel's running and finished jobs are listed, their steps and logs asked
+  for and shown, its thumbnail jobs listed, and Pause and Stop on them sent to it; ours are told and answered for a
+  Jobs window elsewhere, and paused and resumed from it; Clear Finished clears every Kestrel's. Covers making the
+  Jobs window one for all Kestrels.
+
+Changed:
+- `i18n` no longer counts the names the computer gives as untranslated English: the user's group (on GitHub's runner
+  it's `docker`, shown in Properties → Permissions), drive labels and the names the system gives a mount (shown on
+  Overview cards). Its check failed in both of CI's test jobs on alpha.27 though nothing was untranslated.
+- `run.sh` prints a failed check's indented lines under it (what it found), not only its first line, so CI's log
+  shows them. Alpha.27's failure in CI listed nothing.
+
+## 0.3.2-alpha.27
+
+Changed:
+- `prefs` expects the Preferences tab "Images & Videos" written "Images && Videos" (shown as "&"), and its
+  customised file menu's submenu of the user's own is now named "Mine & Yours". Covers the fix for "&" in tab names,
+  which Qt took as a shortcut mark and showed as the next letter underlined.
+
+- Every test runs with English (US) number and date formats (`common.h`), whatever the machine's locale: Kestrel now
+  formats them by the system's, so a check of "1,234 bytes" or a date doesn't depend on where it runs.
+- `fileops`: a remembered folder size's age names its date in the system's format ("Calculated 3 days ago (…)"),
+  no longer as 2026-10-21 14:05. `archives`: the archive window counts "60,001 files" in the system's digit grouping.
+  `tools`: Find Duplicates says "Not kept: 2 files" (a count's plural, no longer "2 file(s)"). `devices`: the
+  no-phones hint is translated where it's shown. Cover the move of numbers, dates and counts to the system's formats
+  and translatable plurals.
+
+Added:
+- `prefs` checks that in a customised menu "Links & Shortcuts" and a submenu named "Mine & Yours" keep their "&".
+- `ui` checks that a folder named "Tom & Jerry" shows as that on its tab and in the window's title.
+- `ui` scans `src/` for a text passed straight to a widget or a message without `tx()` (like the modal-call scan),
+  so new code stays translatable.
+- A new test, `i18n`: every `.ts` file is built into the app and keeps its texts' `%1` and `%n`; English gives every
+  count in the code its plural forms; and with the pseudo-translation installed, the main window, its menus, the
+  Overview, Preferences, the Jobs window and Properties show no untranslated text. Covers making Kestrel
+  translatable.
+- `installer` runs `kes-setup --bleachbit` under umask 000 and checks the cleaner and its folders come out writable
+  only by the user (BleachBit ignores a world-writable cleaner, and then the dry run and the clean find nothing), with
+  no part file left, and that its output says BleachBit will ask once whether to trust it. Covers the fix for the
+  cleaner written with the user's umask.
+- CI's test jobs (`test`, `test-resolute`, `sanitizers`, `sanitizers-resolute`) and `deb` install `qt6-tools-dev`
+  and `qt6-l10n-tools`, which the build needs for the translations and `i18n` for lupdate.
+
+## 0.3.2-alpha.26
+
+Added:
+- `package` checks each release's .deb on its own release (noble's on ubuntu:24.04, resolute's on 26.04), and
+  noble's on 26.04 too, which `stable` and `dev` give to every release. Covers the .deb built for each release, whose
+  Depends now ask for its build system's libraries.
+- A `sanitizers-resolute` CI job: the ASAN+UBSAN run on 26.04 too (GCC 15, which needs no `vm.mmap_rnd_bits`), alongside
+  like `sanitizers`: a memory error that only 26.04's Qt or GLib code paths or GCC 15's checks find fails the run.
+- `ui`: a band dragged from empty space selects the four items it touches, from each corner to the opposite one, in
+  the grid and the list, plain and grouped by date (the mouse events sent to the view's viewport). Covers the fix for
+  the grid's band selecting nothing when dragged up and to the left.
+
+Changed:
+- CI's test jobs install `gnome-settings-daemon-common`, so `slow`'s check that GNOME's low-disk-space check skips a
+  tape being written runs instead of being skipped. The 26.04 jobs also install `zip` (the runner image has it), keep
+  `/usr/share/doc` (the container image leaves it out, and with it BleachBit's schema for `installer`'s check), and
+  put the test user in a second group (`admin_helper`'s group ownership check), so they skip no more than 24.04.
+- CI's test jobs (and the others) use `actions/checkout@v7`, `actions/upload-artifact@v7` and
+  `actions/download-artifact@v8`, which run on Node.js 24: v4 ran on Node.js 20, which GitHub deprecated (each run
+  warned, and its runners force Node.js 24 on it).
+- `ui`: the check that a drop into a subfolder leaves the view where it was waits until `select_paths`' own
+  re-scrolls to the selection (at up to 700 ms) are over before scrolling to the top, and fails as "not at the top
+  before the drop" if the view isn't there. It scrolled up after 200 ms, so under the slower sanitizer build on 26.04
+  the re-scroll at 250 ms could land before the drop and the check failed with the view at the bottom.
+
+## 0.3.2-alpha.25
+
+Added:
+- `check_package.sh --apt REPO SUITE`: installs the package from a suite of a copy of the apt repository, as a user's
+  sources file would, after checking that the suite is there, signed with the repository's published key, and has
+  the package; then the same checks as for a .deb. Covers the new per-release apt suites.
+- An `apt-check` CI job, after the apt repository is updated: the package installed from `noble`/`noble-dev` on
+  ubuntu:24.04, `resolute`/`resolute-dev` on ubuntu:26.04 (the suites of the channel just published) and `stable`/`dev`
+  on 26.04. A dropped release's frozen suites get an entry there, checked whenever the repository is updated, so they keep installing after
+  they stop getting builds.
+- A `test-resolute` CI job: the whole suite (`tests/run.sh`) on Ubuntu 26.04 too, in a clean ubuntu:26.04 container
+  as a normal user, alongside `test` on 24.04; the package now needs both to pass. Until now only 24.04 ran the tests,
+  so a change that broke only on 26.04's newer Qt, GLib or tools (the main platform) reached the package unnoticed.
+
+## 0.3.2-alpha.24
+
+Added:
+- `viewer`: an image renamed into the viewer's folder joins the list in its place in the folder's order, one the
+  folder's view doesn't show yet joins at the end, the image shown stays, and hidden files (parts being written)
+  never join. Covers the viewer picking up new images without being reopened.
+- `viewer`: comparing with a slider: Compare in Viewer opens the two as A and B with the divider in the middle, the
+  pixels on each side are B's and A's, dragging it fully left shows only A and fully right only B, zoom is linked,
+  and D switches to and from side by side. Covers the new slider comparison.
+
+## 0.3.2-alpha.23
+
+Added:
+- `slow`: a tape isn't asked its size or health before the tower has told the process the other Kestrels' jobs, and
+  is asked on its own once it has. Covers the file chooser (which never joins the tower) asking a tape another
+  Kestrel was writing for its health and size. The test now joins a tower, as Kestrel does.
+
+Changed:
+- CI (deb.yml): the test, sanitizers, deb and apt jobs point apt at archive.ubuntu.com before installing anything.
+  The runners' default Azure mirror was very slow, and installing the test dependencies held up every run.
+
+## 0.3.2-alpha.22
+
+Changed:
+- `fileops`: the two "a file another program saves under the new name while a copy runs" checks pause the copy while
+  they save the file, instead of racing it, and copy 32 MB rather than 256 MB. Once the file is there the copy counts
+  as replacing it and syncs its data to disk first; on a slow CI runner (the sanitizers job) syncing 256 MB could take
+  longer than the test waited, and the check failed. A failing check now says which part went wrong (stepped in or
+  not, what the file holds, part files left, the message shown).
+
+## 0.3.2-alpha.21
+
+Added:
+- `ui`: Calculate Folder Size opens Properties and counts the folder again rather than showing the size remembered;
+  Open Metadata opens Properties on its Metadata tab; neither is offered for a plain text file. Covers the two new
+  right-click entries.
+- `theme`: files and folders inside Kestrel's own cache folder get no thumbnail or folder preview, whether asked for
+  by a view or by Generate Previews Recursively (on a folder in it, or on ~/.cache above it).
+- `overview`: a mount's password window (an encrypted drive's) and question window make no reply until they're
+  answered, then reply once, handled, with the password typed. Guards against GIO's own handler answering
+  "unhandled" first, which made udisks fail the unlock with "Expected G_MOUNT_OPERATION_HANDLED but got 2".
+
+Changed:
+- `ui`: `ui_actions.txt` lists the folder menu's new Calculate Folder Size (Open Metadata isn't in the listed menus:
+  they have no image).
+
+## 0.3.2-alpha.20
+
+Added:
+- `overview`: a drive whose udisks bad-sector total has bits above the low 32 (4294967299, as a Seagate reports for 3
+  reallocated sectors) is summarised as "3 bad sectors", not billions.
+
+## 0.3.2-alpha.19
+
+Changed:
+- `installer`: `--install-optional`'s expected `apt-get install` line includes `libheif-examples`, the optional package
+  0.3.2-alpha.18 added (for Convert Image to HEIC and AVIF). The test still listed the old packages, so CI failed.
+
+## 0.3.2-alpha.18
+
+Added:
+- `overview`, a new test for the Overview's choices, its Starred and Frequent Folders sections, and drive health:
+  the sections' saved order; health read from udisks' properties (a JSON file stands in for udisks,
+  `KESTREL_TEST_HEALTH`) for ATA and NVMe drives, a pool, an encrypted volume and a drive with none; with drives added
+  to the mount table, the cards' health lines, the failing-drive notification sent once, the Drive Health window (free)
+  and Properties' health row; the usage bar, free space as a percentage, the system drives' choice and the card sizes;
+  Starred opening files and folders; Frequent Folders counting visits, keeping another Kestrel's counts when saving, a
+  save that fails part-way (RLIMIT_FSIZE) keeping the old file, and nothing counted with File History off; the
+  Preferences list hiding and moving sections. It found that a setting changed while the drives were being scanned was
+  ignored until the next scan (fixed: the scan runs again).
+
+- `media`, a new test for rotating image files (Rotate ▸), Convert Image…, and with ffmpeg Convert Video…, Extract
+  Audio… and Convert Audio…: the ffmpeg options built from each setting, ffprobe's and ffmpeg's answers read, and real
+  conversions of small files the test makes, including one stopped part-way and one failing part-way (RLIMIT_FSIZE),
+  which must leave no half-made file; JPEG rotations through jpegtran (the tag reset, the not-whole-blocks question).
+- `viewer`: dragging an image out (a left-drag when it fits, Alt+drag when zoomed; the data dragged; a copy as shown
+  when turned and not saved), Ctrl+C putting the file on the clipboard too, and a copy-only drop being copied into a
+  folder on the same drive rather than moved.
+- CI's test and sanitizer jobs install ffmpeg, for the media test's conversions (skipped without it).
+
+Changed:
+- `ui`: tests/ui_actions.txt lists Convert Audio… in a folder's menu (shown with ffmpeg installed, as CI now has it).
+- `prefs`: the Overview tab is in the list of Preferences' tabs, and `health_warned` (the drives already notified as
+  failing) is kept state, not a setting.
+- `installer`: BleachBit's cleaner also deletes `frequent.json` (in the expected actions, the dry run and the clean).
+
+## 0.3.2-alpha.17
+
+Added:
+- `tools`, a new test for the file tools. Find Duplicates: identical files are grouped through subfolders, not a file
+  of the same size and beginning that differs further on, a symlink, hidden files (unless asked), a second name of one
+  file (unless asked: then it frees nothing), or subfolders when told not to; the oldest first, and keeping the oldest,
+  the newest or those in a folder; Replace with Hard Links makes a link to the copy kept, and one that fails part-way
+  (its folder takes no new name) is left whole with no part file; nothing is replaced when the copy kept changed since;
+  the window from a folder's menu searches, keeps the oldest and trashes the rest (undoable); the entry is only in
+  folders' menus. Compare: each kind of difference (a folder on one side as one row), a deep compare finds the same size
+  and date with other bytes, a second's slack in dates; the window lists the differences and Copy to Right asks before
+  replacing. Sync: the plan (copies, replacements, deletes only when asked and after the copies); the window's preview,
+  a sync with Kestrel's copy, deleting asked again and nothing deleted before the answer, saved pairs run again; with
+  rsync, a sync that fails part-way (RLIMIT_FSIZE) leaves the destination's file as it was, and a second run completes
+  it. Verify Signature: gpg's status lines (valid, missing key, bad); the plain words for a key you haven't verified and
+  a missing key; with real gpg keys: detached and clearsigned signatures, your own key trusted, an imported key not, no
+  key, a changed file, a missing file, a key that isn't a signature; opening a signature shows the window, a signed
+  SHA256SUMS is checked and then its files; the menu entry only for signatures.
+- `installer`: the BleachBit cleaner's new option for the saved sync pairs (in the dry run and the clean), and rsync
+  among the optional packages.
+- CI's test and sanitizer jobs install rsync and gnupg (the `tools` test's rsync and signature checks; the runner
+  image has them, so this only makes it explicit).
+- `theme`: the thumbnailing modes (thumb_mode), with a job holding the drive: paused, a thumbnail job makes nothing and
+  is listed as paused (and the Jobs window's choice follows the setting); "wait", it waits for the drive; "one per
+  drive", it runs beside that job, and a second folder's job on the drive waits until the first ends.
+- `ui`: files dragged onto a tab (the drag events sent to the tab bar, where a real drag sends them): resting there
+  shows the tab, highlighted (the tab bar's `drop_tab`), and a drop onto it goes into its folder; the drag can go on
+  into a subfolder in the tab it showed; the Overview's tab is shown but takes no drop; a drop onto the Trash's tab
+  moves the file to the trash (with its .trashinfo).
+- `ui`: in the grid, a right-click on an item's icon or name gives its menu, and one elsewhere in its cell (the
+  corner, beside a short name) the folder's own (New Folder…); indexAt follows the same box.
+- `ui`: ui_actions.txt lists the new entries: ☰ → Sync Folders…, and a folder's Find Duplicates…, Compare With… and Sync To….
+- `ui`: the Jobs window's job buttons are right under the jobs list (above the thumbnail list), the thumbnail jobs'
+  controls under the thumbnail list.
+
+## 0.3.2-alpha.16
+
+Added:
+- `viewer`: Wipe Metadata (metadata::wipe): a copy is written as "name (no metadata).jpg" without the camera details
+  or GPS position, keeping the orientation (it looks the same) and the original's permissions, the original untouched;
+  the next copy gets the next free name; wiping the original replaces it (keeping its permissions; the orientation
+  goes too when not kept); a PNG's text is wiped with its pixels kept exactly; a file exiftool can't read is left as it
+  was with no copy; a wipe that fails part-way (RLIMIT_FSIZE) keeps the original and leaves no part file or half-made
+  copy; which files can be wiped (not raw files, missing files or folders).
+- `jobs`: the queue mode "all at once": the scheduler starts every waiting job, also on a drive in use, except a
+  paused one; only by drive, one at a time and all at once are known modes (anything else is by drive, also when
+  stored); with it on, a copy on a drive a running job holds starts at once instead of waiting.
+- `fileops`: Wipe Metadata… in the right-click menu: shown for images and selections with images, not for other files;
+  with "make a copy" it writes the copy and leaves the original and non-images alone, and Undo trashes the copy; with
+  "wipe the original" it asks first, and closing the question changes nothing.
+
+## 0.3.2-alpha.15
+
+Added:
+- `jobs`: jobs belong to Kestrel, not to a window. Closing the window that started a job doesn't ask or stop it (it
+  moves to another window's status bar); closing the last one asks (exit and open the Jobs window, or stop all jobs),
+  and Exit and Open the Jobs Window opens it as a window of its own while the job goes on; a job the user sees keeps
+  Kestrel running and a quiet task doesn't; with every window closed (the Jobs window too), Kestrel's event loop runs
+  until the job ends and then quits.
+- `theme`: thumbnailing as jobs: one per pane and folder (its title, total and window), listed in the Jobs window's
+  own lower part; Pause holds it; leaving the folder lowers it (another window's newer ones come first), it carries on
+  after, and going back raises it; it waits while another job uses its drive; a lowered job stops after the time set
+  in Preferences, keeping what it made; Stop isn't undone by the view drawing the folder again.
+- `fileops`: remembered folder sizes in Properties (counted once and remembered, "Calculated just now"; shown at once
+  later with how old they are, also when the folder changed since; Recalculate is a queued job, a stopped one stores
+  nothing, a finished one replaces the size; a copy drops the entries of the folders it changes; a different folder
+  under the same name isn't given the old size), and New Folder with Selection (a free name window, the items moved
+  in, Undo, a taken name not replaced, a move failing part-way keeping everything).
+- `archives`: Compress…'s volume sizes (offered by what they fit, a DVD's exact size passed in bytes, Custom… with a
+  KB size making volumes of exactly that size, the choice remembered); opening a file from the archive window (a
+  read-only temporary copy opened with its app, through a test application); dragging items out (onto a Kestrel
+  folder: extracted straight there, no temporary copy; for another app: extracted when the drop asks; encrypted ones
+  whose password isn't known offered to Kestrel only); day-old temporary copies deleted; and the unzip path (taken
+  only without 7-Zip, never before in the tests): listing, single items with [ ] * ? in their names, testing.
+- CI (`deb.yml`): unzip installed in the test and sanitizer jobs, for the unzip checks.
+
+Changed:
+- `theme`: "a pane moving to another folder cancels its own folder previews" (0.3.2-alpha.14) is now "leaving a folder
+  lowers its thumbnail job": leaving no longer cancels them (by design: they wait behind newer ones).
+- `installer`: the BleachBit dry run also lists the folder sizes cache and the archive window's temporary copies.
+- `ui`: the context menus listed in ui_actions.txt include New Folder with Selection….
+- `prefs`: the Jobs window's split between its two lists (`jobs_window_lists`) is kept state.
+
+## 0.3.2-alpha.14
+
+Added:
+- `theme`: two windows of one Kestrel asking for folder previews (300 folders for one, 3 for the other). One window
+  moving to another folder drops its own requests and not the other's; then a window closing with its previews still
+  queued gets nothing more made, while the other window's still come. Guards against the queue belonging to no one
+  (previews went on being made for a closed window, and moving to another folder dropped every window's).
+- `viewer`: the wheel over the info panel, at its top where it can't scroll, is kept by the panel and doesn't change
+  the image, while the wheel over the picture still goes to the next one. Guards against the scroll bar passing an
+  unused wheel turn on to the viewer.
+- `jobs`: Paste Into Folder queued behind another job on the same drive, its destination moved while it waits. The
+  title names how much it copies and where to; the copied files are gone from the clipboard once pasted; it fails
+  with one message saying the folder was moved while it waited, and copies nothing; its log starts with what started
+  it, in which window and when, from where to where, and how long it waited for which job.
+- `sidebar`: a mount that's in the mount table only after the sidebar's refresh, with no further event, still shows;
+  and a drive mounted while mount changes keep coming every 100 ms shows within a second. Guards against the
+  sidebar's update being put off by a stream of changes, or missing a mount's later steps.
+
+## 0.3.2-alpha.13
+
+Added:
+- `archives`: Open as Archive on a big tar (60,000 files), the freeze fix: the longest pause of the UI thread while
+  it's read and shown stays under 0.5 s (it was about 4 s in a CI-like container, as the list was built on the UI
+  thread); the items are folders first, by name, at every level; a file's time is read right (the new date parsing);
+  the status counts every file and folder; and a click on a column's header still sorts (the tree no longer keeps
+  itself sorted).
+- `ui`: 1,500 selected folders dropped onto a sibling folder (a move on one drive), the freeze fix: they all move, and
+  the window is never held for more than 2.5 s (about 0.4 s now; 5.7 s before in a CI-like container, as each folder
+  leaving the view deselected it and the status line counted the whole selection again).
+
+## 0.3.2-alpha.12
+
+Added:
+- `archives`: tar archives with a password (through gpg), the new feature: a tar and a tar.gz made with a password are
+  gpg-encrypted (gpg itself opens them with that password only, and no file name is readable in them); the command
+  shown pipes through gpg without the password; `.tar.gz.gpg` is recognised as an encrypted tar (a `.txt.gpg` isn't an
+  archive); the quick password test, listing (only with the password), extracting and testing them; a wrong password
+  is reported as one and extracts nothing; one failing part-way (a file-size limit) keeps the archive of that name and
+  leaves no part; Compress… offers the password and names the archive `.tar.gz.gpg`; Open as Archive and Extract Here
+  ask for its password (again when wrong). Skipped where gpg isn't installed.
+- `fileops`: the "password never on a command line" check also covers a tar.gz through gpg.
+- `archives`: checksum files made while a tar archive is compressed, the new feature: a tar.gz's `.sha256` and `.sfv`
+  and a plain tar's `-CHECKSUM` hold the finished archive's hashes (compared with sha256sum's, md5sum's and
+  sha512sum's, and checked with Verify Checksums' own code); the command shown names them; a tar.gz through gpg gets
+  the encrypted file's hash; a full disk part-way (a file-size limit, with a 3 MB file and with a 64 MB one, where the
+  programs are still being fed) says "File too large" and keeps the old archive and checksum file and no part; ✕
+  part-way leaves no archive, checksum file or part; Compress… offers it for tar formats and not for others.
+
+Changed:
+- `archives`: the Secret Service's name is taken (for the "no keyring" checks) before the gpg checks, not after. Their
+  Open as Archive and Extract Here look for a saved password, which had the test's bus start a gnome-keyring on CI;
+  the 6 keyring checks after them then failed.
+- `archives`: "big encrypted 7z" now says which part failed (making the archive, and how long it took; the right
+  password; the wrong one; an error), since it failed once in a full run in a CI-like container and couldn't be
+  reproduced in 11 runs after.
+- `fileops`: that check's watcher now counts the password in any command line, not only ones naming the archive: a
+  tool making the archive names only its hidden part file, so a password leaked there went unseen.
+- `installer`: `kes-setup --install-optional` now also installs `gnupg` (tar archives with a password).
+
+## 0.3.2-alpha.11
+
+No test changes.
+
+## 0.3.2-alpha.10
+
+Added:
+- `viewer`: an image deleted and put back with Ctrl+Z is shown, even when a read of it started before the delete ends
+  afterwards with "can't read" (sent to the viewer by the test, so it doesn't depend on timing). On CI (0.3.2-alpha.9)
+  that race left "Cannot display this image" and failed the four crop and resize checks after it.
+
+## 0.3.2-alpha.9
+
+Added:
+- `archives`: big archives (25,000 files with long names, a listing of several MB) in 7z, zip, tar.gz, rar and zpaq
+  are listed in full, the first folder too: the listing used to keep only its last 1–2 MB (7z and zip then listed
+  nothing, rar and zpaq only the last files), and a big tar.gz hung (tar's output pipe filled while it was being fed).
+  The quick password test refuses a wrong password on a big encrypted 7z (it found no file to test with in the cut
+  listing, and took any password). The earlier archives were far too small to reach the limit.
+
+## 0.3.2-alpha.8
+
+Added:
+- `slow`: writing onto a tape with dd (the new choice): the question (a free window) marks only the jobs onto the tape,
+  Cancel starts nothing, "Don't ask again" saves the setting and then nothing is asked; dd writes the file whole, with
+  its command and output in the job's log and no buffer of Kestrel's; a dd write that fails part-way (a file-size limit,
+  which dd inherits) leaves no half-written file and says dd failed.
+
+Changed:
+- `sidebar`: the ZFS examples use the pool name "pool".
+- `viewer`: closing with an unsaved rotation, then Don't Save, failed on Qt 6.4 (CI): the viewer closed itself from
+  inside the question's own click, which Qt 6.4 ignores (now it closes once the click is handled). The check now says
+  which part failed: whether it asked, closed, and the file's orientation tag.
+- `slow`: the check that GNOME's low-disk-space check skips a tape crashed the test where GNOME's housekeeping settings
+  aren't installed (GSettings aborts on a key without its schema): skipped there, and the system-monitor check that
+  follows no longer reads those settings.
+- `sidebar`: the disk-size check only picks a disk whose device node exists; in a container the host's disk is in the
+  mount table without one, so lsblk failed and the check with it.
+
+## 0.3.2-alpha.7
+
+Added:
+- `slow`: while a job writes to a tape, GNOME's low-disk-space check skips it, and afterwards its list is as it was (a
+  tape the user put there stays); a system monitor that's running is named in the job's log, once. These programs
+  asking the tape for its free space were what slowed real copies to a quarter of the drive's speed. The test keeps
+  GNOME's settings in memory (GSETTINGS_BACKEND=memory) and uses a stand-in /proc.
+- `viewer`, a new test for the image viewer's new features and for saving its changes. Rotations saved through the
+  orientation tag (every orientation, turn and flip shows as the viewer showed it, and only the tag's two bytes
+  change), exiftool adding a tag, a PNG written again turned with its text; a rotation or crop that fails part-way (a
+  file-size limit) keeping the original and leaving no part file; Straighten; crop and resize as a new file or over
+  the original, keeping the camera details and generation prompts; GPS positions. In the viewer: decoding at screen
+  size and at full size when zoomed in, double-click and pinch zoom, Keep Zoom, the filmstrip, the info panel (map
+  link, histogram), compare with linked zoom, star, move and copy to (recent) folders, Delete and Ctrl+Z, the question
+  about saving a rotation (also on closing), the remembered size and panels, and the folder's order for a selection.
+  Crops and resizes are previewed first: shown at once (turned as shown, on the screen-size copy) with nothing
+  written, Esc undoing them, and saved by Ctrl+S or when leaving the image (asked, with Discard).
+  The viewer's right-click menu in Preferences → Menus: every entry has an id in the default layout's order, a saved
+  layout and Reset apply to it, and the editor offers it.
+  CI's test jobs install exiftool and jpegtran so those checks run there.
+- `installer`: BleachBit's cleaner also clears the image viewer's recent Copy To / Move To folders (a list of paths
+  Kestrel now keeps).
+
+Changed:
+- `installer`: `kes-setup --install-optional` also installs libjpeg-turbo-progs (the viewer's Straighten).
+- `prefs`: the viewer's window size and recent folders are kept state, not settings.
+
+## 0.3.2-alpha.6
+
+Added:
+- `slow`: a copy onto a tape logs a line every 5 seconds (the time, the tape's speed or that it waits for the buffer,
+  the source's, the buffer, how far it is), both while the buffer fills and while the tape writes. It also guards
+  against the copy hanging when that line asks the buffer for its figures (the buffer called back while holding its
+  own lock).
+- `prefs`: Preferences shows the tape buffer's size now, and says when the system can't spare the largest size.
+- `sidebar`: no drive is asked anything over 7 idle seconds; a drive mounted shows and one unmounted goes as soon as the
+  mount table changes (MountWatch); a disk's size from /sys equals lsblk's; the free space is asked again when a job
+  ends.
+- `slow`: a tape isn't asked its size or health while a job uses it (each question is a command to the drive, which
+  slowed real copies to a quarter of the drive's speed), and is asked again once the job has ended.
+
+Changed:
+- `slow`: the tape buffer's size is what's safe: half the memory available at most (counting what it holds), never
+  leaving less than the share kept free, the 16 GB limit (now 10^9-byte GB, as Kestrel shows sizes) only where that's
+  safe; checked on a mid-sized, a big and a squeezed machine.
+
+## 0.3.2-alpha.5
+
+Changed:
+- `slow`: the tape buffer's size: at most 16 GB by default (20 GB available of 32 now gives 16 GB, not 16.8), and with
+  the limit set to 0, the memory available less what's kept free, as before.
+
+## 0.3.2-alpha.4
+
+Changed:
+- `groups`: "collapsing a long group from its footer brings its header into view" checks that the header is in view
+  from top to bottom, not that its whole rectangle fits: on Qt 6.4 (Ubuntu 24.04, CI) a header spanning the list's
+  columns is wider than the view, so the check failed there although the header was in view.
+
+## 0.3.2-alpha.3
+
+Added:
+- `sidebar`: the Mounts section. Which mounts are shown (GIO's rule, from the mount table), when a recent server
+  counts as connected, and, with mounts added through the new `KESTREL_TEST_MOUNTS` hook and two recent servers: the
+  section's entries in order, a mount Devices lists not repeated, a mount's name and tooltip, a greyed server, moving
+  an entry (saved), collapsing, and Remove from Recent Servers (also told to other Kestrels).
+- `chooser`: free names (download numbering from (1), the suggested name made free where the window opens and in
+  each folder visited, the original back where it's free, a name the user typed left alone, an app replacing a file
+  keeping its name and the Replace question, several files each made free without asking) and save locations (only on a
+  Save window's Overview, starting there when set to and not when replacing a file or opening, added, moved and removed
+  from the page and saved, a click going there).
+
+- `slow`: writing onto a tape, watched with inotify (the new `DirWatch` in common.h): a new file is written under its
+  name with no part file; replacing one there, and a new file onto a floppy, still go through a part file; a taken name
+  is kept; a write failing part-way (RLIMIT_FSIZE) and a cancel while writing leave no half-written file and no part.
+- `admin_helper`: the same onto a tape through the admin helper (it recognises a tape from the mount table, or a
+  `KESTREL_TEST_SLOW` folder when not root): written under its name, a replacement through a part file, a taken name
+  kept, a failed write leaving nothing.
+
+- `groups`: collapsing a date group from anywhere in it: the footer at each open group's end (named, counted, not
+  selectable; a click collapses the group and makes its header current, also for a 150-item group whose header was out
+  of view), Ctrl+Left / Ctrl+Right on an item, Collapse This Group on an item's menu, and Collapse / Expand All Groups
+  on empty space's menu and the Sort menu.
+
+- `search` (a new test): the search bar's filters (types by name, size, dates, a new tab keeping them) and searching
+  inside files: with ripgrep and with grep (matching lines, case, regular expressions and a bad one, subfolders,
+  binary and hidden files), ✕ ending the program, which folders the index covers and when Automatic uses it or reads
+  the files (also after an index that finds nothing), nothing read on a tape, and opening a result at its line.
+
+- `search`: a progress bar while a search runs ("Searching…" in the view), "Nothing found" in the view with no window
+  and no progress bar left (also filtering the folder by name), nothing said over results, and the progress bar gone
+  after ✕; the view's message is checked as seen: above the list view.
+
+Changed:
+- `sidebar`: the saved section order now includes Mounts.
+- `search`: a regular expression that doesn't parse is reported in the view ("Nothing found" and why), not the status
+  bar.
+- `installer`: --install-optional's expected packages include ripgrep.
+- `groups`: the list of what a grouped view shows leaves out the new footers (checked on their own).
+- `slow`: "a copy onto a tape writes nothing while the buffer fills" now looks for data written (a new file on a tape
+  is made under its name, empty, when it's opened).
+- `chooser`: "saving over a file asks first" now has the user type the taken name: a suggested name that's taken is
+  made free instead of asking.
+- `installer`: the BleachBit cleaner's new Save locations option (its action, the dry run and the real clean removing
+  `chooser_places` and keeping the other settings).
+- `prefs`: `sidebar_mounts_order` (the Mounts section's order) is kept state, not a setting to choose.
+
+## 0.3.2-alpha.2
+
+Added:
+- `jobs`: the drives of a job's items, asked all at once (2,000 items on one drive and one on a tape), come back as
+  each drive once, in order. The job queue now asks this way, looking each mount up once instead of each item, so a
+  job of thousands of items doesn't hold up the window.
+
+## 0.3.2-alpha.1
+
+No test changes.
+
+## 0.3.2-alpha.0
+
+No test changes.
+
+## 0.3.1-alpha.16
+
+Added:
+- `slow`: the type GLib would read from a file's contents (Open With, opening, Recent) is taken from its name on a
+  tape (a PDF without an extension is still "unknown" there, while elsewhere it's read as a PDF), and opening a file
+  on a tape adds it to Recent with its type by name. The alpha.14 check couldn't see this read: its busy tape only
+  made stat wait. Covers the fix for the freeze still seen when double-clicking a checksum file on a tape.
+
+## 0.3.1-alpha.15
+
+Added:
+- `jobs`: the Tower's Windows tab shows each window's size, the minimum it asks for, its border and screen, its
+  recent resizes (a resize made by the test) and a child wanting more room than the window has, and saves it all to
+  a file in the home folder. Covers the window diagnostics.
+
+## 0.3.1-alpha.14
+
+Added:
+- `slow`: while the tape is busy seeking (`util::set_test_busy`: every stat under it waits 1.5 s, as LTFS's do),
+  selecting files there and opening a checksum file there don't hold the window, the info panel fills in later and
+  Verify Checksums opens. The alpha.11 check only made the checksum file's read wait (a FIFO), so it missed the window
+  asking the tape for other things meanwhile (reported on alpha.12: it still froze). Covers that fix.
+
+## 0.3.1-alpha.13
+
+Added:
+- **`prefs`, a new test for the Preferences window and the right-click menus' layouts.** Every setting the code reads
+  is in the list Preferences is built from (or is kept state, like window sizes): it scans `src/` for the keys read,
+  so a new setting can't be left out. The window: a free window with its tabs and a control for every setting. A
+  change applies at once to every open window (hidden files, list view, icon size, Pinned & Starred First, the default
+  sort, the sidebar, folder preview settings) and is told to the other Kestrels with its key; a change made in a
+  window (Ctrl+H, the zoom) shows in the open window; the search box filters rows and greys out tabs; a homepage that
+  isn't a folder is refused; the file chooser's view follows the main windows' until set; a format's level and Extract
+  To…'s choices set there are what those windows start with; Reset This Tab and Reset All. The menus: every entry has
+  an id and the default layouts list them all in the menu's order (for a folder, a file, an image, an archive,
+  several items and the empty space); a saved layout hides, reorders, takes an entry out of its submenu and puts two
+  in a submenu of the user's own, with no stray separators; an entry that doesn't apply doesn't appear, and appears
+  where it was put when it does; a layout is for its kind only; an entry added in a later version appears in its
+  default place; the editor hides, moves up, into and out of a submenu, and its changes are told to the other
+  Kestrels. Covers the new Preferences and customised right-click menus.
+
+- `slow`: the tape write buffer. Its size follows the memory figures (a stand-in /proc/meminfo,
+  `KESTREL_TEST_MEMINFO`): available less 10% of the total, the share kept free, the largest size, at least 64 MB. The
+  buffer gives every file whole and in order (also ones larger than it), drops skipped files, and leaves files not
+  planned or changed since to be read directly. With a slow source (`KESTREL_TEST_TAPEBUF_DELAY_MS`): writing starts
+  only once it's full and, below the drive's lowest streaming speed, waits for a full buffer again after running dry;
+  within the speed-matching range it carries on without refilling. A copy onto the tape folder fills first, writes
+  nothing meanwhile, then every file whole and in order, and its log gives the buffer's figures; pausing pauses the
+  reading (/proc/self/io); ✕ while filling leaves nothing, not even a part file; a file that doesn't fit isn't started
+  (`KESTREL_TEST_TAPE_FREE`). LTFS's index sync is read from a stand-in ltfs command line (`KESTREL_TEST_PROC`). Properties
+  doesn't read a tape file to name its type. Covers preventing shoe-shining on tapes.
+
+Changed:
+- `atc_sync`: "Saved Preferences are reported" is now "a change made in Preferences is reported, with the setting
+  that changed": Preferences has no OK any more (changes apply as they're made), and the message names the keys.
+
+## 0.3.1-alpha.12
+
+Added:
+- **`jobs`, a new test for the job queue, the Jobs window and the Tower window.** The scheduler's rules (by drive: a job
+  waits for a running one on its drives, keeps its order within a lane, isn't overtaken; a paused waiting job doesn't
+  hold others up; Start Now; one at a time). Drive ids: paths on one drive share one, a tape is its own, a partition
+  counts as its whole disk. In one Kestrel: a job waits for another on its drive (saying so) while one on another
+  drive runs; one at a time; cancelling a waiting job, Start Now, moving a job up, Start New Jobs Paused; pausing a copy
+  (its part file stops growing, then it finishes) and a program a job runs (stopped and continued, then ended on
+  cancel); a copy's steps and its log kept after it ends. The Jobs window opens from the job panel, lists running,
+  waiting and finished jobs, and Delete cancels the selected one without moving the main window's selection to the
+  trash. Through the tower: another Kestrel's job holds a lane our job waits for, a Kestrel that leaves frees its lanes,
+  another Kestrel pauses and resumes our job, everyone hears the queue; the tower's Status (pid, protocol, refused
+  messages) and UndoList; the Tower window shows the status and the messages live. Covers the unified job queue and the
+  two windows.
+
+- **`archives`, a new test for extracting through the window and remembered passwords.** Which archives a selection
+  holds (a split set once, no other files) and the menu it gets (Extract All for several, Extract for a split set
+  selected whole, nothing with other files mixed in); the quick password test for 7z (also with encrypted names), zip,
+  rar and zpaq; Extract All asking once, again only for an archive the typed password doesn't open and after a wrong
+  one, extracting each into its own folder and ending with one summary (a damaged archive among them leaves no
+  folder); no keyring seen and no Remember box while the test holds the Secret Service's name (so the bus can't
+  start gnome-keyring by itself, as it would on a clean Ubuntu); a cancelled password window skipping just that archive; ✕ while it waits for a password closing the window
+  and stopping the job with a summary; the password window a job's thread asks with being a free window; Extract
+  Here on one archive as before. With a real gnome-keyring-daemon on the
+  test's private bus (skipped where it isn't installed): fingerprints follow the contents, nothing is saved without
+  Remember, a ticked one is saved, found again after a rename and move, other saved passwords are tried, and
+  Preferences forgets them. Covers Extract All and remembered archive passwords.
+  Also, for Open as Archive and Test Archive: 7z, zip, tar.gz, rar and zpaq archives are listed (paths, sizes) and a
+  single file or a folder extracted from each into a folder (a taken name gets a number, nothing replaced, nothing else
+  extracted, no part folder left; rar and zpaq skipped where not installed); extracting single items that fails
+  part-way (a file-size limit standing for a full disk) leaves nothing; a folder taken out on its own leaves out a
+  symlink that would then lead out of the destination; Test tells sound 7z, zip and tar.gz archives from damaged
+  ones, names the damaged file, and tells a wrong password apart; the menu offers Open as Archive / Test Archive(s)
+  (not Open as Archive for a single .gz); Test Archives asks for an encrypted one's password and tells all results
+  in one message; the archive window asks for the password of an archive with encrypted names, shows its tree in a
+  free window (raised, not doubled, when opened again) and extracts the selected files without asking again; with
+  encrypted files but visible names it opens without asking and asks once when one is extracted.
+  The keyring checks wait for the test's own gnome-keyring-daemon to own the Secret Service's name (asked with
+  NameHasOwner) before using it: asking libsecret earlier could make the bus start a second, locked keyring that took
+  the name first (seen on a clean Ubuntu 24.04).
+- CI's test and sanitizer jobs install `gnome-keyring` and `p7zip-full` (so these checks run there) and `libsecret-1-dev`.
+
+- `ui`: files dragged from a view grouped by period or by day onto a folder in it move into that folder, in the grid
+  and the list. The drag is what the view's own model gives for the selected items, with the actions it offers (as
+  the view's startDrag asks): the earlier drop checks used files from outside the view, so they missed that a grouped
+  view's drag carried no files and offered no move.
+
+Changed:
+- `theme`: the preview-build checks run the builder directly (it's no longer a thread of its own but runs in a job).
+  Added: each Generate is a job of its own (two at once are both queued and shown in the status bar); Generate keeps
+  previews already made while Regenerate Previews makes them again (a cached preview replaced by a grey stand-in
+  with the same tags must be gone), for the folder's own files and its and its subfolders' previews but nothing
+  deeper; Regenerate Folder Previews (here and recursively) and Regenerate Previews Recursively; ✕ stops a preview job
+  also after its folders are all found (the workers stop, not just the walk); the Previews submenu's entries. Covers
+  preview builds as jobs and the Regenerate options.
+- `ui_actions.txt`: Generate Previews… moved into a Previews submenu (folder and empty space), with the four
+  Regenerate entries.
+- `slow`: "a copy to a tape that another job is using waits" now holds the tape with a queued job (the per-Kestrel
+  lanes it used are replaced by the job queue).
+- `ui_actions.txt`: ☰ → Jobs… (Ctrl+Shift+J) and Tower….
+
+
+## 0.3.1-alpha.11
+
+Added:
+- **`slow`, a new test for tapes and floppies**: folders marked as a tape and a floppy (`KESTREL_TEST_SLOW`, read by
+  `src/drives.cpp`) with a statfs that waits like a busy tape's (`KESTREL_TEST_STATFS_DELAY_MS`). Checks: they're
+  recognised and listed (also that a snap's small loop device isn't taken for a floppy); asking their size doesn't
+  hold the window (sidebar, status bar, Properties, Overview) and the size comes later; a checksum file is read in the
+  background (a FIFO stands in for a seeking tape); no thumbnail, date taken, GIF playback or image details read
+  from a tape until previews are allowed, then they are; copies read a tape in tape order (from LTFS's start-block
+  attributes); a job waits while another holds the tape; the index is written after a copy; more than 1,000 small
+  files ask first; the Overview shows the tape by its volume name. Covers the LTFS and floppy fixes.
+- `fileops`: on a file system without RENAME_NOREPLACE or hard links (`KESTREL_TEST_NO_LINK`, acting as LTFS) a copy
+  to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name. Guards
+  against the "no permission" failure copying to a tape.
+- `admin_helper`: the same for the helper's copy, write and copyfile.
+- `ui`: no `QStorageInfo` outside the Overview's background scan (it asks drives for their size, which waits on a busy
+  tape or floppy). Guards against the window freezing on slow drives again.
+
+## 0.3.1-alpha.10
+
+Added:
+- **Dropping into a subfolder keeps the view where it was** (`ui`): a long folder scrolled to the top, its last files
+  (the view's current item among them) dropped onto a subfolder at the top; after the move the scroll position is
+  unchanged, in the grid, the list and the grouped grid. Guards against the list jumping to where the moved items were.
+- **The mouse's back button doesn't drag** (`ui`): double-click into a folder, click a file there, go back with the
+  back button and move the mouse while it's down: no drag picture appears in the folder above. Guards against the
+  folder just left being dragged and sliding back into place.
+- **The grid is packed** (`ui`): a folder of 850 items, re-laid out by zooming and at window widths one pixel apart:
+  every item in its own cell in order, with as many columns as fit. Guards against the gap a batched layout left at
+  the 400-item batch boundary, and the empty last column when the cells added up to exactly the width.
+- **Save follows the place shown** (`chooser`): a Save chooser's button is off on the Overview and Starred and on
+  again in a folder with nothing selected, and saves there. Guards against it staying greyed out after the Overview.
+
+## 0.3.1-alpha.9
+
+Changed:
+- CI (`deb.yml`): a push or pull request that only changes Markdown files (`*.md`: the docs, changelogs, README, TODO)
+  no longer starts the workflow, so the tests, sanitizers and package jobs don't run for it, and no package is built
+  or published. A change to anything else, in the same push or later, runs everything as before.
+
+## 0.3.1-alpha.8
+
+Added:
+- **Folder copies fill in as they go** (`fileops`): a folder copied to a new name has that name from the start, with no
+  hidden part folder beside it, and a finished file shows up in it while the copy still runs; cancelled part-way, the
+  files finished so far stay whole (no part file left), the folder gets the original's permissions, and Ctrl+Z puts
+  the partial copy in the trash; a write that fails part-way (RLIMIT_FSIZE) keeps the files finished before it and
+  reports the error. These cover copies that used to show nothing until the whole folder was done.
+
+Changed:
+- `fileops`: "a folder made under the new name while a folder copy runs" relied on the hidden part folder the copy
+  used to build beside its destination; there's none now (the new folder is claimed by making it). It now checks that
+  a folder already under the new name when the copy starts is kept and reported.
+- `fileops`: before the new write-failure check, the previous check's error message is waited for, so it can't turn
+  up among a later check's messages (it made "a file another program saves under the new name…" fail now and then).
+
+## 0.3.1-alpha.7
+
+No test changes.
+
+## 0.3.1-alpha.6
+
+Added:
+- **Folder sorts** (`pinned`): sorting a folder sorts only that folder, leaving the other folders and the default as
+  they were; it's saved in `sorts.json`, kept when coming back, followed by other tabs showing the folder and by other
+  Kestrels (both ways). Apply to Subfolders reaches every folder below and none outside it; Set as Default changes
+  only folders without a sort of their own. These cover the new per-folder sort, which replaced one sort for all
+  folders.
+- **Grouping by date** (`groups`, a new test): which period a date falls in (each period, weeks starting on the
+  locale's first day, a week across two months, January, and that going back in time never returns to a newer group);
+  a key and title per day for Group by Day; the date taken read from a photo's EXIF, a video's movie header and a PNG's
+  Creation Time (files built in the test), and none from a file without one. A folder grouped by period shows its
+  items under date headers, each group keeping the chosen sort (name both ways, size) and the oldest group first
+  when sorted by Modified ascending; by day, a header per date; by Date Created, when the files were made (skipped
+  where the file system keeps no creation times); by Date Taken, photos and videos under when they were taken once
+  read in the background, the rest under their date created; Select All leaving headers out; collapsing by click and Enter, and selecting an
+  item of a collapsed group opening it; in the grid a header taking a whole line, in the list spanning the columns;
+  new, removed and changed files moving between groups (the changed one staying selected); a drop on a header going
+  into the folder; grouping (mode and date) saved per folder and with Set as Default; Starred grouped too. These
+  cover the new Group by Period and Group by Day views and the Date to Group By choice.
+- **Old protocol** (`atc_sync`): a flight that names no protocol (one from before the protocol was named, speaking 1) is
+  ignored now that the protocol is 2 (the new "sorts" message). The tower used to accept such a flight as speaking the
+  current protocol.
+
+Changed:
+- `FakeFlight::check_in()` in `common.h` names the current protocol: without one, the tower now takes it for an old
+  flight and ignores it.
+- `ui_actions.txt`: the empty-space Sort By menu shows which sort is chosen (its entries are toggles now, like the
+  toolbar's Sort menu) and has Group by Period, Group by Day, the Date to Group By submenu, Set as Default and Apply to
+  Subfolders.
+- `pinned`: a folder's entry in `sorts.json` has two more values, its grouping and the date it groups by.
+- `installer`: the BleachBit cleaner's expected actions, dry-run listing and clean include `sorts.json` (under Folder
+  covers, colours and sorts).
+
+## 0.3.1-alpha.5
+
+Added:
+- **Following the desktop's dark style** (`theme`): a light theme with the dark style wanted gives a dark background
+  and light text, with no theme colours at all (no python3 or GTK) too, and a dark theme keeps its own colours. Kestrel
+  stayed white under GNOME's dark style unless the GTK theme itself was dark; these pin down the fix.
+- **Folder preview picks** (`theme`): first and last by name, newest and oldest first, and "beginning, middle and end"
+  (evenly spaced, with a chosen cover first), checked against files whose ages aren't in name order, so an order mixed
+  up with another fails. Also: an unknown setting falls back to first by name, and a folder of galleries picks its
+  subfolders the same way. These came with the three new choices in Preferences.
+- **Free windows** (`ui`): Properties opens as a free window (not modal, a normal window, not kept above Kestrel), several
+  at once, and closing one deletes it and what it opened. Opening them gives no widget in Kestrel's or Properties'
+  window a native window of its own: that side effect made both windows glitch on Wayland, and this check names the
+  widgets if it comes back. Messages, questions (answered, and closed without an answer), text input, the folder
+  picker (Kestrel's own chooser) and a copy's name-conflict question are all checked to open free.
+- **No modal windows in the source** (`ui`): a scan of `src/` fails on `exec()`, `open()`, the static
+  `QMessageBox`/`QInputDialog`/`QFileDialog`/`QColorDialog` functions or a modality, naming the line. Every window was
+  made free in this version; the scan keeps a modal one from slipping back in.
+- `shown_window<T>()` and `is_free_window()` in `common.h`, for finding and checking windows now that none is modal.
+
+Changed:
+- `fileops` and `chooser` found message boxes and the Extract dialog through `QApplication::activeModalWidget()`, which
+  sees nothing once windows aren't modal; they look among the visible windows instead. Checks that read a message right
+  after an operation now wait for it: a modal box used to hold the operation until the test had seen it.
+- "Closing a Properties window deletes it" waits for the deletion and carries out pending deletions while it waits.
+  Qt 6.4 (CI) doesn't carry them out in the nested event loop the tests wait in, so it failed there while passing on
+  newer Qt. The message now says which part failed.
+
+## 0.3.1-alpha.4
+
+Added:
+- **Folder-preview builds** (`theme`): Generate Folder Previews covers the folder and the folders directly in it, the
+  recursive one every folder below, neither making a thumbnail for every file; Generate Previews Recursively still
+  makes them all. And the scan finishes before most previews are made, which was the point of the faster scan.
+- **Folders-only walk** (`fileops`): it reaches every folder a full walk does and lists no files. The folder-preview
+  builds rely on it.
+- **Keep damaged files** (`fileops`): damaged 7z, zip and rar archives extract with the option, listing the damaged
+  file, and fail without it, saying how to keep them (rar skipped where rar or unrar isn't installed).
+
+## 0.3.1-alpha.3
+
+Added:
+- **Tab menu** (`ui`): Duplicate Tab (folder and back history, placed after the tab), Open in New Window (moves the
+  tab) and Close Tab, for the new tab right-click menu.
+- **Folders without images** (`theme`) are drawn in the folder colour; **special folders** show their symbol, which
+  stands out on any folder colour, white and black included (skipped when the icon theme lacks the symbols); a
+  **bookmark that isn't there** is a faded folder, a network one a plain one.
+
+Changed:
+- "No folder previews on a phone" (`devices`) now also checks what's drawn instead: a plain folder in the folder colour,
+  not nothing, since folders without previews are coloured like the rest now.
+
+## 0.3.1-alpha.2
+
+Added:
+- **`pinned`**, a new test for pinned items: pins mark an item without starring it, are saved in `pinned.json` and
+  reported to (and picked up from) other Kestrels; Pinned & Starred First sorts them first in either direction, keeps
+  each group sorted, puts newly pinned or starred items first at once, survives leaving and coming back, and turning it
+  off restores the order. `pinned.json` also went into the BleachBit cleaner's dry-run expectations (`installer`).
+
+## 0.3.1-alpha.1
+
+Added:
+- **Files another program creates mid-job** (`fileops`, `admin_helper`): a file or folder saved under the new name while
+  a copy, move or single-file decompress runs is kept and reported, and a name that's taken by the time a job starts is
+  never replaced unless Replace was chosen. These cover the fix that made only Replace replace.
+
+Changed:
+- The race checks step in when the copy's hidden `.kes-….part` file appears, instead of at the first progress report:
+  reports come at most every 80 ms, and on a fast disk the copy could finish before the first one, so the check
+  sometimes tested nothing.
+- "A replace finishes" asks for Replace explicitly, since a copy over an existing name no longer replaces on its own.
+- CI pulls its Ubuntu containers through `mirror.gcr.io`: Docker Hub's rate limit on the runners' shared addresses was
+  failing the package job.
+
+## 0.3.1-alpha.0
+
+Changed:
+- The admin helper's ownership check now expects new items to get the folder's **group**, not its owner: run as the
+  user, it can't give away ownership. The owner-as-root half moved to `tests/check_package.sh`, which runs as root.
+- The symlink-swap delete check reports how many swaps it managed, so a run where the race never happened is visible.
+- The escaping-link sweep is also checked in folders an archive leaves unlistable (mode 111), not only read-only and
+  closed ones.
+
+## 0.3.0-alpha.10
+
+Removed:
+- The cross-version checks against the Python version (launching its `kes` in `atc_tabs`, matching its undo format in
+  `atc_undo`, the shared check texts), ahead of the two projects going separate ways.
+
+Changed (checks made able to fail):
+- The cancel test cancels from the copying thread at the first report on a file, with long sparse files, so the cancel
+  always lands mid-copy. It used to cancel at once, and on a fast disk the copy could finish first, making
+  "stops part-way" untested. It also checks no hidden part folder is left.
+- `atc_tabs`: a launched Kestrel that crashes no longer counts as one that kept its own window, and a second hand-off is
+  checked to add a second tab. A hand-off with a selection is routed to the Kestrel that has a window.
+- `theme`: the dark test palette's highlight changed from `#3584e4` to `#2a7fd4`. The old one was the default accent
+  itself, so "follows the theme's colour" passed even when the default was used.
+- `sidebar`: Trash moved within Places is also checked not to appear in another section.
+- `chooser`: "with multiple, every selected file is chosen" checks the exact files, not just that two came back.
+- `parsing`: the KESTREL_STATS report check describes this project's format only.
+- `tests/check_package.sh`: the admin helper's ownership rules as root (what it makes in root's folder is root's, in the
+  user's folder the user's).
+
+## 0.3.0-alpha.9
+
+Added (`fileops`):
+- Ctrl+Z after a copy that replaced a file says it can't be undone and leaves the action before it alone.
+- Right-clicking a selection mixing trashed and live files gives the normal menu; only an all-trash one gives Restore.
+- Escaping links are removed in folders an archive leaves read-only (555) or closed (000) too, the folders' modes are
+  put back, and each removed link is reported.
+
+## 0.3.0-alpha.8
+
+Added:
+- **Ownership** (`admin_helper`): copies, new folders (with the parents made for them), files and links get the
+  folder's owner, and a copy given another group loses its set-group-ID bit.
+- **Undo after Replace** (`fileops`): a copy that replaced a file isn't offered for undo, and undoing a batch leaves
+  that copy where it is (undoing it would trash the only copy left).
+- **Batch rename** (`fileops`): one failing part-way puts every item back, a dangling symlink too, and replaces nothing.
+- **Conflict dialog** (`fileops`): it says a merge replaces files with the same names and can't be undone.
+- **Delete on mixed selections** (`fileops`): Move to Trash trashes the live items and asks only about the trashed one.
+- **Escaping links** (`fileops`): which link targets lead out of the folder, and extracting into an existing folder keeps
+  the user's own links while dropping the archive's escaping one.
+
+## 0.3.0-alpha.7
+
+Added (`theme`):
+- GNOME's accent colour names give libadwaita's colours, a chosen accent comes before the theme's and folders follow it,
+  and with none chosen folders take the theme's (skipped before GNOME 47). For the new accent colour support.
+
+## 0.3.0-alpha.6
+
+Added (failure-safe replacing):
+- `fileops`: replacing a folder and cancelling part-way, or failing part-way (a write error through RLIMIT_FSIZE), keeps
+  the old folder; copying or moving a folder onto another replaces it whole; compressing over an archive that fails
+  keeps the old one; Kestrel's own files are written in one step (keeping permissions and symlinks); a new file never
+  replaces one that's there; moving between drives copies whole before deleting.
+- `admin_helper`: a write failing part-way (a full disk) keeps the old file or folder, a cancel or an ended admin session
+  stops a large copy at once, and copying or moving a folder onto another replaces it whole.
+
+These cover the rule that a failure, cancel or crash never leaves half a file or loses the old one.
+
+## 0.3.0-alpha.5
+
+- No test changes (version bump only).
+
+## 0.3.0-alpha.4
+
+Added (`fileops`):
+- **Create Checksum File**: one file per algorithm that verifies as OK, or one BSD-tag file (making it again leaves out
+  its own older copy), and an unreadable file is left out and named.
+- **Safer writes**: replacing a file and cancelling or failing part-way keeps the original; replacing a symlink replaces
+  the link, not its target, and another hard link keeps its contents.
+- **Desktop shortcuts**: names and paths with quotes, `$`, backquotes, backslashes, `%` and line breaks stay whole and
+  add no keys, `desktop-file-validate` accepts them, other control characters are refused, and the program's shortcut
+  runs only that program. These came with the escaping fix that stopped file names injecting keys or commands.
+
+## 0.3.0-alpha.3
+
+Added:
+- **Single-file archives** (`fileops`): decompressing doesn't write through a dangling symlink of that name or truncate
+  the file a symlink points to, and a failed run keeps the old file and no temporary one.
+- **Admin helper moves** (`admin_helper`): moving or copying something onto itself or into itself, or a file onto a
+  hard link to it, leaves it as it was. This was the bug where such a move deleted the source.
+
+## 0.3.0-alpha.2
+
+- No test changes (version bump only).
+
+## 0.3.0-alpha.1
+
+Added (`fileops`):
+- **Checksum verification**: checksum files are recognised by name; GNU, BSD-tag, SFV and lone-hash files are read; a
+  verify finds matching, changed and missing files for every algorithm; double-clicking a checksum file opens Verify
+  Checksums; Properties' Checksums tab checks a file against a chosen checksum file.
+
+## 0.3.0-alpha.0
+
+Added (`installer`):
+- `kes-setup --install-optional` installs the missing optional packages apt has, names the ones it hasn't, and installs
+  nothing when they're all there.
+
+## 0.2.1-alpha.3: security and robustness
+
+Added:
+- **`admin_helper`**, a new test for the part that runs as root. It runs the helper as the user and sends it requests as
+  Kestrel does: every operation works; relative paths and protected folders are refused; every operation through a
+  symlinked folder is refused; hard links to other users' files are refused; a folder swapped for a symlink during a
+  delete can't redirect it. This came with the helper's hardening.
+- **Processes** (`fileops`): a program's timeout holds without pipes and after it closes its output, a tool nothing
+  refers to any more is stopped, and a program exiting without reading its input doesn't kill Kestrel.
+- **Archive passwords** (`fileops`): password-protected rar and zip archives are made and opened, and a watcher on every
+  process's command line never sees the password.
+- **Crafted archives** (`fileops`, fixtures in `tests/fixtures/`): tar.gz, zip, 7z and rar archives with `../` and
+  absolute paths or links can't write or leave a link outside the folder.
+- **Symlinks in normal file operations** (`fileops`): a merge doesn't write through a symlink in the destination,
+  copying onto a symlink replaces the link, and a symlink-swapped folder can't take a delete outside the tree.
+- **Tower messages** (`atc_sync`): malformed, unknown and oversized messages are dropped, field types and paths are
+  checked, only valid undo entries are kept, and a flight speaking another protocol version isn't passed on.
+- **`ui`**, a new test: every menu entry and shortcut compared with `tests/ui_actions.txt` (so one lost when code moves
+  is named), every control has a screen-reader name, and a file dropped onto a folder goes into it with the folder
+  highlighted.
+- **`parsing`**, a new test: `shlex_split` and the ordered JSON reader for exiftool's output.
+- **Performance counters** (`fileops`, `atc_sync`): KESTREL_STATS counts folder listings, copy speed, archive jobs, tasks
+  and the tower's delay.
+- **App icon** (`installer`): installed in every size and used by the menu entry, and removed again.
+- **BleachBit**: `kes-setup --bleachbit` writes a valid cleaner that follows BleachBit's schema and names only Kestrel's
+  files, a dry run lists exactly those and changes nothing, a real clean keeps everything else, and `--undo` removes it
+  (`installer`); Shred and Empty Trash with BleachBit hand it the right files, and ✕ stops it (`fileops`).
+
+CI:
+- A **sanitizers** job runs the suite with AddressSanitizer and UndefinedBehaviorSanitizer.
+- A **package** job installs the .deb on clean Ubuntu 24.04 and 26.04 containers (`tests/check_package.sh`): it runs, is
+  complete, keeps the admin helper's root-only rules, and removes cleanly. Only a package that passes is published.
+
+## 0.2.1-alpha.2
+
+CI:
+- A **test** job runs `tests/run.sh` on Ubuntu 24.04 before the .deb is built, so a failing test means no package,
+  release or apt update. It installs what the installer test needs (xdg-utils, desktop-file-utils, GNOME Shell's
+  settings).
+
+## 0.2.1-alpha1 / 0.2.1-alpha.1
+
+- No test changes (version naming only).
+
+## 0.2.1-alpha
+
+Added:
+- **File chooser settings** (`chooser`): a chooser opens smaller with smaller icons, and its zoom and hidden-files
+  settings are its own, for the chooser's separate view settings.
+- **Drop focus extension** (`installer`): `--default` installs and enables it keeping the user's other extensions (only
+  enabling the package's copy after the .deb), once, and `--uninstall` / `--undo` take it out again.
+
+## 0.2.0-alpha
+
+Added:
+- **`devices`**, a new test for phones and cameras: which locations are on a device, which videos are copied before
+  playing, where the Overview lists mounts, the connection hints (Trust, File transfer, PTP), and thumbnails from a
+  phone without folder previews (which would download every file) or hanging on an unreadable photo.
+- **Linux Mint** (`theme`, `chooser`): Cinnamon's own settings are used for the wallpaper, history and icons; on Qt
+  before 6.5 the GTK theme's colours become the palette; an X11 app's window id is read from the portal's handle.
+- **`kes-setup`** (`installer`): on its own, as after installing the .deb, `--default` points the D-Bus services at that
+  `kes` without sudo and leaves the menu entry and PATH alone, and `--undo` puts everything back.
+
+Changed (`installer`):
+- The setup also makes a stand-in for Nemo the folder handler, and `--uninstall` is checked to put it back.
+- The dock checks are skipped where GNOME Shell's settings aren't installed (Linux Mint and other desktops).
+- A stand-in `kes` on PATH, since GIO ignores a menu entry whose program it can't find.
+
+## 0.1.3-alpha
+
+Added:
+- **`chooser`**, a new test for Kestrel as the system's file chooser: filters, Save and Open, replacing a file (asking
+  first), multiple files, folders, several files into one folder, Cancel, closing the window, and the app closing it.
+- **`sidebar`**, a new test: rearranging entries and sections (saved, and kept within their section), collapsing, and
+  sharing the order with other windows and Kestrels.
+- **`theme`**, a new test: light and dark palettes, colours derived from them, and following a change (callbacks run
+  once, stylesheets, the sidebar and the Overview take the new colours, the folder colour follows the accent).
+- **Archives** (`fileops`): a .tar.gz opens Kestrel's Extract dialog; .deb, .iso and .apk open with their own apps.
+- **Installer** (`installer`): the file chooser's portal definition and service are installed (keeping the user's own
+  portals.conf, and putting it back), and `~/.local/bin` goes on new terminals' PATH once and comes off again.
+
+## 0.1.2-alpha: first release
+
+Added, the first test suite (`tests/run.sh`, each test a program with its own HOME and session bus):
+- **`fileops`**: copy, move, merge, replace, delete, cancel, trash, undo, unique names and links.
+- **`atc_sync`**: changes reported to and picked up from other Kestrels through the tower, and a crashed tower replaced.
+- **`atc_tasks`**: running tasks shown and cancelled across windows and Kestrels.
+- **`atc_undo`**: undo per Kestrel (the default) and shared between them, with and without a tower.
+- **`atc_tabs`**: folders from launched Kestrels opening as tabs when that's on.
+- **`installer`**: `install.sh --default`, `--dock` and `--uninstall` in a throwaway HOME, run twice to show nothing
+  doubles.

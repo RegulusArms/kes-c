@@ -2,10 +2,13 @@
 // Usage: kestrel_cpp TEST DATA_DIR [ARG]. Prints {"s": seconds, "n": items, "rss_mb": peak memory}.
 //
 //   trash      move every file in ~/victim to the trash with the window's Move to Trash, then Empty Trash ("empty_s")
-//   move_xdev  move ~/movesrc to ARG (on another drive)
+//   move_xdev  move ~/move/movesrc to ARG (on another drive)
+//   copy_at    copy ARG/ARG3 (copysrc or copybig) to ARG/copydst-kestrel (one drive or share), with Preferences →
+//              Files → Copying on (ARG2 "kernel") or off ("loop")
 #include "app.h"
 #include "fileops.h"
 #include "metadata.h"
+#include "prefs.h"
 #include "thumbs.h"
 #include "util.h"
 #include "widgets.h"
@@ -60,17 +63,9 @@ int main(int argc, char **argv)
     QElapsedTimer t;
     t.start();
     if (test == "bulk_thumbs" || test == "mosaics") {
-        bool fin = false;
-        int done = 0;
-        auto *b = new RecursiveBuilder(test == "bulk_thumbs" ? D + "/gallery" : D + "/albums", 160, tm);
-        QObject::connect(b, &RecursiveBuilder::finished_build, [&](int d, int, bool) {
-            fin = true;
-            done = d;
-        });
-        b->start();
-        wait_for([&] { return fin; });
-        b->wait();
-        n = done;
+        RecursiveBuilder b(test == "bulk_thumbs" ? D + "/gallery" : D + "/albums", 160, tm);
+        b.run();   // (in the app it runs as a job; here on its own, as the build itself is what's measured)
+        n = b.done_count();
     } else if (test == "search") {
         long found = 0;
         auto *st = new SearchThread(D + "/tree", "*_7.jpg", false);
@@ -83,6 +78,14 @@ int main(int argc, char **argv)
         bool fin = false;
         dst = join(HOME(), "copydst");
         fileops::start_ops(nullptr, {{"copy", D + "/copysrc", dst}}, "Copying", [&] { fin = true; });
+        wait_for([&] { return fin; });
+    } else if (test == "copy_at") {
+        bool fin = false;
+        prefs::set("copy_kernel", argc > 4 && QString(argv[4]) == "kernel");
+        dst = join(ARG, "copydst-kestrel");
+        t.restart();
+        fileops::start_ops(nullptr, {{"copy", join(ARG, argc > 5 ? QString(argv[5]) : QString("copysrc")), dst}}, "Copying",
+                           [&] { fin = true; });
         wait_for([&] { return fin; });
     } else if (test == "trash") {
         auto *w = new MainWindow({HOME()}, tm);
@@ -100,10 +103,14 @@ int main(int argc, char **argv)
         qint64 clicked = -1;
         QTimer closer;   // Empty Trash asks first: answer like a user would, and start the clock there
         QObject::connect(&closer, &QTimer::timeout, [&] {
-            if (auto *m = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()); m && clicked < 0) {
-                clicked = t.elapsed();
-                m->button(QMessageBox::Yes)->click();
-            }
+            if (clicked >= 0)
+                return;
+            for (QWidget *top : QApplication::topLevelWidgets())   // a free window, not modal (windows.h)
+                if (auto *m = qobject_cast<QMessageBox *>(top); m && m->isVisible() && m->button(QMessageBox::Yes)) {
+                    clicked = t.elapsed();
+                    m->button(QMessageBox::Yes)->click();
+                    return;
+                }
         });
         closer.start(5);
         w->empty_trash();
@@ -113,7 +120,7 @@ int main(int argc, char **argv)
         empty_left = isdir(trash_files) ? listdir(trash_files).size() : 0;
     } else if (test == "move_xdev") {
         bool fin = false;
-        fileops::start_ops(nullptr, {{"move", join(HOME(), "movesrc"), ARG}}, "Moving", [&] { fin = true; });
+        fileops::start_ops(nullptr, {{"move", join(HOME(), "move/movesrc"), ARG}}, "Moving", [&] { fin = true; });
         wait_for([&] { return fin; });
     } else if (test == "metadata") {
         QStringList files = listdir(D + "/meta");

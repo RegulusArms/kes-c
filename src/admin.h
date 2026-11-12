@@ -48,7 +48,8 @@ public:
     void start();
     // Run one operation as root (call from a worker thread). Progress goes to task; Cancel is passed on.
     // Raises AdminError, or Cancelled.
-    void call(Task *task, const QString &op, const QVariantMap &args);
+    // returns the helper's answer (copy, move: "xattrs_left_out", the attribute names the destination couldn't hold)
+    QJsonObject call(Task *task, const QString &op, const QVariantMap &args);
     void end();   // close the session: the helper exits as soon as its input closes
 
 Q_SIGNALS:
@@ -88,8 +89,10 @@ void start_session(QWidget *parent);
 
 // After a permission error: run work(task) as administrator. With a session open it just runs; otherwise the
 // user is asked first (and then enters their password once). work() uses session().call(); it may return a list
-// of per-item error strings. on_done(ok) runs afterwards.
+// of per-item error strings. on_done(ok) runs afterwards. paths: what it reads and writes, for its lanes in the job queue
+// (jobs.h); empty: it starts at once.
 void retry_as_admin(QWidget *parent, const QString &title, const QString &message,
-                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done = nullptr);
+                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done = nullptr,
+                    const QStringList &paths = QStringList());
 
 }  // namespace admin

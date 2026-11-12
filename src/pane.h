@@ -2,19 +2,30 @@
 // search, history and selection.
 #pragma once
 
+#include "places.h"
+#include "search.h"
+
 #include <QPointer>
+#include <QSet>
 #include <QWidget>
 
 class Animator;
+class DateGroupProxy;
 class FSModel;
 class GridDelegate;
 class MainWindow;
 class OverviewPage;
+class QToolButton;
+class QProgressBar;
+class QComboBox;
+class QDoubleSpinBox;
+class QDateEdit;
 class SearchModel;
 class SearchThread;
 class PinSortProxy;
 class ThumbnailManager;
 class QAbstractItemModel;
+class QModelIndex;
 class QAbstractItemView;
 class QCheckBox;
 class QFileSystemWatcher;
@@ -45,6 +56,7 @@ public:
     bool is_grid() const;
     QAbstractItemView *view() const;
     bool is_overview() const;
+    OverviewPage *overview_page() const { return overview; }
     bool is_trash() const;
     bool is_virtual() const;   // Starred or Recent: files from anywhere, not a folder
     bool is_listing() const;   // a list of files from many folders (Trash, Starred, Recent) in the results model
@@ -53,6 +65,18 @@ public:
     void apply_folder_previews();
     void zoom(int step, int absolute = -1);
     int zoom_value() const;
+    void set_sizes(int grid, int list);   // both zooms (Preferences); saved by whoever changed them
+    void set_search_options(bool subfolders, bool contents);   // the search bar's switches (Preferences)
+    // The search bar's Filters (type, size, date) and how File contents searches: kept for this session, in every
+    // tab and window. Setting one updates the bar and searches again.
+    SearchFilter search_filter() const;
+    void set_search_filter(const SearchFilter &f);
+    ContentSearch content_search() const;
+    void set_content_search(const ContentSearch &c);
+    void search_for(const QString &text);   // as if typed in the search bar (shown), searched at once
+    int match_line(const QString &path) const;   // a content search's first matching line in that file (0: none)
+    QString view_message() const;     // what the view says in place of items ("Nothing found"…), as seen (over the view)
+    bool search_busy_shown() const;   // the search's progress bar is showing
     void update_grid_size();
     bool set_path(const QString &path, bool record = true, const QString &select = QString());
     void show_trash();
@@ -68,11 +92,33 @@ public:
     void start_search();
     void close_search(bool refocus = true, bool navigating = false);
     void stop_search();
+    void cancel_thumbs();   // drop the thumbnails and folder previews this pane asked for that no one else wants
+    const QObject *thumb_owner() const;   // whom its folder's thumbnails are asked for (ThumbnailManager::get)
     QStringList selected_paths() const;
+    // the selected items as the view knows them (kind: KindRole's bits, -1 if it doesn't know; size: -1 likewise),
+    // without asking the file system: on a busy tape, a stat waits until the drive gets there
+    struct Known {
+        QString path;
+        int kind = -1;
+        qint64 size = -1;
+    };
+    QList<Known> selected_known() const;
     QStringList all_paths() const;
     QString current_path() const;
     void invert_selection();
-    void sort_by(int col, int order = -1);
+    void sort_by(int col, int order = -1);   // for this folder (or place) only
+    void apply_folder_sort();   // show the folder's own sort, or the default when it has none
+    int grouping() const { return group_mode; }     // groups::Mode
+    int grouping_by() const { return group_by; }   // groups::DateBy
+    void set_grouping(int mode, int by);   // for this folder (or place) only, like its sort
+    // Collapsing date groups from anywhere in them (not only their header): the group of the current item (or header,
+    // or footer), -1 if not grouped; collapsing keeps the view on the group's header, which becomes the current row
+    int current_group() const;
+    int group_of_path(const QString &path) const;   // the group an item shown here is in (-1: none)
+    void collapse_group(int key);
+    void expand_group(int key);
+    void set_all_groups_collapsed(bool on);
+    QList<int> group_keys() const;   // in order (none when not grouped)
     void set_pinned_first(bool on);   // pinned and starred items first
     bool pinned_first() const;
     QString title() const;
@@ -102,8 +148,14 @@ private:
     void setup_tree();
     FSModel *make_model();
     void attach(QAbstractItemModel *model);
+    void set_root(const QModelIndex &root);   // the folder shown, in the attached model
+    void apply_grouping(int mode, int by);
+    void span_headers();
+    QModelIndex source_index_for(const QString &p) const;   // in the attached model
+    places::FolderSort folder_sort(const QString &p) const;   // its own, or the default
     void fill_trash(const QVariant &items, int gen);
-    void add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, int gen, const QStringList &sel);
+    void add_trash_rows(QStringList paths, const QHash<QString, QString> &locations, const QVariantMap &stats, int gen,
+                        const QStringList &sel);
     void trash_changed();
     void dir_loaded(const QString &p);
     QModelIndex index_for(const QString &p) const;
@@ -120,21 +172,55 @@ private:
     void starred_changed();
 
     ThumbnailManager *thumbs;
+    QAbstractItemModel *attached = nullptr;   // the folder's (proxy) or the results' (search_model)
+    bool grouped = false;   // group_mode isn't groups::NONE
+    int group_mode = 0, group_by = 0;
+    bool applying_sort = false;     // apply_folder_sort is setting the header: not a sort to remember
     bool search_recorded = false;   // the folder as it was before the active search is on back_stack
     QString pending_select;
     int trash_gen = 0;              // bumps on every combined-trash reload, so stale loads are dropped
     QFileSystemWatcher *trash_watch = nullptr;
     bool trash_reload = false;
+    // the results follow their files: a deleted one goes, one that comes back returns, a renamed one is renamed
+    // (SearchModel::update/moved). Checked on a thread when a folder they're in changes, a job ends, Kestrel moves
+    // or renames something, or Kestrel comes back to the front.
+    QFileSystemWatcher *results_watch = nullptr;
+    int results_watched_gen = -1;   // the search the watched folders are for
+    QSet<QString> results_changed;  // folders changed since the last check ("" = every result)
+    bool results_checking = false;  // a check is running (another one waits for it)
+    int finished_seen = 0;          // the finished jobs counted at the last check
+    QTimer *results_timer = nullptr;
+    // set_path's checks of where it's going (look()): waited for at most LOOK_MS
+    enum class Look { File, Dir, Missing, Denied, Busy };
+    static constexpr int LOOK_MS = 300;
+    Look look(const QString &p);
+    void late_look(const QString &p, Look what);
+    void tell_cannot_open(const QString &p, Look what);
+    void watch_results(const QStringList &paths);
+    void check_results(const QString &dir = QString());   // soon, coalesced; "" = every result
+    void run_results_check();
     QWidget *search_bar;
     QLineEdit *search_edit;
     QCheckBox *search_sub;
     QCheckBox *search_contents;
+    QToolButton *filters_btn;
+    QProgressBar *search_progress;   // busy while a search runs
+    QString search_error;            // why the last search found nothing it should have (shown in the view)
+    QWidget *filter_row, *content_opts;
+    QComboBox *f_type, *f_size_mode, *f_unit, *f_when, *f_date_by, *c_engine;
+    QDoubleSpinBox *f_size;
+    QDateEdit *f_from, *f_to;
+    QCheckBox *c_regex, *c_case;
+    bool loading_filters = false;
+    void build_filter_row();
+    void filters_changed();   // the widgets → the session's filters, then search again
     QTimer *search_timer;
     QStackedWidget *stack;
     QAbstractItemView *mode_view;   // grid or tree; stays set while the overview page is shown
     OverviewPage *overview;
     QLabel *empty;
     FSModel *model = nullptr;
+    DateGroupProxy *grouper = nullptr;   // between the model attached and the views while grouped by date (groups.h)
     PinSortProxy *proxy = nullptr;   // between model and the views (PinSortProxy)
     SearchModel *search_model = nullptr;
     GridDelegate *delegate;

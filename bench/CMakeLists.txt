@@ -11,9 +11,10 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)   # focus.cpp
+pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)   # keyring.cpp
 file(GLOB APP_SOURCES ${KES_SRC}/*.cpp ${KES_SRC}/*.h)
 list(REMOVE_ITEM APP_SOURCES ${KES_SRC}/main.cpp ${KES_SRC}/admin_helper.cpp)
 add_executable(kestrel_cpp kestrel_cpp.cpp ${APP_SOURCES})
 target_include_directories(kestrel_cpp PRIVATE ${KES_SRC})
 target_compile_definitions(kestrel_cpp PRIVATE QT_NO_KEYWORDS KES_VERSION="bench")
-target_link_libraries(kestrel_cpp PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB)
+target_link_libraries(kestrel_cpp PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets PkgConfig::GIO PkgConfig::XCB PkgConfig::SECRET)

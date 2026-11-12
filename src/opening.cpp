@@ -6,20 +6,107 @@
 
 #include "archive.h"
 #include "archive_ui.h"
+#include "diskimage.h"
 #include "chooser.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "hashcheck.h"
+#include "pgp.h"
+#include "signature.h"
 #include "places.h"
 #include "proc.h"
+#include "undo.h"
 #include "util.h"
 #include "viewer.h"
 #include "widgets.h"
+#include "windows.h"
 
-#include <QMessageBox>
 #include <QPointer>
 
+#include <gio/gio.h>
+
 using namespace util;
+
+// A content search's result opened at its matching line, where the default app is an editor known to take one on its
+// command line (documented: gedit and its forks, Geany, VS Code and its forks, Kate, Sublime Text, Zed). Others,
+// GNOME Text Editor among them (no such option), open the file as usual: false.
+// Several images selected: the viewer shows them in the order the folder shows them, not the order they were picked in
+static QStringList in_view_order(Pane *p, QStringList files)
+{
+    QHash<QString, int> at;
+    const QStringList order = p->all_paths();
+    for (int i = 0; i < order.size(); ++i)
+        at.insert(order[i], i);
+    std::stable_sort(files.begin(), files.end(),
+                     [&](const QString &a, const QString &b) { return at.value(a, INT_MAX) < at.value(b, INT_MAX); });
+    return files;
+}
+
+static bool open_at_line(const QString &path, int line)
+{
+    AppRef app = default_app(path);
+    const char *exe = app ? g_app_info_get_executable(app.get()) : nullptr;
+    if (!exe || line <= 0)
+        return false;
+    QString bin = basename(QString::fromLocal8Bit(exe)), l = QString::number(line);
+    QStringList argv;
+    if (QStringList{"gedit", "xed", "pluma", "geany"}.contains(bin))
+        argv = {exe, "+" + l, path};
+    else if (QStringList{"code", "codium", "code-oss", "cursor"}.contains(bin))
+        argv = {exe, "-g", path + ":" + l};
+    else if (QStringList{"kate", "kwrite"}.contains(bin))
+        argv = {exe, "-l", l, path};
+    else if (QStringList{"subl", "sublime_text", "zed", "zeditor"}.contains(bin))
+        argv = {exe, path + ":" + l};
+    else
+        return false;
+    return proc::start_detached(argv);
+}
+
+// A checksum file: with a signature beside it (SHA256SUMS.gpg…), the signature is checked first, then the files it
+// lists; otherwise Verify Checksums (one that lists nothing opens as an ordinary file). Looked for on a worker: the
+// folder may be on a tape busy seeking.
+void MainWindow::open_checksums(const QString &f)
+{
+    QPointer<MainWindow> self(this);
+    fileops::run_task(
+        this, tx("Reading %1").arg(basename(f)), [f]() { return QVariant(signature::signature_for(f)); },
+        [self, f](const QVariant &sig) {
+            if (!self)
+                return;
+            auto plain = [self, f]() {
+                if (self && !self->open_file(f))
+                    warn(self, tx("Open"), tx("Could not open %1").arg(f));
+            };
+            if (sig.toString().isEmpty())
+                hashcheck::open_dialog(self, f, plain);
+            else
+                signature::open_window(self, sig.toString(), [self, f]() {
+                    if (self)
+                        hashcheck::open_dialog(self, f, nullptr);
+                });
+        },
+        true);
+}
+
+// A signature (.sig, .asc, .gpg, .sign) opens Verify Signature; an encrypted file (.gpg, .pgp, .asc) Decrypt; a key or
+// anything else with those names opens as usual
+void MainWindow::open_signed_or_encrypted(const QString &f)
+{
+    QPointer<MainWindow> self(this);
+    auto plain = [self, f]() {
+        if (self && !self->open_file(f))
+            warn(self, tx("Open"), tx("Could not open %1").arg(f));
+    };
+    auto decrypt = [self, f, plain]() {
+        if (self)
+            pgp::decrypt(self, f, plain);
+    };
+    if (signature::is_signature_name(f))
+        signature::open_window(this, f, pgp::is_encrypted_name(f) ? std::function<void()>(decrypt) : std::function<void()>(plain));
+    else
+        decrypt();
+}
 
 void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
 {
@@ -29,9 +116,24 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
             paths << x;
     if (paths.isEmpty())
         return;
+    // folder or file: as the view knows it where it can (on a tape busy seeking, a stat would hold the window until the
+    // drive gets there); a link is followed
+    QHash<QString, int> kinds;
+    for (const Pane::Known &k : p->selected_known())
+        kinds.insert(k.path, k.kind);
     QStringList dirs, files;
-    for (const QString &x : paths)
-        (isdir(x) ? dirs : files) << x;
+    for (const QString &x : paths) {
+        int kind = kinds.value(x, -1);
+        bool dir = kind >= 0 && !(kind & KIND_LINK) ? bool(kind & KIND_DIR) : isdir(x);
+        (dir ? dirs : files) << x;
+    }
+    if (embedded) {   // a browser inside another window (embed()): folders open as usual, files go to it
+        if (!dirs.isEmpty())
+            p->set_path(dirs.first());
+        else if (!files.isEmpty() && embed_activated)
+            embed_activated(files);
+        return;
+    }
     if (chooser) {   // a file chooser: folders open as usual, files are the choice
         if (!dirs.isEmpty())
             p->set_path(dirs.first());
@@ -50,10 +152,14 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     }
     QStringList images, videos, fetch, others;
     for (const QString &f : files) {
-        if (archive::opens_as_archive(f))
-            archive_ui::extract_dialog(this, f);   // Kestrel's own extraction, not the system's archive app
-        else if (hashcheck::is_hash_file(f) && hashcheck::open_dialog(this, f))
-            ;   // Verify Checksums (one that lists nothing opens as text)
+        if (diskimage::is_image(f) && !f.toLower().endsWith(".iso"))   // (an .iso opens as an archive, as before)
+            diskimage::mount_image(this, f);
+        else if (archive::opens_as_archive(f))
+            archive_ui::open_archive(this, f);   // Kestrel's own extraction, not the system's archive app
+        else if (signature::is_signature_name(f) || pgp::is_encrypted_name(f))
+            open_signed_or_encrypted(f);
+        else if (hashcheck::is_hash_file(f))   // Verify Checksums (one that lists nothing opens as an ordinary file)
+            open_checksums(f);
         else if (is_image(f))
             images << f;
         else if (is_video(f))
@@ -76,9 +182,9 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
                 if (is_image(x))
                     all_imgs << x;
             int idx = std::max<int>(0, all_imgs.indexOf(images.first()));
-            open_viewer(p, all_imgs.isEmpty() ? images : all_imgs, all_imgs.contains(images.first()) ? idx : 0);
+            open_viewer(p, all_imgs.isEmpty() ? images : all_imgs, all_imgs.contains(images.first()) ? idx : 0, true);
         } else {
-            open_viewer(p, images, 0);
+            open_viewer(p, in_view_order(p, images), 0);
         }
     } else if (!images.isEmpty()) {
         others += open_with_choice(images, img_choice);
@@ -86,15 +192,15 @@ void MainWindow::open_paths(Pane *p, const QStringList &paths_in, bool new_tab_)
     if (!videos.isEmpty())
         open_videos(videos);
     for (const QString &f : others)
-        if (!open_file(f))
-            QMessageBox::warning(this, "Open", "Could not open " + f);
+        if (!open_at_line(f, p->match_line(f)) && !open_file(f))
+            warn(this, tx("Open"), tx("Could not open %1").arg(f));
 }
 
 void MainWindow::open_videos(const QStringList &videos)
 {
     for (const QString &f : open_with_choice(videos, settings().value("video_opener", "system").toString()))
         if (!open_file(f))
-            QMessageBox::warning(this, "Open", "Could not open " + f);
+            warn(this, tx("Open"), tx("Could not open %1").arg(f));
 }
 
 QStringList MainWindow::open_with_choice(const QStringList &files, const QString &choice)
@@ -107,7 +213,7 @@ QStringList MainWindow::open_with_choice(const QStringList &files, const QString
         launch_app(app, files);
         return {};
     } catch (const Error &e) {
-        QMessageBox::warning(this, "Open", QString("Could not open with %1: %2").arg(app_name(app), e.message()));
+        warn(this, tx("Open"), tx("Could not open with %1: %2").arg(app_name(app), e.message()));
         return files;
     }
 }
@@ -150,16 +256,16 @@ void MainWindow::quick_view(Pane *p, const QStringList &paths)
                 if (is_image(x))
                     all_imgs << x;
             int i = all_imgs.indexOf(imgs.first());
-            open_viewer(p, all_imgs.isEmpty() ? imgs : all_imgs, std::max(i, 0));
+            open_viewer(p, all_imgs.isEmpty() ? imgs : all_imgs, std::max(i, 0), true);
         } else {
-            open_viewer(p, imgs, 0);
+            open_viewer(p, in_view_order(p, imgs), 0);
         }
     } else if (!paths.isEmpty()) {
         properties(paths);
     }
 }
 
-void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
+ImageViewer *MainWindow::open_viewer(Pane *p, const QStringList &images, int idx, bool whole_folder)
 {
     QPointer<Pane> pp(p);
     auto viewer_ptr = std::make_shared<QPointer<ImageViewer>>();
@@ -167,10 +273,11 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
     cb.on_delete = [this](const QString &path) {
         try {
             util::trash(path);
+            undo::record_paths("trash", TX_NOOP("Move to Trash"), {path});
             sidebar->refresh();
             return true;
         } catch (const OSError &e) {
-            QMessageBox::warning(this, "Move to Trash", e.message());
+            warn(this, tx("Move to Trash"), e.message());
             return false;
         }
     };
@@ -184,13 +291,37 @@ void MainWindow::open_viewer(Pane *p, const QStringList &images, int idx)
         viewers = keep;
     };
     cb.on_properties = [this, viewer_ptr](const QString &path) { properties({path}, viewer_ptr->data()); };
-    cb.on_open_with = [viewer_ptr](const QString &path) { OpenWithDialog(viewer_ptr->data(), {path}).exec(); };
+    cb.on_open_with = [viewer_ptr](const QString &path) { show_free(new OpenWithDialog(viewer_ptr->data(), {path})); };
+    cb.on_reveal = [this](const QString &path) {
+        reveal(path);
+        raise();
+        activateWindow();
+    };
+    cb.on_undo = [this](std::function<void()> after) { undo::undo(this, after); };
+    cb.on_transfer = [this](const QString &path, const QString &folder, const QString &op) {
+        fileops::transfer(this, {path}, folder, op, nullptr, op == "move" ? "the image viewer's Move" : "the image viewer's Copy");
+    };
+    // while the tab still shows the folder: where its new images go in the list
+    cb.folder_order = [pp](const QString &dir) {
+        return pp && !pp->in_search && !pp->is_listing() && pp->path == dir ? pp->all_paths() : QStringList();
+    };
     auto *v = new ImageViewer(images, idx, cb);
     *viewer_ptr = v;
+    // opened on an image of a folder (not a selection, search results, Starred or Recent): the folder's images, and
+    // ones that appear in it later
+    if (whole_folder && p && !p->in_search && !p->is_listing() && !p->is_overview() && !images.isEmpty() &&
+        dirname(images.first()) == p->path)
+        v->follow_folder(p->path);
     viewers << v;
     if (settings().value("viewer_fullscreen", false).toBool())
         v->showFullScreen();
     else
         v->show();
     v->activateWindow();
+    return v;
+}
+
+void MainWindow::compare_in_viewer(Pane *p, const QStringList &two)
+{
+    open_viewer(p, in_view_order(p, two), 0)->compare_first_two(3);   // A: the first in the folder's order
 }

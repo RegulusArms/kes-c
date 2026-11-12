@@ -2,6 +2,7 @@
 
 #include "fileops.h"
 #include "proc.h"
+#include "windows.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -13,6 +14,8 @@
 #include <QPushButton>
 
 #include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <thread>
 #include <time.h>
 #include <unistd.h>
@@ -33,7 +36,8 @@ static QString resolve_existing(const QString &p)
 {
     QString head = p, tail;
     for (;;) {
-        QString real = QFileInfo(head).canonicalFilePath();
+        char buf[PATH_MAX];   // (by its bytes: QFileInfo would lose a name that isn't valid UTF-8)
+        QString real = ::realpath(util::enc(head).constData(), buf) ? util::dec(buf) : QString();
         if (!real.isEmpty())
             return tail.isEmpty() ? real : util::join(real, tail);
         if (head == "/" || head.isEmpty())
@@ -53,14 +57,25 @@ QVariantMap resolve_paths(const QString &op, QVariantMap args)
     static const QMap<QString, QStringList> PATHS = {
         {"delete", {"path"}},  {"copy", {"src", "dst"}},   {"move", {"src", "dst"}},       {"rename", {"src", "dst"}},
         {"mkdir", {"path"}},   {"touch", {"path"}},        {"copyfile", {"src", "dst"}},   {"symlink", {"link"}},
-        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}};
+        {"hardlink", {"target", "link"}}, {"write", {"path"}}, {"chmod", {"path"}}, {"readdev", {"device", "fifo"}},
+        {"tmpfs_mount", {"path"}}, {"tmpfs_unmount", {"path"}}, {"tmpfs_unit", {"path"}}};
     for (const QString &key : PATHS.value(op)) {
         QString p = args.value(key).toString();
         if (!p.startsWith('/'))
             continue;   // the helper refuses it
-        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src");
+        bool whole = (op == "chmod" && key == "path") || (op == "copyfile" && key == "src") ||
+                     (op == "readdev" && key == "device");   // (/dev/disk/by-… names: the device itself)
         args[key] = whole ? resolve_existing(p) : util::join(resolve_existing(util::dirname(p)), util::basename(p));
     }
+    // Paths also go as their bytes (base64): JSON text can't carry a name that isn't valid UTF-8 (its stray bytes are
+    // lone surrogates in a QString, util.h enc()), so the helper uses "<key>_b64" where it's there. The text stays
+    // for its error messages. A symlink's target is bytes too.
+    QStringList keys = PATHS.value(op);
+    if (op == "symlink")
+        keys << "target";
+    for (const QString &key : keys)
+        if (args.value(key).typeId() == QMetaType::QString)
+            args[key + "_b64"] = QString::fromLatin1(util::enc(args.value(key).toString()).toBase64());
     return args;
 }
 
@@ -119,7 +134,7 @@ void AdminSession::start()
             return;
         QString pkexec = util::which_path("pkexec");
         if (pkexec.isEmpty())
-            throw AdminError("Administrator actions need pkexec. Install it with:  sudo apt install pkexec");
+            throw AdminError(tx("Administrator actions need pkexec. Install it with:  sudo apt install pkexec"));
         proc::Options o;
         o.in = proc::PIPE;
         o.out = proc::PIPE;
@@ -138,9 +153,9 @@ void AdminSession::start()
         if (!hello.value("hello").toBool()) {
             int rc = h->p->wait();
             if (rc == 126 || rc == 127)
-                throw AdminError("Not authorized: the password prompt was dismissed or the password was wrong.");
+                throw AdminError(tx("Not authorized: the password prompt was dismissed or the password was wrong."));
             QString err = QString::fromUtf8(h->p->read_all_err()).trimmed();
-            throw AdminError(!err.isEmpty() ? err : QString("The admin helper failed to start (exit code %1).").arg(rc));
+            throw AdminError(!err.isEmpty() ? err : tx("The admin helper failed to start (exit code %1).").arg(rc));
         }
         {
             std::lock_guard<std::mutex> g(lock);
@@ -177,7 +192,7 @@ void AdminSession::start()
             for (auto &q : waiting) {
                 std::lock_guard<std::mutex> g(q->m);
                 q->items.push_back(std::make_shared<QJsonObject>(
-                    QJsonObject{{"ok", false}, {"error", "The admin session ended."}}));
+                    QJsonObject{{"ok", false}, {"error", tx("The admin session ended.")}}));
                 q->cv.notify_all();
             }
             Q_EMIT changed(false);
@@ -190,7 +205,7 @@ void AdminSession::send(const QByteArray &line)
 {
     std::lock_guard<std::mutex> g(lock);
     if (!helper || !helper->alive || helper->p->in < 0)
-        throw AdminError("The admin session has ended.");
+        throw AdminError(tx("The admin session has ended."));
     QByteArray data = line + "\n";
     qsizetype off = 0;
     while (off < data.size()) {
@@ -198,12 +213,12 @@ void AdminSession::send(const QByteArray &line)
         if (w < 0 && errno == EINTR)
             continue;
         if (w < 0)
-            throw AdminError("The admin session has ended.");
+            throw AdminError(tx("The admin session has ended."));
         off += w;
     }
 }
 
-void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
+QJsonObject AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
 {
     start();
     qint64 rid;
@@ -253,7 +268,7 @@ void AdminSession::call(Task *task, const QString &op, const QVariantMap &args)
             continue;
         }
         if (msg->value("ok").toBool())
-            return;
+            return *msg;
         if (msg->value("cancelled").toBool())
             throw Cancelled();
         QString err = msg->value("error").toString();
@@ -289,14 +304,14 @@ AdminSession &session()
 
 Indicator::Indicator(QWidget *parent) : QToolButton(parent)
 {
-    setText("🛡 Admin");
+    setText(tx("🛡 Admin"));
     setAutoRaise(true);
-    setToolTip(QString("Admin session open: administrator actions don't ask for your password again.\n"
-                       "Ends after %1 minutes without admin actions, or when Kestrel quits.")
-                   .arg(IDLE_MINUTES));
+    setToolTip(txn("Admin session open: administrator actions don't ask for your password again.\n"
+                   "Ends after %Ln minute(s) without admin actions, or when Kestrel quits.",
+                   IDLE_MINUTES));
     setPopupMode(QToolButton::InstantPopup);
     auto *m = new QMenu(this);
-    m->addAction("End Admin Session", []() { session().end(); });
+    m->addAction(tx("End Admin Session"), []() { session().end(); });
     setMenu(m);
     auto style = [this]() {
         setStyleSheet(QString("QToolButton { color: %1; font-weight: bold; }").arg(util::error_color().name()));
@@ -310,73 +325,90 @@ Indicator::Indicator(QWidget *parent) : QToolButton(parent)
 void start_session(QWidget *parent)
 {
     if (!session().available()) {
-        QMessageBox::warning(parent, "Admin Session",
-                             "Administrator actions need pkexec. Install it with:\n\nsudo apt install pkexec");
+        warn(parent, tx("Admin Session"),
+             tx("Administrator actions need pkexec. Install it with:\n\nsudo apt install pkexec"));
         return;
     }
     QPointer<QWidget> p(parent);
     fileops::run_job(
-        parent, "Starting admin session",
-        [](Task *) -> QVariant {
+        parent, tx("Starting admin session"),
+        [](Task *task) -> QVariant {
             try {
                 session().start();
             } catch (const AdminError &e) {
+                task->log(tx("Not started: %1").arg(e.message()));
                 return e.message();
             }
+            task->log(tx("The admin session is open: administrator actions run in it until it's ended"));
             return QString();
         },
         [p](const QVariant &err) {
             if (!err.toString().isEmpty())
-                QMessageBox::warning(p, "Admin Session", err.toString());
+                warn(p, tx("Admin Session"), err.toString());
         },
-        false)
+        false, false, true)
         ->admin = true;
 }
 
 void retry_as_admin(QWidget *parent, const QString &title, const QString &message,
-                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done)
+                    std::function<QStringList(Task *)> work, std::function<void(bool)> on_done, const QStringList &paths)
 {
     AdminSession &s = session();
     if (!s.available()) {
-        QMessageBox::warning(parent, title, message + "\n\nInstall pkexec to retry as administrator.");
+        warn(parent, title, message + "\n\n" + tx("Install pkexec to retry as administrator."));
         if (on_done)
             on_done(false);
         return;
     }
-    if (!s.active()) {
-        QMessageBox box(QMessageBox::Warning, title,
-                        message + QString("\n\nRetry as administrator? You'll be asked for your password once. The "
-                                          "admin session then stays open (🛡 Admin in the status bar) until you end "
-                                          "it or it's unused for %1 minutes.")
-                                      .arg(IDLE_MINUTES),
-                        QMessageBox::Cancel, parent);
-        QPushButton *retry = box.addButton("Retry as Administrator", QMessageBox::AcceptRole);
-        box.setDefaultButton(retry);
-        box.exec();
-        if (box.clickedButton() != retry) {
+    QPointer<QWidget> p(parent);
+    auto run = [p, has_parent = parent != nullptr, title, work, on_done, paths]() {
+        if (has_parent && !p) {   // its window was closed meanwhile
             if (on_done)
                 on_done(false);
             return;
         }
+        auto job = [work](Task *task) -> QVariant {
+            QStringList errors;
+            try {
+                errors = work(task);
+            } catch (const AdminError &e) {
+                errors = QStringList{e.message()};
+            }
+            for (const QString &e : std::as_const(errors))
+                task->log(tx("Failed: %1").arg(e));
+            if (!errors.isEmpty())
+                task->had_errors = true;
+            return QVariantMap{{"errors", errors}};
+        };
+        auto done = [p, title, on_done](const QVariant &res) {
+            QStringList errors = res.toMap().value("errors").toStringList();
+            if (!errors.isEmpty())
+                warn(p, title, errors.mid(0, 20).join('\n'));
+            if (on_done)
+                on_done(res.isValid() && errors.isEmpty());
+        };
+        // done also when p has closed meanwhile (its errors are still told; on_done must not need p)
+        fileops::queue_job(p, tx("%1 (as administrator)").arg(title), paths, job, done, true, {}, false, {}, true)->admin = true;
+    };
+    if (s.active()) {
+        run();
+        return;
     }
-    auto job = [work](Task *task) -> QVariant {
-        QStringList errors;
-        try {
-            errors = work(task);
-        } catch (const AdminError &e) {
-            errors = QStringList{e.message()};
-        }
-        return QVariantMap{{"errors", errors}};
-    };
-    QPointer<QWidget> p(parent);
-    auto done = [p, title, on_done](const QVariant &res) {
-        QStringList errors = res.toMap().value("errors").toStringList();
-        if (!errors.isEmpty())
-            QMessageBox::warning(p, title, errors.mid(0, 20).join('\n'));
-        if (on_done)
-            on_done(res.isValid() && errors.isEmpty());
-    };
-    fileops::run_job(parent, title + " (as administrator)", job, done)->admin = true;
+    auto *box = new QMessageBox(QMessageBox::Warning, title,
+                                message + "\n\n" +
+                                    txn("Retry as administrator? You'll be asked for your password once. The admin "
+                                        "session then stays open (🛡 Admin in the status bar) until you end it or it's "
+                                        "unused for %Ln minute(s).",
+                                        IDLE_MINUTES),
+                                QMessageBox::Cancel, parent);
+    QPushButton *retry = box->addButton(tx("Retry as Administrator"), QMessageBox::AcceptRole);
+    box->setDefaultButton(retry);
+    ask_box(box, [retry, run, on_done](QAbstractButton *b) {
+        if (b == retry)
+            run();
+        else if (on_done)
+            on_done(false);
+    });
 }
 
 }  // namespace admin

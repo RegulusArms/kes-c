@@ -2,6 +2,7 @@
 
 #include "proc.h"
 #include "util.h"
+#include "windows.h"
 
 #include <QCheckBox>
 #include <QDialog>
@@ -9,8 +10,8 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QMenu>
-#include <QMessageBox>
 #include <QProcess>
 
 #include <gio/gdesktopappinfo.h>
@@ -74,10 +75,10 @@ void add_open_folder_menu(QMenu *menu, const QString &folder, std::function<void
         if (!which(e[0]))
             continue;
         QString cmd = e[0];
-        menu->addAction(theme_icon({e[2], "text-editor", "accessories-text-editor"}), "Open in " + e[1], menu,
+        menu->addAction(theme_icon({e[2], "text-editor", "accessories-text-editor"}), tx("Open in %1").arg(e[1]), menu,
                         [cmd, folder]() { start({cmd, folder}); });
     }
-    QMenu *ow = menu->addMenu("Open With");
+    QMenu *ow = menu->addMenu(tx("Open With"));
     for (const AppRef &app : folder_apps(folder))
         ow->addAction(app_icon(app), app_name(app), menu, [app, folder]() {
             try {
@@ -86,7 +87,7 @@ void add_open_folder_menu(QMenu *menu, const QString &folder, std::function<void
             }
         });
     ow->addSeparator();
-    ow->addAction("Other Application…", menu, on_other);
+    ow->addAction(tx("Other Application…"), menu, on_other);
 }
 
 // ---------------------------------------------------------------- Nautilus scripts
@@ -158,30 +159,30 @@ void add_scripts_menu(QMenu *menu, const QStringList &paths, const QString &cur_
     QList<Script> entries = scripts(scripts_dir());
     if (entries.isEmpty())
         return;
-    QMenu *sm = menu->addMenu(theme_icon({"text-x-script", "application-x-executable"}), "Scripts");
+    QMenu *sm = menu->addMenu(theme_icon({"text-x-script", "application-x-executable"}), tx("Scripts"));
     fill_scripts(sm, entries, paths, cur_dir);
     sm->addSeparator();
-    sm->addAction("Open Scripts Folder", menu, [open_folder]() { open_folder(scripts_dir()); });
+    sm->addAction(tx("Open Scripts Folder"), menu, [open_folder]() { open_folder(scripts_dir()); });
 }
 
 // ---------------------------------------------------------------- Send To
 
-void add_send_to_menu(QMenu *menu, const QStringList &paths)
+void add_send_to_menu(QMenu *menu, const QStringList &paths, const std::function<bool(const QString &)> &is_dir)
 {
-    if (paths.isEmpty() || std::any_of(paths.begin(), paths.end(), [](const QString &p) { return isdir(p); }))
+    if (paths.isEmpty() || std::any_of(paths.begin(), paths.end(), [&is_dir](const QString &p) { return is_dir ? is_dir(p) : isdir(p); }))
         return;
     QList<QPair<QStringList, QStringList>> targets;   // (icon + label, argv)
     if (which("xdg-email")) {
         QStringList argv{"xdg-email"};
         for (const QString &p : paths)
             argv << "--attach" << p;
-        targets << qMakePair(QStringList{"mail-send", "Email…"}, argv);
+        targets << qMakePair(QStringList{"mail-send", tx("Email…")}, argv);
     }
     if (which("bluetooth-sendto"))
-        targets << qMakePair(QStringList{"bluetooth", "Bluetooth Device…"}, QStringList{"bluetooth-sendto"} + paths);
+        targets << qMakePair(QStringList{"bluetooth", tx("Bluetooth Device…")}, QStringList{"bluetooth-sendto"} + paths);
     if (targets.isEmpty())
         return;
-    QMenu *sm = menu->addMenu(theme_icon({"document-send", "mail-send"}), "Send To");
+    QMenu *sm = menu->addMenu(theme_icon({"document-send", "mail-send"}), tx("Send To"));
     for (const auto &[label, argv] : targets) {
         QStringList a = argv;
         sm->addAction(theme_icon({label[0], "document-send"}), label[1], menu, [a]() { start(a); });
@@ -216,30 +217,33 @@ static QHash<QString, QHash<QString, QString>> usershares()
     return shares;
 }
 
+static void apply_share(QWidget *parent, const QString &folder, bool existing, const QHash<QString, QString> &ex,
+                        bool share, const QString &share_name, const QString &comment, bool writable, bool guest);
+
 void share_dialog(QWidget *parent, const QString &folder)
 {
     auto shares = usershares();
     bool existing = shares.contains(folder);
     QHash<QString, QString> ex = shares.value(folder);
-    QDialog d(parent);
-    d.setWindowTitle("Network Sharing");
-    auto *form = new QFormLayout(&d);
-    auto *on = new QCheckBox("Share this folder");
+    auto *d = new QDialog(parent);
+    d->setWindowTitle(tx("Network Sharing"));
+    auto *form = new QFormLayout(d);
+    auto *on = new QCheckBox(tx("Share this folder"));
     on->setChecked(existing);
     form->addRow(on);
     QString def = basename(rstrip(folder, '/'));
     auto *name = new QLineEdit(ex.value("name", def.isEmpty() ? QString("share") : def));
     auto *comment = new QLineEdit(ex.value("comment"));
-    auto *write = new QCheckBox("Allow others to create and delete files in this folder");
+    auto *write = new QCheckBox(tx("Allow others to create and delete files in this folder"));
     write->setChecked(ex.value("usershare_acl").contains(":F"));
-    auto *guest = new QCheckBox("Guest access (for people without a user account)");
+    auto *guest = new QCheckBox(tx("Guest access (for people without a user account)"));
     guest->setChecked(ex.value("guest_ok") == "y");
-    form->addRow("Share name:", name);
-    form->addRow("Comment:", comment);
+    form->addRow(tx("Share name:"), name);
+    form->addRow(tx("Comment:"), comment);
     form->addRow(write);
     form->addRow(guest);
-    auto *note = new QLabel("<small>Others on your network can then open it as smb://this-computer/share-name. "
-                            "Needs the Samba server (sudo apt install samba).</small>");
+    auto *note = new QLabel(tx("<small>Others on your network can then open it as smb://this-computer/share-name. "
+                            "Needs the Samba server (sudo apt install samba).</small>"));
     note->setWordWrap(true);
     form->addRow(note);
     for (QWidget *w : std::initializer_list<QWidget *>{name, comment, write, guest}) {
@@ -247,29 +251,39 @@ void share_dialog(QWidget *parent, const QString &folder)
         QObject::connect(on, &QCheckBox::toggled, w, &QWidget::setEnabled);
     }
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QObject::connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::accepted, d, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
     form->addRow(bb);
-    d.resize(460, d.sizeHint().height());
-    if (!d.exec())
-        return;
-    if (existing && (!on->isChecked() || ex.value("name") != name->text().trimmed()))
+    d->resize(460, d->sizeHint().height());
+    QPointer<QWidget> owner(parent);
+    QObject::connect(d, &QDialog::accepted, d, [=]() {
+        apply_share(owner, folder, existing, ex, on->isChecked(), name->text().trimmed(), comment->text(),
+                    write->isChecked(), guest->isChecked());
+    });
+    show_free(d);
+}
+
+// Network Sharing's OK: (un)share the folder as the dialog says
+static void apply_share(QWidget *parent, const QString &folder, bool existing, const QHash<QString, QString> &ex,
+                        bool share, const QString &share_name, const QString &comment, bool writable, bool guest)
+{
+    if (existing && (!share || ex.value("name") != share_name))
         proc::run({"net", "usershare", "delete", ex.value("name")}, 10000);
-    if (!on->isChecked())
+    if (!share)
         return;
-    QString acl = write->isChecked() ? "Everyone:F" : "Everyone:R";
-    auto r = proc::run({"net", "usershare", "add", name->text().trimmed(), folder, comment->text(), acl,
-                        QString("guest_ok=%1").arg(guest->isChecked() ? "y" : "n")},
+    QString acl = writable ? "Everyone:F" : "Everyone:R";
+    auto r = proc::run({"net", "usershare", "add", share_name, folder, comment, acl,
+                        QString("guest_ok=%1").arg(guest ? "y" : "n")},
                        10000);
     if (r.rc != 0) {
         QString err = QString::fromUtf8(r.err + r.out).trimmed();
-        QMessageBox::warning(parent, "Network Sharing", err.isEmpty() ? QString("Sharing failed.") : err);
+        warn(parent, tx("Network Sharing"), err.isEmpty() ? tx("Sharing failed.") : err);
     } else {
         struct stat st;
-        if (write->isChecked() && stat_(folder, st) && !(st.st_mode & 0002))
-            QMessageBox::information(parent, "Network Sharing",
-                                     "The folder is shared. For others to create files in it, it must also be writable "
-                                     "by others (Properties → Permissions).");
+        if (writable && stat_(folder, st) && !(st.st_mode & 0002))
+            inform(parent, tx("Network Sharing"),
+                   tx("The folder is shared. For others to create files in it, it must also be writable "
+                   "by others (Properties → Permissions)."));
     }
 }
 

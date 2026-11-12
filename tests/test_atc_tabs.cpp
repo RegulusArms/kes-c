@@ -13,11 +13,12 @@ static QStringList tab_paths(MainWindow *w)
     return out;
 }
 
-// What a launched Kestrel did within the time: handed its folder over and exited successfully, was still running (it
-// kept its own window), or failed (exited with an error or crashed: neither of the others).
+// What a launched Kestrel did: handed its folder over and exited successfully, opened a window of its own (it told
+// the tower it has one: heard by `fake`), or failed (exited with an error or crashed, or did neither). Whichever comes
+// first, however long the launch takes on this machine.
 enum class Launch { HandedOff, OwnWindow, Failed };
 
-static Launch launch(const QString &prog, const QStringList &args, int ms = 6000, const QStringList &extra_env = {})
+static Launch launch(FakeFlight &fake, const QString &prog, const QStringList &args, const QStringList &extra_env = {})
 {
     QProcess p;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -26,16 +27,23 @@ static Launch launch(const QString &prog, const QStringList &args, int ms = 6000
     p.setProcessEnvironment(env);
     p.setStandardOutputFile(QProcess::nullDevice());
     p.setStandardErrorFile(QProcess::nullDevice());
+    qsizetype from = fake.heard.size();
+    QString me = atc::radio()->flight();
+    auto own_window = [&]() {
+        for (qsizetype i = from; i < fake.heard.size(); ++i) {
+            const auto &[f, m] = fake.heard[i];
+            if (f != me && f != fake.name() && m.value("type").toString() == "windows" && m.value("count").toInt() > 0)
+                return true;
+        }
+        return false;
+    };
     p.start(prog, args);
-    bool done = false;
-    for (int t = 0; t < ms && !done; t += 50) {
-        spin(50);
-        done = p.state() == QProcess::NotRunning;
-    }
-    if (!done) {
+    wait_for([&]() { return p.state() == QProcess::NotRunning || own_window(); }, 60000);
+    if (p.state() != QProcess::NotRunning) {
+        bool own = own_window();
         p.kill();
-        p.waitForFinished(2000);
-        return Launch::OwnWindow;
+        p.waitForFinished(5000);
+        return own ? Launch::OwnWindow : Launch::Failed;
     }
     return p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0 ? Launch::HandedOff : Launch::Failed;
 }
@@ -56,24 +64,25 @@ int main(int argc, char **argv)
     atc::radio()->start();
     MainWindow *w = open_window({P("d1")});
     check(wait_for([]() { return atc::radio()->tower_up(); }), "tower up");
-    spin(500);
+    wait_for([]() { return atc::radio()->caught_up(); });   // checked in: a launched Kestrel can hand over to it
+    FakeFlight fake;   // (only listens: what the launched Kestrels tell the tower)
     QString CXX = qEnvironmentVariable("KES_CXX");
 
     check(!settings().value("open_in_tabs", false).toBool(), "the switch is off by default");
-    check(launch(CXX, {P("d2")}, 2500) == Launch::OwnWindow, "off: a launched Kestrel keeps its own window");
+    check(launch(fake, CXX, {P("d2")}) == Launch::OwnWindow, "off: a launched Kestrel keeps its own window");
     check(w->tabs->count() == 1, "off: no tab added here");
 
     settings().setValue("open_in_tabs", true);
     settings().sync();
-    check(launch(CXX, {P("d2")}) == Launch::HandedOff, "on: a launched Kestrel hands its folder over and exits");
+    check(launch(fake, CXX, {P("d2")}) == Launch::HandedOff, "on: a launched Kestrel hands its folder over and exits");
     check(wait_for([&]() { return tab_paths(w).contains(P("d2")); }), "on: ...and it opens here as a tab");
     check(w->pane() && w->pane()->path == P("d2"), "on: ...which becomes the current tab");
-    check(launch(CXX, {P("d3")}) == Launch::HandedOff, "on: a second launched Kestrel hands its folder over too");
+    check(launch(fake, CXX, {P("d3")}) == Launch::HandedOff, "on: a second launched Kestrel hands its folder over too");
     check(wait_for([&]() { return tab_paths(w).contains(P("d3")) && tab_paths(w).contains(P("d2")); }),
           "on: ...and it opens here as another tab");
-    check(launch(CXX, {P("d4")}, 2500, {"CONDA_DEFAULT_ENV=myenv"}) == Launch::OwnWindow, "on: not from an activated conda environment");
+    check(launch(fake, CXX, {P("d4")}, {"CONDA_DEFAULT_ENV=myenv"}) == Launch::OwnWindow, "on: not from an activated conda environment");
     check(!tab_paths(w).contains(P("d4")), "on: ...so no tab for that one");
-    check(launch(CXX, {}, 2500) == Launch::OwnWindow, "on: launching Kestrel without a folder still opens a new window");
+    check(launch(fake, CXX, {}) == Launch::OwnWindow, "on: launching Kestrel without a folder still opens a new window");
 
     auto selected = [&]() {
         QStringList sel;

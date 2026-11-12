@@ -1,6 +1,8 @@
 // Shared helpers: paths, file-system calls, mime types, icons, desktop integration, trash, bookmarks.
 #pragma once
 
+#include "i18n.h"   // tx() for every text the user sees
+
 #include <QColor>
 #include <QIcon>
 #include <QJsonObject>
@@ -16,7 +18,12 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
+#include <unistd.h>
+// (the C library's unlink, rename, rmdir, chmod, realpath… declared wherever util's are: a file with `using namespace
+// util` that calls ::unlink(…) without them gets util::unlink, which throws, where a failure was meant to be ignored)
 
 typedef struct _GAppInfo GAppInfo;
 typedef struct _GIcon GIcon;
@@ -55,6 +62,9 @@ namespace util {
 
 extern const char *APP_NAME;
 extern const char *APP_ID;
+// In a drag's data: the files may only be copied, never moved (a drag out of the image viewer). Kestrel's drop targets
+// (folders, tabs, the sidebar) then copy whatever the keys held would do.
+extern const char *COPY_ONLY_MIME;
 extern const char *APP_COMMAND;
 extern const QStringList LEGACY_NAMES;   // previous name: thumbnails/settings may carry it
 extern const char *LEGACY_ID;
@@ -63,8 +73,26 @@ extern const char *VERSION;
 QString HOME();
 QString CONFIG_DIR();      // ~/.config/kestrel-explorer
 QString CACHE_ROOT();      // ~/.cache
-QString THUMB_DIR();       // ~/.cache/thumbnails
-QString APP_CACHE();       // ~/.cache/kestrel-explorer
+// where new thumbnails are written: ~/.cache/thumbnails; with separate caching ~/.cache/kestrel-explorer/thumbnails;
+// in private mode the private RAM disk's thumbnails
+QString THUMB_DIR();
+QString APP_CACHE();       // ~/.cache/kestrel-explorer (in private mode: the private RAM disk's cache)
+QString SHARED_THUMB_DIR();   // ~/.cache/thumbnails, also in private mode (read from there, never written)
+// ~/.cache/kestrel-explorer/thumbnails, also in private mode: separate caching's thumbnails (never the RAM disk's)
+QString OWN_THUMB_DIR();
+// The thumbnail folders to look in for a cached thumbnail, in order: separate caching's (while there are thumbnails
+// in it, also after it's turned off, until they're deleted), THUMB_DIR(), and the shared one unless separate caching
+// is on (it shares nothing with the desktop's other apps then, reading included).
+QStringList THUMB_READ_DIRS();
+// Separate caching (Preferences → Privacy): thumbnails kept in Kestrel's own cache folder instead of the desktop's
+// shared one. Any thread may read it while the UI thread changes it.
+void set_separate_cache(bool on);
+bool separate_cache();
+QString HISTORY_DIR();     // where history files go: CONFIG_DIR(), or in private mode the private RAM disk's history
+// Private mode (ramdisk.h): caches and histories in this folder (empty: back to the usual places). Any thread may
+// read the paths above while the UI thread changes this.
+void set_private_dir(const QString &dir);
+QString private_dir_in_use();
 QString TRASH_DIR();       // ~/.local/share/Trash
 QString GTK_BOOKMARKS();   // ~/.config/gtk-3.0/bookmarks
 
@@ -72,6 +100,9 @@ extern const QSet<QString> VIDEO_EXTS;
 extern const QSet<QString> RAW_EXTS;
 
 QSettings &settings();
+// The settings file for kept history (recent_servers, viewer_recent_folders, chooser_folder): settings(), or in
+// private mode a copy in the private RAM disk (UI thread only)
+QSettings &history_settings();
 
 // Prefer the system's programs and libraries over Anaconda's (or Miniconda's, Miniforge's…).
 //
@@ -87,7 +118,10 @@ void prefer_system_environment();
 
 // ---------------------------------------------------------------- paths (os.path semantics)
 
-QByteArray enc(const QString &path);    // file-system encoding of a path
+// A path's bytes and back, losslessly: a name that isn't valid UTF-8 keeps each stray byte as a lone surrogate
+// (U+DC80–U+DCFF, Python's surrogateescape). enc() also finds a name Qt decoded with U+FFFD (QFileSystemModel's),
+// when exactly one entry of its folder matches it.
+QByteArray enc(const QString &path);
 QString dec(const char *path);
 QString dirname(const QString &p);
 QString basename(const QString &p);
@@ -105,6 +139,12 @@ QString ext_of(const QString &p);        // lower-cased extension with the dot
 
 // ---------------------------------------------------------------- file system (raise OSError)
 
+// tests: every stat_/lstat_ under prefix waits ms, as on a tape busy seeking (empty prefix: off)
+void set_test_busy(const QString &prefix, int ms);
+// tests: how many of those waits (and KESTREL_TEST_STATFS_DELAY_MS's) were on the UI thread: each would hold the
+// window. A count, not a time, so a check of it is the same on a fast or a slow machine
+int test_ui_waits();
+void note_test_wait();   // (a test delay is about to wait: counted if it's on the UI thread)
 bool stat_(const QString &p, struct stat &st);    // follows links; false on error
 bool lstat_(const QString &p, struct stat &st);
 bool exists(const QString &p);
@@ -139,6 +179,13 @@ void write_atomic(const QString &path, const QByteArray &data);   // write_text(
 // the general form: fill(fd) writes a part file beside path; new_only: take the name only if free; sync: fsync first
 // (for data that matters, not caches)
 void write_parts(const QString &path, const std::function<void(int)> &fill, bool new_only, bool sync = false);
+// Claiming a new name (never replacing): renameat2(RENAME_NOREPLACE), and link() where a file system lacks it. Some
+// file systems have neither (LTFS tapes, some FUSE ones: no rename flags, no hard links, link() fails with EPERM);
+// no_link_support() tells that EPERM-style failure apart, and the claim then checks the name is free and renames.
+// Tests: KESTREL_TEST_NO_LINK=1 makes these act as on such a file system.
+int rename_noreplace(int src_dir, const char *src, int dst_dir, const char *dst);
+int link_at(int src_dir, const char *src, int dst_dir, const char *dst);
+bool no_link_support(int err);
 void put_new(const QString &part, const QString &path);   // a finished part file to a name that must still be free
 void write_all(int fd, const char *data, qint64 size, const QString &shown);
 // A new, empty file to write something into before it is renamed over a name in the same folder (so that name keeps
@@ -162,10 +209,14 @@ QString uri_to_path(const QString &uri); // null QString for non-file URIs
 QString md5(const QString &s);
 QString human_size(qint64 n);
 QString human_size(double n);
-QString group_digits(qint64 n);           // 12,345
+QString group_digits(qint64 n);           // 12,345 (the system's digit grouping: i18n::number)
 bool natural_less(const QString &a, const QString &b);
 void natural_sort(QStringList &list);
-QString unique_path(const QString &directory, const QString &name, const QString &style = "copy");
+// A free name for name in directory (name itself if it's free), without an earlier " (n)" / " (copy)": style "copy"
+// ("a (copy).txt", "a (copy 2).txt"), "num" ("a (2).txt", "a (3).txt") or "download" ("a (1).txt", "a (2).txt", as
+// browsers number repeated downloads). taken: paths to treat as taken too (names already given out in a batch).
+QString unique_path(const QString &directory, const QString &name, const QString &style = "copy",
+                    const QSet<QString> &taken = {});
 QPair<QString, QString> split_ext(const QString &name);
 QString fmt_time(qint64 ts, const char *fmt);   // strftime in local time
 
@@ -210,6 +261,10 @@ void setup_icon_theme();
 // and uses those; everything else uses GNOME's. has_schema_key: installed, and with that key (empty: any).
 QString desktop_schema(const QString &gnome_schema);
 bool has_schema_key(const QString &schema, const QString &key = QString());
+// KDE Plasma (Kubuntu) keeps its settings in its own config files, not in GSettings. kde_setting: a key from one of
+// them (e.g. "kdeglobals", group "Icons", key "Theme"), the user's own first, then the system's; empty if unset.
+bool is_kde();
+QString kde_setting(const QString &file, const QString &group, const QString &key);
 
 // ---------------------------------------------------------------- theme
 // Colours derived from the desktop's palette, so they suit any theme, light or dark.
@@ -229,11 +284,16 @@ QColor named_accent(const QString &name);
 // stylesheets that use palette(...) are reapplied first, then fn runs. Stops when owner is deleted.
 void on_palette_change(QObject *owner, std::function<void()> fn);
 // Qt before 6.5 (Ubuntu 24.04, Linux Mint 22) takes no colours from the GTK theme and doesn't follow theme changes; Qt
-// 6.5+ does both. There Kestrel reads the theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's
-// python3 with GTK's bindings) and follows the desktop's theme setting. follow_gtk_theme() does nothing on newer Qt.
+// 6.5+ does both, but stays light under GNOME's dark style unless the GTK theme itself is a dark one. Kestrel reads the
+// theme's named colours through GTK (GTK_COLORS_SCRIPT, run by the system's python3 with GTK's bindings; its dark
+// variant when the desktop prefers dark) and follows the desktop's theme settings: always on Qt < 6.5, and on newer Qt
+// once the desktop wants dark and Qt's own colours are light.
 extern const char *GTK_COLORS_SCRIPT;
 bool needs_gtk_palette(const QString &qt_version);
 QPalette gtk_palette_from(const QJsonObject &colors, bool *ok);   // ok: the theme had the basic colours
+// gtk_palette_from, but with dark wanted and the colours light or missing, Adwaita's dark ones
+QPalette theme_palette(const QJsonObject &colors, bool dark, bool *ok);
+bool desktop_prefers_dark();   // the desktop's dark style is on (GNOME's color-scheme setting, or Qt 6.5+'s reading)
 void follow_gtk_theme();   // after QApplication: apply the theme's colours now, then follow changes
 
 // ---------------------------------------------------------------- applications (GIO)
@@ -256,7 +316,9 @@ void launch_app(const AppRef &app, const QStringList &paths);   // raises Error
 void set_default_for_type(const AppRef &app, const QString &ct); // raises Error
 bool which(const QString &name);
 QString which_path(const QString &name);
+QList<QStringList> terminal_commands(const QString &directory);   // the ones to try, the desktop's own first
 bool open_terminal(const QString &directory);
+QList<QStringList> wallpaper_commands(const QString &path);   // the desktop's own way (without UWP)
 void set_wallpaper(const QString &path);
 void trash(const QString &path);   // raises OSError
 void mark_trusted(const QString &path);
