@@ -85,6 +85,56 @@ into.
   panel) and `chooser_start` / `chooser_places`. Check each setting in src/prefs.cpp against a chooser window, and
   fix any that it ignores or reads from somewhere else.
 
+- [ ] **A merge into the parent folder lost a file (seen once, not reproduced yet).** On ZFS (2026-11-12): a folder
+  `1` held a folder `1` with pictures in it (`1/1/img.jpg`). Cut `1/1` with the mouse, went up to the folder above,
+  pasted; the conflict question came up for `1`, answered Merge with "Apply this action to all conflicts". The job
+  finished and the status bar said the merge can't be undone, but img.jpg wasn't in `1` afterwards.
+  - Not reproduced: the same steps through the real paste path (cut, paste, the conflict dialog's Merge with "all"),
+    on ext4 and on ZFS 2.4.1 with block cloning (plain and aes-256-gcm encrypted datasets), with a few files, 3 MB
+    files, and 500 files of mixed sizes, with and without files of the same names already in `1`: every file arrived
+    whole and `1/1` was deleted. Reading the code (plan_transfer → merge_move → copy_at into the existing folder,
+    then remove(src)) finds no path that drops a file.
+  - Job logs weren't being saved (Preferences → Jobs), so there's no record of that run.
+  - Still to find out: whether the file was really gone or the folder view just didn't show it (`ls`, or F5); how
+    many files and how big; whether anything else was cut or open at the time (another tab or window on `1`); the
+    dataset's properties. Next time: turn on saving job logs, and check the folder with `ls` before anything else.
+
+- [ ] **Portrait RAW photos show sideways in the viewer, and their thumbnails are landscape (seen with Fujifilm .raf;
+  very likely every RAW format).** A portrait shot from an X-H2S shows in the viewer as a portrait frame with the
+  picture lying on its side, squeezed to fit; zoomed in far enough for the full decode, it's right. Its thumbnail in
+  the folder is landscape, as is every RAF's.
+  - Not only RAF: the plugin returns every format's embedded preview the same way, and nearly all cameras store that
+    preview landscape with portrait shots marked only by the Orientation tag (Canon CR2/CR3, Nikon NEF, Sony ARW,
+    Olympus ORF, Panasonic RW2, Pentax PEF, DNG). To confirm with portrait samples of each (raw.pixls.us), in a
+    container.
+  - Cause (checked in a container with kimageformat6-plugins 6.24 on Ubuntu 26.04): the viewer (`ImageViewer::request`)
+    and thumbnails (`load_scaled`, src/thumbs.cpp) read RAW files through QImageReader with `setQuality(0)` and
+    `setAutoTransform(true)`. At quality 0 the kimageformats raw plugin returns the camera's embedded preview
+    (`LoadTHUMB`: the biggest one, decoded with `QImage::loadFromData`), which ignores the preview's EXIF
+    orientation. The plugin doesn't support `QImageIOHandler::ImageTransformation` either, so autoTransform does
+    nothing. Fujifilm stores the preview landscape (4416×2944) with Orientation "Rotate 270 CW" in both the RAF's tags
+    and the preview's own EXIF.
+  - The viewer's squeeze: the plugin's `size()` does apply the orientation (`rawImageSize`: width and height swapped
+    when LibRaw's flip says so: 4176×6264 for that shot), so the viewer asks for a portrait scaled size
+    (1365×2048), and Qt scales the landscape preview into it. The full decode (quality -1) is the right way up
+    (LibRaw turns it), which is why zooming in fixes it.
+  - Fix: turn the preview in Kestrel. After a quality 0 read of a RAW file, apply the file's orientation tag
+    (metadata.cpp `orientation_tag`), and ask for the scaled size only after that, or scale it ourselves. src/metadata.cpp
+    doesn't read RAF yet (its header is `FUJIFILMCCD-RAW`, with the preview JPEG's offset and length as big-endian
+    32-bit numbers at bytes 84 and 88: the EXIF is in that JPEG). What it reads per format:
+    - already: the TIFF-based ones (DNG, NEF, NRW, CR2, ARW, SR2, SRF, PEF, SRW, ERF, 3FR, IIQ, MOS, MEF, KDC, DCR, FFF);
+    - a small change: ORF (`IIRO`/`MMOR`) and RW2/RWL (`IIU\0`), TIFF with another magic number;
+    - its own reading: RAF (above), CR3 (ISO-BMFF boxes; the tag is in the `CMT1` box, a TIFF);
+    - old or rare (CRW, MRW, X3F): the fallback.
+    Fallback where there's no tag: if `size()` is portrait and the preview landscape (or the other way), the preview
+    needs turning but the direction is unknown. Then show it unsqueezed as it is (the full decode on zooming in is
+    right), or decode at half size (the plugin's quality 10–19, which LibRaw turns; slower).
+    A preview whose shape already matches `size()` is never turned (some cameras store it turned already).
+  - Thumbnails already cached sideways need making again (the thumbnail cache's key or version). Test with a small RAF
+    or DNG whose preview is stored turned (a fixture made with exiftool), for both the viewer and the thumbnail.
+  - Seen with: X-H2S portrait shots, also a renamed one (`.raf` lower-case); the X-T30 and X-H2S landscape shots are
+    fine.
+
 ## New features
 
 ### Jobs
