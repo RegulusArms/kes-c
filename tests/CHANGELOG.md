@@ -6,6 +6,16 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.4-alpha.2
+
+### Changed
+
+- `viewer`: the check that a RAW file's orientation is read from each format now makes its sample files correctly.
+  Its helper for writing a 16-bit number wrote `QByteArray{low, high}`, which is QByteArray's (count, byte)
+  constructor, not two bytes, so every DNG, NEF, ORF, RW2, RAF and CR3 it made was malformed and read as having no
+  orientation; the check failed on every system (the dev build of 0.3.4-alpha.1 among them) although Kestrel's reader
+  was right. It now appends the two bytes one by one.
+
 ## 0.3.4-alpha.1
 
 ### Added

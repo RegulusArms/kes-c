@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.4-alpha.1
+## 0.3.4-alpha.2
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#034-alpha2).
+
+## 0.3.4-alpha.1 (2026-11-13)
 
 - **Merging folders no longer replaces files.** When a folder is copied or moved onto one with the same name and you
   choose Merge, a file with the same name as one already there is now kept beside it with a number, so both survive:

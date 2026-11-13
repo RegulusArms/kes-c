@@ -989,7 +989,9 @@ int main(int argc, char **argv)
     // each format's own place (raw_orientation), only when the preview's shape doesn't match the photo's
     {
         auto u16 = [](QByteArray &b, quint32 v, bool le) {
-            b += le ? QByteArray{char(v), char(v >> 8)} : QByteArray{char(v >> 8), char(v)};
+            // two appends: QByteArray{a, b} isn't two bytes but QByteArray(qsizetype a, char b), a copies of b
+            b.append(char(le ? v : v >> 8));
+            b.append(char(le ? v >> 8 : v));
         };
         auto u32 = [&](QByteArray &b, quint32 v, bool le) {
             if (le)
