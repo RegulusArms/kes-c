@@ -6,9 +6,11 @@
 #                                       and puts ~/.local/bin on your PATH (for the kes command)
 #                                       (and offer to put it in the dock in place of GNOME Files, or Dolphin in Plasma's taskbar)
 #   ./install.sh --dock                 put it in the dock in place of GNOME Files (Dolphin), without asking
+#   ./install.sh --native-gtk           native GTK apps' Open/Save dialogs through the portal too, so they get
+#                                       Kestrel's (from the next login; kes-setup --native-gtk; not part of --default)
 #   ./install.sh --install-recommended  also install the recommended packages (RAW/HEIC previews, network, drives…)
 #   ./install.sh --uninstall
-# --default, --dock and --install-recommended can be combined.
+# --default, --dock, --native-gtk and --install-recommended can be combined.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # the build folder; KESTREL_BUILD_DIR=build-mint keeps another machine's build apart (e.g. a VM sharing this folder)
@@ -42,14 +44,15 @@ RECOMMENDED=(libglib2.0-bin xdg-utils gvfs gvfs-backends udisks2 qt6-image-forma
 # a|b: the first of these the system has (7zip is p7zip-full on Debian 12 and older Ubuntu releases; the SVG plugins
 # come with libqt6svg6 on Ubuntu 24.04 / Linux Mint 22)
 
-DEFAULT=0 DOCK=0 WITH_RECOMMENDED=0 UNINSTALL=0
+DEFAULT=0 DOCK=0 NATIVE_GTK=0 WITH_RECOMMENDED=0 UNINSTALL=0
 for arg in "$@"; do
     case "$arg" in
         --default) DEFAULT=1 ;;
         --dock) DOCK=1 ;;
+        --native-gtk) NATIVE_GTK=1 ;;
         --install-recommended) WITH_RECOMMENDED=1 ;;
         --uninstall) UNINSTALL=1 ;;
-        -h|--help) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,14s/^# \{0,1\}//p' "$0"; exit 0 ;;
         *) echo "Unknown option: $arg (see ./install.sh --help)" >&2; exit 2 ;;
     esac
 done
@@ -160,10 +163,11 @@ Exec=$BIN
 DESK
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
-if (( DEFAULT || DOCK )); then
+if (( DEFAULT || DOCK || NATIVE_GTK )); then
     setup_args=(--kes "$BIN")
     (( DEFAULT )) && setup_args+=(--default)
     (( DOCK )) && setup_args+=(--dock)
+    (( NATIVE_GTK )) && setup_args+=(--native-gtk)
     "$SETUP" "${setup_args[@]}"
 fi
 if (( DEFAULT )); then

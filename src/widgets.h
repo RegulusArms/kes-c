@@ -294,10 +294,15 @@ public:
     QStringList entry_keys(const QString &section) const;   // in order; empty when collapsed
     void forget_server(const QString &uri);   // takes a recent server out of the Mounts section (and the Overview)
     static void hide_place(const QString &id);   // Hide from Sidebar: an id in sidebar::PLACES
+    // Files dragged over an entry: the row that would take them is highlighted (drop_row, -1: none) with what a drop
+    // does said under it (drop_hint: "Move to Documents", or why it can't). Resting on one for SPRING_MS opens it.
+    static const int SPRING_MS = 500;
+    int drop_row() const { return drop_ok ? drop_on : -1; }
+    QString drop_hint() const { return hint; }
 
 Q_SIGNALS:
     void open_path(const QString &path, bool new_tab);
-    void dropped(const QStringList &sources, const QString &target, bool copy_only);
+    void dropped(const QStringList &sources, const QString &target, bool copy_only, int mods);   // mods: keys held
     void dropped_members(const QByteArray &members, const QString &target);   // archive::MEMBERS_MIME's data
     void empty_trash_requested();
     void find_duplicates(const QString &root);   // a drive's Find Duplicates…
@@ -379,6 +384,25 @@ private:
     QPoint press_pos;
     QPersistentModelIndex press_index;
     int drop_line = -1;   // y of the drop indicator while rearranging, -1 = none
+    // What a drop of files onto an entry does. what: "folder" (into path), "trash", "star", "connect" (a phone or
+    // network place that isn't mounted: path is its URI), "ramdisk" (a RAM disk that isn't in memory: path is its
+    // folder, id its id), "" (none: reason says why, or nothing for a header)
+    struct Target {
+        QString what, path, name, id, reason;
+        qint64 dev = -1;   // the folder's drive (st_dev), -1 unknown
+    };
+    Target target_for(QListWidgetItem *it, const QMimeData *md);   // this drag's, worked out once per entry
+    QString op_for(const Target &t, Qt::KeyboardModifiers mods, bool copy_only) const;   // move, copy, link, ask
+    QString hint_for(const Target &t, const QString &op) const;
+    void end_drop();   // the highlight and hint gone, the spring stopped
+    QHash<QString, Target> targets;   // this drag's targets, by entry: a slow drive is asked once, not on every move
+    QStringList drag_paths;           // the files dragged (local ones)
+    qint64 drag_dev = -1;             // the first one's drive
+    int drop_on = -1;                 // the row under the files dragged
+    bool drop_ok = false;             // ...and it takes them: highlighted (otherwise only the hint, saying why not)
+    QString hint;
+    QTimer spring;                    // resting on an entry: opened in the pane
+    QString spring_path;
 };
 
 // ---------------------------------------------------------------- info panel

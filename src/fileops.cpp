@@ -863,6 +863,23 @@ static QStringList names_in(int dirfd, const QString &shown)   // the names in a
     return out;
 }
 
+// up to n bytes from fd, fewer only at the end of the file; -1 on an error
+static ssize_t read_full(int fd, char *buf, qsizetype n)
+{
+    qsizetype got = 0;
+    while (got < n) {
+        ssize_t r = ::read(fd, buf + got, size_t(n - got));
+        if (r < 0 && errno == EINTR)
+            continue;
+        if (r < 0)
+            return -1;
+        if (r == 0)
+            break;
+        got += r;
+    }
+    return ssize_t(got);
+}
+
 static void copy_times_mode(int fd, const struct stat &st)   // on a descriptor: never through a symlink
 {
     struct timespec times[2] = {st.st_atim, st.st_mtim};
@@ -883,6 +900,29 @@ static QString step_text(const Job &j)
 }
 
 // Runs a list of jobs for a Task. Progress is in bytes, or in files when every job is a delete.
+// A name that was free when looked at was taken when claimed (by another program, meanwhile): what's there is kept.
+// path: the name that was taken (a merge tries its next free name then).
+class NameTaken : public Error {
+public:
+    NameTaken(const QString &msg, const QString &path) : Error(msg), path(path) {}
+    QString path;
+};
+
+// How a copy or move treats what's already in a folder it goes into (Job::overwrite, Job::resume)
+enum class Merge {
+    No,          // not a merge: the destination is new, or replaced as a whole
+    KeepBoth,    // into the existing folder; an item whose name is taken goes beside it as "name-(n).ext"
+    Overwrite,   // into the existing folder; files with the same names are replaced (the user ticked the box)
+    Resume,      // as KeepBoth, but an item already there that is this copy made before is left as it is
+};
+
+static Merge merge_of(const Job &j)
+{
+    if (!j.op.startsWith("merge"))
+        return Merge::No;
+    return j.overwrite ? Merge::Overwrite : j.resume ? Merge::Resume : Merge::KeepBoth;
+}
+
 class Ops {
 public:
     Ops(Task *task, const QList<Job> &jobs) : task(task), jobs(jobs)
@@ -899,6 +939,7 @@ public:
     int cloned = 0, by_kernel = 0, by_kestrel = 0;   // how each file was copied, for the log
     QList<Job> touched;     // jobs that changed something (done, or begun): a tape among them gets its index written
     int replaced = 0, merged = 0;   // copies that replaced something and merges done: neither can be undone
+    int overwrote = 0;              // merges that replaced files with the same names (the user's choice)
 
     QStringList run()
     {
@@ -960,15 +1001,17 @@ public:
                 if (j.op == "delete")
                     remove(j.src);
                 else if (j.op == "move" || j.op == "merge_move")
-                    move(j.src, j.dst, j.op == "merge_move", claim);
+                    move(j.src, j.dst, merge_of(j), claim);
                 else
-                    copy(j.src, j.dst, j.op == "merge_copy", claim);
+                    copy(j.src, j.dst, merge_of(j), claim);
                 if (replacing) {
                     ++replaced;
                     task->log(tx("  done (replaced what was there)"));
                 } else if (j.op == "merge_copy" || j.op == "merge_move") {
                     ++merged;
-                    task->log(tx("  done (merged into the folder there)"));
+                    overwrote += j.overwrite;
+                    task->log(j.overwrite ? tx("  done (merged into the folder there, replacing files with the same names)")
+                                          : tx("  done (merged into the folder there; nothing in it replaced)"));
                 } else {
                     completed << j;
                     task->log(tx("  done"));
@@ -977,10 +1020,16 @@ public:
                 task->log(tx("  failed: %1").arg(e.message()));
                 task->had_errors = true;
                 if (e.permission()) {
-                    // retried as administrator; a new folder already begun is finished by merging into it
+                    // retried as administrator; a new folder already begun is finished by merging into it. That
+                    // merge, and the retry of a merge that keeps both, leave alone what this job already copied
+                    // there (resume) instead of putting a second copy of it beside the first
                     Job retry = j;
-                    if (fresh && isdir(j.dst) && !islink(j.dst))
+                    if (fresh && isdir(j.dst) && !islink(j.dst)) {
                         retry.op = "merge_copy";
+                        retry.overwrite = false;
+                    }
+                    if (retry.op.startsWith("merge") && !retry.overwrite)
+                        retry.resume = true;
                     denied << retry;
                 } else {
                     left_part_way();
@@ -1268,9 +1317,9 @@ private:
         return lstat_(src, a) && stat_(dirname(dst), b) && a.st_dev == b.st_dev;
     }
 
-    void move(const QString &src, const QString &dst, bool merge, bool claim)
+    void move(const QString &src, const QString &dst, Merge merge, bool claim)
     {
-        if (!merge && same_dev(src, dst)) {
+        if (merge == Merge::No && same_dev(src, dst)) {
             struct stat st, dst_st;
             if (claim && lstat_(dst, dst_st))
                 throw conflict(dst);
@@ -1370,7 +1419,7 @@ private:
     }
 
     // claim: dst must be new (see Job::replace)
-    void copy(const QString &src, const QString &dst, bool merge, bool claim)
+    void copy(const QString &src, const QString &dst, Merge merge, bool claim)
     {
         struct stat st;
         if (!lstat_(src, st))
@@ -1382,7 +1431,7 @@ private:
     // claim: dname must still be free when the copy is put there (the items inside a folder being built never are
     // claimed: only Kestrel writes there)
     void copy_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
-                 const QString &dname, const QString &dst, bool merge, bool claim = false)
+                 const QString &dname, const QString &dst, Merge merge, bool claim = false)
     {
         struct stat dst_st;
         bool dst_exists = stat_at(ddir, dname, dst_st);
@@ -1413,7 +1462,8 @@ private:
             }
         } else if (S_ISDIR(st.st_mode)) {
             Fd in(open_dir_at(sdir, sname, st, src));
-            auto copy_into = [&](int out) {
+            // into_existing: out is a folder that was there (a merge), where another program may have files too
+            auto copy_into = [&](int out, bool into_existing) {
                 QStringList names = names_in(in.fd, src);
                 if (drives::slow_kind(src) == drives::Slow::Tape) {   // in tape order (folders, which have none, last)
                     QHash<QString, QPair<qint64, qint64>> at;
@@ -1427,16 +1477,22 @@ private:
                     struct stat est;
                     if (!stat_at(in.fd, e, est))
                         throw_errno(join(src, e));
-                    copy_at(in.fd, e, est, join(src, e), out, e, join(dst, e), merge);
+                    if (into_existing && (merge == Merge::KeepBoth || merge == Merge::Resume))
+                        merge_in(in.fd, e, est, join(src, e), out, dst, merge);
+                    else
+                        copy_at(in.fd, e, est, join(src, e), out, e, join(dst, e), merge);
                 }
                 copy_times_mode(out, st);
                 copy_xattrs(in.fd, out);
             };
-            if (dst_exists && merge) {   // into the existing folder (each file in it still replaced whole)
+            if (dst_exists && merge != Merge::No) {
+                // into the existing folder: nothing in it replaced (merge_in), unless the user chose to replace files
+                // with the same names (Overwrite: each still replaced whole). Not all-or-nothing: a cancel or an
+                // error keeps what was put in so far, each item whole.
                 if (!S_ISDIR(dst_st.st_mode))
                     throw Error(tx("%1 exists and isn't a folder").arg(dst));
                 Fd out(open_dir_at(ddir, dname, dst_st, dst));
-                copy_into(out.fd);
+                copy_into(out.fd, true);
             } else if (!dst_exists && ::mkdirat(ddir, enc(dname).constData(), 0700) == 0) {
                 // a new folder (nothing to replace): made under its own name straight away, so each file shows up
                 // there as soon as it's complete (each is still written under a hidden name and renamed when whole).
@@ -1447,7 +1503,7 @@ private:
                     throw_errno(dst);
                 Fd out(open_dir_at(ddir, dname, made, dst));
                 try {
-                    copy_into(out.fd);
+                    copy_into(out.fd, false);
                 } catch (...) {
                     copy_times_mode(out.fd, st);
                     throw;
@@ -1473,7 +1529,7 @@ private:
                         throw_errno(dst);
                     {
                         Fd out(open_dir_at(ddir, part, part_st, dst));
-                        copy_into(out.fd);
+                        copy_into(out.fd, false);
                     }
                     if (claim)
                         claim_name(ddir, part, ddir, dname, dst);
@@ -1489,6 +1545,77 @@ private:
         } else {
             throw Error(tx("%1 isn't a regular file, folder or link").arg(src));
         }
+    }
+
+    // One item of a merge that keeps both (src, named sname in sdir) into the existing folder out (dst): under its own
+    // name when that's free, merged into a folder of that name, and otherwise beside what's there under the first free
+    // "name-(n).ext" (merge_name). Nothing there is ever replaced: each name is claimed (copy_at's claim), and one
+    // taken meanwhile by another program just moves it on to the next. Resume (finishing a copy as administrator):
+    // a name holding the copy made before (already_copied: the same contents) is left as it is, and nothing more is
+    // done for the item.
+    void merge_in(int sdir, const QString &sname, const struct stat &st, const QString &src, int out, const QString &dst,
+                  Merge merge)
+    {
+        bool is_dir = S_ISDIR(st.st_mode);
+        for (int n = 0;; ++n) {
+            task->check();
+            QString name = n == 0 ? sname : merge_name(sname, n, is_dir);
+            QString to = join(dst, name);
+            struct stat there;
+            if (stat_at(out, name, there)) {
+                if (is_dir && S_ISDIR(there.st_mode) && (n == 0 || merge == Merge::Resume)) {
+                    copy_at(sdir, sname, st, src, out, name, to, merge);   // a folder of that name: merged into
+                    return;
+                }
+                if (merge == Merge::Resume && already_copied(sdir, sname, st, out, name, there)) {
+                    done += by_count ? 1 : (S_ISREG(st.st_mode) ? qint64(st.st_size) : 0);
+                    report_progress(sname);
+                    return;
+                }
+                continue;
+            }
+            try {
+                copy_at(sdir, sname, st, src, out, name, to, merge, true);
+            } catch (const NameTaken &e) {
+                if (e.path != to)   // (something inside it, not its own name)
+                    throw;
+                continue;
+            }
+            if (n > 0)
+                task->log(tx("  “%1” was there already: kept, and the copy put beside it as “%2”").arg(sname, name));
+            return;
+        }
+    }
+
+    // The item there (name in dir, `there`) is the copy of src made before: a file with the same contents (compared
+    // byte for byte, so a different file is never taken for it: a resumed move deletes the original after), or a link
+    // to the same target
+    static bool already_copied(int sdir, const QString &sname, const struct stat &st, int dir, const QString &name,
+                               const struct stat &there)
+    {
+        if (S_ISREG(st.st_mode) && S_ISREG(there.st_mode)) {
+            if (st.st_size != there.st_size)
+                return false;
+            Fd a(::openat(sdir, enc(sname).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+            Fd b(::openat(dir, enc(name).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+            if (a.fd < 0 || b.fd < 0)
+                return false;
+            QByteArray ba(1 << 20, 0), bb(1 << 20, 0);
+            for (;;) {
+                ssize_t na = read_full(a.fd, ba.data(), ba.size()), nb = read_full(b.fd, bb.data(), bb.size());
+                if (na < 0 || na != nb || std::memcmp(ba.constData(), bb.constData(), size_t(na)) != 0)
+                    return false;
+                if (na == 0)
+                    return true;
+            }
+        }
+        if (S_ISLNK(st.st_mode) && S_ISLNK(there.st_mode)) {
+            QByteArray a(PATH_MAX, 0), b(PATH_MAX, 0);
+            ssize_t na = ::readlinkat(sdir, enc(sname).constData(), a.data(), a.size());
+            ssize_t nb = ::readlinkat(dir, enc(name).constData(), b.data(), b.size());
+            return na >= 0 && na == nb && a.left(na) == b.left(nb);
+        }
+        return false;
     }
 
     void copy_file_at(int sdir, const QString &sname, const struct stat &st, const QString &src, int ddir,
@@ -1858,10 +1985,11 @@ private:
         }
     }
 
-    static Error conflict(const QString &dst)
+    static NameTaken conflict(const QString &dst)
     {
-        return Error(tx("“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place")
-                         .arg(basename(dst), dirname(dst)));
+        return NameTaken(tx("“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place")
+                             .arg(basename(dst), dirname(dst)),
+                         dst);
     }
 
     // a finished part (a file or link) to its name in the same folder: claimed (claim_name), or replacing what's
@@ -2019,6 +2147,8 @@ static void retry_denied_as_admin(QWidget *parent, const QString &title, const Q
                                                           {{"src", j.src},
                                                            {"dst", j.dst},
                                                            {"merge", j.op.startsWith("merge")},
+                                                           // what a merge does with a name taken there (Job::overwrite)
+                                                           {"clash", j.overwrite ? "replace" : j.resume ? "resume" : "rename"},
                                                            {"replace", j.replace},
                                                            {"xattrs", keep_xattrs}});
                     QJsonArray names = r.value("xattrs_left_out").toArray();
@@ -2124,12 +2254,13 @@ Task *start_ops(QWidget *parent, const QList<Job> &jobs, const QString &title, s
             else if (!copies.isEmpty())
                 undo::record_paths("create", undo_label, copies);
             if ((*ops)->replaced || (*ops)->merged) {
-                bool merged = (*ops)->merged;
+                bool merged = (*ops)->merged, overwrote = (*ops)->overwrote || (*ops)->replaced;
                 if (moves.isEmpty() && copies.isEmpty())
                     undo::record("none", merged ? tx("Merge (can't be undone)") : tx("Replace (can't be undone)"), {});
                 if (auto *win = qobject_cast<QMainWindow *>(p ? p->window() : nullptr))
-                    win->statusBar()->showMessage(merged ? tx("Merge can't be undone: what was replaced is gone.")
-                                                         : tx("Replace can't be undone: what was replaced is gone."),
+                    win->statusBar()->showMessage(!merged    ? tx("Replace can't be undone: what was replaced is gone.")
+                                                  : overwrote ? tx("Merge can't be undone: what was replaced is gone.")
+                                                              : tx("Merge can't be undone."),
                                                   8000);
             }
         }
@@ -2220,21 +2351,27 @@ struct Plan {
     QStringList sources;
     QString dest_dir, op, dest_real;
     QString apply_all;   // a conflict's answer, "for all"
+    bool apply_all_overwrite = false;   // and whether its box to replace was ticked
     QList<Job> jobs;
     int next = 0;
     std::function<void(const QList<Job> &)> planned;
 };
 }  // namespace
 
-static void plan_job(Plan &p, const QString &choice, const QString &src, const QString &dst, const QString &name)
+// overwrite: the user ticked the box to replace. Without it nothing is replaced: Merge (or a Merge "for all" met by
+// a file) keeps both
+static void plan_job(Plan &p, const QString &choice, bool overwrite, const QString &src, const QString &dst,
+                     const QString &name)
 {
     if (choice == "skip")
         return;
-    if (choice == "both") {
+    bool merge = isdir(dst) && isdir(src);
+    if (choice == "both" || (!merge && !overwrite)) {
         p.jobs << Job{p.op, src, unique_path(p.dest_dir, name, "num")};
     } else {
-        bool merge = isdir(dst) && isdir(src);
-        p.jobs << Job{merge ? "merge_" + p.op : p.op, src, dst, true};
+        Job j{merge ? "merge_" + p.op : p.op, src, dst, true};
+        j.overwrite = merge && overwrite;
+        p.jobs << j;
     }
 }
 
@@ -2264,7 +2401,7 @@ static void plan_next(std::shared_ptr<Plan> p)
             continue;
         }
         if (!p->apply_all.isEmpty()) {
-            plan_job(*p, p->apply_all, src, dst, name);
+            plan_job(*p, p->apply_all, p->apply_all_overwrite, src, dst, name);
             continue;
         }
         // ask, and go on with the rest once it's answered
@@ -2272,9 +2409,12 @@ static void plan_next(std::shared_ptr<Plan> p)
         QObject::connect(dlg, &QDialog::finished, dlg, [p, dlg, src, dst, name]() {
             if (dlg->choice == "cancel")
                 return;
-            if (dlg->all_box->isChecked())
+            bool overwrite = dlg->overwrite_box->isChecked();
+            if (dlg->all_box->isChecked()) {
                 p->apply_all = dlg->choice;
-            plan_job(*p, dlg->choice, src, dst, name);
+                p->apply_all_overwrite = overwrite;
+            }
+            plan_job(*p, dlg->choice, overwrite, src, dst, name);
             ++p->next;
             plan_next(p);
         });
@@ -2880,14 +3020,21 @@ ConflictDialog::ConflictDialog(QWidget *parent, const QString &dst, bool is_dir)
     auto *lay = new QVBoxLayout(this);
     QString kind = is_dir ? "folder" : "file";
     lay->addWidget(new QLabel(tx("A %1 named “%2” already exists in\n%3").arg(kind, basename(dst), dirname(dst))));
-    if (is_dir)
-        lay->addWidget(new QLabel(tx("Merge puts the contents into the existing folder: files there with the same names are\n"
-                                  "replaced. A merge can't be undone.")));
+    // Nothing is replaced unless the box is ticked (never by default): an answer given without reading keeps every file
+    if (is_dir) {
+        lay->addWidget(new QLabel(tx("Merge puts the contents into the existing folder. Nothing there is replaced: a file\n"
+                                  "with the same name as one there is put beside it as “name-(1).ext”. A merge can't be undone.")));
+        overwrite_box = new QCheckBox(tx("Replace files with the same names instead (what's there is lost for good)"));
+    } else {
+        overwrite_box = new QCheckBox(tx("Allow replacing the file there (it's lost for good)"));
+    }
+    lay->addWidget(overwrite_box);
     all_box = new QCheckBox(tx("Apply this action to all conflicts"));
     lay->addWidget(all_box);
     auto *bb = new QDialogButtonBox;
+    // (labels as tx() texts; the value says which was clicked)
     const QList<QPair<QString, QString>> choices = {
-        {is_dir ? "Merge" : "Replace", "replace"}, {"Keep Both", "both"}, {"Skip", "skip"}};
+        {is_dir ? tx("Merge") : tx("Replace"), "replace"}, {tx("Keep Both"), "both"}, {tx("Skip"), "skip"}};
     for (const auto &[label, val] : choices) {
         QPushButton *b = bb->addButton(label, QDialogButtonBox::AcceptRole);
         QString v = val;
@@ -2895,6 +3042,18 @@ ConflictDialog::ConflictDialog(QWidget *parent, const QString &dst, bool is_dir)
             choice = v;
             accept();
         });
+        // the safe answer is the one Enter gives: Merge for a folder (which keeps everything unless the box is
+        // ticked), Keep Both for a file; a file's Replace needs the box ticked first
+        if (v == (is_dir ? "replace" : "both")) {
+            b->setDefault(true);
+            b->setAutoDefault(true);
+        } else {
+            b->setAutoDefault(false);
+        }
+        if (!is_dir && v == "replace") {
+            b->setEnabled(false);
+            connect(overwrite_box, &QCheckBox::toggled, b, &QPushButton::setEnabled);
+        }
     }
     QPushButton *cancel = bb->addButton(QDialogButtonBox::Cancel);
     connect(cancel, &QPushButton::clicked, this, [this]() {

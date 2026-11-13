@@ -31,8 +31,8 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+684"/>
-        <location line="+608"/>
+        <location filename="../src/app.cpp" line="+701"/>
+        <location line="+609"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
         <translation>붙여넣기</translation>
@@ -71,6 +71,7 @@
     </message>
     <message>
         <location line="+18"/>
+        <location filename="../src/widgets.cpp" line="+2219"/>
         <source>Drop</source>
         <translation>놓기</translation>
     </message>
@@ -81,8 +82,8 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="-747"/>
-        <location line="+753"/>
+        <location filename="../src/app.cpp" line="-748"/>
+        <location line="+754"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Duplicate</source>
         <translation>복제</translation>
@@ -237,7 +238,7 @@
         <location line="+97"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1082"/>
+        <location filename="../src/fileops.cpp" line="+1131"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 / %2 — %3</translation>
@@ -247,17 +248,18 @@
         <location filename="../src/undo.cpp" line="+265"/>
         <location line="+26"/>
         <source>Moved to the trash: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>휴지통으로 이동함: %1</translation>
     </message>
     <message>
         <location line="+12"/>
-        <location filename="../src/app.cpp" line="-752"/>
-        <location line="+988"/>
+        <location filename="../src/app.cpp" line="-753"/>
+        <location line="+989"/>
         <location filename="../src/diskusage.cpp" line="+1014"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+115"/>
         <location filename="../src/opening.cpp" line="+276"/>
         <location line="+4"/>
+        <location filename="../src/widgets.cpp" line="-153"/>
         <source>Move to Trash</source>
         <translation>휴지통으로 이동</translation>
     </message>
@@ -324,14 +326,14 @@ This cannot be undone.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-987"/>
-        <location line="+672"/>
+        <location filename="../src/app.cpp" line="-988"/>
+        <location line="+673"/>
         <source>Delete Permanently</source>
         <translation>영구 삭제</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+534"/>
+        <location filename="../src/app.cpp" line="+551"/>
         <source>Delete</source>
         <translation>삭제</translation>
     </message>
@@ -454,21 +456,21 @@ No backup is kept, so this can&apos;t be undone.</source>
     <message>
         <location line="+1"/>
         <source>Skipped: %1: its original location is unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>건너뜀: %1: 원래 위치를 알 수 없음</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Restored: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>복원함: %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Restored: %1 (as %2: its name was taken)</source>
-        <translation type="unfinished"></translation>
+        <translation>복원함: %1 (%2(으)로: 이름이 이미 사용 중이었음)</translation>
     </message>
     <message>
         <location line="+15"/>
-        <location filename="../src/app.cpp" line="-535"/>
+        <location filename="../src/app.cpp" line="-552"/>
         <source>Restore</source>
         <translation>복원</translation>
     </message>
@@ -482,7 +484,7 @@ No backup is kept, so this can&apos;t be undone.</source>
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
         <location filename="../src/menus.cpp" line="-105"/>
-        <location filename="../src/widgets.cpp" line="+1711"/>
+        <location filename="../src/widgets.cpp" line="-314"/>
         <source>Empty Trash</source>
         <translation>휴지통 비우기</translation>
     </message>
@@ -552,7 +554,7 @@ No backup is kept, so this can&apos;t be undone.</source>
     </message>
     <message numerus="yes">
         <location line="+18"/>
-        <location filename="../src/archive_ui.cpp" line="+836"/>
+        <location filename="../src/archive_ui.cpp" line="+854"/>
         <location filename="../src/jobswin.cpp" line="+574"/>
         <location filename="../src/linkwin.cpp" line="+620"/>
         <source>… and %Ln more</source>
@@ -663,12 +665,12 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+5"/>
         <source>Not started: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>시작되지 않음: %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The admin session is open: administrator actions run in it until it&apos;s ended</source>
-        <translation type="unfinished"></translation>
+        <translation>관리 세션이 열려 있습니다: 세션이 끝날 때까지 관리자 작업은 그 안에서 실행됩니다</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -677,10 +679,10 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+20"/>
-        <location filename="../src/drives.cpp" line="+547"/>
+        <location filename="../src/drives.cpp" line="+558"/>
         <location filename="../src/ramdisk.cpp" line="+747"/>
         <source>Failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>실패: %1</translation>
     </message>
     <message>
         <location line="+13"/>
@@ -700,15 +702,15 @@ sudo apt install pkexec</translation>
         <translation>관리자로 다시 시도</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1246"/>
+        <location filename="../src/app.cpp" line="-1264"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+370"/>
-        <location filename="../src/fsmodel.cpp" line="+775"/>
+        <location filename="../src/fsmodel.cpp" line="+776"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
         <location filename="../src/pgp.cpp" line="+460"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1441"/>
+        <location filename="../src/widgets.cpp" line="-1481"/>
         <source>Name</source>
         <translation>이름</translation>
     </message>
@@ -724,7 +726,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/ramdiskwin.cpp" line="+50"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1910"/>
+        <location line="+2159"/>
         <source>Size</source>
         <translation>크기</translation>
     </message>
@@ -745,13 +747,13 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1911"/>
-        <location line="+1913"/>
+        <location filename="../src/widgets.cpp" line="-2160"/>
+        <location line="+2162"/>
         <source>Modified</source>
         <translation>수정한 날짜</translation>
     </message>
     <message>
-        <location line="+232"/>
+        <location line="+237"/>
         <source>Zoom (Ctrl+scroll)</source>
         <translation>확대/축소 (Ctrl+스크롤)</translation>
     </message>
@@ -772,29 +774,29 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+11"/>
-        <location filename="../src/widgets.cpp" line="-724"/>
+        <location filename="../src/widgets.cpp" line="-933"/>
         <source>Private</source>
-        <translation type="unfinished"></translation>
+        <translation>개인</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Private mode: Kestrel&apos;s caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드: Kestrel의 캐시와 기록은 메모리에 보관되며 마지막 Kestrel이 닫힐 때 삭제되고, 저장 창은 개인 폴더에서 시작합니다.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Open the Private Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 폴더 열기</translation>
     </message>
     <message>
         <location line="+1"/>
         <location filename="../src/ramdisk.cpp" line="+346"/>
         <location filename="../src/widgets.cpp" line="+296"/>
         <source>Leave Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드 끝내기</translation>
     </message>
     <message>
-        <location line="+96"/>
+        <location line="+108"/>
         <location line="+296"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
@@ -906,20 +908,20 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+777"/>
+        <location line="+778"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>모든 그룹 접기</translation>
     </message>
     <message>
-        <location line="-773"/>
-        <location line="+778"/>
+        <location line="-774"/>
+        <location line="+779"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>모든 그룹 펼치기</translation>
     </message>
     <message>
-        <location line="-772"/>
+        <location line="-773"/>
         <source>Set as Default</source>
         <translation>기본값으로 설정</translation>
     </message>
@@ -936,20 +938,20 @@ Turn off in large or slow folders to speed things up.</source>
     <message>
         <location line="+14"/>
         <source>Looking for the folders below %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 아래의 폴더를 찾는 중</translation>
     </message>
     <message numerus="yes">
         <location line="+8"/>
         <source>%Ln folder(s) found — %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>폴더 %Ln개 찾음 — %1</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+4"/>
         <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>폴더 %Ln개 찾음: 작업이 끝나면 각 폴더에 이 폴더의 정렬이 적용됩니다</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -966,7 +968,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+37"/>
-        <location filename="../src/fsmodel.cpp" line="-734"/>
+        <location filename="../src/fsmodel.cpp" line="-735"/>
         <location filename="../src/hashcheck.cpp" line="+413"/>
         <source>File</source>
         <translation>파일</translation>
@@ -989,13 +991,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-228"/>
-        <location line="+627"/>
+        <location line="+628"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <source>New Folder…</source>
         <translation>새 폴더…</translation>
     </message>
     <message>
-        <location line="-626"/>
+        <location line="-627"/>
         <source>New Empty File…</source>
         <translation>새 빈 파일…</translation>
     </message>
@@ -1027,22 +1029,22 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1392"/>
+        <location line="+1410"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>실행 취소</translation>
     </message>
     <message>
-        <location line="-1388"/>
-        <location line="+753"/>
+        <location line="-1406"/>
+        <location line="+754"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
         <translation>잘라내기</translation>
     </message>
     <message>
-        <location line="-752"/>
-        <location line="+753"/>
+        <location line="-753"/>
+        <location line="+754"/>
         <location filename="../src/compare.cpp" line="-177"/>
         <location line="+376"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
@@ -1050,39 +1052,39 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+458"/>
+        <location filename="../src/widgets.cpp" line="+667"/>
         <source>Copy</source>
         <translation>복사</translation>
     </message>
     <message>
-        <location line="-751"/>
-        <location line="+609"/>
+        <location line="-752"/>
+        <location line="+610"/>
         <location filename="../src/menus.cpp" line="-24"/>
         <source>Paste as Link</source>
         <translation>링크로 붙여넣기</translation>
     </message>
     <message>
-        <location line="-607"/>
-        <location line="+581"/>
+        <location line="-608"/>
+        <location line="+582"/>
         <location line="+34"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Select All</source>
         <translation>모두 선택</translation>
     </message>
     <message>
-        <location line="-614"/>
+        <location line="-615"/>
         <source>Invert Selection</source>
         <translation>선택 반전</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+757"/>
+        <location line="+758"/>
         <location filename="../src/menus.cpp" line="+28"/>
         <source>Rename…</source>
         <translation>이름 바꾸기…</translation>
     </message>
     <message>
-        <location line="-753"/>
+        <location line="-754"/>
         <location filename="../src/menus.cpp" line="-36"/>
         <location filename="../src/viewer.cpp" line="+1413"/>
         <source>Copy Path</source>
@@ -1090,10 +1092,10 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+9"/>
-        <location line="+635"/>
+        <location line="+636"/>
         <location line="+32"/>
         <location line="+328"/>
-        <location line="+250"/>
+        <location line="+267"/>
         <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
@@ -1103,7 +1105,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>속성</translation>
     </message>
     <message>
-        <location line="-1236"/>
+        <location line="-1254"/>
         <location filename="../src/menus.cpp" line="-187"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1148,16 +1150,16 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+586"/>
+        <location line="+587"/>
         <location filename="../src/menus.cpp" line="+72"/>
         <source>Show Hidden Files</source>
         <translation>숨긴 파일 표시</translation>
     </message>
     <message>
-        <location line="-584"/>
+        <location line="-585"/>
         <location filename="../src/prefs.cpp" line="-148"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1069"/>
+        <location filename="../src/widgets.cpp" line="-1284"/>
         <source>Sidebar</source>
         <translation>사이드바</translation>
     </message>
@@ -1169,13 +1171,13 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1230"/>
+        <location line="+1248"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>전체 화면</translation>
     </message>
     <message>
-        <location line="-1222"/>
+        <location line="-1240"/>
         <source>Reload</source>
         <translation>새로 고침</translation>
     </message>
@@ -1246,16 +1248,16 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/widgets.cpp" line="+608"/>
+        <location filename="../src/widgets.cpp" line="+614"/>
         <location line="+4"/>
         <source>New RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>새 RAM 디스크…</translation>
     </message>
     <message>
         <location line="+2"/>
         <location filename="../src/ramdisk.cpp" line="-34"/>
         <source>Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -1279,12 +1281,12 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1208"/>
+        <location line="+1226"/>
         <source>Keyboard Shortcuts</source>
         <translation>키보드 단축키</translation>
     </message>
     <message>
-        <location line="-1207"/>
+        <location line="-1225"/>
         <source>About</source>
         <translation>정보</translation>
     </message>
@@ -1305,20 +1307,20 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+522"/>
+        <location line="+523"/>
         <location filename="../src/menus.cpp" line="+38"/>
         <source>Open in New Window</source>
         <translation>새 창에서 열기</translation>
     </message>
     <message>
-        <location line="-486"/>
+        <location line="-487"/>
         <source>%1 free</source>
         <translation>%1 남음</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>%1 (Private)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (개인)</translation>
     </message>
     <message>
         <location line="+39"/>
@@ -1553,7 +1555,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+38"/>
         <source>Drives, network locations and bookmarks</source>
         <translation>드라이브, 네트워크 위치 및 책갈피</translation>
     </message>
@@ -1586,7 +1588,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+422"/>
+        <location filename="../src/widgets.cpp" line="+631"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>항목 %Ln개</numerusform>
@@ -1618,7 +1620,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="+37"/>
         <location line="+105"/>
         <location filename="../src/overview.cpp" line="-13"/>
-        <location filename="../src/widgets.cpp" line="-477"/>
+        <location filename="../src/widgets.cpp" line="-686"/>
         <source>Open in Terminal</source>
         <translation>터미널에서 열기</translation>
     </message>
@@ -1644,7 +1646,7 @@ Turn off in large or slow folders to speed things up.</source>
     </message>
     <message>
         <location line="-302"/>
-        <location line="+553"/>
+        <location line="+570"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
@@ -1667,7 +1669,7 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>열기</translation>
     </message>
     <message>
-        <location line="-550"/>
+        <location line="-567"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-193"/>
         <location line="+51"/>
@@ -1819,13 +1821,13 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/menus.cpp" line="-36"/>
         <location line="+37"/>
         <source>Link…</source>
-        <translation type="unfinished"></translation>
+        <translation>링크…</translation>
     </message>
     <message>
         <location line="+11"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Edit Link…</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 편집…</translation>
     </message>
     <message>
         <location line="-8"/>
@@ -1912,13 +1914,13 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/diskimage.cpp" line="+714"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <source>Mount Image</source>
-        <translation type="unfinished"></translation>
+        <translation>이미지 마운트</translation>
     </message>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Mount Image for Writing</source>
-        <translation type="unfinished"></translation>
+        <translation>쓰기용으로 이미지 마운트</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -1947,7 +1949,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location filename="../src/overview.cpp" line="+2"/>
         <location filename="../src/widgets.cpp" line="+1"/>
         <source>Disk Usage…</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 사용량…</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -1971,7 +1973,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <source>Encrypt…</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화…</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -1982,7 +1984,7 @@ Turn off in large or slow folders to speed things up.</source>
         <location line="+27"/>
         <location line="+4"/>
         <source>Decrypt</source>
-        <translation type="unfinished"></translation>
+        <translation>복호화</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -2166,12 +2168,12 @@ Turn off in large or slow folders to speed things up.</source>
         <translation>UWP에 연결할 수 없습니다. 편집기 창이 아직 열려 있습니까?</translation>
     </message>
     <message>
-        <location line="+151"/>
+        <location line="+161"/>
         <source>Folder preview cache cleared</source>
         <translation>폴더 미리 보기 캐시를 지웠습니다</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+12"/>
         <source>Delete All Thumbnails</source>
         <translation>모든 썸네일 삭제</translation>
     </message>
@@ -2249,7 +2251,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-727"/>
+        <location filename="../src/widgets.cpp" line="-733"/>
         <source>Type a location</source>
         <translation>위치 입력</translation>
     </message>
@@ -2537,7 +2539,7 @@ They will be regenerated as you browse.</source>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+906"/>
+        <location filename="../src/fileops.cpp" line="+998"/>
         <location filename="../src/hashcheck.cpp" line="+487"/>
         <source>…and %Ln more</source>
         <translation>
@@ -2580,7 +2582,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location filename="../src/archive.cpp" line="+95"/>
-        <location filename="../src/archive_ui.cpp" line="-861"/>
+        <location filename="../src/archive_ui.cpp" line="-879"/>
         <source>Store</source>
         <translation>저장만</translation>
     </message>
@@ -2734,7 +2736,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="-836"/>
-        <location filename="../src/archive_ui.cpp" line="+1021"/>
+        <location filename="../src/archive_ui.cpp" line="+1041"/>
         <source>Compressing %1</source>
         <translation>%1 압축 중</translation>
     </message>
@@ -2776,7 +2778,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="+200"/>
-        <location filename="../src/archive_ui.cpp" line="-652"/>
+        <location filename="../src/archive_ui.cpp" line="-654"/>
         <location line="+2"/>
         <location line="+7"/>
         <location line="+248"/>
@@ -2825,7 +2827,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <translation>%1이(가) 문제를 보고했습니다 (종료 코드 %2)</translation>
     </message>
     <message>
-        <location filename="../src/archive_ui.cpp" line="-1315"/>
+        <location filename="../src/archive_ui.cpp" line="-1333"/>
         <source>%1 only accepts the password on its command line, so other users on this computer could see it in the process list while the job runs.</source>
         <translation>%1은(는) 암호를 명령줄로만 받으므로, 작업이 실행되는 동안 이 컴퓨터의 다른 사용자가 프로세스 목록에서 볼 수 있습니다.</translation>
     </message>
@@ -2874,14 +2876,14 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <location line="+17"/>
         <location line="+4"/>
         <location line="+36"/>
-        <location line="+28"/>
-        <location line="+296"/>
+        <location line="+45"/>
+        <location line="+297"/>
         <location filename="../src/convert.cpp" line="+640"/>
         <source>Extract</source>
         <translation>압축 풀기</translation>
     </message>
     <message>
-        <location line="-949"/>
+        <location line="-967"/>
         <location line="+163"/>
         <location line="+255"/>
         <location line="+4"/>
@@ -2895,12 +2897,12 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="-436"/>
-        <location line="+1354"/>
+        <location line="+1374"/>
         <source>Archive</source>
         <translation>압축 파일</translation>
     </message>
     <message>
-        <location line="-1348"/>
+        <location line="-1368"/>
         <source>Archive name:</source>
         <translation>압축 파일 이름:</translation>
     </message>
@@ -3024,7 +3026,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message numerus="yes">
         <location line="+7"/>
-        <location filename="../src/util.cpp" line="+964"/>
+        <location filename="../src/util.cpp" line="+992"/>
         <source>%Ln byte(s)</source>
         <translation>
             <numerusform>%Ln바이트</numerusform>
@@ -3201,12 +3203,12 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     <message>
         <location line="+43"/>
         <location line="+73"/>
-        <location line="+453"/>
+        <location line="+471"/>
         <source>Extract All</source>
         <translation>모두 압축 풀기</translation>
     </message>
     <message>
-        <location line="-518"/>
+        <location line="-536"/>
         <source>%1 archives</source>
         <translation>압축 파일 %1개</translation>
     </message>
@@ -3260,12 +3262,14 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
         <location line="+1"/>
         <location filename="../src/chooser.cpp" line="+259"/>
         <location filename="../src/compare.cpp" line="+1"/>
+        <location filename="../src/fileops.cpp" line="+905"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <source>Replace</source>
         <translation>바꾸기</translation>
     </message>
     <message>
         <location line="+1"/>
+        <location filename="../src/fileops.cpp" line="+0"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <source>Skip</source>
         <translation>건너뛰기</translation>
@@ -3340,7 +3344,7 @@ Kestrel 창이 없어도 계속할 수 있습니다. 작업 창에 표시되며,
     </message>
     <message>
         <location line="+41"/>
-        <location line="+323"/>
+        <location line="+341"/>
         <source>Kestrel needs another program to open “%1”.
 
 Install it with:  sudo apt install %2</source>
@@ -3349,8 +3353,8 @@ Install it with:  sudo apt install %2</source>
 다음으로 설치하세요:  sudo apt install %2</translation>
     </message>
     <message>
-        <location line="-308"/>
-        <location line="+225"/>
+        <location line="-325"/>
+        <location line="+242"/>
         <location line="+245"/>
         <source>Opening %1</source>
         <translation>%1 여는 중</translation>
@@ -3565,7 +3569,7 @@ Install it with:  sudo apt install %2</source>
         </translation>
     </message>
     <message>
-        <location line="+83"/>
+        <location line="+85"/>
         <source>Measuring…</source>
         <translation>측정 중…</translation>
     </message>
@@ -3658,8 +3662,8 @@ Install it with:  sudo apt install %2</source>
     <message numerus="yes">
         <location line="+7"/>
         <source>%Ln item(s) listed in %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%1에 항목 %Ln개 나열됨</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -3824,29 +3828,29 @@ Install it with:  sudo apt install </source>
     <message>
         <location line="+24"/>
         <source>Comparing %1 with %2, reading the files of the same size and date</source>
-        <translation type="unfinished"></translation>
+        <translation>%1와(과) %2 비교 중, 크기와 날짜가 같은 파일을 읽는 중</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Comparing %1 with %2 by size and date</source>
-        <translation type="unfinished"></translation>
+        <translation>%1와(과) %2를(을) 크기와 날짜로 비교 중</translation>
     </message>
     <message>
         <location line="+9"/>
         <location filename="../src/diskusage.cpp" line="+6"/>
         <source>  %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  %1: %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1, %2 the same</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, %2 같음</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln difference(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>차이 %Ln개</numerusform>
         </translation>
     </message>
     <message>
@@ -4200,12 +4204,12 @@ Install it with:  sudo apt install </source>
     <message>
         <location line="+22"/>
         <source>Last synced:</source>
-        <translation type="unfinished"></translation>
+        <translation>마지막 동기화:</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Syncs run before with this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더와 이전에 실행한 동기화</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -4322,32 +4326,32 @@ Install it with:  sudo apt install </source>
     <message>
         <location line="+9"/>
         <source>Looking for syncs of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 동기화를 찾는 중</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>%1 → %2  (%3, deleting)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2  (%3, 삭제 포함)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1 → %2  (%3)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2  (%3)</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>Filled in as this was last synced, on %1: check the direction, then Preview.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 마지막으로 동기화한 대로 채웠습니다: 방향을 확인한 다음 미리 보기를 누르세요.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>⚠ The source, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>⚠ 원본 “%1”이(가) 지금 없습니다: 삭제되었거나 이동되었거나, 드라이브가 연결되어 있지 않습니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>⚠ The destination, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>⚠ 대상 “%1”이(가) 지금 없습니다: 삭제되었거나 이동되었거나, 드라이브가 연결되어 있지 않습니다.</translation>
     </message>
     <message>
         <location line="+48"/>
@@ -5590,12 +5594,12 @@ Accepts: %3</source>
     <message>
         <location line="+8"/>
         <source>Counting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 세는 중</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>  %1 in %2 and %3, remembered for next time</source>
-        <translation type="unfinished"></translation>
+        <translation>  %2와(과) %3에 %1, 다음을 위해 기억함</translation>
     </message>
     <message>
         <location line="+14"/>
@@ -5617,7 +5621,7 @@ Accepts: %3</source>
     <message>
         <location line="+4"/>
         <source>Remembered: %1: %2 in %3 (%4)</source>
-        <translation type="unfinished"></translation>
+        <translation>기억함: %1: %3에 %2 (%4)</translation>
     </message>
     <message>
         <location line="+23"/>
@@ -5730,7 +5734,7 @@ Accepts: %3</source>
     <message>
         <location line="-405"/>
         <source>Change what it points to, or its name, in the Link window</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 창에서 가리키는 대상이나 이름 바꾸기</translation>
     </message>
     <message>
         <location line="+409"/>
@@ -6129,7 +6133,7 @@ Actual: %2</source>
     <message>
         <location line="+4"/>
         <source>The index of the tape in %1 is written</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 있는 테이프의 색인을 기록했습니다</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -6222,96 +6226,96 @@ Actual: %2</source>
         <location filename="../src/dialogs.cpp" line="-967"/>
         <location filename="../src/diskusage.cpp" line="-777"/>
         <source>%1 in %Ln file(s) so far — %2</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>지금까지 파일 %Ln개에 %1 — %2</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/diskusage.cpp" line="+321"/>
         <source>%1, as Properties remembers</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, 속성이 기억한 값</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>This folder is on a tape: counting reads every folder in it, which keeps the tape busy for a long time. Count Now counts it anyway.</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더는 테이프에 있습니다: 세기는 그 안의 모든 폴더를 읽으므로 테이프를 오래 사용합니다. 지금 세기를 누르면 그래도 셉니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>This folder is on a floppy disk: counting reads every folder in it, which is slow. Count Now counts it anyway.</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더는 플로피 디스크에 있습니다: 세기는 그 안의 모든 폴더를 읽으므로 느립니다. 지금 세기를 누르면 그래도 셉니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Count Now</source>
-        <translation type="unfinished"></translation>
+        <translation>지금 세기</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Other files and folders (not remembered one by one)</source>
-        <translation type="unfinished"></translation>
+        <translation>기타 파일 및 폴더 (하나씩 기억하지 않음)</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln smaller file(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>더 작은 파일 %Ln개</numerusform>
         </translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Disk usage map</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 사용량 지도</translation>
     </message>
     <message>
         <location line="+63"/>
         <source>Nothing counted yet</source>
-        <translation type="unfinished"></translation>
+        <translation>아직 센 것이 없습니다</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Nothing here takes up space</source>
-        <translation type="unfinished"></translation>
+        <translation>여기에는 공간을 차지하는 것이 없습니다</translation>
     </message>
     <message>
         <location line="+72"/>
         <source>%1 in %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%2에 %1</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>%1% of “%2”</source>
-        <translation type="unfinished"></translation>
+        <translation>“%2”의 %1%</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>%1% of everything counted</source>
-        <translation type="unfinished"></translation>
+        <translation>센 전체의 %1%</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Small: its contents aren&apos;t mapped one by one</source>
-        <translation type="unfinished"></translation>
+        <translation>작음: 내용을 하나씩 표시하지 않음</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Its contents aren&apos;t remembered: Recalculate to map them</source>
-        <translation type="unfinished"></translation>
+        <translation>내용이 기억되지 않았습니다: 다시 계산을 눌러 표시하세요</translation>
     </message>
     <message>
         <location line="+93"/>
         <source>Disk Usage — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 사용량 — %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>Up to the folder this one is in (Backspace)</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더가 들어 있는 폴더로 올라가기 (Backspace)</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>Count everything in it again</source>
-        <translation type="unfinished"></translation>
+        <translation>안에 있는 모든 것을 다시 세기</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -6325,66 +6329,66 @@ Actual: %2</source>
     <message>
         <location line="+14"/>
         <source>What&apos;s in the folder shown</source>
-        <translation type="unfinished"></translation>
+        <translation>표시된 폴더의 내용</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Share</source>
-        <translation type="unfinished"></translation>
+        <translation>비율</translation>
     </message>
     <message>
         <location line="+120"/>
         <source>Counting what fills “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 채우는 것을 세는 중</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Counting %1 (not other drives mounted in it)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 세는 중 (그 안에 마운트된 다른 드라이브는 제외)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1 in %2 and %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%2와(과) %3에 %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Couldn&apos;t be read, counted as empty: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>읽을 수 없어 비어 있는 것으로 셈: %1</translation>
     </message>
     <message numerus="yes">
         <location line="+9"/>
         <source>%Ln folder size(s) remembered for Properties</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>속성용으로 폴더 크기 %Ln개를 기억함</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+19"/>
         <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>폴더 %Ln개를 읽을 수 없어 비어 있는 것으로 셈 (예: %1)</numerusform>
         </translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Stopped: the sizes shown are from before.</source>
-        <translation type="unfinished"></translation>
+        <translation>중지됨: 표시된 크기는 이전 값입니다.</translation>
     </message>
     <message>
         <location line="+62"/>
         <source>%1%</source>
-        <translation type="unfinished"></translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>Go Into</source>
-        <translation type="unfinished"></translation>
+        <translation>들어가기</translation>
     </message>
     <message>
         <location line="+58"/>
         <source>Moved “%1” to the trash. Undo in a Kestrel window brings it back (Recalculate then counts it again).</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 휴지통으로 이동했습니다. Kestrel 창에서 실행 취소하면 되돌아옵니다(그 후 다시 계산하면 다시 셉니다).</translation>
     </message>
     <message>
         <location filename="../src/dupes.cpp" line="+12"/>
@@ -6457,50 +6461,50 @@ Actual: %2</source>
     <message>
         <location filename="../src/dupes.cpp" line="-403"/>
         <source>Couldn&apos;t be read, left out: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>읽을 수 없어 제외함: %1</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>Looking through the files: %1 found — %2</source>
-        <translation type="unfinished"></translation>
+        <translation>파일을 살펴보는 중: %1개 찾음 — %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/thumbs.cpp" line="+1544"/>
+        <location filename="../src/thumbs.cpp" line="+1556"/>
         <source>Looking through %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 살펴보는 중</translation>
     </message>
     <message numerus="yes">
         <location line="+36"/>
         <source>%Ln file(s) found</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 %Ln개 찾음</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>다른 파일과 크기가 같은 파일 %Ln개: 앞부분을 비교합니다</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+28"/>
         <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>같은 크기의 다른 파일과 앞부분이 같은 파일 %Ln개: 전체를 읽습니다 (%1)</numerusform>
         </translation>
     </message>
     <message>
         <location line="+16"/>
         <source>Comparing the files of the same size: %1 · %2</source>
-        <translation type="unfinished"></translation>
+        <translation>같은 크기의 파일 비교 중: %1 · %2</translation>
     </message>
     <message numerus="yes">
         <location line="+24"/>
         <source>%Ln group(s) of identical files; %1 can be freed</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>동일한 파일 그룹 %Ln개, %1 확보 가능</numerusform>
         </translation>
     </message>
     <message>
@@ -6599,17 +6603,17 @@ This can&apos;t be undone.</source>
     <message>
         <location line="+8"/>
         <source>Kept: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>유지함: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  replaced with a hard link to it: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  그 파일에 대한 하드 링크로 바꿈: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  left as it is: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  그대로 둠: %1</translation>
     </message>
     <message>
         <location line="+13"/>
@@ -6619,7 +6623,7 @@ This can&apos;t be undone.</source>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1818"/>
+        <location filename="../src/fileops.cpp" line="-2864"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln줄 생략 …</numerusform>
@@ -6704,7 +6708,7 @@ This can&apos;t be undone.</source>
         <translation>%1이(가) 처리 중에 바뀌었습니다</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+51"/>
         <source>Copy %1 → %2</source>
         <translation>복사 %1 → %2</translation>
     </message>
@@ -6729,7 +6733,7 @@ This can&apos;t be undone.</source>
         <translation>삭제 %1</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+49"/>
         <source>Counting…</source>
         <translation>세는 중…</translation>
     </message>
@@ -6739,18 +6743,13 @@ This can&apos;t be undone.</source>
         <translation>  완료 (있던 것을 바꿈)</translation>
     </message>
     <message>
-        <location line="+3"/>
-        <source>  done (merged into the folder there)</source>
-        <translation>  완료 (있던 폴더에 병합)</translation>
-    </message>
-    <message>
-        <location line="+3"/>
+        <location line="+8"/>
         <source>  done</source>
         <translation>  완료</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location line="+13"/>
+        <location line="+19"/>
         <source>  failed: %1</source>
         <translation>  실패: %1</translation>
     </message>
@@ -6760,95 +6759,105 @@ This can&apos;t be undone.</source>
         <translation>  취소됨</translation>
     </message>
     <message>
-        <location line="-807"/>
-        <location line="+876"/>
+        <location line="-856"/>
+        <location line="+925"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-868"/>
+        <location line="-917"/>
         <source>%1  %2% · %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  %2% · %3</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1  %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  %2</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Failed after %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 후 실패</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>Stopped after %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 후 중지됨</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Finished, with errors, in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 만에 완료됨 (오류 있음)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Finished in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 만에 완료됨</translation>
     </message>
     <message>
-        <location line="+767"/>
+        <location line="+778"/>
+        <source>  done (merged into the folder there, replacing files with the same names)</source>
+        <translation>  완료 (기존 폴더에 병합, 이름이 같은 파일은 바꿈)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>  done (merged into the folder there; nothing in it replaced)</source>
+        <translation>  완료 (기존 폴더에 병합, 그 안의 아무것도 바꾸지 않음)</translation>
+    </message>
+    <message>
+        <location line="+37"/>
         <source>%1: the copy doesn&apos;t match the original (read back after copying). It&apos;s kept; copy it again.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: 복사본이 원본과 일치하지 않습니다(복사 후 다시 읽음). 복사본은 유지됩니다. 다시 복사하세요.</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>복사한 파일 %Ln개를 확인했습니다: 다시 읽은 각 파일이 원본과 일치합니다 (SHA-256).</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>복사한 파일 %Ln개를 확인했습니다: %1개가 원본과 일치하지 않습니다 (위에 나열됨).</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>복제된 파일 %Ln개는 드라이브에서 원본과 데이터를 공유합니다: 다시 읽을 것이 없습니다.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
-        <location line="+1006"/>
+        <location line="+1100"/>
         <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>대상이 보관할 수 없어 항목 %Ln개의 확장 속성을 제외함: %1</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location line="-997"/>
+        <location line="-1091"/>
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 %Ln개를 복제함 (둘 중 하나가 바뀔 때까지 복사본은 원본과 공간을 공유)</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>시스템이 파일 %Ln개를 복사함 (네트워크 공유에서는 서버 자체가)</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) read and written by Kestrel</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Kestrel이 파일 %Ln개를 읽고 씀</numerusform>
         </translation>
     </message>
     <message>
@@ -6900,8 +6909,8 @@ This can&apos;t be undone.</source>
     <message numerus="yes">
         <location line="-91"/>
         <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>복사한 파일 %Ln개가 원본과 일치하지 않아(복사 후 다시 읽음) 원래 위치에서 아무것도 삭제하지 않았습니다: %1</numerusform>
         </translation>
     </message>
     <message>
@@ -6910,7 +6919,7 @@ This can&apos;t be undone.</source>
         <translation>%1은(는) 다른 드라이브(마운트 지점)에 있으므로 삭제하지 않습니다</translation>
     </message>
     <message>
-        <location line="+95"/>
+        <location line="+102"/>
         <source>%1 exists and isn&apos;t a folder</source>
         <translation>%1이(가) 있지만 폴더가 아닙니다</translation>
     </message>
@@ -6920,7 +6929,12 @@ This can&apos;t be undone.</source>
         <translation>%1은(는) 일반 파일, 폴더, 링크가 아닙니다</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+39"/>
+        <source>  “%1” was there already: kept, and the copy put beside it as “%2”</source>
+        <translation>  “%1”이(가) 이미 있었습니다: 유지하고, 복사본을 옆에 “%2”(으)로 두었습니다</translation>
+    </message>
+    <message>
+        <location line="+45"/>
         <source>%1 changed while it was being copied</source>
         <translation>%1이(가) 복사 중에 바뀌었습니다</translation>
     </message>
@@ -6935,7 +6949,7 @@ This can&apos;t be undone.</source>
         <translation>테이프에 “%1”을(를) 위한 공간이 부족합니다: %2 필요, 테이프에 %3 남음</translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location line="+57"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>원본 읽기 속도가 %1/s로 테이프의 최저 스트리밍 속도보다 느립니다: 테이프가 버퍼에서 끊어서 기록하고 그 사이에 멈춥니다. 더 빠른 드라이브에서 복사하거나 먼저 빠른 디스크에 압축 파일을 만들면 스트리밍을 유지할 수 있습니다.</translation>
     </message>
@@ -6947,49 +6961,49 @@ This can&apos;t be undone.</source>
     <message>
         <location line="+80"/>
         <source>Verifying — reading the original of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>확인 중 — %1의 원본을 읽는 중</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Verifying on the tape — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>테이프에서 확인 중 — %1</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Verifying — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>확인 중 — %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>  “%1” couldn&apos;t be read back to verify it: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  “%1”을(를) 확인하기 위해 다시 읽을 수 없었습니다: %2</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>  ✘ The copy “%1” doesn&apos;t match its original: their checksums (SHA-256) differ.</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ 복사본 “%1”이(가) 원본과 일치하지 않습니다: 체크섬(SHA-256)이 다릅니다.</translation>
     </message>
     <message numerus="yes">
         <location line="+11"/>
         <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>확인이 꺼졌습니다: 테이프에 복사한 파일 %Ln개를 다시 읽지 않았습니다.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+11"/>
         <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>테이프에 복사한 파일 %Ln개를 테이프에 놓인 순서대로 다시 읽어 확인하는 중</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+111"/>
+        <location line="+123"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>작업 중에 “%1”이(가) %2에 나타났습니다. 그대로 두었으며 그 자리에 아무것도 넣지 않았습니다</translation>
     </message>
     <message>
-        <location line="+100"/>
+        <location line="+101"/>
         <source>%1 was replaced, but the old one couldn&apos;t be deleted (it&apos;s left as %2): %3</source>
         <translation>%1을(를) 바꿨지만 이전 것을 삭제하지 못했습니다(%2(으)로 남아 있음): %3</translation>
     </message>
@@ -7071,7 +7085,7 @@ This can&apos;t be undone.</source>
         </translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+74"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1초</translation>
@@ -7136,14 +7150,46 @@ This can&apos;t be undone.</source>
         <translation>바꾸기 (되돌릴 수 없음)</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>Merge can&apos;t be undone: what was replaced is gone.</source>
         <translation>병합은 되돌릴 수 없습니다: 바뀐 것은 사라집니다.</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+763"/>
+        <source>Merge puts the contents into the existing folder. Nothing there is replaced: a file
+with the same name as one there is put beside it as “name-(1).ext”. A merge can&apos;t be undone.</source>
+        <translation>병합하면 내용이 기존 폴더에 들어갑니다. 그곳의 아무것도 바뀌지 않습니다: 그곳의 파일과
+이름이 같은 파일은 그 옆에 “name-(1).ext”(으)로 놓입니다. 병합은 실행 취소할 수 없습니다.</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Replace files with the same names instead (what&apos;s there is lost for good)</source>
+        <translation>대신 이름이 같은 파일 바꾸기 (그곳에 있던 것은 영구히 사라짐)</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Allow replacing the file there (it&apos;s lost for good)</source>
+        <translation>그곳의 파일 바꾸기 허용 (영구히 사라짐)</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Merge</source>
+        <translation>병합</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Keep Both</source>
+        <translation>둘 다 유지</translation>
+    </message>
+    <message>
+        <location line="-776"/>
         <source>Replace can&apos;t be undone: what was replaced is gone.</source>
         <translation>바꾸기는 되돌릴 수 없습니다: 바뀐 것은 사라집니다.</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Merge can&apos;t be undone.</source>
+        <translation>병합은 실행 취소할 수 없습니다.</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -7177,12 +7223,12 @@ This can&apos;t be undone.</source>
     <message numerus="yes">
         <location line="+9"/>
         <source>%Ln item(s) failed.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>항목 %Ln개가 실패했습니다.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+64"/>
         <source>Cannot transfer</source>
         <translation>전송할 수 없음</translation>
     </message>
@@ -7197,7 +7243,7 @@ This can&apos;t be undone.</source>
         <translation>“%1”을(를) 자기 자신 안으로 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+57"/>
         <source>Counting files</source>
         <translation>파일 세는 중</translation>
     </message>
@@ -7301,12 +7347,12 @@ Copy them anyway?</source>
     <message>
         <location line="+8"/>
         <source>Still there (not shredded): %1</source>
-        <translation type="unfinished"></translation>
+        <translation>아직 있음 (파쇄되지 않음): %1</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Shredded: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>파쇄함: %1</translation>
     </message>
     <message>
         <location line="+122"/>
@@ -7366,14 +7412,7 @@ Copy them anyway?</source>
 %3</translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>Merge puts the contents into the existing folder: files there with the same names are
-replaced. A merge can&apos;t be undone.</source>
-        <translation>병합하면 기존 폴더에 내용을 넣습니다: 그곳에 같은 이름의 파일은
-바뀝니다. 병합은 되돌릴 수 없습니다.</translation>
-    </message>
-    <message>
-        <location line="+2"/>
+        <location line="+10"/>
         <source>Apply this action to all conflicts</source>
         <translation>모든 충돌에 이 동작 적용</translation>
     </message>
@@ -7462,30 +7501,32 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="+152"/>
         <source>Missing: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>없음: %1</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Verifying %1 · %2 of %3 · %4</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 확인 중 · %3 중 %2 · %4</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>OK: %1 (%2 %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>정상: %1 (%2 %3)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Doesn&apos;t match: %1
   expected %2 %3
   found    %2 %4</source>
-        <translation type="unfinished"></translation>
+        <translation>일치하지 않음: %1
+  예상 %2 %3
+  실제 %2 %4</translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+70"/>
         <source>Couldn&apos;t be read: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>읽을 수 없음: %1: %2</translation>
     </message>
     <message>
         <location line="+37"/>
@@ -7563,49 +7604,49 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="+49"/>
         <source>Checked %1 of %2: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%2개 중 %1개 확인: %3</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Checked %Ln file(s): %1.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 %Ln개 확인: %1.</numerusform>
         </translation>
     </message>
     <message>
         <location line="+3"/>
         <source>These didn&apos;t pass:</source>
-        <translation type="unfinished"></translation>
+        <translation>다음은 통과하지 못했습니다:</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>  ✘ Doesn&apos;t match: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ 일치하지 않음: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  ✘ Missing: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ 없음: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  ✘ Couldn&apos;t be read: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ 읽을 수 없음: %1: %2</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Verifying checksums in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 체크섬 확인 중</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Checking the files listed in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 나열된 파일 확인 중</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>Closing this window doesn&apos;t stop the check: it goes on in the Jobs window.</source>
-        <translation type="unfinished"></translation>
+        <translation>이 창을 닫아도 확인은 멈추지 않습니다: 작업 창에서 계속됩니다.</translation>
     </message>
     <message numerus="yes">
         <location line="+110"/>
@@ -7651,22 +7692,22 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="+9"/>
         <source>%1 (%2) to hash with %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%3(으)로 해시를 계산할 %1 (%2)</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Hashing %1 (%2 of %3) · %4</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 해시 계산 중 (%3 중 %2) · %4</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>  %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  %1</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Couldn&apos;t be read, left out: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>읽을 수 없어 제외함: %1: %2</translation>
     </message>
     <message>
         <location line="+7"/>
@@ -7676,7 +7717,7 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="+5"/>
         <source>Wrote %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 기록함</translation>
     </message>
     <message>
         <location line="+30"/>
@@ -7732,54 +7773,54 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location filename="../src/diskimage.cpp" line="-258"/>
         <source>“%1” is on the drive being read: the image would be written onto what&apos;s being copied. Save it on another drive.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 읽는 중인 드라이브에 있습니다: 이미지가 복사 중인 것 위에 기록됩니다. 다른 드라이브에 저장하세요.</translation>
     </message>
     <message>
         <location line="+57"/>
         <source>%1 of %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%2 중 %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <location line="+195"/>
         <source>%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (%2)</translation>
     </message>
     <message>
         <location line="-136"/>
         <source>The drive wasn&apos;t read to its end, so no image was made.</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브를 끝까지 읽지 못해 이미지를 만들지 않았습니다.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Wrote %1 from the drive into %2</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브에서 %2에 %1 기록함</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Back Up Drive to Image: %1 (%2) to %3</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브를 이미지로 백업: %1 (%2)을(를) %3(으)로</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+109"/>
         <source>size unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>크기 알 수 없음</translation>
     </message>
     <message>
         <location line="-107"/>
         <source>Compressed with zstd</source>
-        <translation type="unfinished"></translation>
+        <translation>zstd로 압축됨</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Encrypted with a password (gpg, AES-256)</source>
-        <translation type="unfinished"></translation>
+        <translation>암호로 암호화됨 (gpg, AES-256)</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Backing up %1 to “%2”</source>
-        <translation type="unfinished"></translation>
+        <translation>%1을(를) “%2”(으)로 백업하는 중</translation>
     </message>
     <message>
         <location line="+61"/>
@@ -7787,32 +7828,32 @@ replaced. A merge can&apos;t be undone.</source>
         <location line="+119"/>
         <location line="+65"/>
         <source>Back Up Drive to Image</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브를 이미지로 백업</translation>
     </message>
     <message>
         <location line="-213"/>
         <source>The image of %1 is saved as “%2”.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 이미지를 “%2”(으)로 저장했습니다.</translation>
     </message>
     <message>
         <location line="+33"/>
         <source>Copies everything on the drive, byte for byte, into an image file, which Mount Image can open later. Reading the drive needs your administrator password.</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브의 모든 것을 바이트 단위로 이미지 파일에 복사합니다. 이 파일은 나중에 이미지 마운트로 열 수 있습니다. 드라이브를 읽으려면 관리자 암호가 필요합니다.</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>This partition: %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>이 파티션: %1 (%2)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The whole disk: %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 전체: %1 (%2)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Copy:</source>
-        <translation type="unfinished"></translation>
+        <translation>복사:</translation>
     </message>
     <message>
         <location line="+6"/>
@@ -7823,215 +7864,227 @@ replaced. A merge can&apos;t be undone.</source>
     <message>
         <location line="+3"/>
         <source>Compress (zstd): smaller, as the drive&apos;s empty space takes almost nothing</source>
-        <translation type="unfinished"></translation>
+        <translation>압축 (zstd): 드라이브의 빈 공간은 거의 차지하지 않으므로 더 작아짐</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Install zstd to compress images</source>
-        <translation type="unfinished"></translation>
+        <translation>이미지를 압축하려면 zstd를 설치하세요</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Encrypt with a password (gpg): the image is never on the disk unencrypted</source>
-        <translation type="unfinished"></translation>
+        <translation>암호로 암호화 (gpg): 이미지가 암호화되지 않은 상태로 디스크에 놓이지 않음</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Install gpg to encrypt images</source>
-        <translation type="unfinished"></translation>
+        <translation>이미지를 암호화하려면 gpg를 설치하세요</translation>
     </message>
     <message>
         <location line="+11"/>
         <location filename="../src/pgp.cpp" line="+3"/>
         <source>Again:</source>
-        <translation type="unfinished"></translation>
+        <translation>다시:</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Back Up</source>
-        <translation type="unfinished"></translation>
+        <translation>백업</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Save the Image In</source>
-        <translation type="unfinished"></translation>
+        <translation>이미지 저장 위치</translation>
     </message>
     <message>
         <location line="+44"/>
         <source>The drive holds %1; %2 is free there.</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브에 %1이(가) 있으며, 그곳에 %2이(가) 비어 있습니다.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Mounted for writing: %1. Unmounting it first gives the most faithful copy.</source>
-        <translation type="unfinished"></translation>
+        <translation>쓰기용으로 마운트됨: %1. 먼저 마운트를 해제하면 가장 정확한 복사본이 됩니다.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Reading a drive needs pkexec. Install it with:
 
 sudo apt install pkexec</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브를 읽으려면 pkexec가 필요합니다. 다음으로 설치하세요:
+
+sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>“%1” isn&apos;t a folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 폴더가 아닙니다.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>That name can&apos;t be used.</source>
-        <translation type="unfinished"></translation>
+        <translation>그 이름은 사용할 수 없습니다.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>“%1” is already there. Choose another name.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”이(가) 이미 있습니다. 다른 이름을 고르세요.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Enter the password to encrypt the image with.</source>
-        <translation type="unfinished"></translation>
+        <translation>이미지를 암호화할 암호를 입력하세요.</translation>
     </message>
     <message>
         <location line="+4"/>
         <location filename="../src/pgp.cpp" line="+112"/>
         <source>The two passwords aren&apos;t the same.</source>
-        <translation type="unfinished"></translation>
+        <translation>두 암호가 같지 않습니다.</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>There isn&apos;t room for the image there: it takes %1, and %2 is free.</source>
-        <translation type="unfinished"></translation>
+        <translation>그곳에 이미지를 둘 공간이 없습니다: %1이(가) 필요하고 %2이(가) 비어 있습니다.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Compressed, the image&apos;s size can&apos;t be known beforehand: it may not fit in the %1 free there (the drive holds %2).</source>
-        <translation type="unfinished"></translation>
+        <translation>압축하면 이미지 크기를 미리 알 수 없습니다: 그곳의 빈 공간 %1에 들어가지 않을 수 있습니다 (드라이브에 %2이(가) 있음).</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>It&apos;s mounted for writing (%1): programs may change it while it&apos;s read, and the image could then be inconsistent. Unmounting it first, or mounting it read-only, is safer.</source>
-        <translation type="unfinished"></translation>
+        <translation>쓰기용으로 마운트되어 있습니다 (%1): 읽는 동안 프로그램이 바꿀 수 있어 이미지가 일관되지 않을 수 있습니다. 먼저 마운트를 해제하거나 읽기 전용으로 마운트하는 편이 더 안전합니다.</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>%1
 
 Back up anyway?</source>
-        <translation type="unfinished"></translation>
+        <translation>%1
+
+그래도 백업할까요?</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Kestrel can&apos;t tell which device this drive is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel이 이 드라이브가 어떤 장치인지 알 수 없습니다.</translation>
     </message>
     <message>
         <location line="+79"/>
         <source>udisksctl failed (exit code %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>udisksctl 실패 (종료 코드 %1)</translation>
     </message>
     <message>
         <location line="+67"/>
         <location line="+430"/>
         <source>Detaching %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 분리하는 중</translation>
     </message>
     <message>
         <location line="-379"/>
         <source>Looking for a saved password</source>
-        <translation type="unfinished"></translation>
+        <translation>저장된 암호를 찾는 중</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>Mounting disk images needs udisks2 (udisksctl). Install it with:
 
 sudo apt install udisks2</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 이미지를 마운트하려면 udisks2(udisksctl)가 필요합니다. 다음으로 설치하세요:
+
+sudo apt install udisks2</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Opening “%1” needs %2, which isn&apos;t installed.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 열려면 %2이(가) 필요한데 설치되어 있지 않습니다.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>“%1” is encrypted. To mount it, Kestrel decrypts it into a copy in your cache folder (%2 free there; the image takes %3, and more once expanded if it&apos;s also compressed). The copy isn&apos;t encrypted while it&apos;s there; it&apos;s mounted read-only and deleted once unmounted.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 암호화되어 있습니다. 마운트하려면 Kestrel이 캐시 폴더의 복사본으로 복호화합니다 (그곳에 %2 비어 있음, 이미지는 %3을(를) 차지하며 압축도 되어 있으면 풀린 후 더 커짐). 복사본은 그곳에 있는 동안 암호화되지 않으며, 읽기 전용으로 마운트되고 마운트 해제 후 삭제됩니다.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>“%1” is compressed. To mount it, Kestrel expands it into a copy in your cache folder (%2 free there; it may need several times the %3 it takes now). The copy is mounted read-only and deleted once unmounted.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 압축되어 있습니다. 마운트하려면 Kestrel이 캐시 폴더의 복사본으로 압축을 풉니다 (그곳에 %2 비어 있음, 지금 차지하는 %3의 몇 배가 필요할 수 있음). 복사본은 읽기 전용으로 마운트되고 마운트 해제 후 삭제됩니다.</translation>
     </message>
     <message>
         <location line="+49"/>
         <source>Expanding “%1” to mount it</source>
-        <translation type="unfinished"></translation>
+        <translation>마운트하기 위해 “%1” 압축을 푸는 중</translation>
     </message>
     <message>
         <location line="+63"/>
         <source>Expanded into %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 압축을 풂 (%2)</translation>
     </message>
     <message>
         <location line="+41"/>
         <source>Setting up “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1” 설정 중</translation>
     </message>
     <message>
         <location line="+37"/>
         <source>“%1” couldn&apos;t be set up as a drive:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 드라이브로 설정할 수 없었습니다:
+
+%2</translation>
     </message>
     <message>
         <location line="+37"/>
         <location line="+54"/>
         <source>%1: not unlocked</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: 잠금 해제되지 않음</translation>
     </message>
     <message>
         <location line="-50"/>
         <location line="+54"/>
         <source>Unlock</source>
-        <translation type="unfinished"></translation>
+        <translation>잠금 해제</translation>
     </message>
     <message>
         <location line="-37"/>
         <source>Unlocking %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 잠금 해제 중</translation>
     </message>
     <message>
         <location line="+54"/>
         <source>Mounting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 마운트 중</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>No file system Kestrel can mount was found in it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel이 마운트할 수 있는 파일 시스템을 찾지 못했습니다.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Nothing in “%1” could be mounted:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”에서 아무것도 마운트할 수 없었습니다:
+
+%2</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Some of “%1” couldn&apos;t be mounted:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”의 일부를 마운트할 수 없었습니다:
+
+%2</translation>
     </message>
     <message numerus="yes">
         <location line="+4"/>
         <source>Mounted %Ln file system(s) from “%1”</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>“%1”에서 파일 시스템 %Ln개를 마운트함</numerusform>
         </translation>
     </message>
     <message>
@@ -8572,7 +8625,7 @@ sudo apt install udisks2</source>
         <translation>차례를 기다리는 중 (드라이브 사용 중)…</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-829"/>
+        <location filename="../src/fileops.cpp" line="-845"/>
         <source>Waiting</source>
         <translation>대기 중</translation>
     </message>
@@ -8734,23 +8787,23 @@ sudo apt install udisks2</source>
         <location line="+4"/>
         <location filename="../src/prefs.cpp" line="+15"/>
         <source>Verify copies</source>
-        <translation type="unfinished"></translation>
+        <translation>복사본 확인</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+355"/>
         <source>Read each file back once it&apos;s copied and compare it with the original (for the files copied from now on). Its default is in Preferences → Files.</source>
-        <translation type="unfinished"></translation>
+        <translation>복사한 각 파일을 다시 읽어 원본과 비교합니다 (지금부터 복사하는 파일 대상). 기본값은 환경설정 → 파일에 있습니다.</translation>
     </message>
     <message>
         <location line="-348"/>
         <source>Verify copies turned on (Jobs window): each file copied from now on is read back and checked.</source>
-        <translation type="unfinished"></translation>
+        <translation>복사본 확인 켜짐 (작업 창): 지금부터 복사하는 각 파일을 다시 읽어 확인합니다.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Verify copies turned off (Jobs window).</source>
-        <translation type="unfinished"></translation>
+        <translation>복사본 확인 꺼짐 (작업 창).</translation>
     </message>
     <message>
         <location line="+10"/>
@@ -8850,7 +8903,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+12"/>
         <source>Only for this Kestrel&apos;s own jobs: set it in the Kestrel that started the job</source>
-        <translation type="unfinished"></translation>
+        <translation>이 Kestrel의 작업에만 해당: 작업을 시작한 Kestrel에서 설정하세요</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -9232,7 +9285,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+1"/>
         <source>not in the Trash</source>
-        <translation type="unfinished"></translation>
+        <translation>휴지통에 있지 않을 때</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -9328,12 +9381,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+2"/>
         <source>disk images (.img, .iso, .raw)</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크 이미지 (.img, .iso, .raw)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>plain disk images you can write to</source>
-        <translation type="unfinished"></translation>
+        <translation>쓸 수 있는 일반 디스크 이미지</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -9353,12 +9406,12 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+2"/>
         <source>when no folders are selected</source>
-        <translation type="unfinished"></translation>
+        <translation>선택된 폴더가 없을 때</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>for encrypted files (.gpg, .pgp, .asc)</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화된 파일용 (.gpg, .pgp, .asc)</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -9475,7 +9528,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+718"/>
+        <location filename="../src/widgets.cpp" line="+724"/>
         <source>Move Up</source>
         <translation>위로 이동</translation>
     </message>
@@ -10219,7 +10272,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1438"/>
+        <location filename="../src/widgets.cpp" line="-1478"/>
         <source>Location</source>
         <translation>위치</translation>
     </message>
@@ -10300,7 +10353,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+4"/>
         <location line="+1"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+934"/>
+        <location filename="../src/widgets.cpp" line="+974"/>
         <source>Overview</source>
         <translation>개요</translation>
     </message>
@@ -10476,7 +10529,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+12"/>
         <location line="+1"/>
         <source>What&apos;s using this space?</source>
-        <translation type="unfinished"></translation>
+        <translation>무엇이 이 공간을 쓰고 있나요?</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -10610,7 +10663,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+11"/>
         <location filename="../src/widgets.cpp" line="-130"/>
         <source>Back Up Drive to Image…</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브를 이미지로 백업…</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -10659,8 +10712,8 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+3"/>
         <location filename="../src/thumbs.cpp" line="-6"/>
-        <location filename="../src/widgets.cpp" line="-642"/>
-        <location line="+140"/>
+        <location filename="../src/widgets.cpp" line="-648"/>
+        <location line="+146"/>
         <location line="+178"/>
         <source>Home</source>
         <translation>홈</translation>
@@ -11624,47 +11677,47 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+9"/>
         <location line="+5"/>
         <source>Copying</source>
-        <translation type="unfinished"></translation>
+        <translation>복사</translation>
     </message>
     <message>
         <location line="-13"/>
         <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
-        <translation type="unfinished"></translation>
+        <translation>파일 복사를 시스템에 맡기기 (Btrfs, XFS, ZFS에서는 즉시 복사, 네트워크 공유에서는 서버 측 복사)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the server copies the file itself, so it doesn&apos;t cross the network twice; elsewhere the system copies it without passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always go through Kestrel&apos;s buffer or dd.</source>
-        <translation type="unfinished"></translation>
+        <translation>파일 간에 데이터를 공유할 수 있는 드라이브(Btrfs, XFS, bcachefs, ZFS 2.2 이상)에서는 같은 드라이브의 복사본이 복제본이 됩니다: 즉시 완료되며, 둘 중 하나가 바뀔 때까지 추가 공간을 차지하지 않습니다. SMB나 NFS 공유에서는 서버가 직접 파일을 복사하므로 네트워크를 두 번 거치지 않습니다. 그 밖의 경우에는 시스템이 Kestrel을 거치지 않고 복사합니다. 64 KB 미만의 파일은 계속 Kestrel이 읽고 쓰며, 그 편이 같거나 더 빠릅니다(Btrfs 제외). 끄면: Kestrel이 모든 파일을 직접 읽고 씁니다. 테이프로의 복사는 항상 Kestrel의 버퍼나 dd를 거칩니다.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Keep extended attributes and ACLs</source>
-        <translation type="unfinished"></translation>
+        <translation>확장 속성 및 ACL 유지</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Copies also get their originals&apos; extended attributes: the address a download came from, tags other apps keep, access control lists (ACLs), and attributes backup tools rely on. Where the destination can&apos;t hold them (FAT, exFAT, some network and FUSE drives) the copy goes on without them, and its log says which were left out. Security labels need the administrator. A move within one drive always keeps them.</source>
-        <translation type="unfinished"></translation>
+        <translation>복사본은 원본의 확장 속성도 받습니다: 다운로드한 주소, 다른 앱이 붙인 태그, 접근 제어 목록(ACL), 백업 도구가 의존하는 속성 등입니다. 대상이 보관할 수 없는 곳(FAT, exFAT, 일부 네트워크 및 FUSE 드라이브)에서는 속성 없이 복사를 계속하고, 로그에 제외된 것을 적습니다. 보안 레이블에는 관리자가 필요합니다. 한 드라이브 안에서의 이동은 항상 유지합니다.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>each job in the Jobs window (Ctrl+Shift+J)</source>
-        <translation type="unfinished"></translation>
+        <translation>작업 창의 각 작업 (Ctrl+Shift+J)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Each file copied (or moved to another drive) is read back once it&apos;s written and its checksum compared with the original&apos;s, read while it was copied. A copy that doesn&apos;t match is named in the job&apos;s log and its list of failures (a move then keeps its original). Onto a tape, the files are read back after the whole job, in the order they lie on it. Slower: every copy is read once more.</source>
-        <translation type="unfinished"></translation>
+        <translation>복사한 (또는 다른 드라이브로 이동한) 각 파일은 기록 후 다시 읽혀, 복사하는 동안 읽은 원본의 체크섬과 비교됩니다. 일치하지 않는 복사본은 작업 로그와 실패 목록에 이름이 나옵니다(이동은 그 경우 원본을 유지). 테이프에서는 작업 전체가 끝난 후 테이프에 놓인 순서대로 파일을 다시 읽습니다. 더 느림: 모든 복사본을 한 번 더 읽습니다.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Save each finished job&apos;s log</source>
-        <translation type="unfinished"></translation>
+        <translation>완료된 각 작업의 로그 저장</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Each job&apos;s log, with its steps, when it ran and how it ended, is saved as a file in ~/.cache/kestrel-explorer/job-logs (a folder for each day), so it&apos;s kept after Clear Finished and after Kestrel quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB.</source>
-        <translation type="unfinished"></translation>
+        <translation>각 작업의 로그(단계, 실행 시각, 끝난 방식)는 ~/.cache/kestrel-explorer/job-logs에 파일로 저장되므로(날마다 폴더 하나), 완료된 작업 지우기 후와 Kestrel 종료 후에도 남습니다. 90일보다 오래된 로그는 삭제되며, 합계가 100 MB를 넘으면 가장 오래된 날부터 삭제됩니다.</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -11917,12 +11970,13 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+2"/>
         <location line="+2"/>
         <location line="+3"/>
+        <location line="+7"/>
         <location line="+6"/>
         <source>Privacy</source>
         <translation>개인 정보</translation>
     </message>
     <message>
-        <location line="-21"/>
+        <location line="-28"/>
         <source>The desktop&apos;s File History</source>
         <translation>데스크톱의 파일 기록</translation>
     </message>
@@ -11968,34 +12022,49 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+1"/>
+        <source>Separate caching</source>
+        <translation>캐시 분리</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Keep thumbnails in Kestrel&apos;s own cache folder, apart from other apps</source>
+        <translation>썸네일을 다른 앱과 분리하여 Kestrel 전용 캐시 폴더에 보관</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Thumbnails are then neither read from nor written to the cache the desktop&apos;s apps share (GNOME Files and others): Kestrel makes its own and keeps them in its cache folder, with its other caches. Turned off again, the thumbnails kept there are still used until they&apos;re deleted (☰ → Delete All Thumbnails…), and new ones go to the shared cache.</source>
+        <translation>그러면 데스크톱 앱이 공유하는 캐시(GNOME 파일 등)에서 썸네일을 읽거나 그곳에 쓰지 않습니다: Kestrel이 자체 썸네일을 만들어 다른 캐시와 함께 자기 캐시 폴더에 보관합니다. 다시 끄면 그곳에 보관된 썸네일은 삭제될 때까지 계속 쓰이고(☰ → 모든 썸네일 삭제…), 새 썸네일은 공유 캐시로 갑니다.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <location line="+1"/>
         <source>Private mode</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>☰ → Private Mode; the status bar&apos;s Private; the sidebar&apos;s Private (Leave Private Mode)</source>
-        <translation type="unfinished"></translation>
+        <translation>☰ → 개인 모드, 상태 표시줄의 개인, 사이드바의 개인 (개인 모드 끝내기)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Kestrel&apos;s caches (the previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent servers, remembered syncs, the viewer&apos;s folders) are kept in memory and deleted when the last Kestrel closes; nothing is added to the desktop&apos;s Recent; Save windows start in the Private folder, in memory too. It stays on, also after Kestrel is closed and opened again, until it&apos;s turned off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel의 캐시(만든 미리 보기, 폴더 크기, 작업 로그)와 기록(자주 가는 폴더, 최근 서버, 기억한 동기화, 뷰어의 폴더)은 메모리에 보관되고 마지막 Kestrel이 닫힐 때 삭제됩니다. 데스크톱의 최근 항목에는 아무것도 추가되지 않습니다. 저장 창은 역시 메모리에 있는 개인 폴더에서 시작합니다. 끌 때까지는 Kestrel을 닫았다가 다시 열어도 켜진 상태로 유지됩니다.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Say which files will be deleted when the last Kestrel closes or private mode is left</source>
-        <translation type="unfinished"></translation>
+        <translation>마지막 Kestrel을 닫거나 개인 모드를 끝낼 때 삭제될 파일 알려 주기</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>the warning&apos;s Don&apos;t show this again</source>
-        <translation type="unfinished"></translation>
+        <translation>경고의 다시 표시 안 함</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The files saved in Private (private mode) and in RAM disks that last until Kestrel closes.</source>
-        <translation type="unfinished"></translation>
+        <translation>개인(개인 모드)과 Kestrel이 닫힐 때까지 유지되는 RAM 디스크에 저장된 파일.</translation>
     </message>
     <message>
         <location filename="../src/prefswin.cpp" line="-239"/>
@@ -12034,7 +12103,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location line="+1"/>
         <location filename="../src/widgets.cpp" line="+1"/>
         <source>RAM Disks</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -12084,7 +12153,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+617"/>
+        <location filename="../src/widgets.cpp" line="+826"/>
         <source>%1:</source>
         <translation>%1:</translation>
     </message>
@@ -12356,7 +12425,7 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
         <location filename="../src/pgp.cpp" line="-519"/>
         <source>decrypted</source>
         <comment>the name of a decrypted file whose own name was only “.gpg”</comment>
-        <translation type="unfinished"></translation>
+        <translation>복호화됨</translation>
     </message>
     <message>
         <location line="+146"/>
@@ -12367,215 +12436,221 @@ For every Kestrel window (also Preferences → Images &amp; Videos).</source>
     <message>
         <location line="+69"/>
         <source>gpg couldn&apos;t encrypt “%1”: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg가 “%1”을(를) 암호화하지 못했습니다: %2</translation>
     </message>
     <message>
         <location line="+31"/>
         <source>“%1” is encrypted to a key whose secret part isn&apos;t in your keyring.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 비밀 부분이 키링에 없는 키에 대해 암호화되어 있습니다.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>gpg couldn&apos;t decrypt “%1”: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg가 “%1”을(를) 복호화하지 못했습니다: %2</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>%1, by %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, %2 작성</translation>
     </message>
     <message>
         <location line="+10"/>
         <location line="+187"/>
         <source>Encrypt</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화</translation>
     </message>
     <message>
         <location line="-187"/>
         <source>Encrypting needs gpg, which isn&apos;t installed. Install it with:
 
 sudo apt install gnupg</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화하려면 gpg가 필요한데 설치되어 있지 않습니다. 다음으로 설치하세요:
+
+sudo apt install gnupg</translation>
     </message>
     <message>
         <location line="+25"/>
         <source>Decrypting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 복호화 중</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Decrypted into %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1(으)로 복호화함</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>The password is wrong.</source>
-        <translation type="unfinished"></translation>
+        <translation>암호가 틀렸습니다.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>“%1” is decrypted into “%2”. What was in it was also signed:
 
 %3</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) “%2”(으)로 복호화했습니다. 내용에는 서명도 있었습니다:
+
+%3</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Decrypting needs gpg, which isn&apos;t installed. Install it with:
 
 sudo apt install gnupg</source>
-        <translation type="unfinished"></translation>
+        <translation>복호화하려면 gpg가 필요한데 설치되어 있지 않습니다. 다음으로 설치하세요:
+
+sudo apt install gnupg</translation>
     </message>
     <message>
         <location line="+27"/>
         <source>“%1” isn&apos;t encrypted: gpg finds no encrypted data in it (it may be a signature or a key).</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 암호화되어 있지 않습니다: gpg가 그 안에서 암호화된 데이터를 찾지 못했습니다 (서명이나 키일 수 있음).</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>“%1” is encrypted to someone else&apos;s key (%2): your keyring doesn&apos;t have its secret part, so only they can open it.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 다른 사람의 키(%2)에 대해 암호화되어 있습니다: 키링에 그 비밀 부분이 없으므로 그 사람만 열 수 있습니다.</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Encrypt “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1” 암호화</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Encrypt %Ln File(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 %Ln개 암호화</numerusform>
         </translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+49"/>
         <source>An encrypted copy is made beside it, as “%1”; the original stays as it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화된 복사본이 옆에 “%1”(으)로 만들어집니다. 원본은 그대로 남습니다.</translation>
     </message>
     <message>
         <location line="-47"/>
         <location line="+51"/>
         <source>An encrypted copy of each is made beside it (“name.gpg”); the originals stay as they are.</source>
-        <translation type="unfinished"></translation>
+        <translation>각 파일의 암호화된 복사본이 옆에 만들어집니다 (“name.gpg”). 원본은 그대로 남습니다.</translation>
     </message>
     <message>
         <location line="-45"/>
         <source>With a password: anyone who has it can open it</source>
-        <translation type="unfinished"></translation>
+        <translation>암호로: 암호를 아는 사람은 누구나 열 수 있음</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Password</source>
-        <translation type="unfinished"></translation>
+        <translation>암호</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The password again</source>
-        <translation type="unfinished"></translation>
+        <translation>암호 다시 입력</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>To people&apos;s keys: only they can open it, with no password to pass on</source>
-        <translation type="unfinished"></translation>
+        <translation>사람들의 키로: 그 사람들만 열 수 있으며, 전달할 암호가 없음</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Keys to encrypt to</source>
-        <translation type="unfinished"></translation>
+        <translation>암호화에 사용할 키</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Key</source>
-        <translation type="unfinished"></translation>
+        <translation>키</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Verified</source>
-        <translation type="unfinished"></translation>
+        <translation>확인됨</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Also to my own key, so I can open it too</source>
-        <translation type="unfinished"></translation>
+        <translation>내 키로도 암호화하여 나도 열 수 있게 함</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Looking for keys…</source>
-        <translation type="unfinished"></translation>
+        <translation>키를 찾는 중…</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>As text (.asc), to paste into an email or a message</source>
-        <translation type="unfinished"></translation>
+        <translation>텍스트로 (.asc), 이메일이나 메시지에 붙여 넣을 수 있게</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>An encrypted copy of each is made beside it (“name.asc”); the originals stay as they are.</source>
-        <translation type="unfinished"></translation>
+        <translation>각 파일의 암호화된 복사본이 옆에 만들어집니다 (“name.asc”). 원본은 그대로 남습니다.</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Listing your keys</source>
-        <translation type="unfinished"></translation>
+        <translation>키 목록을 가져오는 중</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>%1 (you)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (나)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Yes</source>
-        <translation type="unfinished"></translation>
+        <translation>예</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>No</source>
-        <translation type="unfinished"></translation>
+        <translation>아니요</translation>
     </message>
     <message>
         <location line="+22"/>
         <source>Your keyring has no keys to encrypt to. Import the public key of whoever it&apos;s for (for example in Passwords and Keys, or with gpg --import) and open Encrypt… again.</source>
-        <translation type="unfinished"></translation>
+        <translation>키링에 암호화에 사용할 키가 없습니다. 받는 사람의 공개 키를 가져온 다음(예: 암호 및 키에서, 또는 gpg --import로) 암호화…를 다시 여세요.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A key you haven&apos;t verified may not be theirs: anyone can make a key with any name. Compare its fingerprint (hover over its key) with the one they gave you.</source>
-        <translation type="unfinished"></translation>
+        <translation>확인하지 않은 키는 그 사람의 키가 아닐 수 있습니다: 누구나 아무 이름으로나 키를 만들 수 있습니다. 키의 지문(키 위에 포인터를 올리면 표시)을 받은 지문과 비교하세요.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>You have no key of your own, so you won&apos;t be able to open what&apos;s encrypted to other people&apos;s keys. Anyone can make a key with any name: compare a key&apos;s fingerprint (hover over it) with the one its owner gave you.</source>
-        <translation type="unfinished"></translation>
+        <translation>내 키가 없으므로 다른 사람의 키에 대해 암호화된 것은 열 수 없습니다. 누구나 아무 이름으로나 키를 만들 수 있습니다: 키의 지문(위에 포인터를 올리면 표시)을 소유자에게 받은 지문과 비교하세요.</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Type a password, twice.</source>
-        <translation type="unfinished"></translation>
+        <translation>암호를 두 번 입력하세요.</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Tick the keys of the people it&apos;s for.</source>
-        <translation type="unfinished"></translation>
+        <translation>받는 사람의 키를 선택하세요.</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>Encrypting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 암호화 중</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Encrypting %Ln file(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 %Ln개 암호화 중</numerusform>
         </translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Encrypted %1 into %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1을(를) %2(으)로 암호화함</translation>
     </message>
     <message>
         <location filename="../src/signature.cpp" line="+15"/>
@@ -12692,7 +12767,7 @@ sudo apt install gnupg</source>
     <message>
         <location line="+2"/>
         <source>Checking %1 with gpg</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg로 %1 확인 중</translation>
     </message>
     <message>
         <location line="+36"/>
@@ -12815,7 +12890,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         </translation>
     </message>
     <message>
-        <location filename="../src/thumbs.cpp" line="-1298"/>
+        <location filename="../src/thumbs.cpp" line="-1310"/>
         <source>Red</source>
         <translation>빨강</translation>
     </message>
@@ -12860,7 +12935,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>갈색</translation>
     </message>
     <message>
-        <location line="+1297"/>
+        <location line="+1309"/>
         <source>Thumbnails: %1</source>
         <translation>썸네일: %1</translation>
     </message>
@@ -12887,40 +12962,40 @@ This connects to the internet: the keyserver sees which key is asked for. Having
     <message>
         <location line="+199"/>
         <source>No preview could be made of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 미리 보기를 만들 수 없었습니다</translation>
     </message>
     <message numerus="yes">
         <location line="+74"/>
         <source>%Ln file preview(s) made</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>파일 미리 보기 %Ln개를 만듦</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>%Ln folder preview(s) made</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>폴더 미리 보기 %Ln개를 만듦</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) with no preview</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>미리 보기가 없는 파일 %Ln개</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>미리 보기에 너무 큰 파일 %Ln개 (환경설정 → 이미지 및 동영상)</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1 of %2 done: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%2 중 %1 완료: %3</translation>
     </message>
     <message>
         <location filename="../src/towerwin.cpp" line="-103"/>
@@ -13183,7 +13258,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <location line="-48"/>
         <location line="+51"/>
         <source>Renamed back: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>이름을 되돌림: %1 → %2</translation>
     </message>
     <message>
         <location line="-37"/>
@@ -13193,17 +13268,17 @@ This connects to the internet: the keyserver sees which key is asked for. Having
     <message>
         <location line="+13"/>
         <source>Put back: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>되돌려 놓음: %1</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>Pointed back: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>대상을 되돌림: %1</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Couldn&apos;t undo: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>실행 취소할 수 없음: %1</translation>
     </message>
     <message>
         <location filename="../src/util.cpp" line="-2"/>
@@ -13733,7 +13808,7 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>실행 취소	Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1827"/>
+        <location filename="../src/widgets.cpp" line="-2076"/>
         <source>Match</source>
         <translation>일치</translation>
     </message>
@@ -13749,12 +13824,12 @@ This connects to the internet: the keyserver sees which key is asked for. Having
         <translation>%1번째 줄: %2</translation>
     </message>
     <message>
-        <location line="+673"/>
+        <location line="+707"/>
         <source>Type a location (Ctrl+L)</source>
         <translation>위치 입력 (Ctrl+L)</translation>
     </message>
     <message>
-        <location line="+217"/>
+        <location line="+223"/>
         <location line="+180"/>
         <source>Desktop</source>
         <translation>바탕 화면</translation>
@@ -13839,7 +13914,7 @@ Not connected: click to connect</source>
     <message>
         <location line="+8"/>
         <source>Private mode: Save windows start here. Deleted when the last Kestrel closes.</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드: 저장 창이 여기에서 시작합니다. 마지막 Kestrel이 닫힐 때 삭제됩니다.</translation>
     </message>
     <message>
         <location line="+276"/>
@@ -13849,22 +13924,22 @@ Not connected: click to connect</source>
     <message>
         <location line="+7"/>
         <source>Bring Back into Memory</source>
-        <translation type="unfinished"></translation>
+        <translation>메모리로 다시 가져오기</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Save to Disk Now</source>
-        <translation type="unfinished"></translation>
+        <translation>지금 디스크에 저장</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Edit RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 편집…</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Remove RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 제거…</translation>
     </message>
     <message>
         <location line="+14"/>
@@ -13897,7 +13972,112 @@ Not connected: click to connect</source>
         <translation>작업이 아직 이 드라이브를 읽거나 쓰고 있습니다. 그래도 마운트 해제하시겠습니까?</translation>
     </message>
     <message>
-        <location line="+317"/>
+        <location line="+151"/>
+        <source>Only files and folders can be dropped here</source>
+        <translation>여기에는 파일과 폴더만 놓을 수 있습니다</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The Overview takes no files</source>
+        <translation>개요는 파일을 받지 않습니다</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Recent takes no files: it lists the files you opened</source>
+        <translation>최근 항목은 파일을 받지 않습니다: 연 파일의 목록입니다</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location line="+5"/>
+        <source>Only into a folder</source>
+        <translation>폴더 안에만</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>“%1” isn&apos;t there any more</source>
+        <translation>“%1”이(가) 더 이상 없습니다</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1 is read-only</source>
+        <translation>%1은(는) 읽기 전용입니다</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>A folder can&apos;t go into itself</source>
+        <translation>폴더는 자기 자신 안에 들어갈 수 없습니다</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Already in %1</source>
+        <translation>이미 %1에 있음</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>Add to Starred</source>
+        <translation>별표에 추가</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Connect to %1, then move there</source>
+        <translation>%1에 연결한 다음 그곳으로 이동</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Connect to %1, then ask what to do</source>
+        <translation>%1에 연결한 다음 무엇을 할지 묻기</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Connect to %1, then copy there</source>
+        <translation>%1에 연결한 다음 그곳으로 복사</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Bring %1 back into memory, then move there</source>
+        <translation>%1을(를) 메모리로 다시 가져온 다음 그곳으로 이동</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Bring %1 back into memory, then ask what to do</source>
+        <translation>%1을(를) 메모리로 다시 가져온 다음 무엇을 할지 묻기</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Bring %1 back into memory, then copy there</source>
+        <translation>%1을(를) 메모리로 다시 가져온 다음 그곳으로 복사</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Move to %1</source>
+        <translation>%1(으)로 이동</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Link in %1</source>
+        <translation>%1에 링크 만들기</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Move, copy or link to %1 (asks)</source>
+        <translation>%1(으)로 이동, 복사 또는 링크 (묻기)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Copy to %1</source>
+        <translation>%1(으)로 복사</translation>
+    </message>
+    <message>
+        <location line="+141"/>
+        <source>Couldn&apos;t connect to %1, so nothing was put there:
+
+%2</source>
+        <translation>%1에 연결할 수 없어 그곳에 아무것도 두지 않았습니다:
+
+%2</translation>
+    </message>
+    <message>
+        <location line="+152"/>
         <location line="+66"/>
         <source>Details</source>
         <translation>세부 정보</translation>
@@ -13940,167 +14120,167 @@ Not connected: click to connect</source>
     <message>
         <location filename="../src/joblogs.cpp" line="+26"/>
         <source>%1 · started %2 · ended %3 · took %4</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 · 시작 %2 · 끝 %3 · 소요 %4</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>as administrator</source>
-        <translation type="unfinished"></translation>
+        <translation>관리자로</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>%Ln step(s):</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>단계 %Ln개:</numerusform>
         </translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Log:</source>
-        <translation type="unfinished"></translation>
+        <translation>로그:</translation>
     </message>
     <message>
         <location filename="../src/links.cpp" line="+28"/>
         <source>Symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>심볼릭 링크</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Relative symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>상대 심볼릭 링크</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Hard link</source>
-        <translation type="unfinished"></translation>
+        <translation>하드 링크</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Shortcut (.desktop)</source>
-        <translation type="unfinished"></translation>
+        <translation>바로 가기 (.desktop)</translation>
     </message>
     <message>
         <location line="+41"/>
         <source>That name can&apos;t be used</source>
-        <translation type="unfinished"></translation>
+        <translation>그 이름은 사용할 수 없습니다</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder it goes in isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>들어갈 폴더가 없습니다</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The name is taken in that folder</source>
-        <translation type="unfinished"></translation>
+        <translation>그 폴더에서 이름이 이미 사용 중입니다</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Another link in the list has this name in this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>목록의 다른 링크가 이 폴더에서 이 이름을 쓰고 있습니다</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>The link isn&apos;t there any more</source>
-        <translation type="unfinished"></translation>
+        <translation>링크가 더 이상 없습니다</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>The link was changed since it was put in the list</source>
-        <translation type="unfinished"></translation>
+        <translation>목록에 넣은 후 링크가 바뀌었습니다</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A symbolic link can only be changed into another symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>심볼릭 링크는 다른 심볼릭 링크로만 바꿀 수 있습니다</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>What it points to isn&apos;t there: the link will be broken</source>
-        <translation type="unfinished"></translation>
+        <translation>가리키는 대상이 없습니다: 링크가 끊어진 상태가 됩니다</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>What it points to isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>가리키는 대상이 없습니다</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Hard links are for files only (not folders or links)</source>
-        <translation type="unfinished"></translation>
+        <translation>하드 링크는 파일 전용입니다 (폴더나 링크는 안 됨)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A hard link has to be on the same drive as the file</source>
-        <translation type="unfinished"></translation>
+        <translation>하드 링크는 파일과 같은 드라이브에 있어야 합니다</translation>
     </message>
     <message>
         <location line="+40"/>
         <location line="+46"/>
         <source>“%1” isn&apos;t a symbolic link any more</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 더 이상 심볼릭 링크가 아닙니다</translation>
     </message>
     <message>
         <location line="-36"/>
         <location line="+38"/>
         <source>“%1” was changed meanwhile, so it was left as it is</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”이(가) 그 사이에 바뀌어 그대로 두었습니다</translation>
     </message>
     <message>
         <location line="-14"/>
         <source>Made “%1”, but couldn&apos;t remove “%2”: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 만들었지만 “%2”을(를) 제거할 수 없었습니다: %3</translation>
     </message>
     <message>
         <location line="+22"/>
         <location line="+20"/>
         <source>“%1” is taken</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 이미 사용 중입니다</translation>
     </message>
     <message>
         <location line="-8"/>
         <source>Made “%1”, but couldn&apos;t remove the old link “%2”: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 만들었지만 이전 링크 “%2”을(를) 제거할 수 없었습니다: %3</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>The folder “%1” isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>폴더 “%1”이(가) 없습니다</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>“%1” isn&apos;t a file</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 파일이 아닙니다</translation>
     </message>
     <message>
         <location filename="../src/linkwin.cpp" line="-133"/>
         <source>New</source>
-        <translation type="unfinished"></translation>
+        <translation>새로 만듦</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Points elsewhere, renamed</source>
-        <translation type="unfinished"></translation>
+        <translation>다른 곳을 가리킴, 이름 바뀜</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Renamed</source>
-        <translation type="unfinished"></translation>
+        <translation>이름 바뀜</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Moved</source>
-        <translation type="unfinished"></translation>
+        <translation>이동됨</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Points elsewhere</source>
-        <translation type="unfinished"></translation>
+        <translation>다른 곳을 가리킴</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>No change yet</source>
-        <translation type="unfinished"></translation>
+        <translation>아직 변경 없음</translation>
     </message>
     <message>
         <location line="+32"/>
@@ -14110,474 +14290,485 @@ Not connected: click to connect</source>
         <location line="+72"/>
         <location line="+44"/>
         <source>Link</source>
-        <translation type="unfinished"></translation>
+        <translation>링크</translation>
     </message>
     <message>
         <location line="-708"/>
         <location line="+6"/>
         <location line="+62"/>
         <source>Points to</source>
-        <translation type="unfinished"></translation>
+        <translation>가리키는 대상</translation>
     </message>
     <message>
         <location line="-67"/>
         <location line="+25"/>
         <source>Link goes in</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 위치</translation>
     </message>
     <message>
         <location line="-19"/>
         <source>What the links lead to: pick one item, or select several.</source>
-        <translation type="unfinished"></translation>
+        <translation>링크가 이어지는 대상: 항목 하나를 고르거나 여러 개를 선택하세요.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Links to be made in this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더에 만들 링크</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>The folder the links are made in. They show below, among what&apos;s here, until they&apos;re made.</source>
-        <translation type="unfinished"></translation>
+        <translation>링크를 만들 폴더. 만들어지기 전까지 아래에 이곳의 항목들과 함께 표시됩니다.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Kind of link</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 종류</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A relative path: the link keeps working when it&apos;s moved together with what it points to</source>
-        <translation type="unfinished"></translation>
+        <translation>상대 경로: 가리키는 대상과 함께 이동해도 링크가 계속 작동함</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Another name of the same file: files only, on the same drive</source>
-        <translation type="unfinished"></translation>
+        <translation>같은 파일의 다른 이름: 파일만, 같은 드라이브에서</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A .desktop file that opens it, as a launcher on a desktop or dock</source>
-        <translation type="unfinished"></translation>
+        <translation>그것을 여는 .desktop 파일, 데스크톱이나 독의 실행기로</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Find the Other Names</source>
-        <translation type="unfinished"></translation>
+        <translation>다른 이름 찾기</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Searches its drive for the other names of this file (a job: slow on a big drive)</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브에서 이 파일의 다른 이름을 찾습니다 (작업: 큰 드라이브에서는 느림)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Add to List</source>
-        <translation type="unfinished"></translation>
+        <translation>목록에 추가</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Keeps the links shown on the right in the list, to be made with OK</source>
-        <translation type="unfinished"></translation>
+        <translation>오른쪽에 표시된 링크를 목록에 유지하여 확인으로 만듭니다</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Change Link</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 바꾸기</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The link selected in the list points to what&apos;s picked on the left, in the folder shown on the right</source>
-        <translation type="unfinished"></translation>
+        <translation>목록에서 선택한 링크가 왼쪽에서 고른 것을, 오른쪽에 표시된 폴더에서 가리킵니다</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Kind:</source>
-        <translation type="unfinished"></translation>
+        <translation>종류:</translation>
     </message>
     <message>
         <location line="+8"/>
         <location line="+27"/>
         <source>Links to make or change</source>
-        <translation type="unfinished"></translation>
+        <translation>만들거나 바꿀 링크</translation>
     </message>
     <message>
         <location line="-25"/>
         <source>Kind</source>
-        <translation type="unfinished"></translation>
+        <translation>종류</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Change</source>
-        <translation type="unfinished"></translation>
+        <translation>변경</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Problems</source>
-        <translation type="unfinished"></translation>
+        <translation>문제</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Takes the selected links out of the list (nothing on the disk changes)</source>
-        <translation type="unfinished"></translation>
+        <translation>선택한 링크를 목록에서 뺍니다 (디스크에서는 아무것도 바뀌지 않음)</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Shows what will be made or changed, to confirm</source>
-        <translation type="unfinished"></translation>
+        <translation>만들거나 바꿀 내용을 보여 주어 확인하게 합니다</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Nothing is made or changed until OK. Click a link to show it on both sides and change it.</source>
-        <translation type="unfinished"></translation>
+        <translation>확인을 누르기 전에는 아무것도 만들거나 바꾸지 않습니다. 링크를 클릭하면 양쪽에 표시되고 바꿀 수 있습니다.</translation>
     </message>
     <message>
         <location line="+83"/>
         <source>Edit Link</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 편집</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>These links couldn&apos;t be read:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>다음 링크를 읽을 수 없었습니다:
+
+%1</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>The links in the list haven&apos;t been made or changed. Close the window anyway?</source>
-        <translation type="unfinished"></translation>
+        <translation>목록의 링크는 만들거나 바뀌지 않았습니다. 그래도 창을 닫을까요?</translation>
     </message>
     <message>
         <location line="+147"/>
         <source>%1  (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  (%2)</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>%Ln names</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>이름 %Ln개</numerusform>
         </translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The link will hold: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 내용: %1</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Open a folder on the right to make links in it.</source>
-        <translation type="unfinished"></translation>
+        <translation>링크를 만들려면 오른쪽에서 폴더를 여세요.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>The links to be made or changed in this folder (double-click a name to rename it):</source>
-        <translation type="unfinished"></translation>
+        <translation>이 폴더에서 만들거나 바꿀 링크 (이름을 두 번 클릭하면 이름을 바꿀 수 있음):</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Points to: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>가리키는 대상: %1</translation>
     </message>
     <message>
         <location line="+21"/>
         <source>Points to: %1
 Not in the list yet: Add to List keeps it.</source>
-        <translation type="unfinished"></translation>
+        <translation>가리키는 대상: %1
+아직 목록에 없음: 목록에 추가를 누르면 유지됩니다.</translation>
     </message>
     <message>
         <location line="+33"/>
         <source>The kind of the links added</source>
-        <translation type="unfinished"></translation>
+        <translation>추가하는 링크의 종류</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>The kind of the links selected in the list</source>
-        <translation type="unfinished"></translation>
+        <translation>목록에서 선택한 링크의 종류</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>“%1” isn&apos;t there: this link is broken.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”이(가) 없습니다: 이 링크는 끊어졌습니다.</translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
         <source>“%1” has %Ln names (hard links).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>“%1”에는 이름이 %Ln개 있습니다 (하드 링크).</numerusform>
         </translation>
     </message>
     <message>
         <location line="+48"/>
         <source>Finding the other names of “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”의 다른 이름을 찾는 중</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Also named: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>다른 이름: %1</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Other Names</source>
-        <translation type="unfinished"></translation>
+        <translation>다른 이름</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>No other name of “%1” was found on its drive (it may have some in folders you can&apos;t open).</source>
-        <translation type="unfinished"></translation>
+        <translation>드라이브에서 “%1”의 다른 이름을 찾지 못했습니다 (열 수 없는 폴더에 있을 수 있음).</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The other names of “%1”:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”의 다른 이름:
+
+%2</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Some links in the list can&apos;t be made as they are. Change them or remove them from the list first:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>목록의 일부 링크는 지금 상태로는 만들 수 없습니다. 먼저 바꾸거나 목록에서 빼세요:
+
+%1</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>%1 → %2 (%3)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2 (%3)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>%1: %2 → %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2 → %3</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Nothing in the list changes anything yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>아직 목록에서 바뀌는 것이 없습니다.</translation>
     </message>
     <message numerus="yes">
         <location line="+12"/>
         <source>%Ln new link(s):</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>새 링크 %Ln개:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln link(s) to point elsewhere:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>다른 곳을 가리키게 할 링크 %Ln개:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln link(s) to rename or move:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>이름을 바꾸거나 이동할 링크 %Ln개:</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>To note:</source>
-        <translation type="unfinished"></translation>
+        <translation>참고:</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Make and Change Links</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 만들기 및 바꾸기</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>These links will be made or changed. Undo (Ctrl+Z) puts them all back as they were.</source>
-        <translation type="unfinished"></translation>
+        <translation>다음 링크를 만들거나 바꿉니다. 실행 취소(Ctrl+Z)하면 모두 원래대로 돌아갑니다.</translation>
     </message>
     <message>
         <location line="+28"/>
         <source>Something changed since the list was checked, so nothing was made or changed:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>목록을 확인한 후 무언가 바뀌어서 아무것도 만들거나 바꾸지 않았습니다:
+
+%1</translation>
     </message>
     <message numerus="yes">
         <location line="+24"/>
         <source>Making %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>링크 %Ln개 만드는 중</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Making and changing %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>링크 %Ln개 만들고 바꾸는 중</numerusform>
         </translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Made: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>만듦: %1 → %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Changed and renamed: %1 → %2 (now → %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>바꾸고 이름 바꿈: %1 → %2 (이제 → %3)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Renamed: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>이름 바꿈: %1 → %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Changed: %1 → %2 (was → %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>바꿈: %1 → %2 (이전 → %3)</translation>
     </message>
     <message>
         <location line="+7"/>
         <location line="+4"/>
         <source>Couldn&apos;t make or change %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1을(를) 만들거나 바꿀 수 없었습니다: %2</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Change Links</source>
-        <translation type="unfinished"></translation>
+        <translation>링크 바꾸기</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Some links couldn&apos;t be made or changed, and are still in the list:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>일부 링크는 만들거나 바꿀 수 없어 목록에 남아 있습니다:
+
+%1</translation>
     </message>
     <message numerus="yes">
         <location line="+45"/>
         <source>You don&apos;t have permission to make %Ln of these links.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>이 링크 중 %Ln개를 만들 권한이 없습니다.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
         <source>Made or changed %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>링크 %Ln개를 만들거나 바꿈</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/ramdisk.cpp" line="-731"/>
         <source>Give it a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>이름을 지정하세요.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A name can&apos;t contain “/” or start with “.”.</source>
-        <translation type="unfinished"></translation>
+        <translation>이름에 “/”를 넣거나 “.”으로 시작할 수 없습니다.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A name can&apos;t contain control characters.</source>
-        <translation type="unfinished"></translation>
+        <translation>이름에 제어 문자를 넣을 수 없습니다.</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>Until Kestrel closes</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel이 닫힐 때까지</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Until you restart</source>
-        <translation type="unfinished"></translation>
+        <translation>다시 시작할 때까지</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Until you log out or restart</source>
-        <translation type="unfinished"></translation>
+        <translation>로그아웃하거나 다시 시작할 때까지</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Always: back, empty, at every start</source>
-        <translation type="unfinished"></translation>
+        <translation>항상: 시작할 때마다 빈 상태로 다시 생김</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Always: back, empty, at every login</source>
-        <translation type="unfinished"></translation>
+        <translation>항상: 로그인할 때마다 빈 상태로 다시 생김</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Always, with its files saved to disk</source>
-        <translation type="unfinished"></translation>
+        <translation>항상, 파일을 디스크에 저장</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>RAM disk of %1, mounted on %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 RAM 디스크, %2에 마운트됨</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>RAM disk in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 RAM 디스크</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Saved to %1 every %Ln minute(s), at logout and at shutdown</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln분마다, 로그아웃할 때, 시스템을 끌 때 %1에 저장</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Saved to %1 at logout and at shutdown</source>
-        <translation type="unfinished"></translation>
+        <translation>로그아웃할 때와 시스템을 끌 때 %1에 저장</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Not in memory now: click to bring it back</source>
-        <translation type="unfinished"></translation>
+        <translation>지금 메모리에 없음: 클릭하면 다시 가져옵니다</translation>
     </message>
     <message>
         <location line="+280"/>
         <source>“%1” isn&apos;t in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 메모리에 없습니다.</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>“%1” isn&apos;t in memory: nothing to save.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”은(는) 메모리에 없습니다: 저장할 것이 없습니다.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>“%1” hasn&apos;t been loaded from %2 yet, so it isn&apos;t saved over it.</source>
-        <translation type="unfinished"></translation>
+        <translation>“%1”을(를) 아직 %2에서 불러오지 않았으므로 그 위에 저장하지 않습니다.</translation>
     </message>
     <message>
         <location line="+165"/>
         <source>systemctl %1 failed: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>systemctl %1 실패: %2</translation>
     </message>
     <message>
         <location line="+52"/>
         <location filename="../src/ramdiskwin.cpp" line="+71"/>
         <source>RAM disks without a size limit need a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
-        <translation type="unfinished"></translation>
+        <translation>크기 제한이 없는 RAM 디스크에는 /dev/shm에 Kestrel 전용 폴더가 필요한데 만들 수 없습니다.</translation>
     </message>
     <message>
         <location line="+36"/>
         <source>Making the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1” 만드는 중</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Loading what&apos;s saved in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 저장된 것을 불러오는 중</translation>
     </message>
     <message>
         <location line="+22"/>
@@ -14585,223 +14776,228 @@ Not in the list yet: Add to List keeps it.</source>
         <location filename="../src/ramdiskwin.cpp" line="-123"/>
         <location line="+20"/>
         <source>RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크</translation>
     </message>
     <message>
         <location line="-127"/>
         <source>Saving the RAM disk “%1” to disk</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1”을(를) 디스크에 저장하는 중</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>Saving to %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 저장하는 중</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>It couldn&apos;t all be saved, so it&apos;s kept:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>전부 저장할 수 없어 유지합니다:
+%1</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Not all of %1 could be deleted.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1의 일부를 삭제할 수 없었습니다.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Remove the RAM disk “%1”? Its files are saved to %2 one last time, and that copy is kept; they&apos;re no longer kept in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1”을(를) 제거할까요? 파일은 마지막으로 한 번 %2에 저장되고 그 복사본은 유지되며, 더 이상 메모리에 보관되지 않습니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Remove the RAM disk “%1”? The files in it are deleted.</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1”을(를) 제거할까요? 그 안의 파일은 삭제됩니다.</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+23"/>
         <source>Remove RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 제거</translation>
     </message>
     <message>
         <location line="-15"/>
         <source>Removing the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1” 제거하는 중</translation>
     </message>
     <message>
         <location line="+32"/>
         <source>Changing the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1” 바꾸는 중</translation>
     </message>
     <message>
         <location line="+145"/>
         <source>Private mode needs a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드에는 /dev/shm에 Kestrel 전용 폴더가 필요한데 만들 수 없습니다.</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Private (private mode&apos;s folder)</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 (개인 모드의 폴더)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Leaving private mode deletes what&apos;s in its RAM disk, also the files saved in Private:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>개인 모드를 끝내면 RAM 디스크의 내용이 삭제되며, 개인에 저장한 파일도 삭제됩니다:
+
+%1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Closing Kestrel deletes the files in these RAM disks:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel을 닫으면 다음 RAM 디스크의 파일이 삭제됩니다:
+
+%1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Close Kestrel</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel 닫기</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Delete and Leave Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>삭제하고 개인 모드 끝내기</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Delete and Close</source>
-        <translation type="unfinished"></translation>
+        <translation>삭제하고 닫기</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Don&apos;t show this again (Preferences → Privacy)</source>
-        <translation type="unfinished"></translation>
+        <translation>다시 표시 안 함 (환경설정 → 개인 정보)</translation>
     </message>
     <message>
         <location filename="../src/ramdiskwin.cpp" line="-29"/>
         <source>Edit RAM Disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 “%1” 편집</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>New RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>새 RAM 디스크</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A RAM disk keeps its files in memory: very fast, and gone when it&apos;s taken down, unless it saves them to disk.</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크는 파일을 메모리에 보관합니다: 매우 빠르지만, 디스크에 저장하지 않으면 내릴 때 사라집니다.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>A size limit of its own (needs your password to mount it)</source>
-        <translation type="unfinished"></translation>
+        <translation>자체 크기 제한 (마운트하려면 암호가 필요함)</translation>
     </message>
     <message>
         <location line="+22"/>
         <source>Mounted on:</source>
-        <translation type="unfinished"></translation>
+        <translation>마운트 위치:</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>How long it lasts:</source>
-        <translation type="unfinished"></translation>
+        <translation>유지 기간:</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>A folder on disk</source>
-        <translation type="unfinished"></translation>
+        <translation>디스크의 폴더</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Saved to:</source>
-        <translation type="unfinished"></translation>
+        <translation>저장 위치:</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Only at logout and shutdown</source>
-        <translation type="unfinished"></translation>
+        <translation>로그아웃할 때와 시스템을 끌 때만</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Also saved every</source>
-        <translation type="unfinished"></translation>
+        <translation>다음 간격으로도 저장</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Also saved every:</source>
-        <translation type="unfinished"></translation>
+        <translation>다음 간격으로도 저장:</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Mount the RAM Disk On</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크 마운트 위치</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Save the RAM Disk&apos;s Files To</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM 디스크의 파일 저장 위치</translation>
     </message>
     <message>
         <location line="+38"/>
         <source>There&apos;s a RAM disk called that already.</source>
-        <translation type="unfinished"></translation>
+        <translation>그 이름의 RAM 디스크가 이미 있습니다.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>There&apos;s something called that in %1 already.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1에 그 이름의 항목이 이미 있습니다.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Choose the folder to mount it on.</source>
-        <translation type="unfinished"></translation>
+        <translation>마운트할 폴더를 고르세요.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder&apos;s path can&apos;t contain %, \ or &quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>폴더 경로에 %, \, &quot;를 넣을 수 없습니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Mount it on a new folder, or an empty one.</source>
-        <translation type="unfinished"></translation>
+        <translation>새 폴더나 빈 폴더에 마운트하세요.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Choose the folder on disk its files are saved to.</source>
-        <translation type="unfinished"></translation>
+        <translation>파일을 저장할 디스크의 폴더를 고르세요.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder it&apos;s saved to must be outside the RAM disk (and not around it).</source>
-        <translation type="unfinished"></translation>
+        <translation>저장할 폴더는 RAM 디스크 밖에 있어야 합니다 (RAM 디스크를 감싸서도 안 됨).</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Save it to a folder on a disk, not in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>메모리가 아니라 디스크의 폴더에 저장하세요.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>This needs systemd&apos;s user services (systemctl --user), which aren&apos;t running.</source>
-        <translation type="unfinished"></translation>
+        <translation>이 작업에는 systemd 사용자 서비스(systemctl --user)가 필요한데 실행 중이 아닙니다.</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>It uses memory only for what&apos;s in it, up to its size. Mounting it (and changing or removing it) asks for your password once.</source>
-        <translation type="unfinished"></translation>
+        <translation>들어 있는 것만큼만, 크기 한도까지 메모리를 사용합니다. 마운트할 때(그리고 바꾸거나 제거할 때) 암호를 한 번 묻습니다.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>No password needed. It has no size limit of its own: it shares the memory set aside for /dev/shm (half the RAM).</source>
-        <translation type="unfinished"></translation>
+        <translation>암호가 필요 없습니다. 자체 크기 제한이 없으며, /dev/shm용으로 따로 둔 메모리(RAM의 절반)를 공유합니다.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Its files are loaded from the folder on disk when it comes up, and saved there when you log out or shut down, and as often as set here. A power cut loses what changed since the last save.</source>
-        <translation type="unfinished"></translation>
+        <translation>파일은 시작할 때 디스크의 폴더에서 불러오고, 로그아웃하거나 시스템을 끌 때, 그리고 여기서 설정한 간격마다 그곳에 저장됩니다. 정전이 되면 마지막 저장 이후 바뀐 것은 사라집니다.</translation>
     </message>
 </context>
 </TS>

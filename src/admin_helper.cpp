@@ -8,7 +8,7 @@
 // Replies:   {"id": n, "progress": [done, total, text]}   then   {"id": n, "ok": true} / {"id": n, "ok": false,
 //            "error": "..."}
 //
-// Ops: delete(path) · copy/move(src, dst, merge) · rename(src, dst) · mkdir(path) · copyfile(src, dst) ·
+// Ops: delete(path) · copy/move(src, dst, merge, clash) · rename(src, dst) · mkdir(path) · copyfile(src, dst) ·
 //      touch(path) · symlink(target, link) · hardlink(target, link) · write(path, text, mode) · chmod(path, mode) ·
 //      readdev(device, fifo) · tmpfs_mount(path, size_mb, remount) · tmpfs_unmount(path) ·
 //      tmpfs_unit(path, size_mb, enable)
@@ -112,6 +112,45 @@ struct Cancelled {};
 struct Failure : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
+// a name that had to be free was taken (by another program, meanwhile): kept as it is. name: that name
+struct Taken : Failure {
+    Taken(const std::string &msg, const std::string &name) : Failure(msg), name(name) {}
+    std::string name;
+};
+
+// The name a merge gives an item whose name is taken there, as Kestrel's util merge_name(): "1.jpeg" → "1-(1).jpeg"
+// for n = 1, without an earlier "-(n)" ("1-(1).jpeg" → "1-(2).jpeg"); a folder's whole name is the stem. The
+// extension as Kestrel's split_ext: the last dot's (not a leading dot's), or .tar.gz and its kind.
+static std::string merge_name(const std::string &name, int n, bool is_dir)
+{
+    std::string stem = name, ext;
+    if (!is_dir) {
+        std::string low;
+        for (char c : name)
+            low += char(std::tolower(static_cast<unsigned char>(c)));
+        for (const char *e : {".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"}) {
+            size_t len = strlen(e);
+            if (low.size() > len && low.compare(low.size() - len, len, e) == 0) {
+                ext = name.substr(name.size() - len);
+                break;
+            }
+        }
+        if (ext.empty()) {
+            size_t dot = name.rfind('.');
+            size_t first = name.find_first_not_of('.');
+            if (dot != std::string::npos && first != std::string::npos && dot > first)
+                ext = name.substr(dot);
+        }
+        stem = name.substr(0, name.size() - ext.size());
+    }
+    // an earlier "-(digits)" at the end taken off, unless that's the whole name
+    std::string bare = stem;
+    size_t open = stem.rfind("-(");
+    if (open != std::string::npos && open > 0 && stem.size() > open + 3 && stem.back() == ')' &&
+        stem.find_first_not_of("0123456789", open + 2) == stem.size() - 1)
+        bare = stem.substr(0, open);
+    return bare + "-(" + std::to_string(n) + ")" + ext;
+}
 
 static void send(const QJsonObject &obj)
 {
@@ -509,6 +548,11 @@ public:
     double done = 0, total = 0;
     bool to_tape = false;   // the destination is on an LTFS tape (on_tape): a new file is written straight to its name
     bool xattrs = false;    // copies get their originals' extended attributes and ACLs too (Kestrel's "copy_xattrs")
+    // What a merge does with an item whose name is taken in the folder it goes into (Kestrel's Job::overwrite and
+    // Job::resume): Rename puts it beside under the next free "name-(n).ext" and replaces nothing; Replace replaces a
+    // file of that name (the user ticked the box for it); Resume is Rename, but leaves alone the copy Kestrel made there
+    // before (finishing its copy as administrator)
+    enum class Clash { Rename, Replace, Resume } clash = Clash::Rename;
     std::set<std::string> left_out;   // attribute names a destination couldn't hold, told back with the answer
     int left_items = 0;
 
@@ -577,7 +621,9 @@ public:
 
     // Copy src (in src_dir) to dst (in dst_dir). Whatever is made is built under a hidden part_name() beside dst and
     // put in its place only when complete (install), so a failure, a cancel or the session ending leaves dst as it
-    // was and no half-made copy. Only a merge writes into an existing folder (each file in it still replaced whole).
+    // was and no half-made copy. Only a merge writes into an existing folder: with clash Rename or Resume nothing in
+    // it is replaced (merge_in); with Replace each file of the same name is replaced whole. Not all-or-nothing: a
+    // failure or cancel keeps what was put in so far, each item whole.
     // staged: dst is inside a folder being built, where nothing exists yet. claim: dst must be new (Kestrel's
     // "replace": false): one that's there, or that appears while this runs, is kept and the copy fails.
     void copy(int src_dir, const std::string &src, int dst_dir, const std::string &dst, bool merge,
@@ -596,8 +642,12 @@ public:
                 throw Failure(dst + " exists and isn't a folder");
             Fd in = open_dir_at(src_dir, src, st);
             Fd out = open_dir_at(dst_dir, dst, dst_st);
-            for (const std::string &e : list_dir(in.get()))
-                copy(in.get(), e, out.get(), e, merge, owner);
+            for (const std::string &e : list_dir(in.get())) {
+                if (clash == Clash::Replace)
+                    copy(in.get(), e, out.get(), e, merge, owner);
+                else
+                    merge_in(in.get(), e, out.get(), owner);
+            }
             Owner existing{owner.keep, dst_st.st_uid, dst_st.st_gid};   // a copy leaves the folder's owner as it was
             copy_stat_fd(out.get(), st, existing);
             keep_xattrs(in.get(), out.get());
@@ -685,6 +735,91 @@ public:
         report(src);
     }
 
+    // One item (src in src_dir) of a merge that replaces nothing, into the existing folder out: under its own name
+    // when that's free, merged into a folder of that name, and otherwise beside what's there under the first free
+    // merge_name(). Each name is claimed (copy's claim), so one taken meanwhile is kept and the next tried. Resume: a
+    // name holding the copy made before (already_copied: the same contents) is left as it is, and the item counted
+    // as done.
+    void merge_in(int src_dir, const std::string &src, int out, const Owner &owner)
+    {
+        struct stat st;
+        if (!stat_at(src_dir, src, &st))
+            fail_errno();
+        bool is_dir = S_ISDIR(st.st_mode);
+        for (int n = 0;; ++n) {
+            check_cancel();
+            std::string name = n == 0 ? src : merge_name(src, n, is_dir);
+            struct stat there;
+            if (stat_at(out, name, &there)) {
+                if (is_dir && S_ISDIR(there.st_mode) && (n == 0 || clash == Clash::Resume)) {
+                    copy(src_dir, src, out, name, true, owner);   // a folder of that name: merged into
+                    return;
+                }
+                if (clash == Clash::Resume && already_copied(src_dir, src, st, out, name, there)) {
+                    done += 1 + (S_ISREG(st.st_mode) ? double(st.st_size) : 0);
+                    report(src);
+                    return;
+                }
+                continue;
+            }
+            try {
+                copy(src_dir, src, out, name, true, owner, false, true);
+                return;
+            } catch (const Taken &t) {
+                if (t.name != name)
+                    throw;
+            }
+        }
+    }
+
+    // name (in dir, `there`) is the copy of src made before: a file with the same contents (compared byte for byte,
+    // so a different file is never taken for it: a resumed move deletes the original after), or a link to the same
+    // target
+    static bool already_copied(int src_dir, const std::string &src, const struct stat &st, int dir,
+                               const std::string &name, const struct stat &there)
+    {
+        if (S_ISREG(st.st_mode) && S_ISREG(there.st_mode)) {
+            if (st.st_size != there.st_size)
+                return false;
+            Fd a(openat(src_dir, src.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+            Fd b(openat(dir, name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+            if (a.get() < 0 || b.get() < 0)
+                return false;
+            std::vector<char> ba(1 << 20), bb(1 << 20);
+            for (;;) {
+                ssize_t na = read_full(a.get(), ba.data(), ba.size()), nb = read_full(b.get(), bb.data(), bb.size());
+                if (na < 0 || na != nb || memcmp(ba.data(), bb.data(), size_t(na)) != 0)
+                    return false;
+                if (na == 0)
+                    return true;
+            }
+        }
+        if (S_ISLNK(st.st_mode) && S_ISLNK(there.st_mode)) {
+            char la[PATH_MAX], lb[PATH_MAX];
+            ssize_t na = readlinkat(src_dir, src.c_str(), la, sizeof la);
+            ssize_t nb = readlinkat(dir, name.c_str(), lb, sizeof lb);
+            return na >= 0 && na == nb && memcmp(la, lb, size_t(na)) == 0;
+        }
+        return false;
+    }
+
+    // up to n bytes from fd, fewer only at the end of the file; -1 on an error
+    static ssize_t read_full(int fd, char *buf, size_t n)
+    {
+        size_t got = 0;
+        while (got < n) {
+            ssize_t r = read(fd, buf + got, n - got);
+            if (r < 0 && errno == EINTR)
+                continue;
+            if (r < 0)
+                return -1;
+            if (r == 0)
+                break;
+            got += size_t(r);
+        }
+        return ssize_t(got);
+    }
+
     // in → out, checking for a cancel and reporting the bytes as it goes
     void copy_bytes(int in, int out, const std::string &label)
     {
@@ -738,9 +873,10 @@ public:
     // rename. Where a folder is involved, the two are swapped in one step (RENAME_EXCHANGE; on a filesystem without
     // it, the old one is renamed aside first and put back if the second rename fails), and then the old one, now
     // under the part name, is deleted.
-    static Failure conflict(const std::string &name)
+    static Taken conflict(const std::string &name)
     {
-        return Failure(name + " appeared while this was being done; it was kept as it is, and nothing was put in its place");
+        return Taken(name + " appeared while this was being done; it was kept as it is, and nothing was put in its place",
+                     name);
     }
 
     // a finished part to a name that must still be free: never replacing what another program put there meanwhile
@@ -1152,6 +1288,9 @@ static void handle(const QJsonObject &req, QJsonObject &reply)
         job.total = job.count(src.dir.get(), src.name, true) + (op == "move" ? job.count(src.dir.get(), src.name) : 0);
         job.to_tape = on_tape(dst.path);
         job.xattrs = req.value("xattrs").toBool();
+        // a merge's "clash": absent (an older Kestrel) or unknown, nothing is replaced
+        QString clash = req.value("clash").toString();
+        job.clash = clash == "replace" ? Job::Clash::Replace : clash == "resume" ? Job::Clash::Resume : Job::Clash::Rename;
         if (op == "copy")
             job.copy(src.dir.get(), src.name, dst.dir.get(), dst.name, merge, owner_of(dst.dir.get()), false, claim);
         else

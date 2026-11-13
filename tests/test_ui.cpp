@@ -3,6 +3,9 @@
 // moves shows up as a difference.
 // KESTREL_UI_DUMP=file writes the list there instead of comparing (to update ui_actions.txt after a deliberate change).
 #include "common.h"
+#include "drives.h"
+#include "places.h"
+#include "widgets.h"
 
 #include "groups.h"
 #include "linkwin.h"
@@ -376,6 +379,137 @@ int main(int argc, char **argv)
         for (Pane *p : {to, ov, trash})
             w->close_tab(w->tabs->indexOf(p));
         w->tabs->setCurrentWidget(from);
+    }
+
+    // -- files dropped onto sidebar entries: a bookmark, a drive and the Trash take them as a drop onto a folder does
+    // (a job: moved here, as they're on the same drive), highlighted with what dropping does said under them; Starred
+    // stars them; Recent, the Overview, a bookmark whose folder is gone and a read-only drive refuse, saying why; a
+    // recent server that isn't connected offers to connect first. Resting on an entry opens it in the pane, and each
+    // entry is looked at once for a drag (a slow drive isn't asked on every move)
+    {
+        Sidebar *s = w->sidebar;
+        QString bm = home_path("sb-bookmark"), drive = home_path("sb-drive"), ro = home_path("sb-ro"),
+                gone = home_path("sb-gone");
+        for (const QString &d : {bm, drive, ro, gone})
+            makedirs(d, true);
+        makedirs(join(TRASH_DIR(), "files"), true);
+        makedirs(join(TRASH_DIR(), "info"), true);
+        s->add_bookmark(bm);
+        s->add_bookmark(gone);
+        qputenv("KESTREL_TEST_MOUNTS", (drive + "|vfat|/dev/kestrel-sb;" + ro + "|vfat|/dev/kestrel-sb-ro|ro").toUtf8());
+        settings().setValue("recent_servers", QStringList({"smb://kestrel-test.invalid/share"}));
+        auto row_of = [&](const QString &path) -> QListWidgetItem * {
+            for (int i = 0; i < s->count(); ++i)
+                if (s->item(i)->data(PathRole).toString() == path)
+                    return s->item(i);
+            return nullptr;
+        };
+        QString recent_path = places::RECENT, server = "smb://kestrel-test.invalid/share";
+        wait_for([&]() {
+            drives::MountWatch::instance()->mounts_changed();
+            s->refresh();
+            return row_of(bm) && row_of(gone) && row_of(drive) && row_of(ro) && row_of(server) && row_of(recent_path);
+        });
+        QWidget *vp = s->viewport();
+        auto send = [&](QEvent::Type type, QListWidgetItem *it, const QMimeData &data) {
+            QPoint at = it ? s->visualItemRect(it).center() : QPoint(1, 1);
+            if (type == QEvent::Drop) {
+                QDropEvent e(at, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(vp, &e);
+            } else {
+                QDragMoveEvent e(at, Qt::CopyAction | Qt::MoveAction, &data, Qt::LeftButton, Qt::NoModifier, type);
+                QApplication::sendEvent(vp, &e);
+            }
+        };
+        struct Over {
+            bool lit;
+            QString hint;
+        };
+        auto over = [&](const QString &path, const QMimeData &data) {   // a new drag, coming onto path's entry
+            QListWidgetItem *it = row_of(path);
+            send(QEvent::DragEnter, it, data);
+            send(QEvent::DragMove, it, data);
+            return Over{it && s->drop_row() == s->row(it), s->drop_hint()};
+        };
+        auto file = [&](const QString &name) {
+            write_text(home_path(name), "x");
+            auto *d = new QMimeData;
+            d->setUrls({QUrl::fromLocalFile(home_path(name))});
+            return std::unique_ptr<QMimeData>(d);
+        };
+        QStringList res;
+        auto drop_into = [&](const QString &entry, const QString &folder, const QString &name, const QString &hint) {
+            auto d = file(name);
+            Over o = over(entry, *d);
+            send(QEvent::Drop, row_of(entry), *d);
+            bool unlit = s->drop_row() == -1 && s->drop_hint().isEmpty();
+            bool moved = wait_for([&]() { return exists(join(folder, name)) && !exists(home_path(name)); });
+            if (!o.lit || !o.hint.startsWith(hint) || !unlit || !moved)
+                res << name + ": " + (o.lit ? "" : "not highlighted, ") + "hint “" + o.hint + "”" + (unlit ? "" : ", still lit") +
+                           (moved ? "" : ", not moved there");
+        };
+        drop_into(bm, bm, "sb-1.txt", "Move to sb-bookmark");
+        drop_into(drive, drive, "sb-2.txt", "Move to sb-drive");
+        drop_into(join(TRASH_DIR(), "files"), join(TRASH_DIR(), "files"), "sb-3.txt", "Move to Trash");
+        check(res.isEmpty(), "files dropped onto a bookmark, a drive or the Trash: the entry is highlighted with what "
+                             "dropping does, and the drop moves them there (into the Trash: Move to Trash)" +
+                                 (res.isEmpty() ? QString() : " (" + res.join("; ") + ")"));
+
+        auto refuses = [&](const QString &entry, const QString &reason) {
+            auto d = file("sb-stay.txt");
+            Over o = over(entry, *d);
+            auto jobs = [] { return TaskBoard::instance()->mine().size() + TaskBoard::instance()->finished.size(); };
+            auto jobs_before = jobs();
+            send(QEvent::Drop, row_of(entry), *d);
+            // a drop starts its job once the drag is over (a 0 ms timer): run those, then no job may have come
+            QCoreApplication::processEvents();
+            QCoreApplication::processEvents();
+            return !o.lit && o.hint.contains(reason) && jobs() == jobs_before && exists(home_path("sb-stay.txt"))
+                       ? QString()
+                       : entry + ": " + (o.lit ? "highlighted, " : "") + "hint “" + o.hint + "”";
+        };
+        QStringList refused;
+        for (const QString &r : {refuses(recent_path, "Recent takes no files"), refuses(OVERVIEW, "The Overview takes no files"),
+                                 refuses(ro, "is read-only")})
+            if (!r.isEmpty())
+                refused << r;
+        // a bookmark whose folder goes during the drag is still offered (it was looked at once); the next drag refuses it
+        auto d4 = file("sb-4.txt");
+        Over before = over(gone, *d4);
+        QDir().rmdir(gone);
+        send(QEvent::DragMove, row_of(gone), *d4);
+        bool cached = s->drop_row() == s->row(row_of(gone));
+        send(QEvent::DragLeave, nullptr, *d4);
+        QString r = refuses(gone, "isn't there any more");
+        if (!before.lit || !cached || !r.isEmpty())
+            refused << "gone bookmark: " + QString(before.lit ? "" : "not offered at first, ") +
+                           (cached ? "" : "looked at again in the same drag, ") + r;
+        check(refused.isEmpty(), "Recent, the Overview, a read-only drive and a bookmark whose folder is gone refuse a "
+                                 "drop and say why; an entry is looked at once for a drag" +
+                                     (refused.isEmpty() ? QString() : " (" + refused.join("; ") + ")"));
+
+        auto d5 = file("sb-5.txt");
+        Over srv = over(server, *d5);
+        send(QEvent::DragLeave, nullptr, *d5);
+        check(srv.lit && srv.hint.startsWith("Connect to ") && srv.hint.endsWith(", then copy there"),
+              "a recent server that isn't connected takes a drop, connecting first (" + srv.hint + ")");
+        Over star = over(places::STARRED, *d5);
+        send(QEvent::Drop, row_of(places::STARRED), *d5);
+        check(star.lit && star.hint == "Add to Starred" &&
+                  wait_for([&]() { return places::is_starred(home_path("sb-5.txt")) && exists(home_path("sb-5.txt")); }),
+              "files dropped onto Starred are starred, and stay where they are");
+        places::set_starred({home_path("sb-5.txt")}, false);
+
+        // resting on an entry opens it in the pane, so the drag can go on into a folder there
+        QString before_path = w->pane()->path;
+        auto d6 = file("sb-6.txt");
+        over(drive, *d6);
+        bool sprung = wait_for([&]() { return w->pane()->path == drive; }, Sidebar::SPRING_MS * 10);
+        send(QEvent::DragLeave, nullptr, *d6);
+        check(sprung && before_path != drive, "resting on a sidebar entry while dragging opens it in the pane");
+        w->open_location(before_path);
+        qunsetenv("KESTREL_TEST_MOUNTS");
+        drives::MountWatch::instance()->mounts_changed();
     }
 
     // -- in the grid, an item is its icon and name, not its whole cell: a right-click elsewhere in the cell gives the

@@ -100,7 +100,9 @@ public:
     void clip(bool cut, const QStringList &paths);
     QPair<QString, QStringList> read_clipboard() const;
     void paste(const QString &target = QString(), bool as_link = false);
-    void handle_drop(const QStringList &paths, const QString &target, bool copy_only = false);   // COPY_ONLY_MIME
+    // mods: the keys held when they were dropped (-1: the keys held now; the sidebar passes them, as a drop onto a phone
+    // or server goes on only once it's connected)
+    void handle_drop(const QStringList &paths, const QString &target, bool copy_only = false, int mods = -1);   // COPY_ONLY_MIME
     void transfer_to(const QStringList &paths, const QString &op);
     void duplicate(const QStringList &paths);
     void new_folder();
@@ -209,6 +211,13 @@ private:
 QString location_arg(const QString &arg);
 // The app's state and helpers that incoming.cpp shares
 extern QList<MainWindow *> WINDOWS;   // this process's windows (file choosers aren't in it)
+// this process's chooser-mode windows (file choosers, the Link window's two sides): not in WINDOWS, but they follow the
+// same settings, so what applies a setting to the windows goes through all_windows()
+extern QList<MainWindow *> CHOOSERS;
+QList<MainWindow *> all_windows();   // WINDOWS, then CHOOSERS
+// a key a chooser window keeps its own value of, under "chooser/" (its view, icon sizes, hidden files, sidebar and
+// info panel; and its size and splitter): every other setting is the main windows'
+bool chooser_own(const QString &key);
 extern ThumbnailManager *g_thumbs;
 void repaint_all();
 void apply_preferences();   // after Preferences change, here or in another Kestrel

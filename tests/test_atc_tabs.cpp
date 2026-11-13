@@ -105,5 +105,18 @@ int main(int argc, char **argv)
     settings().sync();
     handle_fm1("ShowFolders", {file_uri(P("d6"))}, "");
     check(WINDOWS.size() == 2, "off: Show in folder opens a new window again");
+
+    // the system's file chooser (kes --file-chooser, its own process) checks in with the tower too, so it hears the
+    // settings changed in the other Kestrels and applies them to its windows; it has no windows of its own, so a
+    // hand-off still goes to the Kestrel that has one
+    makedirs(P("d7"), true);
+    QProcess fc;
+    fc.start(CXX, {"--file-chooser"});
+    check(fc.waitForStarted() && wait_for([&]() { return fake.flights_have(fc.processId(), "c++"); }),
+          "the file chooser's process checks in with the tower (so it hears settings changed elsewhere)");
+    check(atc::hand_off({P("d7")}) == atc::radio()->flight(),
+          "...and a hand-off still goes to the Kestrel with a window, not to the file chooser");
+    fc.kill();
+    fc.waitForFinished();
     finish();
 }

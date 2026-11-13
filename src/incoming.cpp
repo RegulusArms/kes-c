@@ -156,12 +156,12 @@ void on_atc(const QJsonObject &m)
     if (type == "sidebar") {   // its order or collapsed sections; also refreshes this process's other windows
         if (!own)
             settings().sync();
-        for (MainWindow *w : WINDOWS)
+        for (MainWindow *w : all_windows())
             w->sidebar->refresh();
         prefs::notify({"sidebar_sections", "sidebar_collapsed"});
     }
     if (type == "bookmarks") {   // also refreshes this process's other windows
-        for (MainWindow *w : WINDOWS) {
+        for (MainWindow *w : all_windows()) {
             w->sidebar->refresh();
             for (Pane *p : w->panes())
                 if (p->is_overview())
@@ -208,7 +208,7 @@ void on_atc(const QJsonObject &m)
             g_thumbs->invalidate(v.toString(), false);   // the sender already removed the cached mosaic
     } else if (type == "thumbs_cleared") {
         g_thumbs->clear_memory();
-        for (MainWindow *w : WINDOWS)
+        for (MainWindow *w : all_windows())
             for (Pane *p : w->panes())
                 p->animator->clear();
         repaint_all();

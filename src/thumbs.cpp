@@ -1,4 +1,5 @@
 #include "thumbs.h"
+#include "metadata.h"
 
 #include "drives.h"
 #include "fileops.h"
@@ -73,14 +74,45 @@ int bucket_for(int size)
 
 // ---------------------------------------------------------------- workers (run in a thread pool)
 
-QImage load_scaled(const QString &path, int size)
+QImage raw_preview(const QString &path, int max_side, QSize *full)
 {
-    // For camera RAW files, quality 0 makes the LibRaw plugin return the embedded JPEG preview (~0.3 s) instead of
-    // demosaicing the sensor data (~20 s).
+    // quality 0: the LibRaw plugin returns the embedded JPEG preview (~0.3 s) instead of demosaicing the sensor data
+    // (~20 s). Not scaled by the reader: it would squeeze a landscape preview into the photo's portrait size.
     QImageReader reader(path);
     reader.setAutoTransform(true);
+    reader.setQuality(0);
+    QSize photo = reader.size();   // (the plugin's: already turned by LibRaw's flip)
+    QImage img = reader.read();
+    if (img.isNull())
+        return img;
+    img = turned_preview(img, photo, [&path]() { return metadata::raw_orientation(path); });
+    if (full)
+        *full = photo.isValid() ? photo : img.size();
+    if (max_side > 0 && (img.width() > max_side || img.height() > max_side))
+        img = img.scaled(max_side, max_side, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return img;
+}
+
+QImage turned_preview(const QImage &preview, const QSize &photo, const std::function<int()> &orientation)
+{
+    bool mismatch = photo.isValid() && photo.width() != photo.height() && preview.width() != preview.height() &&
+                    (photo.width() > photo.height()) != (preview.width() > preview.height());
+    if (!mismatch)
+        return preview;
+    // EXIF: 6 turn 90° clockwise, 8 turn 270°; 5 and 7 mirrored first. Other values (or none): left as it is
+    int o = orientation();
+    if (o < 5 || o > 8)
+        return preview;
+    QImage img = o == 5 || o == 7 ? preview.mirrored(true, false) : preview;
+    return img.transformed(QTransform().rotate(o == 6 || o == 7 ? 90 : 270));
+}
+
+QImage load_scaled(const QString &path, int size)
+{
     if (is_raw(path))
-        reader.setQuality(0);
+        return raw_preview(path, size);
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
     QString ext = ext_of(path);
     if (ext == ".jpg" || ext == ".jpeg" || ext == ".jfif") {
         // JPEG can decode straight to a smaller size (much faster), but that needs the dimensions up front
@@ -251,6 +283,10 @@ QImage system_thumb(const QString &path, int size)
     return QImage();
 }
 
+// On a RAW file's thumbnail Kestrel made: its preview was turned by its orientation (raw_preview). One without it,
+// made by an earlier version, may lie on its side and is made again.
+static const char *RAW_TURNED = "X-Kestrel-Raw-Turned";
+
 QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
 {
     QString flavor = FLAVORS.value(bucket_for(size));
@@ -270,7 +306,9 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
         if (in_cache_dir || fresh || !exists(cached))
             continue;
         QImage img(cached);
-        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime)) {
+        // (a RAW's that Kestrel made before it turned their previews may be lying on its side: made again)
+        bool stale_raw = is_raw(path) && img.text("Software") == APP_NAME && img.text(RAW_TURNED).isEmpty();
+        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime) && !stale_raw) {
             stats::count("thumbnails from the disk cache");
             return img;
         }
@@ -293,6 +331,8 @@ QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
             img.setText("Thumb::URI", uri);   // notr: a PNG text key
             img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
             img.setText("Software", APP_NAME);   // notr: a PNG text key
+            if (is_raw(path))
+                img.setText(RAW_TURNED, "1");   // notr: a PNG text key
             QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
             int fd = ::mkstemps(tmpl.data(), 4);
             if (fd >= 0) {
@@ -516,7 +556,8 @@ QImage add_folder_symbol(const QImage &folder, const QString &icon, const QStrin
 
 QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpts &opts, bool fresh)
 {
-    QString tag = QString("v2|%1|%2|%3|%4|%5").arg(mtime).arg(opts.count).arg(opts.order, opts.color, opts.cover);
+    // (v3: RAW photos' tiles the right way up, raw_preview)
+    QString tag = QString("v3|%1|%2|%3|%4|%5").arg(mtime).arg(opts.count).arg(opts.order, opts.color, opts.cover);
     QString cache = join(join(APP_CACHE(), "folders"), QString("%1-%2.png").arg(md5(path)).arg(size));
     if (!fresh && exists(cache)) {
         QImage img(cache);

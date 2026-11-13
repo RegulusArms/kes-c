@@ -984,5 +984,126 @@ int main(int argc, char **argv)
         sv->close();
         wait_for([&]() { return !sv; });
     }
+    // ---- RAW photos the right way up. The RAW plugin returns a camera's embedded preview as stored (a portrait shot's
+    // nearly always landscape, marked only by the Orientation tag), so Kestrel turns it: by the file's tag, read from
+    // each format's own place (raw_orientation), only when the preview's shape doesn't match the photo's
+    {
+        auto u16 = [](QByteArray &b, quint32 v, bool le) {
+            b += le ? QByteArray{char(v), char(v >> 8)} : QByteArray{char(v >> 8), char(v)};
+        };
+        auto u32 = [&](QByteArray &b, quint32 v, bool le) {
+            if (le)
+                u16(b, v & 0xffff, true), u16(b, v >> 16, true);
+            else
+                u16(b, v >> 16, false), u16(b, v & 0xffff, false);
+        };
+        // a TIFF structure: header (byte order, magic), IFD0 with ImageWidth and Orientation
+        auto tiff = [&](bool le, const QByteArray &magic, int orientation) {
+            QByteArray b = QByteArray(le ? "II" : "MM") + magic;
+            u32(b, 8, le);
+            u16(b, 2, le);
+            for (auto [tag, val] : {std::pair{0x0100u, 10u}, std::pair{0x0112u, quint32(orientation)}}) {
+                u16(b, tag, le), u16(b, 3, le), u32(b, 1, le), u16(b, val, le), u16(b, 0, le);
+            }
+            u32(b, 0, le);
+            return b;
+        };
+        auto be = [&](QByteArray &b, quint32 v) { u32(b, v, false); };
+        auto save = [&](const QString &name, const QByteArray &data) {
+            QString f = home_path("raw/" + name);
+            makedirs(dirname(f), true);
+            write_text(f, data);
+            return f;
+        };
+        // RAF: its header, then a preview JPEG whose EXIF has the orientation (offset and length at 84 and 88)
+        QByteArray exif = QByteArray("Exif\0\0", 6) + tiff(false, QByteArray("\0*", 2), 8);
+        QByteArray jpeg("\xff\xd8\xff\xe1", 4);
+        u16(jpeg, quint32(exif.size() + 2), false);
+        jpeg += exif + QByteArray("\xff\xd9", 2);
+        QByteArray raf = QByteArray("FUJIFILMCCD-RAW 0201FF383501").leftJustified(84, '\0');
+        be(raf, 100);
+        be(raf, quint32(jpeg.size()));
+        raf = raf.leftJustified(100, '\0') + jpeg;
+        // CR3: ftyp, then moov → Canon's uuid box → CMT1 (a TIFF)
+        QByteArray cmt1 = tiff(true, QByteArray("*\0", 2), 6), uuid_payload = QByteArray::fromHex("85c0b687820f11e08111f4ce462b6a48");
+        QByteArray cmt1_box;
+        be(cmt1_box, quint32(8 + cmt1.size()));
+        cmt1_box += "CMT1" + cmt1;
+        QByteArray uuid_box;
+        be(uuid_box, quint32(8 + 16 + cmt1_box.size()));
+        uuid_box += "uuid" + uuid_payload + cmt1_box;
+        QByteArray cr3;
+        be(cr3, 20);
+        cr3 += QByteArray("ftypcrx ") + QByteArray("\0\0\0\1", 4) + "crx ";
+        be(cr3, quint32(8 + uuid_box.size()));
+        cr3 += "moov" + uuid_box;
+        QStringList wrong;
+        const QList<std::tuple<QString, QByteArray, int>> files = {
+            {"a.dng", tiff(true, QByteArray("*\0", 2), 6), 6},   // DNG, CR2, ARW…: little-endian TIFF
+            {"b.nef", tiff(false, QByteArray("\0*", 2), 8), 8},  // big-endian TIFF
+            {"c.orf", tiff(true, "RO", 6), 6},                   // Olympus: its own magic number
+            {"d.rw2", tiff(true, QByteArray("U\0", 2), 8), 8},   // Panasonic: its own magic number
+            {"e.raf", raf, 8},
+            {"f.cr3", cr3, 6},
+            {"g.crw", QByteArray("II\x1a\0\0\0HEAPCCDR", 14), 0},   // (not read: none)
+        };
+        for (const auto &[name, data, want] : files) {
+            int got = metadata::raw_orientation(save(name, data));
+            if (got != want)
+                wrong << QString("%1: %2, not %3").arg(name).arg(got).arg(want);
+        }
+        check(wrong.isEmpty(), "a RAW file's orientation is read from DNG/TIFF (either byte order), ORF, RW2, RAF (its "
+                               "preview's EXIF) and CR3 (its CMT1 box)" +
+                                   (wrong.isEmpty() ? QString() : " (" + wrong.join("; ") + ")"));
+
+        // a landscape preview (its top-left quarter red) of a portrait photo
+        QImage pv(40, 20, QImage::Format_RGB32);
+        pv.fill(Qt::blue);
+        for (int y = 0; y < 10; ++y)
+            for (int x = 0; x < 20; ++x)
+                pv.setPixelColor(x, y, Qt::red);
+        auto red_at = [](const QImage &im, int x, int y) { return im.pixelColor(x, y) == QColor(Qt::red); };
+        QSize portrait(2000, 3000), landscape(3000, 2000);
+        QImage t6 = thumbs::turned_preview(pv, portrait, [] { return 6; }), t8 = thumbs::turned_preview(pv, portrait, [] { return 8; }),
+               t5 = thumbs::turned_preview(pv, portrait, [] { return 5; }), t7 = thumbs::turned_preview(pv, portrait, [] { return 7; });
+        bool turned = t6.size() == QSize(20, 40) && red_at(t6, 15, 5) && t8.size() == QSize(20, 40) && red_at(t8, 5, 35) &&
+                      red_at(t5, 5, 5) && red_at(t7, 15, 35) && !red_at(t6, 5, 35);
+        check(turned, "a RAW's landscape preview of a portrait photo is turned by its orientation (6: 90° clockwise, "
+                      "8: 270°, 5 and 7 mirrored too)");
+        int asked = 0;
+        QImage same = thumbs::turned_preview(pv, landscape, [&] { return ++asked, 6; });
+        QImage unknown = thumbs::turned_preview(pv, portrait, [] { return 0; });
+        check(same.size() == pv.size() && asked == 0 && unknown.size() == pv.size() && red_at(unknown, 5, 5),
+              "a preview that already has the photo's shape isn't turned (its tag isn't even read), and one with no tag "
+              "is left as it is, not squeezed");
+
+        // thumbnails a RAW's that an earlier Kestrel made (perhaps on its side) are made again; another app's are used
+        QString dng = home_path("raw/a.dng");
+        struct stat st;
+        stat(dng.toLocal8Bit().constData(), &st);
+        QString cached = join(join(THUMB_DIR(), "normal"), md5(file_uri(dng)) + ".png");
+        auto plant = [&](const QString &software, bool marked) {
+            makedirs(dirname(cached), true);
+            QImage im(128, 85, QImage::Format_RGB32);
+            im.fill(Qt::green);
+            im.setText("Thumb::URI", file_uri(dng));
+            im.setText("Thumb::MTime", QString::number(qint64(st.st_mtime)));
+            im.setText("Software", software);
+            if (marked)
+                im.setText("X-Kestrel-Raw-Turned", "1");
+            im.save(cached, "PNG");
+        };
+        auto green = [](const QImage &im) { return !im.isNull() && im.pixelColor(im.width() / 2, im.height() / 2) == QColor(Qt::green); };
+        plant(APP_NAME, false);
+        bool old_remade = !green(thumbs::file_thumb(dng, st.st_mtime, 128));
+        plant(APP_NAME, true);
+        bool new_used = green(thumbs::file_thumb(dng, st.st_mtime, 128));
+        plant("GNOME::ThumbnailFactory", false);
+        bool other_used = green(thumbs::file_thumb(dng, st.st_mtime, 128));
+        check(old_remade && new_used && other_used,
+              "a RAW's thumbnail an earlier Kestrel made isn't used (it may lie on its side), one made now is, and another "
+              "app's is");
+    }
+
     finish();
 }

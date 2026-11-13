@@ -415,6 +415,41 @@ int main(int argc, char **argv)
         w->close();
     wait_for([&]() { return r.got; });
 
+    // -- a chooser follows every setting the main windows do, also one changed while it's open (apply_settings), apart
+    // from its own view settings ("chooser/…"); a shared one changed in a chooser is the main windows' too
+    {
+        settings().setValue("folder_previews", true);
+        settings().setValue("chooser/folder_previews", false);   // (left by an earlier version: ignored now)
+        settings().remove("chooser/info_panel");
+        settings().setValue("info_panel", false);
+        call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
+        w = wait_window();
+        check(w && w->folder_previews, "a chooser reads folder previews from the main windows' setting, not a chooser/ copy");
+        prefs::set("folder_previews", false);
+        bool followed = w && !w->folder_previews && !w->preview_box->isChecked();
+        prefs::set("folder_previews", true);
+        check(followed && w->folder_previews,
+              "an open chooser follows a setting changed meanwhile (Preferences or another Kestrel: apply_settings)");
+        bool hidden_before = w && w->show_hidden;   // (its own, from the zoom check above: on)
+        prefs::set("show_hidden", false);
+        bool own_kept = w && w->show_hidden == hidden_before;
+        prefs::set("chooser/show_hidden", !hidden_before);
+        check(own_kept && w->show_hidden == !hidden_before,
+              "...but one of its own view settings follows only its chooser/ key, which applies to it at once");
+        prefs::set("info_panel", true);
+        check(w && w->info->isVisible(), "...and one it has no own value of yet follows the main windows'");
+        prefs::set("info_panel", false);
+        if (w)
+            w->preview_box->click();   // folder previews off, in the chooser
+        check(w && !w->folder_previews && !settings().value("folder_previews", true).toBool(),
+              "turning folder previews off in a chooser turns off the main windows' setting (not a chooser/ copy)");
+        prefs::set("folder_previews", true);
+        if (w)
+            w->close();
+        wait_for([&]() { return r.got; });
+        settings().remove("chooser/folder_previews");
+    }
+
     // -- cancelling
     call("OpenFile", options({{"current_folder", folder(dir)}}), &r);
     w = wait_window();

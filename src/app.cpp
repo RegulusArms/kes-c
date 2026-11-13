@@ -83,6 +83,7 @@ static const int GRID_DEFAULT = 160, LIST_DEFAULT = 28;
 static const int CHOOSER_GRID = 96, CHOOSER_LIST = 24;   // a chooser window starts with smaller icons
 static const QStringList SORT_COLUMNS = {TX_NOOP("Name"), TX_NOOP("Size"), TX_NOOP("Type"), TX_NOOP("Modified")};
 QList<MainWindow *> WINDOWS;
+QList<MainWindow *> CHOOSERS;
 ThumbnailManager *g_thumbs = nullptr;
 
 static QIcon icon(const QStringList &names) { return theme_icon(names); }
@@ -252,6 +253,10 @@ MainWindow::MainWindow(const QStringList &paths, ThumbnailManager *thumbs_, bool
     : thumbs(thumbs_), chooser_mode(chooser_mode_)
 {
     setAttribute(Qt::WA_DeleteOnClose);
+    if (chooser_mode) {   // (WINDOWS is kept by open_window and closeEvent; the choosers by their own lifetime)
+        CHOOSERS << this;
+        connect(this, &QObject::destroyed, qApp, [this]() { CHOOSERS.removeAll(this); });
+    }
     show_hidden = view_value("show_hidden", false).toBool();
     folder_previews = view_value("folder_previews", true).toBool();
     setWindowTitle(APP_NAME);
@@ -400,13 +405,25 @@ void MainWindow::embed(std::function<void(const QStringList &)> activated)
         a->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 }
 
-// A file chooser window keeps its own view settings, under "chooser/": changing the zoom, view, sort, panels and so on
-// there leaves the main windows alone, and the next chooser starts from them. Until changed in a chooser they follow
-// the main windows', apart from the size (never the main windows' maximized one) and the smaller icons.
+// A file chooser window keeps its own view settings, under "chooser/" (chooser_own: the view, icon sizes, hidden
+// files, sidebar and info panel, and its size): changing them there leaves the main windows alone, and the next
+// chooser starts from them. Until changed in a chooser they follow the main windows', apart from the size (never the
+// main windows' maximized one) and the smaller icons. Every other setting (sorts, folder previews, search options…)
+// is the main windows' own, read and written under the same key. (A "chooser/" value of another key, left by an
+// earlier version, is ignored.)
+bool chooser_own(const QString &key)
+{
+    static const QSet<QString> own = {"view_mode", "grid_size", "list_size", "show_hidden", "sidebar", "info_panel",
+                                      "geometry", "splitter"};
+    return own.contains(key);
+}
+
+QList<MainWindow *> all_windows() { return WINDOWS + CHOOSERS; }
+
 QVariant MainWindow::view_value(const QString &key, const QVariant &def) const
 {
     QSettings &s = settings();
-    if (chooser_mode && s.contains("chooser/" + key))
+    if (chooser_mode && chooser_own(key) && s.contains("chooser/" + key))
         return s.value("chooser/" + key);
     if (key == "grid_size" || key == "list_size") {
         bool grid = key == "grid_size";
@@ -419,7 +436,7 @@ QVariant MainWindow::view_value(const QString &key, const QVariant &def) const
 
 void MainWindow::set_view_value(const QString &key, const QVariant &value)
 {
-    QString k = chooser_mode ? "chooser/" + key : key;
+    QString k = chooser_mode && chooser_own(key) ? "chooser/" + key : key;
     settings().setValue(k, value);
     prefs::notify({k});   // an open Preferences window shows it
 }
@@ -559,7 +576,7 @@ void MainWindow::set_default_sort(Pane *p)
     set_view_value("sort_order", int(p->tree->header()->sortIndicatorOrder()));
     set_view_value("sort_group", p->grouping());
     set_view_value("sort_group_by", p->grouping_by());
-    for (MainWindow *w : WINDOWS)
+    for (MainWindow *w : all_windows())
         for (Pane *q : w->panes())
             q->apply_folder_sort();
     statusBar()->showMessage(tx("Folders without a sort of their own now use this one"), 5000);
@@ -1031,8 +1048,8 @@ void MainWindow::sync_zoom_slider()
 
 void MainWindow::set_folder_previews(bool on, bool save)
 {
-    // global switch for folder mosaics; off means no directory scanning at all (a chooser's is its own)
-    QList<MainWindow *> wins = chooser_mode ? QList<MainWindow *>() : WINDOWS;
+    // global switch for folder mosaics, in every window (file choosers too); off means no directory scanning at all
+    QList<MainWindow *> wins = all_windows();
     if (!wins.contains(this))
         wins << this;
     for (MainWindow *w : wins) {
@@ -1122,7 +1139,7 @@ Task *MainWindow::build_previews(const QString &root, bool folders_only, int dep
         QVariantMap m = r.toMap();
         if (fresh) {   // the old pictures are still in memory, here and in the other Kestrels
             g_thumbs->clear_memory();
-            for (MainWindow *x : WINDOWS)
+            for (MainWindow *x : all_windows())
                 for (Pane *p : x->panes())
                     p->animator->clear();
             atc::announce("thumbs_cleared");
@@ -1762,12 +1779,13 @@ void MainWindow::preferences()
 
 void repaint_all()
 {
-    for (MainWindow *w : WINDOWS)
+    for (MainWindow *w : all_windows())
         for (Pane *p : w->panes())
             p->view()->viewport()->update();
 }
 
-// The main windows' view settings take effect in every main window (a chooser window has its own, "chooser/…")
+// Settings take effect in every window that reads them: the main windows' and the file choosers' alike, apart from a
+// chooser's own view settings ("chooser/…", chooser_own), which only the choosers follow
 void apply_settings(const QStringList &keys);
 static const bool settings_hooked = (prefs::apply_hook = apply_settings, true);   // prefs::set applies through it
 
@@ -1777,15 +1795,19 @@ void apply_settings(const QStringList &keys)
     for (const QString &raw : keys) {
         bool chooser = raw.startsWith("chooser/");
         QString key = chooser ? raw.mid(8) : raw;
+        // the windows whose value this changes: for one of a chooser's own keys, the choosers by "chooser/…" and the
+        // main windows by the plain key (a chooser that has none of its own following it too, as view_value reads);
+        // for any other key, every window
         QList<MainWindow *> wins;
-        for (MainWindow *w : WINDOWS)
-            if (w->chooser_mode == chooser)
+        for (MainWindow *w : all_windows())
+            if (!chooser_own(key) || w->chooser_mode == chooser ||
+                (w->chooser_mode && !settings().contains("chooser/" + key)))
                 wins << w;
         QVariant v = prefs::get(raw);
         if (key == "view_mode") {
             for (MainWindow *w : wins) {
                 for (Pane *p : w->panes())
-                    p->set_view_mode(v.toString());
+                    p->set_view_mode(w->view_value("view_mode", "grid").toString());
                 w->sync_view_btn();
                 w->sync_zoom_slider();
             }
@@ -1797,30 +1819,32 @@ void apply_settings(const QStringList &keys)
             }
         } else if (key == "show_hidden") {   // (applied, not saved again: a reset leaves it unset)
             for (MainWindow *w : wins) {
+                bool on = w->view_value("show_hidden", false).toBool();
                 QSignalBlocker quiet(w->a_hidden);
-                w->a_hidden->setChecked(v.toBool());
-                w->show_hidden = v.toBool();
+                w->a_hidden->setChecked(on);
+                w->show_hidden = on;
                 for (Pane *p : w->panes())
                     p->apply_hidden();
             }
         } else if (key == "sidebar" || key == "info_panel") {
             for (MainWindow *w : wins) {
+                bool on = w->view_value(key, key == "sidebar").toBool();
                 QAction *a = key == "sidebar" ? w->a_sidebar : w->a_info;
                 QSignalBlocker quiet(a);
-                a->setChecked(v.toBool());
-                (key == "sidebar" ? static_cast<QWidget *>(w->sidebar) : w->info)->setVisible(v.toBool());
-                if (key == "info_panel" && v.toBool())
+                a->setChecked(on);
+                (key == "sidebar" ? static_cast<QWidget *>(w->sidebar) : w->info)->setVisible(on);
+                if (key == "info_panel" && on)
                     w->update_status();
             }
         } else if (key == "folder_previews") {
             if (!wins.isEmpty())
-                wins.first()->set_folder_previews(v.toBool(), false);   // (every main window)
+                wins.first()->set_folder_previews(v.toBool(), false);   // (every window)
         } else if (key == "pinned_first") {
             for (MainWindow *w : wins)
                 for (Pane *p : w->panes())
                     p->set_pinned_first(v.toBool());
         } else if (key.startsWith("sort_")) {
-            for (MainWindow *w : WINDOWS)
+            for (MainWindow *w : wins)
                 for (Pane *p : w->panes())
                     p->apply_folder_sort();
         } else if (key == "search_recursive" || key == "search_contents") {
@@ -1828,12 +1852,12 @@ void apply_settings(const QStringList &keys)
                 for (Pane *p : w->panes())
                     p->set_search_options(prefs::get("search_recursive").toBool(), prefs::get("search_contents").toBool());
         } else if (key == "sidebar_sections" || key == "sidebar_collapsed" || key == "sidebar_hidden") {
-            for (MainWindow *w : WINDOWS)
+            for (MainWindow *w : wins)
                 w->sidebar->refresh();
         } else if (key == "private_mode") {
             // this process's caches and histories to the private RAM disk or back (ramdisk.h), and what shows it
             ramdisk::apply_private();
-            for (MainWindow *w : WINDOWS) {
+            for (MainWindow *w : wins) {
                 w->sync_private();
                 w->sidebar->refresh();
             }
@@ -1870,14 +1894,14 @@ void apply_preferences()
 {
     apply_thumb_settings(g_thumbs);
     g_thumbs->clear_memory();
-    for (MainWindow *w : WINDOWS)
+    for (MainWindow *w : all_windows())
         for (Pane *p : w->panes()) {
             p->animator->clear();
             p->apply_folder_previews();
             p->view()->viewport()->update();
         }
     Q_EMIT undo::signals_()->changed();   // "Share undo…" may have changed what Ctrl+Z undoes
-    for (MainWindow *w : WINDOWS)
+    for (MainWindow *w : all_windows())
         if (w->a_tower)
             w->a_tower->setVisible(settings().value("developer_tools", false).toBool());
 }
@@ -2217,6 +2241,11 @@ int kes_main(int argc, char **argv)
         if (QByteArray(argv[i]) == "--file-chooser") {
             // started by D-Bus for the system's file chooser (see chooser.h): only chooser windows
             app.setQuitOnLastWindowClosed(false);   // the service quits after a minute without dialogs
+            // it hears the other Kestrels (settings changed in Preferences, private mode, folder colours, thumbnails
+            // deleted…) as they do, so an open chooser follows them. It reports no windows, so the tower never hands
+            // it folders to open.
+            QObject::connect(atc::radio(), &atc::Radio::heard, qApp, on_atc);
+            atc::radio()->start();
             chooser::serve([](const chooser::Request &req, std::function<void(const chooser::Result &)> done) {
                 QPointer<MainWindow> w = open_chooser(req, std::move(done));
                 return std::function<void()>([w]() {

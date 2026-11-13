@@ -261,6 +261,13 @@ struct Job {
     // starts, or appears while it runs (another program saving a file), is kept and the job fails with a conflict.
     bool replace = false;
     bool dd = false;   // onto a tape: each file written by dd (the user's choice) instead of Kestrel's buffered copy
+    // A merge (merge_copy, merge_move) never replaces anything unless the user ticked "Replace files with the same
+    // names" (overwrite): an item whose name is taken in the folder there is put beside it under the next free
+    // "name-(n).ext" (folders with the same name are merged into). resume: finishing a copy this job began, as
+    // administrator: an item already there that is the copy made before (a file with the same contents, a link to the
+    // same target) is left as it is rather than copied again beside it.
+    bool overwrite = false;
+    bool resume = false;
 };
 
 // Copy/move/delete jobs on a thread, with progress and Cancel in the status bar. Jobs that fail for lack of
@@ -354,8 +361,12 @@ class ConflictDialog : public QDialog {
     Q_OBJECT
 public:
     ConflictDialog(QWidget *parent, const QString &dst, bool is_dir);
+    // "replace" (Merge for a folder, Replace for a file), "both", "skip" or "cancel"
     QString choice = "skip";
     QCheckBox *all_box;
+    // ticked by the user: a merge replaces files with the same names, and a file's Replace can be clicked. Never
+    // ticked by default, so an answer given without reading keeps everything.
+    QCheckBox *overwrite_box;
 };
 
 Q_DECLARE_METATYPE(fileops::DirStats)

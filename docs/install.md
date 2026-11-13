@@ -39,6 +39,7 @@ Then, optionally, make it your file manager (see below); `kes-setup --undo` puts
 
 ```bash
 kes-setup --default
+kes-setup --native-gtk  # and/or give native GTK apps Kestrel's Open/Save dialogs too (see "Which apps get Kestrel's file chooser" below)
 kes-setup --bleachbit   # and/or add Kestrel to BleachBit's cleaners (see "Cleaning up with BleachBit" below)
 kes-setup --install-optional   # and/or install the optional packages: exiftool, ffmpeg, BleachBit, rar… (see [Dependencies](dependencies.md))
 ```
@@ -73,6 +74,7 @@ The packages are built by GitHub Actions (`.github/workflows/deb.yml`). Remove K
 ./install.sh             # installs build tools if needed, builds, adds `kes` to ~/.local/bin and the app grid
 ./install.sh --default   # ...and makes it the default app for opening folders and the trash, and puts kes on your PATH
 ./install.sh --dock      # ...and puts it in the dock in place of GNOME Files (Dolphin in KDE Plasma's taskbar)
+./install.sh --native-gtk   # ...and gives native GTK apps Kestrel's Open/Save dialogs too (from your next login)
 ./install.sh --install-recommended   # ...and installs the recommended packages (RAW/HEIC previews etc.)
 ./install.sh --uninstall
 
@@ -87,11 +89,17 @@ If `~/.local/bin` isn't on your PATH yet (on Ubuntu and Mint it's only added at 
 
 It also makes Kestrel the system's **file chooser**: the Open and Save dialogs that apps get through the desktop portal (xdg-desktop-portal), such as a browser's "Save image as", Flatpak and Snap apps, and GTK 4 and Qt apps that use the portal. Those dialogs open as a Kestrel window with a bar at the bottom for the file name, the file type, Cancel and Save/Open, so you browse with the sidebar, previews and search as usual. A suggested name that's already taken in the folder becomes the next free one (`photo (1).jpg`), saving over a file you chose asks first, and the next dialog starts where the last one picked something (or, if you choose so in Preferences → Windows, on an Overview of the folders you keep for saving; see [Features](features.md)). The portal chooses its file chooser per desktop, not per app, so this applies to every app that uses it. The installer adds a D-Bus activation file for `kes --file-chooser`, installs the portal definition `/usr/share/xdg-desktop-portal/portals/kestrel.portal` (the portal reads these only from there, so this one file asks for your password), writes `~/.config/xdg-desktop-portal/<desktop>-portals.conf` with your desktop's current choices plus Kestrel for the file chooser (the desktop's own, GNOME's or KDE's, stays as the fallback; a portals.conf you already had is kept and changed), and restarts the portal. `--uninstall` puts it all back.
 
+**Which apps get Kestrel's file chooser.** Only apps that ask the desktop portal for their Open and Save dialogs:
+
+- Flatpak and Snap apps (they always ask the portal), browsers that use it (Firefox, Chrome, Brave and other Chromium browsers), and Qt and GTK apps that ask it themselves.
+- **Native GTK apps** (installed with apt, not Flatpak or Snap, such as gedit) don't ask it by default: GTK sends its native file chooser to the portal only for sandboxed apps, or when told to (`GTK_USE_PORTAL=1` for GTK 3, `GDK_DEBUG=portals` for GTK 4). **`kes-setup --native-gtk`** (or `./install.sh --native-gtk`; not part of `--default`) tells them to, for your whole session, with a file in `~/.config/environment.d/` that desktops using systemd's user session (GNOME, KDE Plasma) read when you log in, so it takes effect at your **next login**. It also sends their other portal requests through the desktop portal: opening links, choosing an app to open a file with, and printing in some GTK versions. `kes-setup --undo` (or `--uninstall`) takes it out.
+- **Where Kestrel can't be:** an app that builds GTK's file dialog itself (a `GtkFileChooserDialog`) rather than asking for the native one always shows GTK's own dialog: gedit's **Save** and **Save As**, for one (its **Open** uses the native one, so it does get Kestrel's). Nothing outside the app can replace that dialog.
+
 It also installs a small GNOME Shell extension, **Kestrel drop focus**, so that when you drag files from Kestrel into another app (a browser, an editor, a chat window) that app gets the focus, as it would on Windows. On GNOME on Wayland an app can't focus another app's window, so the extension does it when Kestrel asks; GNOME loads a newly installed extension at your next log-in, so log out and back in once. On X11 (Linux Mint, GNOME on Xorg) Kestrel needs no extension, and on KDE Plasma it asks KWin itself (a small script it loads for each drop), so nothing is installed there. The extension is copied to `~/.local/share/gnome-shell/extensions/` (the .deb installs it for everyone) and added to your enabled extensions; `--uninstall` takes it out again and leaves your other extensions alone.
 
 It also makes Kestrel the app for `trash:///` (the dock's Trash icon, `gio open trash:///`), remembering which app had it so `--uninstall` can put it back. If GNOME Files is pinned in the dock (or Dolphin in KDE Plasma's taskbar), `--default` asks whether to put Kestrel in its place; `--dock` does that without asking. `--uninstall` puts GNOME Files (Dolphin) back if the installer swapped it.
 
-The installer does all of this (everything but the PATH) by running `kes-setup`, which you can also run on its own: `kes-setup --default`, `kes-setup --dock`, and `kes-setup --undo` to put back what they changed. It sets things up for the `kes` next to it, or the one given with `--kes PATH`.
+The installer does all of this (everything but the PATH) by running `kes-setup`, which you can also run on its own: `kes-setup --default`, `kes-setup --dock`, `kes-setup --native-gtk`, and `kes-setup --undo` to put back what they changed. It sets things up for the `kes` next to it, or the one given with `--kes PATH`.
 
 **Cleaning up with BleachBit:** `kes-setup --bleachbit` adds Kestrel Explorer to [BleachBit](https://www.bleachbit.org) (as `~/.config/bleachbit/cleaners/kestrel-explorer.xml`), with eight options:
 - **Cache:** folder preview mosaics, the video clips played in the file view, copies of phone videos made to play them, files opened from inside archives, copies of images dragged out of the image viewer, the folder sizes Properties remembers, copies of compressed or encrypted disk images expanded to mount them, and exiftool's tag lists. Not the saved job logs:

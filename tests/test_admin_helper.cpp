@@ -305,6 +305,38 @@ int main(int argc, char **argv)
     h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3")}, {"merge", true}});
     check(read_file(join(W, "self.txt")) == "mine" && !tree_before.isEmpty() && contents(join(W, "tree3")) == tree_before,
           "moving or copying a file or folder onto itself leaves it as it was");
+    // a merge replaces nothing unless Kestrel says the user chose to ("clash": "replace"): a file whose name is taken
+    // goes beside it as name-(n).ext, a folder of that name is merged into; "resume" leaves the copy made before
+    {
+        auto put = [](const QString &p, const QByteArray &d) {
+            QDir().mkpath(dirname(p));
+            write_file(p, d);
+        };
+        put(join(W, "mg/src/a.txt"), "new a");
+        put(join(W, "mg/src/sub/s.txt"), "new s");
+        put(join(W, "mg/src/only.txt"), "only");
+        put(join(W, "mg/dst/a.txt"), "old a");
+        put(join(W, "mg/dst/a-(1).txt"), "old a1");
+        put(join(W, "mg/dst/sub/s.txt"), "old s");
+        bool merged = ok(h.call({{"op", "copy"}, {"src", join(W, "mg/src")}, {"dst", join(W, "mg/dst")}, {"merge", true}}));
+        check(merged && read_file(join(W, "mg/dst/a.txt")) == "old a" && read_file(join(W, "mg/dst/a-(1).txt")) == "old a1" &&
+                  read_file(join(W, "mg/dst/a-(2).txt")) == "new a" && read_file(join(W, "mg/dst/sub/s.txt")) == "old s" &&
+                  read_file(join(W, "mg/dst/sub/s-(1).txt")) == "new s" && read_file(join(W, "mg/dst/only.txt")) == "only",
+              "a merge (no \"clash\" given) replaces nothing: a taken name gets the next free name-(n).ext, folders "
+              "are merged into");
+        QStringList before = contents(join(W, "mg/dst"));
+        bool resumed = ok(h.call({{"op", "copy"}, {"src", join(W, "mg/src")}, {"dst", join(W, "mg/dst")}, {"merge", true},
+                                  {"clash", "resume"}}));
+        check(resumed && contents(join(W, "mg/dst")) == before,
+              "a resumed merge leaves the copies made before as they are, and adds no second copy of them");
+        put(join(W, "mg/src/a.txt"), "newer a");
+        bool replaced = ok(h.call({{"op", "copy"}, {"src", join(W, "mg/src")}, {"dst", join(W, "mg/dst")}, {"merge", true},
+                                   {"clash", "replace"}}));
+        check(replaced && read_file(join(W, "mg/dst/a.txt")) == "newer a" && read_file(join(W, "mg/dst/sub/s.txt")) == "new s" &&
+                  !QFile::exists(join(W, "mg/dst/a-(3).txt")),
+              "a merge with \"clash\": \"replace\" replaces files with the same names");
+        QDir(join(W, "mg")).removeRecursively();
+    }
     QJsonObject into_move = h.call({{"op", "move"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
     QJsonObject into_copy = h.call({{"op", "copy"}, {"src", join(W, "tree3")}, {"dst", join(W, "tree3/d0/in")}}, 10000);
     check(!into_move.isEmpty() && !ok(into_move) && !into_copy.isEmpty() && !ok(into_copy) &&

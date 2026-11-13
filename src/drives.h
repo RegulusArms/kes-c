@@ -24,6 +24,7 @@ namespace drives {
 
 struct Mount {
     QString root, source, fstype;
+    bool read_only = false;   // mounted read-only ("ro" among its mount options)
 };
 QList<Mount> mounts();   // every mount, from /proc/self/mountinfo (cached for a second); safe on any thread
 void reread_mounts();    // the next mounts() reads the table again, not its copy
@@ -48,6 +49,7 @@ private:
     MountWatch();
 };
 QString mount_root(const QString &path);       // the mount point path is on
+bool read_only(const QString &path);          // path is on a drive mounted read-only (the mount table: asks it nothing)
 QString mount_fstype(const QString &path);     // the file system type of the mount path is on ("fuse.sshfs"…)
 // A mount file managers show of their own accord, by GIO's rule (g_unix_mount_guess_should_display, which GNOME Files'
 // volume monitors follow): not a system file system, device or path, not inside a hidden folder, and under the home

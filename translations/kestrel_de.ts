@@ -33,8 +33,8 @@
         <location line="+2"/>
         <location line="+3"/>
         <location line="+9"/>
-        <location filename="../src/app.cpp" line="+684"/>
-        <location line="+608"/>
+        <location filename="../src/app.cpp" line="+701"/>
+        <location line="+609"/>
         <location filename="../src/menus.cpp" line="+136"/>
         <source>Paste</source>
         <translation>Einfügen</translation>
@@ -73,6 +73,7 @@
     </message>
     <message>
         <location line="+18"/>
+        <location filename="../src/widgets.cpp" line="+2219"/>
         <source>Drop</source>
         <translation>Ablegen</translation>
     </message>
@@ -83,8 +84,8 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/app.cpp" line="-747"/>
-        <location line="+753"/>
+        <location filename="../src/app.cpp" line="-748"/>
+        <location line="+754"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Duplicate</source>
         <translation>Duplizieren</translation>
@@ -242,7 +243,7 @@
         <location line="+97"/>
         <location line="+75"/>
         <location filename="../src/convert.cpp" line="+90"/>
-        <location filename="../src/fileops.cpp" line="+1082"/>
+        <location filename="../src/fileops.cpp" line="+1131"/>
         <location line="+1"/>
         <source>%1 of %2 — %3</source>
         <translation>%1 von %2 – %3</translation>
@@ -252,17 +253,18 @@
         <location filename="../src/undo.cpp" line="+265"/>
         <location line="+26"/>
         <source>Moved to the trash: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>In den Papierkorb verschoben: %1</translation>
     </message>
     <message>
         <location line="+12"/>
-        <location filename="../src/app.cpp" line="-752"/>
-        <location line="+988"/>
+        <location filename="../src/app.cpp" line="-753"/>
+        <location line="+989"/>
         <location filename="../src/diskusage.cpp" line="+1014"/>
         <location filename="../src/menus.cpp" line="-32"/>
         <location line="+115"/>
         <location filename="../src/opening.cpp" line="+276"/>
         <location line="+4"/>
+        <location filename="../src/widgets.cpp" line="-153"/>
         <source>Move to Trash</source>
         <translation>In den Papierkorb verschieben</translation>
     </message>
@@ -337,14 +339,14 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="-987"/>
-        <location line="+672"/>
+        <location filename="../src/app.cpp" line="-988"/>
+        <location line="+673"/>
         <source>Delete Permanently</source>
         <translation>Endgültig löschen</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/app.cpp" line="+534"/>
+        <location filename="../src/app.cpp" line="+551"/>
         <source>Delete</source>
         <translation>Löschen</translation>
     </message>
@@ -478,21 +480,21 @@ Es wird keine Sicherung angelegt, dies kann also nicht rückgängig gemacht werd
     <message>
         <location line="+1"/>
         <source>Skipped: %1: its original location is unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>Übersprungen: %1: sein ursprünglicher Ort ist unbekannt</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Restored: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Wiederhergestellt: %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Restored: %1 (as %2: its name was taken)</source>
-        <translation type="unfinished"></translation>
+        <translation>Wiederhergestellt: %1 (als %2: sein Name war vergeben)</translation>
     </message>
     <message>
         <location line="+15"/>
-        <location filename="../src/app.cpp" line="-535"/>
+        <location filename="../src/app.cpp" line="-552"/>
         <source>Restore</source>
         <translation>Wiederherstellen</translation>
     </message>
@@ -506,7 +508,7 @@ Es wird keine Sicherung angelegt, dies kann also nicht rückgängig gemacht werd
         <location line="+69"/>
         <location filename="../src/app.cpp" line="-34"/>
         <location filename="../src/menus.cpp" line="-105"/>
-        <location filename="../src/widgets.cpp" line="+1711"/>
+        <location filename="../src/widgets.cpp" line="-314"/>
         <source>Empty Trash</source>
         <translation>Papierkorb leeren</translation>
     </message>
@@ -577,7 +579,7 @@ Es wird keine Sicherung angelegt, dies kann also nicht rückgängig gemacht werd
     </message>
     <message numerus="yes">
         <location line="+18"/>
-        <location filename="../src/archive_ui.cpp" line="+836"/>
+        <location filename="../src/archive_ui.cpp" line="+854"/>
         <location filename="../src/jobswin.cpp" line="+574"/>
         <location filename="../src/linkwin.cpp" line="+620"/>
         <source>… and %Ln more</source>
@@ -692,12 +694,12 @@ sudo apt install pkexec</translation>
     <message>
         <location line="+5"/>
         <source>Not started: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nicht gestartet: %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The admin session is open: administrator actions run in it until it&apos;s ended</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Admin-Sitzung ist offen: Administratoraktionen laufen darin, bis sie beendet wird</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -706,10 +708,10 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+20"/>
-        <location filename="../src/drives.cpp" line="+547"/>
+        <location filename="../src/drives.cpp" line="+558"/>
         <location filename="../src/ramdisk.cpp" line="+747"/>
         <source>Failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fehlgeschlagen: %1</translation>
     </message>
     <message>
         <location line="+13"/>
@@ -730,15 +732,15 @@ sudo apt install pkexec</translation>
         <translation>Als Administrator erneut versuchen</translation>
     </message>
     <message>
-        <location filename="../src/app.cpp" line="-1246"/>
+        <location filename="../src/app.cpp" line="-1264"/>
         <location filename="../src/archivewin.cpp" line="+335"/>
         <location filename="../src/diskusage.cpp" line="-260"/>
         <location filename="../src/dupes.cpp" line="+370"/>
-        <location filename="../src/fsmodel.cpp" line="+775"/>
+        <location filename="../src/fsmodel.cpp" line="+776"/>
         <location filename="../src/linkwin.cpp" line="-586"/>
         <location filename="../src/pgp.cpp" line="+460"/>
         <location filename="../src/prefs.cpp" line="+56"/>
-        <location filename="../src/widgets.cpp" line="-1441"/>
+        <location filename="../src/widgets.cpp" line="-1481"/>
         <source>Name</source>
         <translation>Name</translation>
     </message>
@@ -754,7 +756,7 @@ sudo apt install pkexec</translation>
         <location filename="../src/ramdiskwin.cpp" line="+50"/>
         <location filename="../src/viewer.cpp" line="+637"/>
         <location filename="../src/widgets.cpp" line="+0"/>
-        <location line="+1910"/>
+        <location line="+2159"/>
         <source>Size</source>
         <translation>Größe</translation>
     </message>
@@ -775,13 +777,13 @@ sudo apt install pkexec</translation>
         <location filename="../src/prefs.cpp" line="+0"/>
         <location line="+9"/>
         <location filename="../src/viewer.cpp" line="+1"/>
-        <location filename="../src/widgets.cpp" line="-1911"/>
-        <location line="+1913"/>
+        <location filename="../src/widgets.cpp" line="-2160"/>
+        <location line="+2162"/>
         <source>Modified</source>
         <translation>Geändert</translation>
     </message>
     <message>
-        <location line="+232"/>
+        <location line="+237"/>
         <source>Zoom (Ctrl+scroll)</source>
         <translation>Zoom (Strg+Mausrad)</translation>
     </message>
@@ -802,29 +804,29 @@ sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+11"/>
-        <location filename="../src/widgets.cpp" line="-724"/>
+        <location filename="../src/widgets.cpp" line="-933"/>
         <source>Private</source>
-        <translation type="unfinished"></translation>
+        <translation>Privat</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Private mode: Kestrel&apos;s caches and histories are kept in memory and deleted when the last Kestrel closes, and Save windows start in the Private folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Privatmodus: Kestrels Caches und Verläufe werden im Arbeitsspeicher gehalten und gelöscht, wenn das letzte Kestrel geschlossen wird, und Speichern-Fenster beginnen im Ordner Privat.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Open the Private Folder</source>
-        <translation type="unfinished"></translation>
+        <translation>Den Ordner Privat öffnen</translation>
     </message>
     <message>
         <location line="+1"/>
         <location filename="../src/ramdisk.cpp" line="+346"/>
         <location filename="../src/widgets.cpp" line="+296"/>
         <source>Leave Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Privatmodus verlassen</translation>
     </message>
     <message>
-        <location line="+96"/>
+        <location line="+108"/>
         <location line="+296"/>
         <location filename="../src/diskusage.cpp" line="-61"/>
         <source>Back</source>
@@ -936,20 +938,20 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+4"/>
-        <location line="+777"/>
+        <location line="+778"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Collapse All Groups</source>
         <translation>Alle Gruppen einklappen</translation>
     </message>
     <message>
-        <location line="-773"/>
-        <location line="+778"/>
+        <location line="-774"/>
+        <location line="+779"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Expand All Groups</source>
         <translation>Alle Gruppen ausklappen</translation>
     </message>
     <message>
-        <location line="-772"/>
+        <location line="-773"/>
         <source>Set as Default</source>
         <translation>Als Standard festlegen</translation>
     </message>
@@ -966,22 +968,22 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     <message>
         <location line="+14"/>
         <source>Looking for the folders below %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Ordner unter %1 werden gesucht</translation>
     </message>
     <message numerus="yes">
         <location line="+8"/>
         <source>%Ln folder(s) found — %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Ordner gefunden — %1</numerusform>
+            <numerusform>%Ln Ordner gefunden — %1</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+4"/>
         <source>%Ln folder(s) found: each gets this folder&apos;s sort once the job ends</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Ordner gefunden: jeder erhält die Sortierung dieses Ordners, wenn der Auftrag endet</numerusform>
+            <numerusform>%Ln Ordner gefunden: jeder erhält die Sortierung dieses Ordners, wenn der Auftrag endet</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -999,7 +1001,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+37"/>
-        <location filename="../src/fsmodel.cpp" line="-734"/>
+        <location filename="../src/fsmodel.cpp" line="-735"/>
         <location filename="../src/hashcheck.cpp" line="+413"/>
         <source>File</source>
         <translation>Datei</translation>
@@ -1022,13 +1024,13 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="-228"/>
-        <location line="+627"/>
+        <location line="+628"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <source>New Folder…</source>
         <translation>Neuer Ordner …</translation>
     </message>
     <message>
-        <location line="-626"/>
+        <location line="-627"/>
         <source>New Empty File…</source>
         <translation>Neue leere Datei …</translation>
     </message>
@@ -1060,22 +1062,22 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1392"/>
+        <location line="+1410"/>
         <location filename="../src/menus.cpp" line="-4"/>
         <location filename="../src/towerwin.cpp" line="+16"/>
         <source>Undo</source>
         <translation>Rückgängig</translation>
     </message>
     <message>
-        <location line="-1388"/>
-        <location line="+753"/>
+        <location line="-1406"/>
+        <location line="+754"/>
         <location filename="../src/menus.cpp" line="+29"/>
         <source>Cut</source>
         <translation>Ausschneiden</translation>
     </message>
     <message>
-        <location line="-752"/>
-        <location line="+753"/>
+        <location line="-753"/>
+        <location line="+754"/>
         <location filename="../src/compare.cpp" line="-177"/>
         <location line="+376"/>
         <location filename="../src/dialogs.cpp" line="-1133"/>
@@ -1083,39 +1085,39 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location filename="../src/menus.cpp" line="+0"/>
         <location filename="../src/towerwin.cpp" line="+19"/>
         <location filename="../src/viewer.cpp" line="-846"/>
-        <location filename="../src/widgets.cpp" line="+458"/>
+        <location filename="../src/widgets.cpp" line="+667"/>
         <source>Copy</source>
         <translation>Kopieren</translation>
     </message>
     <message>
-        <location line="-751"/>
-        <location line="+609"/>
+        <location line="-752"/>
+        <location line="+610"/>
         <location filename="../src/menus.cpp" line="-24"/>
         <source>Paste as Link</source>
         <translation>Als Verknüpfung einfügen</translation>
     </message>
     <message>
-        <location line="-607"/>
-        <location line="+581"/>
+        <location line="-608"/>
+        <location line="+582"/>
         <location line="+34"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Select All</source>
         <translation>Alles auswählen</translation>
     </message>
     <message>
-        <location line="-614"/>
+        <location line="-615"/>
         <source>Invert Selection</source>
         <translation>Auswahl umkehren</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+757"/>
+        <location line="+758"/>
         <location filename="../src/menus.cpp" line="+28"/>
         <source>Rename…</source>
         <translation>Umbenennen …</translation>
     </message>
     <message>
-        <location line="-753"/>
+        <location line="-754"/>
         <location filename="../src/menus.cpp" line="-36"/>
         <location filename="../src/viewer.cpp" line="+1413"/>
         <source>Copy Path</source>
@@ -1123,10 +1125,10 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+9"/>
-        <location line="+635"/>
+        <location line="+636"/>
         <location line="+32"/>
         <location line="+328"/>
-        <location line="+250"/>
+        <location line="+267"/>
         <location filename="../src/diskusage.cpp" line="+325"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <location line="+12"/>
@@ -1136,7 +1138,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>Eigenschaften</translation>
     </message>
     <message>
-        <location line="-1236"/>
+        <location line="-1254"/>
         <location filename="../src/menus.cpp" line="-187"/>
         <location filename="../src/prefs.cpp" line="-14"/>
         <location line="+2"/>
@@ -1181,16 +1183,16 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location line="+586"/>
+        <location line="+587"/>
         <location filename="../src/menus.cpp" line="+72"/>
         <source>Show Hidden Files</source>
         <translation>Versteckte Dateien anzeigen</translation>
     </message>
     <message>
-        <location line="-584"/>
+        <location line="-585"/>
         <location filename="../src/prefs.cpp" line="-148"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="-1069"/>
+        <location filename="../src/widgets.cpp" line="-1284"/>
         <source>Sidebar</source>
         <translation>Seitenleiste</translation>
     </message>
@@ -1202,13 +1204,13 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+2"/>
-        <location line="+1230"/>
+        <location line="+1248"/>
         <location filename="../src/menus.cpp" line="-3"/>
         <source>Fullscreen</source>
         <translation>Vollbild</translation>
     </message>
     <message>
-        <location line="-1222"/>
+        <location line="-1240"/>
         <source>Reload</source>
         <translation>Neu laden</translation>
     </message>
@@ -1279,16 +1281,16 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/widgets.cpp" line="+608"/>
+        <location filename="../src/widgets.cpp" line="+614"/>
         <location line="+4"/>
         <source>New RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>Neue RAM-Disk …</translation>
     </message>
     <message>
         <location line="+2"/>
         <location filename="../src/ramdisk.cpp" line="-34"/>
         <source>Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Privatmodus</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -1312,12 +1314,12 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+1"/>
-        <location line="+1208"/>
+        <location line="+1226"/>
         <source>Keyboard Shortcuts</source>
         <translation>Tastenkürzel</translation>
     </message>
     <message>
-        <location line="-1207"/>
+        <location line="-1225"/>
         <source>About</source>
         <translation>Über</translation>
     </message>
@@ -1338,20 +1340,20 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="+2"/>
-        <location line="+522"/>
+        <location line="+523"/>
         <location filename="../src/menus.cpp" line="+38"/>
         <source>Open in New Window</source>
         <translation>In neuem Fenster öffnen</translation>
     </message>
     <message>
-        <location line="-486"/>
+        <location line="-487"/>
         <source>%1 free</source>
         <translation>%1 frei</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>%1 (Private)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (Privat)</translation>
     </message>
     <message>
         <location line="+39"/>
@@ -1587,7 +1589,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+38"/>
         <source>Drives, network locations and bookmarks</source>
         <translation>Laufwerke, Netzwerkorte und Lesezeichen</translation>
     </message>
@@ -1622,7 +1624,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message numerus="yes">
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+422"/>
+        <location filename="../src/widgets.cpp" line="+631"/>
         <source>%Ln item(s)</source>
         <translation>
             <numerusform>%Ln Element</numerusform>
@@ -1655,7 +1657,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location filename="../src/menus.cpp" line="+37"/>
         <location line="+105"/>
         <location filename="../src/overview.cpp" line="-13"/>
-        <location filename="../src/widgets.cpp" line="-477"/>
+        <location filename="../src/widgets.cpp" line="-686"/>
         <source>Open in Terminal</source>
         <translation>Im Terminal öffnen</translation>
     </message>
@@ -1681,7 +1683,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
     </message>
     <message>
         <location line="-302"/>
-        <location line="+553"/>
+        <location line="+570"/>
         <location filename="../src/archivewin.cpp" line="+51"/>
         <location line="+114"/>
         <location line="+12"/>
@@ -1704,7 +1706,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>Öffnen</translation>
     </message>
     <message>
-        <location line="-550"/>
+        <location line="-567"/>
         <location filename="../src/menus.cpp" line="+3"/>
         <location filename="../src/overview.cpp" line="-193"/>
         <location line="+51"/>
@@ -1857,13 +1859,13 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location filename="../src/menus.cpp" line="-36"/>
         <location line="+37"/>
         <source>Link…</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung …</translation>
     </message>
     <message>
         <location line="+11"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Edit Link…</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung bearbeiten …</translation>
     </message>
     <message>
         <location line="-8"/>
@@ -1950,13 +1952,13 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location filename="../src/diskimage.cpp" line="+714"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <source>Mount Image</source>
-        <translation type="unfinished"></translation>
+        <translation>Abbild einhängen</translation>
     </message>
     <message>
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+1"/>
         <source>Mount Image for Writing</source>
-        <translation type="unfinished"></translation>
+        <translation>Abbild zum Schreiben einhängen</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -1985,7 +1987,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location filename="../src/overview.cpp" line="+2"/>
         <location filename="../src/widgets.cpp" line="+1"/>
         <source>Disk Usage…</source>
-        <translation type="unfinished"></translation>
+        <translation>Speicherbelegung …</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -2009,7 +2011,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location line="+4"/>
         <location filename="../src/menus.cpp" line="+2"/>
         <source>Encrypt…</source>
-        <translation type="unfinished"></translation>
+        <translation>Verschlüsseln …</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -2020,7 +2022,7 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <location line="+27"/>
         <location line="+4"/>
         <source>Decrypt</source>
-        <translation type="unfinished"></translation>
+        <translation>Entschlüsseln</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -2204,12 +2206,12 @@ In großen oder langsamen Ordnern ausschalten, um es zu beschleunigen.</translat
         <translation>UWP ist nicht erreichbar. Ist sein Editorfenster noch offen?</translation>
     </message>
     <message>
-        <location line="+151"/>
+        <location line="+161"/>
         <source>Folder preview cache cleared</source>
         <translation>Cache der Ordnervorschauen geleert</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+12"/>
         <source>Delete All Thumbnails</source>
         <translation>Alle Vorschaubilder löschen</translation>
     </message>
@@ -2288,7 +2290,7 @@ Sie werden beim Durchsuchen neu erzeugt.</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-727"/>
+        <location filename="../src/widgets.cpp" line="-733"/>
         <source>Type a location</source>
         <translation>Einen Ort eingeben</translation>
     </message>
@@ -2576,7 +2578,7 @@ Sie werden beim Durchsuchen neu erzeugt.</translation>
     </message>
     <message numerus="yes">
         <location line="+27"/>
-        <location filename="../src/fileops.cpp" line="+906"/>
+        <location filename="../src/fileops.cpp" line="+998"/>
         <location filename="../src/hashcheck.cpp" line="+487"/>
         <source>…and %Ln more</source>
         <translation>
@@ -2620,7 +2622,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location filename="../src/archive.cpp" line="+95"/>
-        <location filename="../src/archive_ui.cpp" line="-861"/>
+        <location filename="../src/archive_ui.cpp" line="-879"/>
         <source>Store</source>
         <translation>Speichern</translation>
     </message>
@@ -2774,7 +2776,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="-836"/>
-        <location filename="../src/archive_ui.cpp" line="+1021"/>
+        <location filename="../src/archive_ui.cpp" line="+1041"/>
         <source>Compressing %1</source>
         <translation>%1 wird komprimiert</translation>
     </message>
@@ -2816,7 +2818,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="+200"/>
-        <location filename="../src/archive_ui.cpp" line="-652"/>
+        <location filename="../src/archive_ui.cpp" line="-654"/>
         <location line="+2"/>
         <location line="+7"/>
         <location line="+248"/>
@@ -2865,7 +2867,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
         <translation>%1 hat ein Problem gemeldet (Exit-Code %2)</translation>
     </message>
     <message>
-        <location filename="../src/archive_ui.cpp" line="-1315"/>
+        <location filename="../src/archive_ui.cpp" line="-1333"/>
         <source>%1 only accepts the password on its command line, so other users on this computer could see it in the process list while the job runs.</source>
         <translation>%1 akzeptiert das Passwort nur auf seiner Befehlszeile, daher könnten andere Benutzer dieses Computers es in der Prozessliste sehen, solange der Auftrag läuft.</translation>
     </message>
@@ -2914,14 +2916,14 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
         <location line="+17"/>
         <location line="+4"/>
         <location line="+36"/>
-        <location line="+28"/>
-        <location line="+296"/>
+        <location line="+45"/>
+        <location line="+297"/>
         <location filename="../src/convert.cpp" line="+640"/>
         <source>Extract</source>
         <translation>Entpacken</translation>
     </message>
     <message>
-        <location line="-949"/>
+        <location line="-967"/>
         <location line="+163"/>
         <location line="+255"/>
         <location line="+4"/>
@@ -2935,12 +2937,12 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="-436"/>
-        <location line="+1354"/>
+        <location line="+1374"/>
         <source>Archive</source>
         <translation>Archiv</translation>
     </message>
     <message>
-        <location line="-1348"/>
+        <location line="-1368"/>
         <source>Archive name:</source>
         <translation>Archivname:</translation>
     </message>
@@ -3064,7 +3066,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message numerus="yes">
         <location line="+7"/>
-        <location filename="../src/util.cpp" line="+964"/>
+        <location filename="../src/util.cpp" line="+992"/>
         <source>%Ln byte(s)</source>
         <translation>
             <numerusform>%Ln Byte</numerusform>
@@ -3242,12 +3244,12 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     <message>
         <location line="+43"/>
         <location line="+73"/>
-        <location line="+453"/>
+        <location line="+471"/>
         <source>Extract All</source>
         <translation>Alle entpacken</translation>
     </message>
     <message>
-        <location line="-518"/>
+        <location line="-536"/>
         <source>%1 archives</source>
         <translation>%1 Archive</translation>
     </message>
@@ -3301,12 +3303,14 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
         <location line="+1"/>
         <location filename="../src/chooser.cpp" line="+259"/>
         <location filename="../src/compare.cpp" line="+1"/>
+        <location filename="../src/fileops.cpp" line="+905"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <source>Replace</source>
         <translation>Ersetzen</translation>
     </message>
     <message>
         <location line="+1"/>
+        <location filename="../src/fileops.cpp" line="+0"/>
         <location filename="../src/prefs.cpp" line="+0"/>
         <source>Skip</source>
         <translation>Überspringen</translation>
@@ -3381,7 +3385,7 @@ Sie können ohne ein Kestrel-Fenster weiterlaufen: Das Auftragsfenster zeigt sie
     </message>
     <message>
         <location line="+41"/>
-        <location line="+323"/>
+        <location line="+341"/>
         <source>Kestrel needs another program to open “%1”.
 
 Install it with:  sudo apt install %2</source>
@@ -3390,8 +3394,8 @@ Install it with:  sudo apt install %2</source>
 Installieren mit:  sudo apt install %2</translation>
     </message>
     <message>
-        <location line="-308"/>
-        <location line="+225"/>
+        <location line="-325"/>
+        <location line="+242"/>
         <location line="+245"/>
         <source>Opening %1</source>
         <translation>%1 wird geöffnet</translation>
@@ -3622,7 +3626,7 @@ Installieren mit:  sudo apt install %2</translation>
         </translation>
     </message>
     <message>
-        <location line="+83"/>
+        <location line="+85"/>
         <source>Measuring…</source>
         <translation>Wird gemessen …</translation>
     </message>
@@ -3715,9 +3719,9 @@ Installieren mit:  sudo apt install %2</translation>
     <message numerus="yes">
         <location line="+7"/>
         <source>%Ln item(s) listed in %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Element in %1 aufgelistet</numerusform>
+            <numerusform>%Ln Elemente in %1 aufgelistet</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -3888,30 +3892,30 @@ Installieren mit:  sudo apt install </translation>
     <message>
         <location line="+24"/>
         <source>Comparing %1 with %2, reading the files of the same size and date</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird mit %2 verglichen, die Dateien gleicher Größe und gleichen Datums werden gelesen</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Comparing %1 with %2 by size and date</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird mit %2 nach Größe und Datum verglichen</translation>
     </message>
     <message>
         <location line="+9"/>
         <location filename="../src/diskusage.cpp" line="+6"/>
         <source>  %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  %1: %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1, %2 the same</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, %2 gleich</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln difference(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Unterschied</numerusform>
+            <numerusform>%Ln Unterschiede</numerusform>
         </translation>
     </message>
     <message>
@@ -4267,12 +4271,12 @@ Installieren mit:  sudo apt install </translation>
     <message>
         <location line="+22"/>
         <source>Last synced:</source>
-        <translation type="unfinished"></translation>
+        <translation>Zuletzt synchronisiert:</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Syncs run before with this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>Frühere Synchronisierungen mit diesem Ordner</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -4389,32 +4393,32 @@ Installieren mit:  sudo apt install </translation>
     <message>
         <location line="+9"/>
         <source>Looking for syncs of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Synchronisierungen von %1 werden gesucht</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>%1 → %2  (%3, deleting)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2  (%3, mit Löschen)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1 → %2  (%3)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2  (%3)</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>Filled in as this was last synced, on %1: check the direction, then Preview.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ausgefüllt wie bei der letzten Synchronisierung am %1: Richtung prüfen, dann Vorschau.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>⚠ The source, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>⚠ Die Quelle „%1“ ist jetzt nicht da: sie wurde gelöscht oder verschoben, oder ihr Laufwerk ist nicht angeschlossen.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>⚠ The destination, “%1”, isn&apos;t there now: it was deleted or moved, or its drive isn&apos;t connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>⚠ Das Ziel „%1“ ist jetzt nicht da: es wurde gelöscht oder verschoben, oder sein Laufwerk ist nicht angeschlossen.</translation>
     </message>
     <message>
         <location line="+48"/>
@@ -5692,12 +5696,12 @@ Akzeptiert: %3</translation>
     <message>
         <location line="+8"/>
         <source>Counting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird gezählt</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>  %1 in %2 and %3, remembered for next time</source>
-        <translation type="unfinished"></translation>
+        <translation>  %1 in %2 und %3, für das nächste Mal gemerkt</translation>
     </message>
     <message>
         <location line="+14"/>
@@ -5720,7 +5724,7 @@ Akzeptiert: %3</translation>
     <message>
         <location line="+4"/>
         <source>Remembered: %1: %2 in %3 (%4)</source>
-        <translation type="unfinished"></translation>
+        <translation>Gemerkt: %1: %2 in %3 (%4)</translation>
     </message>
     <message>
         <location line="+23"/>
@@ -5833,7 +5837,7 @@ Akzeptiert: %3</translation>
     <message>
         <location line="-405"/>
         <source>Change what it points to, or its name, in the Link window</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Ziel oder den Namen im Verknüpfungsfenster ändern</translation>
     </message>
     <message>
         <location line="+409"/>
@@ -6239,7 +6243,7 @@ Tatsächlich: %2</translation>
     <message>
         <location line="+4"/>
         <source>The index of the tape in %1 is written</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Index des Bandes in %1 ist geschrieben</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -6334,98 +6338,98 @@ Tatsächlich: %2</translation>
         <location filename="../src/dialogs.cpp" line="-967"/>
         <location filename="../src/diskusage.cpp" line="-777"/>
         <source>%1 in %Ln file(s) so far — %2</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%1 in %Ln Datei bisher — %2</numerusform>
+            <numerusform>%1 in %Ln Dateien bisher — %2</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/diskusage.cpp" line="+321"/>
         <source>%1, as Properties remembers</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, wie von Eigenschaften gemerkt</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>This folder is on a tape: counting reads every folder in it, which keeps the tape busy for a long time. Count Now counts it anyway.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Ordner liegt auf einem Band: Zählen liest jeden Ordner darin, was das Band lange beschäftigt. Jetzt zählen zählt ihn trotzdem.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>This folder is on a floppy disk: counting reads every folder in it, which is slow. Count Now counts it anyway.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Ordner liegt auf einer Diskette: Zählen liest jeden Ordner darin, was langsam ist. Jetzt zählen zählt ihn trotzdem.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Count Now</source>
-        <translation type="unfinished"></translation>
+        <translation>Jetzt zählen</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Other files and folders (not remembered one by one)</source>
-        <translation type="unfinished"></translation>
+        <translation>Andere Dateien und Ordner (nicht einzeln gemerkt)</translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln smaller file(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln kleinere Datei</numerusform>
+            <numerusform>%Ln kleinere Dateien</numerusform>
         </translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Disk usage map</source>
-        <translation type="unfinished"></translation>
+        <translation>Karte der Speicherbelegung</translation>
     </message>
     <message>
         <location line="+63"/>
         <source>Nothing counted yet</source>
-        <translation type="unfinished"></translation>
+        <translation>Noch nichts gezählt</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Nothing here takes up space</source>
-        <translation type="unfinished"></translation>
+        <translation>Hier belegt nichts Platz</translation>
     </message>
     <message>
         <location line="+72"/>
         <source>%1 in %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 in %2</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>%1% of “%2”</source>
-        <translation type="unfinished"></translation>
+        <translation>%1% von „%2“</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>%1% of everything counted</source>
-        <translation type="unfinished"></translation>
+        <translation>%1% von allem Gezählten</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Small: its contents aren&apos;t mapped one by one</source>
-        <translation type="unfinished"></translation>
+        <translation>Klein: sein Inhalt wird nicht einzeln dargestellt</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Its contents aren&apos;t remembered: Recalculate to map them</source>
-        <translation type="unfinished"></translation>
+        <translation>Sein Inhalt ist nicht gemerkt: Neu berechnen, um ihn darzustellen</translation>
     </message>
     <message>
         <location line="+93"/>
         <source>Disk Usage — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Speicherbelegung — %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>Up to the folder this one is in (Backspace)</source>
-        <translation type="unfinished"></translation>
+        <translation>Hinauf zum Ordner, in dem dieser liegt (Rücktaste)</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>Count everything in it again</source>
-        <translation type="unfinished"></translation>
+        <translation>Alles darin erneut zählen</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -6439,68 +6443,68 @@ Tatsächlich: %2</translation>
     <message>
         <location line="+14"/>
         <source>What&apos;s in the folder shown</source>
-        <translation type="unfinished"></translation>
+        <translation>Was im angezeigten Ordner ist</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Share</source>
-        <translation type="unfinished"></translation>
+        <translation>Anteil</translation>
     </message>
     <message>
         <location line="+120"/>
         <source>Counting what fills “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>Was „%1“ füllt, wird gezählt</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Counting %1 (not other drives mounted in it)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird gezählt (nicht andere darin eingehängte Laufwerke)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1 in %2 and %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 in %2 und %3</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Couldn&apos;t be read, counted as empty: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Konnte nicht gelesen werden, als leer gezählt: %1</translation>
     </message>
     <message numerus="yes">
         <location line="+9"/>
         <source>%Ln folder size(s) remembered for Properties</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Ordnergröße für Eigenschaften gemerkt</numerusform>
+            <numerusform>%Ln Ordnergrößen für Eigenschaften gemerkt</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+19"/>
         <source>%Ln folder(s) couldn&apos;t be read and count as empty, such as %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Ordner konnte nicht gelesen werden und zählt als leer, etwa %1</numerusform>
+            <numerusform>%Ln Ordner konnten nicht gelesen werden und zählen als leer, etwa %1</numerusform>
         </translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Stopped: the sizes shown are from before.</source>
-        <translation type="unfinished"></translation>
+        <translation>Angehalten: die angezeigten Größen sind von vorher.</translation>
     </message>
     <message>
         <location line="+62"/>
         <source>%1%</source>
-        <translation type="unfinished"></translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>Go Into</source>
-        <translation type="unfinished"></translation>
+        <translation>Hineingehen</translation>
     </message>
     <message>
         <location line="+58"/>
         <source>Moved “%1” to the trash. Undo in a Kestrel window brings it back (Recalculate then counts it again).</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ in den Papierkorb verschoben. Rückgängig in einem Kestrel-Fenster holt es zurück (Neu berechnen zählt es dann wieder).</translation>
     </message>
     <message>
         <location filename="../src/dupes.cpp" line="+12"/>
@@ -6573,54 +6577,54 @@ Tatsächlich: %2</translation>
     <message>
         <location filename="../src/dupes.cpp" line="-403"/>
         <source>Couldn&apos;t be read, left out: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Konnte nicht gelesen werden, ausgelassen: %1</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>Looking through the files: %1 found — %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Dateien werden durchgesehen: %1 gefunden — %2</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/thumbs.cpp" line="+1544"/>
+        <location filename="../src/thumbs.cpp" line="+1556"/>
         <source>Looking through %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird durchgesehen</translation>
     </message>
     <message numerus="yes">
         <location line="+36"/>
         <source>%Ln file(s) found</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei gefunden</numerusform>
+            <numerusform>%Ln Dateien gefunden</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln file(s) of a size another has too: their beginnings are compared</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei mit einer Größe, die auch eine andere hat: ihre Anfänge werden verglichen</numerusform>
+            <numerusform>%Ln Dateien mit einer Größe, die auch eine andere hat: ihre Anfänge werden verglichen</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+28"/>
         <source>%Ln file(s) begin like another of the same size: read whole (%1)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei beginnt wie eine andere gleicher Größe: ganz gelesen (%1)</numerusform>
+            <numerusform>%Ln Dateien beginnen wie eine andere gleicher Größe: ganz gelesen (%1)</numerusform>
         </translation>
     </message>
     <message>
         <location line="+16"/>
         <source>Comparing the files of the same size: %1 · %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Dateien gleicher Größe werden verglichen: %1 · %2</translation>
     </message>
     <message numerus="yes">
         <location line="+24"/>
         <source>%Ln group(s) of identical files; %1 can be freed</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Gruppe identischer Dateien; %1 können freigegeben werden</numerusform>
+            <numerusform>%Ln Gruppen identischer Dateien; %1 können freigegeben werden</numerusform>
         </translation>
     </message>
     <message>
@@ -6730,17 +6734,17 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     <message>
         <location line="+8"/>
         <source>Kept: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Behalten: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  replaced with a hard link to it: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  durch eine harte Verknüpfung darauf ersetzt: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  left as it is: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  so gelassen: %1</translation>
     </message>
     <message>
         <location line="+13"/>
@@ -6750,7 +6754,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
 %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/fileops.cpp" line="-1818"/>
+        <location filename="../src/fileops.cpp" line="-2864"/>
         <source>… %Ln line(s) not kept …</source>
         <translation>
             <numerusform>… %Ln Zeile nicht behalten …</numerusform>
@@ -6838,7 +6842,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>%1 hat sich geändert, während daran gearbeitet wurde</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+51"/>
         <source>Copy %1 → %2</source>
         <translation>Kopieren %1 → %2</translation>
     </message>
@@ -6863,7 +6867,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Löschen %1</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+49"/>
         <source>Counting…</source>
         <translation>Wird gezählt …</translation>
     </message>
@@ -6873,18 +6877,13 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>  fertig (Vorhandenes ersetzt)</translation>
     </message>
     <message>
-        <location line="+3"/>
-        <source>  done (merged into the folder there)</source>
-        <translation>  fertig (mit dem vorhandenen Ordner zusammengeführt)</translation>
-    </message>
-    <message>
-        <location line="+3"/>
+        <location line="+8"/>
         <source>  done</source>
         <translation>  fertig</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location line="+13"/>
+        <location line="+19"/>
         <source>  failed: %1</source>
         <translation>  fehlgeschlagen: %1</translation>
     </message>
@@ -6894,102 +6893,112 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>  abgebrochen</translation>
     </message>
     <message>
-        <location line="-807"/>
-        <location line="+876"/>
+        <location line="-856"/>
+        <location line="+925"/>
         <location line="+5"/>
         <source>%1/s</source>
         <translation>%1/s</translation>
     </message>
     <message>
-        <location line="-868"/>
+        <location line="-917"/>
         <source>%1  %2% · %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  %2% · %3</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1  %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  %2</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Failed after %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fehlgeschlagen nach %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>Stopped after %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Angehalten nach %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Finished, with errors, in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Beendet, mit Fehlern, in %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Finished in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Beendet in %1</translation>
     </message>
     <message>
-        <location line="+767"/>
+        <location line="+778"/>
+        <source>  done (merged into the folder there, replacing files with the same names)</source>
+        <translation>  fertig (mit dem vorhandenen Ordner zusammengeführt, Dateien mit gleichem Namen ersetzt)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>  done (merged into the folder there; nothing in it replaced)</source>
+        <translation>  fertig (mit dem vorhandenen Ordner zusammengeführt; nichts darin ersetzt)</translation>
+    </message>
+    <message>
+        <location line="+37"/>
         <source>%1: the copy doesn&apos;t match the original (read back after copying). It&apos;s kept; copy it again.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: die Kopie stimmt nicht mit dem Original überein (nach dem Kopieren zurückgelesen). Sie bleibt erhalten; kopieren Sie sie erneut.</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Verified %Ln copied file(s): each one read back matches its original (SHA-256).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln kopierte Datei geprüft: zurückgelesen stimmt sie mit ihrem Original überein (SHA-256).</numerusform>
+            <numerusform>%Ln kopierte Dateien geprüft: jede stimmt zurückgelesen mit ihrem Original überein (SHA-256).</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>Verified %Ln copied file(s): %1 don&apos;t match their originals (listed above).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln kopierte Datei geprüft: %1 stimmen nicht mit ihren Originalen überein (oben aufgeführt).</numerusform>
+            <numerusform>%Ln kopierte Dateien geprüft: %1 stimmen nicht mit ihren Originalen überein (oben aufgeführt).</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>%Ln cloned file(s) share their original&apos;s data on the drive: nothing to read back.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln geklonte Datei teilt die Daten ihres Originals auf dem Laufwerk: nichts zurückzulesen.</numerusform>
+            <numerusform>%Ln geklonte Dateien teilen die Daten ihrer Originale auf dem Laufwerk: nichts zurückzulesen.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
-        <location line="+1006"/>
+        <location line="+1100"/>
         <source>Extended attributes left out on %Ln item(s), as the destination can&apos;t hold them: %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Erweiterte Attribute bei %Ln Element ausgelassen, da das Ziel sie nicht aufnehmen kann: %1</numerusform>
+            <numerusform>Erweiterte Attribute bei %Ln Elementen ausgelassen, da das Ziel sie nicht aufnehmen kann: %1</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location line="-997"/>
+        <location line="-1091"/>
         <source>%Ln file(s) cloned (the copy shares the original&apos;s space until one of them changes)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei geklont (die Kopie teilt den Platz des Originals, bis sich eine von beiden ändert)</numerusform>
+            <numerusform>%Ln Dateien geklont (die Kopie teilt den Platz des Originals, bis sich eine von beiden ändert)</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) copied by the system (on a network share, by the server itself)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei vom System kopiert (auf einer Netzwerkfreigabe vom Server selbst)</numerusform>
+            <numerusform>%Ln Dateien vom System kopiert (auf einer Netzwerkfreigabe vom Server selbst)</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) read and written by Kestrel</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei von Kestrel gelesen und geschrieben</numerusform>
+            <numerusform>%Ln Dateien von Kestrel gelesen und geschrieben</numerusform>
         </translation>
     </message>
     <message>
@@ -7041,9 +7050,9 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     <message numerus="yes">
         <location line="-91"/>
         <source>%Ln copied file(s) don&apos;t match their originals (read back after copying), so nothing was deleted from where it came from: %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln kopierte Datei stimmt nicht mit ihrem Original überein (nach dem Kopieren zurückgelesen), daher wurde am Ursprungsort nichts gelöscht: %1</numerusform>
+            <numerusform>%Ln kopierte Dateien stimmen nicht mit ihren Originalen überein (nach dem Kopieren zurückgelesen), daher wurde am Ursprungsort nichts gelöscht: %1</numerusform>
         </translation>
     </message>
     <message>
@@ -7052,7 +7061,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>%1 liegt auf einem anderen Laufwerk (ein Einhängepunkt); wird nicht gelöscht</translation>
     </message>
     <message>
-        <location line="+95"/>
+        <location line="+102"/>
         <source>%1 exists and isn&apos;t a folder</source>
         <translation>%1 existiert und ist kein Ordner</translation>
     </message>
@@ -7062,7 +7071,12 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>%1 ist keine reguläre Datei, kein Ordner und keine Verknüpfung</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+39"/>
+        <source>  “%1” was there already: kept, and the copy put beside it as “%2”</source>
+        <translation>  „%1“ war schon da: behalten, und die Kopie daneben als „%2“ abgelegt</translation>
+    </message>
+    <message>
+        <location line="+45"/>
         <source>%1 changed while it was being copied</source>
         <translation>%1 hat sich beim Kopieren geändert</translation>
     </message>
@@ -7077,7 +7091,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Nicht genug Platz auf dem Band für „%1“: Es braucht %2, das Band hat noch %3</translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location line="+57"/>
         <source>The source reads at %1/s, slower than the tape&apos;s lowest streaming speed: the tape writes in bursts from the buffer, stopping in between. Copying from a faster drive, or making an archive on a fast disk first, would keep it streaming.</source>
         <translation>Die Quelle liest mit %1/s, langsamer als die niedrigste Streaming-Geschwindigkeit des Bandes: Das Band schreibt schubweise aus dem Puffer und hält dazwischen an. Kopieren von einem schnelleren Laufwerk oder zuerst ein Archiv auf einer schnellen Festplatte zu erstellen, hielte es am Streamen.</translation>
     </message>
@@ -7089,51 +7103,51 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     <message>
         <location line="+80"/>
         <source>Verifying — reading the original of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Prüfen — das Original von %1 wird gelesen</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Verifying on the tape — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Prüfen auf dem Band — %1</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Verifying — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Prüfen — %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>  “%1” couldn&apos;t be read back to verify it: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  „%1“ konnte zum Prüfen nicht zurückgelesen werden: %2</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>  ✘ The copy “%1” doesn&apos;t match its original: their checksums (SHA-256) differ.</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ Die Kopie „%1“ stimmt nicht mit ihrem Original überein: ihre Prüfsummen (SHA-256) unterscheiden sich.</translation>
     </message>
     <message numerus="yes">
         <location line="+11"/>
         <source>Verifying was turned off: %Ln copied file(s) on the tape weren&apos;t read back.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Prüfen wurde ausgeschaltet: %Ln kopierte Datei auf dem Band wurde nicht zurückgelesen.</numerusform>
+            <numerusform>Prüfen wurde ausgeschaltet: %Ln kopierte Dateien auf dem Band wurden nicht zurückgelesen.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+11"/>
         <source>Reading back %Ln file(s) copied onto the tape, in the order they lie on it, to verify them</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln auf das Band kopierte Datei wird in der Reihenfolge auf dem Band zurückgelesen, um sie zu prüfen</numerusform>
+            <numerusform>%Ln auf das Band kopierte Dateien werden in ihrer Reihenfolge auf dem Band zurückgelesen, um sie zu prüfen</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+111"/>
+        <location line="+123"/>
         <source>“%1” appeared in %2 while this was being done; it was kept as it is, and nothing was put in its place</source>
         <translation>„%1“ ist in %2 aufgetaucht, während dies erledigt wurde; es wurde so belassen, und nichts wurde an seine Stelle gelegt</translation>
     </message>
     <message>
-        <location line="+100"/>
+        <location line="+101"/>
         <source>%1 was replaced, but the old one couldn&apos;t be deleted (it&apos;s left as %2): %3</source>
         <translation>%1 wurde ersetzt, aber das alte konnte nicht gelöscht werden (es liegt als %2 vor): %3</translation>
     </message>
@@ -7236,7 +7250,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+74"/>
         <location filename="../src/metadata.cpp" line="+532"/>
         <source>%1 s</source>
         <translation>%1 s</translation>
@@ -7303,14 +7317,46 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>Ersetzen (nicht rückgängig zu machen)</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>Merge can&apos;t be undone: what was replaced is gone.</source>
         <translation>Zusammenführen kann nicht rückgängig gemacht werden: Was ersetzt wurde, ist weg.</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+763"/>
+        <source>Merge puts the contents into the existing folder. Nothing there is replaced: a file
+with the same name as one there is put beside it as “name-(1).ext”. A merge can&apos;t be undone.</source>
+        <translation>Zusammenführen legt den Inhalt in den vorhandenen Ordner. Nichts dort wird ersetzt: eine Datei
+mit dem Namen einer dortigen wird daneben als „name-(1).ext“ abgelegt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Replace files with the same names instead (what&apos;s there is lost for good)</source>
+        <translation>Stattdessen Dateien mit gleichem Namen ersetzen (was dort ist, geht endgültig verloren)</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Allow replacing the file there (it&apos;s lost for good)</source>
+        <translation>Ersetzen der dortigen Datei erlauben (sie geht endgültig verloren)</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Merge</source>
+        <translation>Zusammenführen</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Keep Both</source>
+        <translation>Beide behalten</translation>
+    </message>
+    <message>
+        <location line="-776"/>
         <source>Replace can&apos;t be undone: what was replaced is gone.</source>
         <translation>Ersetzen kann nicht rückgängig gemacht werden: Was ersetzt wurde, ist weg.</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Merge can&apos;t be undone.</source>
+        <translation>Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -7344,13 +7390,13 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
     <message numerus="yes">
         <location line="+9"/>
         <source>%Ln item(s) failed.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Element fehlgeschlagen.</numerusform>
+            <numerusform>%Ln Elemente fehlgeschlagen.</numerusform>
         </translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+64"/>
         <source>Cannot transfer</source>
         <translation>Übertragung nicht möglich</translation>
     </message>
@@ -7365,7 +7411,7 @@ Dies kann nicht rückgängig gemacht werden.</numerusform>
         <translation>„%1“ kann nicht in sich selbst kopiert werden.</translation>
     </message>
     <message>
-        <location line="+54"/>
+        <location line="+57"/>
         <source>Counting files</source>
         <translation>Dateien werden gezählt</translation>
     </message>
@@ -7473,12 +7519,12 @@ Trotzdem kopieren?</translation>
     <message>
         <location line="+8"/>
         <source>Still there (not shredded): %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Noch da (nicht geschreddert): %1</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Shredded: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Geschreddert: %1</translation>
     </message>
     <message>
         <location line="+122"/>
@@ -7543,14 +7589,7 @@ Trotzdem kopieren?</translation>
 %3</translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>Merge puts the contents into the existing folder: files there with the same names are
-replaced. A merge can&apos;t be undone.</source>
-        <translation>Zusammenführen legt den Inhalt in den vorhandenen Ordner: Dateien dort mit gleichem Namen werden
-ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
-    </message>
-    <message>
-        <location line="+2"/>
+        <location line="+10"/>
         <source>Apply this action to all conflicts</source>
         <translation>Diese Aktion auf alle Konflikte anwenden</translation>
     </message>
@@ -7639,30 +7678,32 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+152"/>
         <source>Missing: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fehlt: %1</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Verifying %1 · %2 of %3 · %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Prüfen von %1 · %2 von %3 · %4</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>OK: %1 (%2 %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>OK: %1 (%2 %3)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Doesn&apos;t match: %1
   expected %2 %3
   found    %2 %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Stimmt nicht überein: %1
+  erwartet %2 %3
+  gefunden %2 %4</translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+70"/>
         <source>Couldn&apos;t be read: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Konnte nicht gelesen werden: %1: %2</translation>
     </message>
     <message>
         <location line="+37"/>
@@ -7744,50 +7785,50 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+49"/>
         <source>Checked %1 of %2: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 von %2 geprüft: %3</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Checked %Ln file(s): %1.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei geprüft: %1.</numerusform>
+            <numerusform>%Ln Dateien geprüft: %1.</numerusform>
         </translation>
     </message>
     <message>
         <location line="+3"/>
         <source>These didn&apos;t pass:</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese haben die Prüfung nicht bestanden:</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>  ✘ Doesn&apos;t match: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ Stimmt nicht überein: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  ✘ Missing: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ Fehlt: %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  ✘ Couldn&apos;t be read: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>  ✘ Konnte nicht gelesen werden: %1: %2</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Verifying checksums in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Prüfsummen in %1 werden geprüft</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Checking the files listed in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die in %1 aufgeführten Dateien werden geprüft</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>Closing this window doesn&apos;t stop the check: it goes on in the Jobs window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Schließen dieses Fensters hält die Prüfung nicht an: sie läuft im Auftragsfenster weiter.</translation>
     </message>
     <message numerus="yes">
         <location line="+110"/>
@@ -7836,22 +7877,22 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+9"/>
         <source>%1 (%2) to hash with %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (%2) mit %3 zu hashen</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Hashing %1 (%2 of %3) · %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Hashen von %1 (%2 von %3) · %4</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>  %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  %1</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Couldn&apos;t be read, left out: %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Konnte nicht gelesen werden, ausgelassen: %1: %2</translation>
     </message>
     <message>
         <location line="+7"/>
@@ -7861,7 +7902,7 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+5"/>
         <source>Wrote %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 geschrieben</translation>
     </message>
     <message>
         <location line="+30"/>
@@ -7918,54 +7959,54 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location filename="../src/diskimage.cpp" line="-258"/>
         <source>“%1” is on the drive being read: the image would be written onto what&apos;s being copied. Save it on another drive.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ liegt auf dem Laufwerk, das gelesen wird: das Abbild würde auf das Kopierte geschrieben. Speichern Sie es auf einem anderen Laufwerk.</translation>
     </message>
     <message>
         <location line="+57"/>
         <source>%1 of %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 von %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <location line="+195"/>
         <source>%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (%2)</translation>
     </message>
     <message>
         <location line="-136"/>
         <source>The drive wasn&apos;t read to its end, so no image was made.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Laufwerk wurde nicht bis zum Ende gelesen, daher wurde kein Abbild erstellt.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Wrote %1 from the drive into %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 vom Laufwerk in %2 geschrieben</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Back Up Drive to Image: %1 (%2) to %3</source>
-        <translation type="unfinished"></translation>
+        <translation>Laufwerk als Abbild sichern: %1 (%2) nach %3</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+109"/>
         <source>size unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>Größe unbekannt</translation>
     </message>
     <message>
         <location line="-107"/>
         <source>Compressed with zstd</source>
-        <translation type="unfinished"></translation>
+        <translation>Mit zstd komprimiert</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Encrypted with a password (gpg, AES-256)</source>
-        <translation type="unfinished"></translation>
+        <translation>Mit einem Passwort verschlüsselt (gpg, AES-256)</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Backing up %1 to “%2”</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird nach „%2“ gesichert</translation>
     </message>
     <message>
         <location line="+61"/>
@@ -7973,32 +8014,32 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
         <location line="+119"/>
         <location line="+65"/>
         <source>Back Up Drive to Image</source>
-        <translation type="unfinished"></translation>
+        <translation>Laufwerk als Abbild sichern</translation>
     </message>
     <message>
         <location line="-213"/>
         <source>The image of %1 is saved as “%2”.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Abbild von %1 ist als „%2“ gespeichert.</translation>
     </message>
     <message>
         <location line="+33"/>
         <source>Copies everything on the drive, byte for byte, into an image file, which Mount Image can open later. Reading the drive needs your administrator password.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopiert alles auf dem Laufwerk Byte für Byte in eine Abbilddatei, die Abbild einhängen später öffnen kann. Das Lesen des Laufwerks erfordert Ihr Administratorpasswort.</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>This partition: %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese Partition: %1 (%2)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The whole disk: %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Die ganze Festplatte: %1 (%2)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Copy:</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopieren:</translation>
     </message>
     <message>
         <location line="+6"/>
@@ -8009,216 +8050,228 @@ ersetzt. Zusammenführen kann nicht rückgängig gemacht werden.</translation>
     <message>
         <location line="+3"/>
         <source>Compress (zstd): smaller, as the drive&apos;s empty space takes almost nothing</source>
-        <translation type="unfinished"></translation>
+        <translation>Komprimieren (zstd): kleiner, da der leere Platz des Laufwerks fast nichts belegt</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Install zstd to compress images</source>
-        <translation type="unfinished"></translation>
+        <translation>zstd installieren, um Abbilder zu komprimieren</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Encrypt with a password (gpg): the image is never on the disk unencrypted</source>
-        <translation type="unfinished"></translation>
+        <translation>Mit einem Passwort verschlüsseln (gpg): das Abbild liegt nie unverschlüsselt auf der Festplatte</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Install gpg to encrypt images</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg installieren, um Abbilder zu verschlüsseln</translation>
     </message>
     <message>
         <location line="+11"/>
         <location filename="../src/pgp.cpp" line="+3"/>
         <source>Again:</source>
-        <translation type="unfinished"></translation>
+        <translation>Wiederholen:</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Back Up</source>
-        <translation type="unfinished"></translation>
+        <translation>Sichern</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Save the Image In</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Abbild speichern in</translation>
     </message>
     <message>
         <location line="+44"/>
         <source>The drive holds %1; %2 is free there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Laufwerk enthält %1; dort sind %2 frei.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Mounted for writing: %1. Unmounting it first gives the most faithful copy.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zum Schreiben eingehängt: %1. Vorher aushängen ergibt die getreueste Kopie.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Reading a drive needs pkexec. Install it with:
 
 sudo apt install pkexec</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Lesen eines Laufwerks erfordert pkexec. Installieren Sie es mit:
+
+sudo apt install pkexec</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>“%1” isn&apos;t a folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist kein Ordner.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>That name can&apos;t be used.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Name kann nicht verwendet werden.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>“%1” is already there. Choose another name.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist schon da. Wählen Sie einen anderen Namen.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Enter the password to encrypt the image with.</source>
-        <translation type="unfinished"></translation>
+        <translation>Geben Sie das Passwort ein, mit dem das Abbild verschlüsselt werden soll.</translation>
     </message>
     <message>
         <location line="+4"/>
         <location filename="../src/pgp.cpp" line="+112"/>
         <source>The two passwords aren&apos;t the same.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die beiden Passwörter sind nicht gleich.</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>There isn&apos;t room for the image there: it takes %1, and %2 is free.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dort ist kein Platz für das Abbild: es braucht %1, und %2 sind frei.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Compressed, the image&apos;s size can&apos;t be known beforehand: it may not fit in the %1 free there (the drive holds %2).</source>
-        <translation type="unfinished"></translation>
+        <translation>Komprimiert lässt sich die Größe des Abbilds nicht vorher wissen: es passt vielleicht nicht in die dort freien %1 (das Laufwerk enthält %2).</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>It&apos;s mounted for writing (%1): programs may change it while it&apos;s read, and the image could then be inconsistent. Unmounting it first, or mounting it read-only, is safer.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es ist zum Schreiben eingehängt (%1): Programme können es ändern, während es gelesen wird, und das Abbild könnte dann inkonsistent sein. Vorher aushängen oder schreibgeschützt einhängen ist sicherer.</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>%1
 
 Back up anyway?</source>
-        <translation type="unfinished"></translation>
+        <translation>%1
+
+Trotzdem sichern?</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Kestrel can&apos;t tell which device this drive is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel kann nicht erkennen, welches Gerät dieses Laufwerk ist.</translation>
     </message>
     <message>
         <location line="+79"/>
         <source>udisksctl failed (exit code %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>udisksctl fehlgeschlagen (Exit-Code %1)</translation>
     </message>
     <message>
         <location line="+67"/>
         <location line="+430"/>
         <source>Detaching %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird gelöst</translation>
     </message>
     <message>
         <location line="-379"/>
         <source>Looking for a saved password</source>
-        <translation type="unfinished"></translation>
+        <translation>Gespeichertes Passwort wird gesucht</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>Mounting disk images needs udisks2 (udisksctl). Install it with:
 
 sudo apt install udisks2</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Einhängen von Abbildern erfordert udisks2 (udisksctl). Installieren Sie es mit:
+
+sudo apt install udisks2</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Opening “%1” needs %2, which isn&apos;t installed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Öffnen von „%1“ erfordert %2, das nicht installiert ist.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>“%1” is encrypted. To mount it, Kestrel decrypts it into a copy in your cache folder (%2 free there; the image takes %3, and more once expanded if it&apos;s also compressed). The copy isn&apos;t encrypted while it&apos;s there; it&apos;s mounted read-only and deleted once unmounted.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist verschlüsselt. Zum Einhängen entschlüsselt Kestrel es in eine Kopie in Ihrem Cache-Ordner (dort sind %2 frei; das Abbild belegt %3, und entpackt mehr, falls es auch komprimiert ist). Die Kopie ist dort unverschlüsselt; sie wird schreibgeschützt eingehängt und nach dem Aushängen gelöscht.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>“%1” is compressed. To mount it, Kestrel expands it into a copy in your cache folder (%2 free there; it may need several times the %3 it takes now). The copy is mounted read-only and deleted once unmounted.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist komprimiert. Zum Einhängen entpackt Kestrel es in eine Kopie in Ihrem Cache-Ordner (dort sind %2 frei; sie braucht vielleicht ein Mehrfaches der %3, die es jetzt belegt). Die Kopie wird schreibgeschützt eingehängt und nach dem Aushängen gelöscht.</translation>
     </message>
     <message>
         <location line="+49"/>
         <source>Expanding “%1” to mount it</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ wird zum Einhängen entpackt</translation>
     </message>
     <message>
         <location line="+63"/>
         <source>Expanded into %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>In %1 entpackt (%2)</translation>
     </message>
     <message>
         <location line="+41"/>
         <source>Setting up “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ wird eingerichtet</translation>
     </message>
     <message>
         <location line="+37"/>
         <source>“%1” couldn&apos;t be set up as a drive:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ konnte nicht als Laufwerk eingerichtet werden:
+
+%2</translation>
     </message>
     <message>
         <location line="+37"/>
         <location line="+54"/>
         <source>%1: not unlocked</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: nicht entsperrt</translation>
     </message>
     <message>
         <location line="-50"/>
         <location line="+54"/>
         <source>Unlock</source>
-        <translation type="unfinished"></translation>
+        <translation>Entsperren</translation>
     </message>
     <message>
         <location line="-37"/>
         <source>Unlocking %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird entsperrt</translation>
     </message>
     <message>
         <location line="+54"/>
         <source>Mounting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird eingehängt</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>No file system Kestrel can mount was found in it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Darin wurde kein Dateisystem gefunden, das Kestrel einhängen kann.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Nothing in “%1” could be mounted:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Nichts in „%1“ konnte eingehängt werden:
+
+%2</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Some of “%1” couldn&apos;t be mounted:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Einiges in „%1“ konnte nicht eingehängt werden:
+
+%2</translation>
     </message>
     <message numerus="yes">
         <location line="+4"/>
         <source>Mounted %Ln file system(s) from “%1”</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Dateisystem aus „%1“ eingehängt</numerusform>
+            <numerusform>%Ln Dateisysteme aus „%1“ eingehängt</numerusform>
         </translation>
     </message>
     <message>
@@ -8767,7 +8820,7 @@ sudo apt install udisks2</source>
         <translation>Wartet, bis es an der Reihe ist (sein Laufwerk ist belegt) …</translation>
     </message>
     <message>
-        <location filename="../src/fileops.cpp" line="-829"/>
+        <location filename="../src/fileops.cpp" line="-845"/>
         <source>Waiting</source>
         <translation>Wartet</translation>
     </message>
@@ -8929,23 +8982,23 @@ sudo apt install udisks2</source>
         <location line="+4"/>
         <location filename="../src/prefs.cpp" line="+15"/>
         <source>Verify copies</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopien prüfen</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+355"/>
         <source>Read each file back once it&apos;s copied and compare it with the original (for the files copied from now on). Its default is in Preferences → Files.</source>
-        <translation type="unfinished"></translation>
+        <translation>Jede Datei nach dem Kopieren zurücklesen und mit dem Original vergleichen (für die ab jetzt kopierten Dateien). Die Voreinstellung steht in Einstellungen → Dateien.</translation>
     </message>
     <message>
         <location line="-348"/>
         <source>Verify copies turned on (Jobs window): each file copied from now on is read back and checked.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopien prüfen eingeschaltet (Auftragsfenster): jede ab jetzt kopierte Datei wird zurückgelesen und geprüft.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Verify copies turned off (Jobs window).</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopien prüfen ausgeschaltet (Auftragsfenster).</translation>
     </message>
     <message>
         <location line="+10"/>
@@ -9045,7 +9098,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+12"/>
         <source>Only for this Kestrel&apos;s own jobs: set it in the Kestrel that started the job</source>
-        <translation type="unfinished"></translation>
+        <translation>Nur für die eigenen Aufträge dieses Kestrel: im Kestrel einstellen, das den Auftrag gestartet hat</translation>
     </message>
     <message>
         <location line="+27"/>
@@ -9428,7 +9481,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+1"/>
         <source>not in the Trash</source>
-        <translation type="unfinished"></translation>
+        <translation>nicht im Papierkorb</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -9524,12 +9577,12 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+2"/>
         <source>disk images (.img, .iso, .raw)</source>
-        <translation type="unfinished"></translation>
+        <translation>Festplattenabbilder (.img, .iso, .raw)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>plain disk images you can write to</source>
-        <translation type="unfinished"></translation>
+        <translation>einfache Festplattenabbilder, in die geschrieben werden kann</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -9549,12 +9602,12 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+2"/>
         <source>when no folders are selected</source>
-        <translation type="unfinished"></translation>
+        <translation>wenn keine Ordner ausgewählt sind</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>for encrypted files (.gpg, .pgp, .asc)</source>
-        <translation type="unfinished"></translation>
+        <translation>für verschlüsselte Dateien (.gpg, .pgp, .asc)</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -9671,7 +9724,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+14"/>
-        <location filename="../src/widgets.cpp" line="+718"/>
+        <location filename="../src/widgets.cpp" line="+724"/>
         <source>Move Up</source>
         <translation>Nach oben</translation>
     </message>
@@ -10416,7 +10469,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/widgets.cpp" line="-1438"/>
+        <location filename="../src/widgets.cpp" line="-1478"/>
         <source>Location</source>
         <translation>Ort</translation>
     </message>
@@ -10497,7 +10550,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+4"/>
         <location line="+1"/>
         <location line="+2"/>
-        <location filename="../src/widgets.cpp" line="+934"/>
+        <location filename="../src/widgets.cpp" line="+974"/>
         <source>Overview</source>
         <translation>Übersicht</translation>
     </message>
@@ -10673,7 +10726,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+12"/>
         <location line="+1"/>
         <source>What&apos;s using this space?</source>
-        <translation type="unfinished"></translation>
+        <translation>Was belegt diesen Platz?</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -10808,7 +10861,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+11"/>
         <location filename="../src/widgets.cpp" line="-130"/>
         <source>Back Up Drive to Image…</source>
-        <translation type="unfinished"></translation>
+        <translation>Laufwerk als Abbild sichern …</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -10857,8 +10910,8 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+3"/>
         <location filename="../src/thumbs.cpp" line="-6"/>
-        <location filename="../src/widgets.cpp" line="-642"/>
-        <location line="+140"/>
+        <location filename="../src/widgets.cpp" line="-648"/>
+        <location line="+146"/>
         <location line="+178"/>
         <source>Home</source>
         <translation>Persönlicher Ordner</translation>
@@ -11822,47 +11875,47 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+9"/>
         <location line="+5"/>
         <source>Copying</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopieren</translation>
     </message>
     <message>
         <location line="-13"/>
         <source>Let the system copy files (instant copies on Btrfs, XFS and ZFS; server-side copies on network shares)</source>
-        <translation type="unfinished"></translation>
+        <translation>Das System Dateien kopieren lassen (sofortige Kopien auf Btrfs, XFS und ZFS; serverseitige Kopien auf Netzwerkfreigaben)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>On a drive that can share data between files (Btrfs, XFS, bcachefs, ZFS 2.2 or later), a copy on the same drive is a clone: instant, and taking no extra space until one of them changes. On an SMB or NFS share the server copies the file itself, so it doesn&apos;t cross the network twice; elsewhere the system copies it without passing it through Kestrel. Files under 64 KB are still read and written by Kestrel, which is as quick or quicker for them (except on Btrfs). Off: Kestrel reads and writes every file itself. Copies onto a tape always go through Kestrel&apos;s buffer or dd.</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf einem Laufwerk, das Daten zwischen Dateien teilen kann (Btrfs, XFS, bcachefs, ZFS 2.2 oder neuer), ist eine Kopie auf demselben Laufwerk ein Klon: sofort fertig und ohne zusätzlichen Platz, bis sich eine von beiden ändert. Auf einer SMB- oder NFS-Freigabe kopiert der Server die Datei selbst, sodass sie nicht zweimal durchs Netzwerk geht; anderswo kopiert das System sie, ohne sie durch Kestrel zu leiten. Dateien unter 64 KB werden weiterhin von Kestrel gelesen und geschrieben, was für sie genauso schnell oder schneller ist (außer auf Btrfs). Aus: Kestrel liest und schreibt jede Datei selbst. Kopien auf ein Band gehen immer durch Kestrels Puffer oder dd.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Keep extended attributes and ACLs</source>
-        <translation type="unfinished"></translation>
+        <translation>Erweiterte Attribute und ACLs behalten</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Copies also get their originals&apos; extended attributes: the address a download came from, tags other apps keep, access control lists (ACLs), and attributes backup tools rely on. Where the destination can&apos;t hold them (FAT, exFAT, some network and FUSE drives) the copy goes on without them, and its log says which were left out. Security labels need the administrator. A move within one drive always keeps them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopien erhalten auch die erweiterten Attribute ihrer Originale: die Adresse, von der ein Download kam, Schlagwörter anderer Apps, Zugriffssteuerungslisten (ACLs) und Attribute, auf die Sicherungsprogramme angewiesen sind. Wo das Ziel sie nicht aufnehmen kann (FAT, exFAT, manche Netzwerk- und FUSE-Laufwerke), wird ohne sie kopiert, und das Protokoll nennt, welche ausgelassen wurden. Sicherheitskennzeichnungen erfordern den Administrator. Ein Verschieben innerhalb eines Laufwerks behält sie immer.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>each job in the Jobs window (Ctrl+Shift+J)</source>
-        <translation type="unfinished"></translation>
+        <translation>jeden Auftrag im Auftragsfenster (Strg+Umschalt+J)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Each file copied (or moved to another drive) is read back once it&apos;s written and its checksum compared with the original&apos;s, read while it was copied. A copy that doesn&apos;t match is named in the job&apos;s log and its list of failures (a move then keeps its original). Onto a tape, the files are read back after the whole job, in the order they lie on it. Slower: every copy is read once more.</source>
-        <translation type="unfinished"></translation>
+        <translation>Jede kopierte (oder auf ein anderes Laufwerk verschobene) Datei wird nach dem Schreiben zurückgelesen und ihre Prüfsumme mit der des Originals verglichen, die beim Kopieren gelesen wurde. Eine Kopie, die nicht übereinstimmt, wird im Protokoll des Auftrags und in seiner Fehlerliste genannt (ein Verschieben behält dann sein Original). Auf ein Band werden die Dateien nach dem ganzen Auftrag zurückgelesen, in ihrer Reihenfolge auf dem Band. Langsamer: jede Kopie wird noch einmal gelesen.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Save each finished job&apos;s log</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Protokoll jedes beendeten Auftrags speichern</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Each job&apos;s log, with its steps, when it ran and how it ended, is saved as a file in ~/.cache/kestrel-explorer/job-logs (a folder for each day), so it&apos;s kept after Clear Finished and after Kestrel quits. Logs older than 90 days are deleted, and the oldest days when they take more than 100 MB.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Protokoll jedes Auftrags, mit seinen Schritten, wann er lief und wie er endete, wird als Datei in ~/.cache/kestrel-explorer/job-logs gespeichert (ein Ordner pro Tag), sodass es nach Fertige entfernen und nach dem Beenden von Kestrel erhalten bleibt. Protokolle, die älter als 90 Tage sind, werden gelöscht, und die ältesten Tage, wenn sie mehr als 100 MB belegen.</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -12115,12 +12168,13 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+2"/>
         <location line="+2"/>
         <location line="+3"/>
+        <location line="+7"/>
         <location line="+6"/>
         <source>Privacy</source>
         <translation>Datenschutz</translation>
     </message>
     <message>
-        <location line="-21"/>
+        <location line="-28"/>
         <source>The desktop&apos;s File History</source>
         <translation>Der Dateiverlauf der Arbeitsumgebung</translation>
     </message>
@@ -12166,34 +12220,49 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+1"/>
+        <source>Separate caching</source>
+        <translation>Getrenntes Zwischenspeichern</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Keep thumbnails in Kestrel&apos;s own cache folder, apart from other apps</source>
+        <translation>Vorschaubilder in Kestrels eigenem Cache-Ordner halten, getrennt von anderen Apps</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Thumbnails are then neither read from nor written to the cache the desktop&apos;s apps share (GNOME Files and others): Kestrel makes its own and keeps them in its cache folder, with its other caches. Turned off again, the thumbnails kept there are still used until they&apos;re deleted (☰ → Delete All Thumbnails…), and new ones go to the shared cache.</source>
+        <translation>Vorschaubilder werden dann weder aus dem Cache gelesen noch in den Cache geschrieben, den die Apps des Desktops teilen (GNOME Dateien und andere): Kestrel erstellt eigene und hält sie in seinem Cache-Ordner, bei seinen anderen Caches. Wieder ausgeschaltet, werden die dort gehaltenen Vorschaubilder weiter benutzt, bis sie gelöscht werden (☰ → Alle Vorschaubilder löschen …), und neue gehen in den gemeinsamen Cache.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <location line="+1"/>
         <source>Private mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Privatmodus</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>☰ → Private Mode; the status bar&apos;s Private; the sidebar&apos;s Private (Leave Private Mode)</source>
-        <translation type="unfinished"></translation>
+        <translation>☰ → Privatmodus; „Privat“ in der Statusleiste; „Privat“ in der Seitenleiste (Privatmodus verlassen)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Kestrel&apos;s caches (the previews it makes, folder sizes, job logs) and histories (Frequent Folders, recent servers, remembered syncs, the viewer&apos;s folders) are kept in memory and deleted when the last Kestrel closes; nothing is added to the desktop&apos;s Recent; Save windows start in the Private folder, in memory too. It stays on, also after Kestrel is closed and opened again, until it&apos;s turned off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrels Caches (die erstellten Vorschauen, Ordnergrößen, Auftragsprotokolle) und Verläufe (Häufige Ordner, letzte Server, gemerkte Synchronisierungen, die Ordner des Betrachters) werden im Arbeitsspeicher gehalten und gelöscht, wenn das letzte Kestrel geschlossen wird; nichts wird zu „Zuletzt verwendet“ des Desktops hinzugefügt; Speichern-Fenster beginnen im Ordner Privat, ebenfalls im Arbeitsspeicher. Er bleibt an, auch nachdem Kestrel geschlossen und wieder geöffnet wurde, bis er ausgeschaltet wird.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Say which files will be deleted when the last Kestrel closes or private mode is left</source>
-        <translation type="unfinished"></translation>
+        <translation>Sagen, welche Dateien gelöscht werden, wenn das letzte Kestrel geschlossen oder der Privatmodus verlassen wird</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>the warning&apos;s Don&apos;t show this again</source>
-        <translation type="unfinished"></translation>
+        <translation>„Nicht mehr anzeigen“ der Warnung</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The files saved in Private (private mode) and in RAM disks that last until Kestrel closes.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die in Privat (Privatmodus) und in RAM-Disks gespeicherten Dateien, die bis zum Schließen von Kestrel bestehen.</translation>
     </message>
     <message>
         <location filename="../src/prefswin.cpp" line="-239"/>
@@ -12232,7 +12301,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location line="+1"/>
         <location filename="../src/widgets.cpp" line="+1"/>
         <source>RAM Disks</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disks</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -12282,7 +12351,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     </message>
     <message>
         <location line="+23"/>
-        <location filename="../src/widgets.cpp" line="+617"/>
+        <location filename="../src/widgets.cpp" line="+826"/>
         <source>%1:</source>
         <translation>%1:</translation>
     </message>
@@ -12554,7 +12623,7 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
         <location filename="../src/pgp.cpp" line="-519"/>
         <source>decrypted</source>
         <comment>the name of a decrypted file whose own name was only “.gpg”</comment>
-        <translation type="unfinished"></translation>
+        <translation>entschlüsselt</translation>
     </message>
     <message>
         <location line="+146"/>
@@ -12565,217 +12634,223 @@ Für jedes Kestrel-Fenster (auch Einstellungen → Bilder &amp; Videos).</transl
     <message>
         <location line="+69"/>
         <source>gpg couldn&apos;t encrypt “%1”: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg konnte „%1“ nicht verschlüsseln: %2</translation>
     </message>
     <message>
         <location line="+31"/>
         <source>“%1” is encrypted to a key whose secret part isn&apos;t in your keyring.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist für einen Schlüssel verschlüsselt, dessen geheimer Teil nicht in Ihrem Schlüsselbund ist.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>gpg couldn&apos;t decrypt “%1”: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>gpg konnte „%1“ nicht entschlüsseln: %2</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>%1, by %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1, von %2</translation>
     </message>
     <message>
         <location line="+10"/>
         <location line="+187"/>
         <source>Encrypt</source>
-        <translation type="unfinished"></translation>
+        <translation>Verschlüsseln</translation>
     </message>
     <message>
         <location line="-187"/>
         <source>Encrypting needs gpg, which isn&apos;t installed. Install it with:
 
 sudo apt install gnupg</source>
-        <translation type="unfinished"></translation>
+        <translation>Zum Verschlüsseln wird gpg benötigt, das nicht installiert ist. Installieren Sie es mit:
+
+sudo apt install gnupg</translation>
     </message>
     <message>
         <location line="+25"/>
         <source>Decrypting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird entschlüsselt</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Decrypted into %1</source>
-        <translation type="unfinished"></translation>
+        <translation>In %1 entschlüsselt</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>The password is wrong.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Passwort ist falsch.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>“%1” is decrypted into “%2”. What was in it was also signed:
 
 %3</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist in „%2“ entschlüsselt. Der Inhalt war außerdem signiert:
+
+%3</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Decrypting needs gpg, which isn&apos;t installed. Install it with:
 
 sudo apt install gnupg</source>
-        <translation type="unfinished"></translation>
+        <translation>Zum Entschlüsseln wird gpg benötigt, das nicht installiert ist. Installieren Sie es mit:
+
+sudo apt install gnupg</translation>
     </message>
     <message>
         <location line="+27"/>
         <source>“%1” isn&apos;t encrypted: gpg finds no encrypted data in it (it may be a signature or a key).</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist nicht verschlüsselt: gpg findet darin keine verschlüsselten Daten (es ist vielleicht eine Signatur oder ein Schlüssel).</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>“%1” is encrypted to someone else&apos;s key (%2): your keyring doesn&apos;t have its secret part, so only they can open it.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist für den Schlüssel einer anderen Person verschlüsselt (%2): Ihr Schlüsselbund hat seinen geheimen Teil nicht, also kann nur diese Person es öffnen.</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Encrypt “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ verschlüsseln</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Encrypt %Ln File(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei verschlüsseln</numerusform>
+            <numerusform>%Ln Dateien verschlüsseln</numerusform>
         </translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+49"/>
         <source>An encrypted copy is made beside it, as “%1”; the original stays as it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine verschlüsselte Kopie wird daneben als „%1“ erstellt; das Original bleibt, wie es ist.</translation>
     </message>
     <message>
         <location line="-47"/>
         <location line="+51"/>
         <source>An encrypted copy of each is made beside it (“name.gpg”); the originals stay as they are.</source>
-        <translation type="unfinished"></translation>
+        <translation>Von jeder wird daneben eine verschlüsselte Kopie erstellt („name.gpg“); die Originale bleiben, wie sie sind.</translation>
     </message>
     <message>
         <location line="-45"/>
         <source>With a password: anyone who has it can open it</source>
-        <translation type="unfinished"></translation>
+        <translation>Mit einem Passwort: wer es hat, kann es öffnen</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Password</source>
-        <translation type="unfinished"></translation>
+        <translation>Passwort</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The password again</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Passwort noch einmal</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>To people&apos;s keys: only they can open it, with no password to pass on</source>
-        <translation type="unfinished"></translation>
+        <translation>Für Schlüssel von Personen: nur sie können es öffnen, ohne ein Passwort weiterzugeben</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Keys to encrypt to</source>
-        <translation type="unfinished"></translation>
+        <translation>Schlüssel, für die verschlüsselt wird</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Key</source>
-        <translation type="unfinished"></translation>
+        <translation>Schlüssel</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Verified</source>
-        <translation type="unfinished"></translation>
+        <translation>Überprüft</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Also to my own key, so I can open it too</source>
-        <translation type="unfinished"></translation>
+        <translation>Auch für meinen eigenen Schlüssel, damit ich es auch öffnen kann</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Looking for keys…</source>
-        <translation type="unfinished"></translation>
+        <translation>Schlüssel werden gesucht …</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>As text (.asc), to paste into an email or a message</source>
-        <translation type="unfinished"></translation>
+        <translation>Als Text (.asc), zum Einfügen in eine E-Mail oder Nachricht</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>An encrypted copy of each is made beside it (“name.asc”); the originals stay as they are.</source>
-        <translation type="unfinished"></translation>
+        <translation>Von jeder wird daneben eine verschlüsselte Kopie erstellt („name.asc“); die Originale bleiben, wie sie sind.</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Listing your keys</source>
-        <translation type="unfinished"></translation>
+        <translation>Ihre Schlüssel werden aufgelistet</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>%1 (you)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (Sie)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Yes</source>
-        <translation type="unfinished"></translation>
+        <translation>Ja</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>No</source>
-        <translation type="unfinished"></translation>
+        <translation>Nein</translation>
     </message>
     <message>
         <location line="+22"/>
         <source>Your keyring has no keys to encrypt to. Import the public key of whoever it&apos;s for (for example in Passwords and Keys, or with gpg --import) and open Encrypt… again.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ihr Schlüsselbund hat keine Schlüssel, für die verschlüsselt werden kann. Importieren Sie den öffentlichen Schlüssel des Empfängers (etwa in Passwörter und Verschlüsselung oder mit gpg --import) und öffnen Sie Verschlüsseln … erneut.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A key you haven&apos;t verified may not be theirs: anyone can make a key with any name. Compare its fingerprint (hover over its key) with the one they gave you.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Schlüssel, den Sie nicht überprüft haben, gehört vielleicht nicht der Person: jeder kann einen Schlüssel mit beliebigem Namen erstellen. Vergleichen Sie seinen Fingerabdruck (mit der Maus über seinem Schlüssel) mit dem, den man Ihnen gegeben hat.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>You have no key of your own, so you won&apos;t be able to open what&apos;s encrypted to other people&apos;s keys. Anyone can make a key with any name: compare a key&apos;s fingerprint (hover over it) with the one its owner gave you.</source>
-        <translation type="unfinished"></translation>
+        <translation>Sie haben keinen eigenen Schlüssel, also können Sie nicht öffnen, was für Schlüssel anderer verschlüsselt ist. Jeder kann einen Schlüssel mit beliebigem Namen erstellen: vergleichen Sie den Fingerabdruck eines Schlüssels (mit der Maus darüber) mit dem, den sein Besitzer Ihnen gegeben hat.</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Type a password, twice.</source>
-        <translation type="unfinished"></translation>
+        <translation>Geben Sie ein Passwort zweimal ein.</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Tick the keys of the people it&apos;s for.</source>
-        <translation type="unfinished"></translation>
+        <translation>Haken Sie die Schlüssel der Empfänger an.</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>Encrypting %1</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird verschlüsselt</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Encrypting %Ln file(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei wird verschlüsselt</numerusform>
+            <numerusform>%Ln Dateien werden verschlüsselt</numerusform>
         </translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Encrypted %1 into %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 in %2 verschlüsselt</translation>
     </message>
     <message>
         <location filename="../src/signature.cpp" line="+15"/>
@@ -12892,7 +12967,7 @@ sudo apt install gnupg</source>
     <message>
         <location line="+2"/>
         <source>Checking %1 with gpg</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 wird mit gpg geprüft</translation>
     </message>
     <message>
         <location line="+36"/>
@@ -13016,7 +13091,7 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         </translation>
     </message>
     <message>
-        <location filename="../src/thumbs.cpp" line="-1298"/>
+        <location filename="../src/thumbs.cpp" line="-1310"/>
         <source>Red</source>
         <translation>Rot</translation>
     </message>
@@ -13061,7 +13136,7 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <translation>Braun</translation>
     </message>
     <message>
-        <location line="+1297"/>
+        <location line="+1309"/>
         <source>Thumbnails: %1</source>
         <translation>Vorschaubilder: %1</translation>
     </message>
@@ -13088,44 +13163,44 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
     <message>
         <location line="+199"/>
         <source>No preview could be made of %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Von %1 konnte keine Vorschau erstellt werden</translation>
     </message>
     <message numerus="yes">
         <location line="+74"/>
         <source>%Ln file preview(s) made</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Dateivorschau erstellt</numerusform>
+            <numerusform>%Ln Dateivorschauen erstellt</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>%Ln folder preview(s) made</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Ordnervorschau erstellt</numerusform>
+            <numerusform>%Ln Ordnervorschauen erstellt</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) with no preview</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei ohne Vorschau</numerusform>
+            <numerusform>%Ln Dateien ohne Vorschau</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+2"/>
         <source>%Ln file(s) too big for a preview (Preferences → Images &amp; Videos)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Datei zu groß für eine Vorschau (Einstellungen → Bilder &amp; Videos)</numerusform>
+            <numerusform>%Ln Dateien zu groß für eine Vorschau (Einstellungen → Bilder &amp; Videos)</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1 of %2 done: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 von %2 erledigt: %3</translation>
     </message>
     <message>
         <location filename="../src/towerwin.cpp" line="-103"/>
@@ -13391,7 +13466,7 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <location line="-48"/>
         <location line="+51"/>
         <source>Renamed back: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurückbenannt: %1 → %2</translation>
     </message>
     <message>
         <location line="-37"/>
@@ -13401,17 +13476,17 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
     <message>
         <location line="+13"/>
         <source>Put back: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurückgelegt: %1</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>Pointed back: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurückgerichtet: %1</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Couldn&apos;t undo: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Konnte nicht rückgängig machen: %1</translation>
     </message>
     <message>
         <location filename="../src/util.cpp" line="-2"/>
@@ -13941,7 +14016,7 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <translation>Rückgängig	Strg+Z</translation>
     </message>
     <message>
-        <location filename="../src/widgets.cpp" line="-1827"/>
+        <location filename="../src/widgets.cpp" line="-2076"/>
         <source>Match</source>
         <translation>Treffer</translation>
     </message>
@@ -13957,12 +14032,12 @@ Dies verbindet sich mit dem Internet: Der Schlüsselserver sieht, welcher Schlü
         <translation>Zeile %1: %2</translation>
     </message>
     <message>
-        <location line="+673"/>
+        <location line="+707"/>
         <source>Type a location (Ctrl+L)</source>
         <translation>Einen Ort eingeben (Strg+L)</translation>
     </message>
     <message>
-        <location line="+217"/>
+        <location line="+223"/>
         <location line="+180"/>
         <source>Desktop</source>
         <translation>Schreibtisch</translation>
@@ -14047,7 +14122,7 @@ Nicht verbunden: zum Verbinden klicken</translation>
     <message>
         <location line="+8"/>
         <source>Private mode: Save windows start here. Deleted when the last Kestrel closes.</source>
-        <translation type="unfinished"></translation>
+        <translation>Privatmodus: Speichern-Fenster beginnen hier. Wird gelöscht, wenn das letzte Kestrel geschlossen wird.</translation>
     </message>
     <message>
         <location line="+276"/>
@@ -14057,22 +14132,22 @@ Nicht verbunden: zum Verbinden klicken</translation>
     <message>
         <location line="+7"/>
         <source>Bring Back into Memory</source>
-        <translation type="unfinished"></translation>
+        <translation>Wieder in den Arbeitsspeicher holen</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Save to Disk Now</source>
-        <translation type="unfinished"></translation>
+        <translation>Jetzt auf Festplatte speichern</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Edit RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk bearbeiten …</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Remove RAM Disk…</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk entfernen …</translation>
     </message>
     <message>
         <location line="+14"/>
@@ -14105,7 +14180,112 @@ Nicht verbunden: zum Verbinden klicken</translation>
         <translation>Ein Auftrag liest oder schreibt dieses Laufwerk noch. Trotzdem aushängen?</translation>
     </message>
     <message>
-        <location line="+317"/>
+        <location line="+151"/>
+        <source>Only files and folders can be dropped here</source>
+        <translation>Hier können nur Dateien und Ordner abgelegt werden</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>The Overview takes no files</source>
+        <translation>Die Übersicht nimmt keine Dateien auf</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Recent takes no files: it lists the files you opened</source>
+        <translation>„Zuletzt verwendet“ nimmt keine Dateien auf: es listet die Dateien, die Sie geöffnet haben</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location line="+5"/>
+        <source>Only into a folder</source>
+        <translation>Nur in einen Ordner</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>“%1” isn&apos;t there any more</source>
+        <translation>„%1“ ist nicht mehr da</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>%1 is read-only</source>
+        <translation>%1 ist schreibgeschützt</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>A folder can&apos;t go into itself</source>
+        <translation>Ein Ordner kann nicht in sich selbst</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Already in %1</source>
+        <translation>Schon in %1</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>Add to Starred</source>
+        <translation>Zu „Mit Stern“ hinzufügen</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Connect to %1, then move there</source>
+        <translation>Mit %1 verbinden, dann dorthin verschieben</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Connect to %1, then ask what to do</source>
+        <translation>Mit %1 verbinden, dann fragen, was geschehen soll</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Connect to %1, then copy there</source>
+        <translation>Mit %1 verbinden, dann dorthin kopieren</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Bring %1 back into memory, then move there</source>
+        <translation>%1 wieder in den Arbeitsspeicher holen, dann dorthin verschieben</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Bring %1 back into memory, then ask what to do</source>
+        <translation>%1 wieder in den Arbeitsspeicher holen, dann fragen, was geschehen soll</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Bring %1 back into memory, then copy there</source>
+        <translation>%1 wieder in den Arbeitsspeicher holen, dann dorthin kopieren</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Move to %1</source>
+        <translation>Nach %1 verschieben</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Link in %1</source>
+        <translation>In %1 verknüpfen</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Move, copy or link to %1 (asks)</source>
+        <translation>Nach %1 verschieben, kopieren oder verknüpfen (fragt)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Copy to %1</source>
+        <translation>Nach %1 kopieren</translation>
+    </message>
+    <message>
+        <location line="+141"/>
+        <source>Couldn&apos;t connect to %1, so nothing was put there:
+
+%2</source>
+        <translation>Keine Verbindung zu %1, daher wurde dort nichts abgelegt:
+
+%2</translation>
+    </message>
+    <message>
+        <location line="+152"/>
         <location line="+66"/>
         <source>Details</source>
         <translation>Details</translation>
@@ -14148,168 +14328,168 @@ Nicht verbunden: zum Verbinden klicken</translation>
     <message>
         <location filename="../src/joblogs.cpp" line="+26"/>
         <source>%1 · started %2 · ended %3 · took %4</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 · gestartet %2 · beendet %3 · Dauer %4</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>as administrator</source>
-        <translation type="unfinished"></translation>
+        <translation>als Administrator</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>%Ln step(s):</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Schritt:</numerusform>
+            <numerusform>%Ln Schritte:</numerusform>
         </translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Log:</source>
-        <translation type="unfinished"></translation>
+        <translation>Protokoll:</translation>
     </message>
     <message>
         <location filename="../src/links.cpp" line="+28"/>
         <source>Symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>Symbolische Verknüpfung</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Relative symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>Relative symbolische Verknüpfung</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Hard link</source>
-        <translation type="unfinished"></translation>
+        <translation>Harte Verknüpfung</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Shortcut (.desktop)</source>
-        <translation type="unfinished"></translation>
+        <translation>Starter (.desktop)</translation>
     </message>
     <message>
         <location line="+41"/>
         <source>That name can&apos;t be used</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Name kann nicht verwendet werden</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder it goes in isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Ordner, in den sie kommt, ist nicht da</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>The name is taken in that folder</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Name ist in diesem Ordner vergeben</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Another link in the list has this name in this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine andere Verknüpfung in der Liste hat diesen Namen in diesem Ordner</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>The link isn&apos;t there any more</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Verknüpfung ist nicht mehr da</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>The link was changed since it was put in the list</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Verknüpfung wurde geändert, seit sie in die Liste kam</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A symbolic link can only be changed into another symbolic link</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine symbolische Verknüpfung kann nur in eine andere symbolische Verknüpfung geändert werden</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>What it points to isn&apos;t there: the link will be broken</source>
-        <translation type="unfinished"></translation>
+        <translation>Ihr Ziel ist nicht da: die Verknüpfung wird defekt sein</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>What it points to isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>Ihr Ziel ist nicht da</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Hard links are for files only (not folders or links)</source>
-        <translation type="unfinished"></translation>
+        <translation>Harte Verknüpfungen gibt es nur für Dateien (nicht für Ordner oder Verknüpfungen)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A hard link has to be on the same drive as the file</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine harte Verknüpfung muss auf demselben Laufwerk liegen wie die Datei</translation>
     </message>
     <message>
         <location line="+40"/>
         <location line="+46"/>
         <source>“%1” isn&apos;t a symbolic link any more</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist keine symbolische Verknüpfung mehr</translation>
     </message>
     <message>
         <location line="-36"/>
         <location line="+38"/>
         <source>“%1” was changed meanwhile, so it was left as it is</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ wurde zwischenzeitlich geändert und daher so gelassen</translation>
     </message>
     <message>
         <location line="-14"/>
         <source>Made “%1”, but couldn&apos;t remove “%2”: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ erstellt, aber „%2“ konnte nicht entfernt werden: %3</translation>
     </message>
     <message>
         <location line="+22"/>
         <location line="+20"/>
         <source>“%1” is taken</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist vergeben</translation>
     </message>
     <message>
         <location line="-8"/>
         <source>Made “%1”, but couldn&apos;t remove the old link “%2”: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ erstellt, aber die alte Verknüpfung „%2“ konnte nicht entfernt werden: %3</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>The folder “%1” isn&apos;t there</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Ordner „%1“ ist nicht da</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>“%1” isn&apos;t a file</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist keine Datei</translation>
     </message>
     <message>
         <location filename="../src/linkwin.cpp" line="-133"/>
         <source>New</source>
-        <translation type="unfinished"></translation>
+        <translation>Neu</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Points elsewhere, renamed</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt anderswohin, umbenannt</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Renamed</source>
-        <translation type="unfinished"></translation>
+        <translation>Umbenannt</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Moved</source>
-        <translation type="unfinished"></translation>
+        <translation>Verschoben</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Points elsewhere</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt anderswohin</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>No change yet</source>
-        <translation type="unfinished"></translation>
+        <translation>Noch keine Änderung</translation>
     </message>
     <message>
         <location line="+32"/>
@@ -14319,484 +14499,495 @@ Nicht verbunden: zum Verbinden klicken</translation>
         <location line="+72"/>
         <location line="+44"/>
         <source>Link</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung</translation>
     </message>
     <message>
         <location line="-708"/>
         <location line="+6"/>
         <location line="+62"/>
         <source>Points to</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt auf</translation>
     </message>
     <message>
         <location line="-67"/>
         <location line="+25"/>
         <source>Link goes in</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung kommt in</translation>
     </message>
     <message>
         <location line="-19"/>
         <source>What the links lead to: pick one item, or select several.</source>
-        <translation type="unfinished"></translation>
+        <translation>Worauf die Verknüpfungen führen: ein Element wählen oder mehrere auswählen.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Links to be made in this folder</source>
-        <translation type="unfinished"></translation>
+        <translation>In diesem Ordner zu erstellende Verknüpfungen</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>The folder the links are made in. They show below, among what&apos;s here, until they&apos;re made.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Ordner, in dem die Verknüpfungen erstellt werden. Sie erscheinen unten zwischen dem, was hier ist, bis sie erstellt sind.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Kind of link</source>
-        <translation type="unfinished"></translation>
+        <translation>Art der Verknüpfung</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A relative path: the link keeps working when it&apos;s moved together with what it points to</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein relativer Pfad: die Verknüpfung funktioniert weiter, wenn sie zusammen mit ihrem Ziel verschoben wird</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Another name of the same file: files only, on the same drive</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein weiterer Name derselben Datei: nur Dateien, auf demselben Laufwerk</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A .desktop file that opens it, as a launcher on a desktop or dock</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine .desktop-Datei, die es öffnet, als Starter auf einem Desktop oder Dock</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Find the Other Names</source>
-        <translation type="unfinished"></translation>
+        <translation>Die anderen Namen finden</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Searches its drive for the other names of this file (a job: slow on a big drive)</source>
-        <translation type="unfinished"></translation>
+        <translation>Durchsucht sein Laufwerk nach den anderen Namen dieser Datei (ein Auftrag: langsam auf einem großen Laufwerk)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Add to List</source>
-        <translation type="unfinished"></translation>
+        <translation>Zur Liste hinzufügen</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Keeps the links shown on the right in the list, to be made with OK</source>
-        <translation type="unfinished"></translation>
+        <translation>Behält die rechts angezeigten Verknüpfungen in der Liste, um sie mit OK zu erstellen</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Change Link</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung ändern</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>The link selected in the list points to what&apos;s picked on the left, in the folder shown on the right</source>
-        <translation type="unfinished"></translation>
+        <translation>Die in der Liste ausgewählte Verknüpfung zeigt auf das links Gewählte, im rechts angezeigten Ordner</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Kind:</source>
-        <translation type="unfinished"></translation>
+        <translation>Art:</translation>
     </message>
     <message>
         <location line="+8"/>
         <location line="+27"/>
         <source>Links to make or change</source>
-        <translation type="unfinished"></translation>
+        <translation>Zu erstellende oder zu ändernde Verknüpfungen</translation>
     </message>
     <message>
         <location line="-25"/>
         <source>Kind</source>
-        <translation type="unfinished"></translation>
+        <translation>Art</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Change</source>
-        <translation type="unfinished"></translation>
+        <translation>Änderung</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Problems</source>
-        <translation type="unfinished"></translation>
+        <translation>Probleme</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Takes the selected links out of the list (nothing on the disk changes)</source>
-        <translation type="unfinished"></translation>
+        <translation>Nimmt die ausgewählten Verknüpfungen aus der Liste (auf der Festplatte ändert sich nichts)</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Shows what will be made or changed, to confirm</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt, was erstellt oder geändert wird, zur Bestätigung</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Nothing is made or changed until OK. Click a link to show it on both sides and change it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nichts wird erstellt oder geändert bis OK. Klicken Sie auf eine Verknüpfung, um sie auf beiden Seiten zu zeigen und zu ändern.</translation>
     </message>
     <message>
         <location line="+83"/>
         <source>Edit Link</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfung bearbeiten</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>These links couldn&apos;t be read:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese Verknüpfungen konnten nicht gelesen werden:
+
+%1</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>The links in the list haven&apos;t been made or changed. Close the window anyway?</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Verknüpfungen in der Liste wurden nicht erstellt oder geändert. Das Fenster trotzdem schließen?</translation>
     </message>
     <message>
         <location line="+147"/>
         <source>%1  (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1  (%2)</translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>%Ln names</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Name</numerusform>
+            <numerusform>%Ln Namen</numerusform>
         </translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The link will hold: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Verknüpfung wird enthalten: %1</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Open a folder on the right to make links in it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öffnen Sie rechts einen Ordner, um darin Verknüpfungen zu erstellen.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>The links to be made or changed in this folder (double-click a name to rename it):</source>
-        <translation type="unfinished"></translation>
+        <translation>Die in diesem Ordner zu erstellenden oder zu ändernden Verknüpfungen (Doppelklick auf einen Namen, um ihn umzubenennen):</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Points to: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt auf: %1</translation>
     </message>
     <message>
         <location line="+21"/>
         <source>Points to: %1
 Not in the list yet: Add to List keeps it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zeigt auf: %1
+Noch nicht in der Liste: Zur Liste hinzufügen behält sie.</translation>
     </message>
     <message>
         <location line="+33"/>
         <source>The kind of the links added</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Art der hinzugefügten Verknüpfungen</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>The kind of the links selected in the list</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Art der in der Liste ausgewählten Verknüpfungen</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>“%1” isn&apos;t there: this link is broken.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist nicht da: diese Verknüpfung ist defekt.</translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
         <source>“%1” has %Ln names (hard links).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>„%1“ hat %Ln Namen (harte Verknüpfungen).</numerusform>
+            <numerusform>„%1“ hat %Ln Namen (harte Verknüpfungen).</numerusform>
         </translation>
     </message>
     <message>
         <location line="+48"/>
         <source>Finding the other names of “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>Die anderen Namen von „%1“ werden gesucht</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Also named: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Auch benannt: %1</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Other Names</source>
-        <translation type="unfinished"></translation>
+        <translation>Andere Namen</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>No other name of “%1” was found on its drive (it may have some in folders you can&apos;t open).</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf seinem Laufwerk wurde kein anderer Name von „%1“ gefunden (vielleicht hat es welche in Ordnern, die Sie nicht öffnen können).</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The other names of “%1”:
 
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Die anderen Namen von „%1“:
+
+%2</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>Some links in the list can&apos;t be made as they are. Change them or remove them from the list first:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Einige Verknüpfungen in der Liste können so nicht erstellt werden. Ändern Sie sie oder nehmen Sie sie zuerst aus der Liste:
+
+%1</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>%1 → %2 (%3)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2 (%3)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>%1: %2 → %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2 → %3</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>%1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 → %2</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Nothing in the list changes anything yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>Noch ändert nichts in der Liste etwas.</translation>
     </message>
     <message numerus="yes">
         <location line="+12"/>
         <source>%Ln new link(s):</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln neue Verknüpfung:</numerusform>
+            <numerusform>%Ln neue Verknüpfungen:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln link(s) to point elsewhere:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Verknüpfung, die anderswohin zeigen soll:</numerusform>
+            <numerusform>%Ln Verknüpfungen, die anderswohin zeigen sollen:</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+1"/>
         <source>%Ln link(s) to rename or move:</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Verknüpfung zum Umbenennen oder Verschieben:</numerusform>
+            <numerusform>%Ln Verknüpfungen zum Umbenennen oder Verschieben:</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>To note:</source>
-        <translation type="unfinished"></translation>
+        <translation>Zu beachten:</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Make and Change Links</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfungen erstellen und ändern</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>These links will be made or changed. Undo (Ctrl+Z) puts them all back as they were.</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese Verknüpfungen werden erstellt oder geändert. Rückgängig (Strg+Z) stellt sie alle wieder her, wie sie waren.</translation>
     </message>
     <message>
         <location line="+28"/>
         <source>Something changed since the list was checked, so nothing was made or changed:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Seit die Liste geprüft wurde, hat sich etwas geändert, daher wurde nichts erstellt oder geändert:
+
+%1</translation>
     </message>
     <message numerus="yes">
         <location line="+24"/>
         <source>Making %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Verknüpfung wird erstellt</numerusform>
+            <numerusform>%Ln Verknüpfungen werden erstellt</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+0"/>
         <source>Making and changing %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Verknüpfung wird erstellt und geändert</numerusform>
+            <numerusform>%Ln Verknüpfungen werden erstellt und geändert</numerusform>
         </translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Made: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Erstellt: %1 → %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Changed and renamed: %1 → %2 (now → %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>Geändert und umbenannt: %1 → %2 (jetzt → %3)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Renamed: %1 → %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Umbenannt: %1 → %2</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Changed: %1 → %2 (was → %3)</source>
-        <translation type="unfinished"></translation>
+        <translation>Geändert: %1 → %2 (vorher → %3)</translation>
     </message>
     <message>
         <location line="+7"/>
         <location line="+4"/>
         <source>Couldn&apos;t make or change %1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 konnte nicht erstellt oder geändert werden: %2</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Change Links</source>
-        <translation type="unfinished"></translation>
+        <translation>Verknüpfungen ändern</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Some links couldn&apos;t be made or changed, and are still in the list:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Einige Verknüpfungen konnten nicht erstellt oder geändert werden und sind noch in der Liste:
+
+%1</translation>
     </message>
     <message numerus="yes">
         <location line="+45"/>
         <source>You don&apos;t have permission to make %Ln of these links.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Sie haben keine Berechtigung, %Ln dieser Verknüpfungen zu erstellen.</numerusform>
+            <numerusform>Sie haben keine Berechtigung, %Ln dieser Verknüpfungen zu erstellen.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location line="+6"/>
         <source>Made or changed %Ln link(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln Verknüpfung erstellt oder geändert</numerusform>
+            <numerusform>%Ln Verknüpfungen erstellt oder geändert</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/ramdisk.cpp" line="-731"/>
         <source>Give it a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Geben Sie ihr einen Namen.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>A name can&apos;t contain “/” or start with “.”.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Name darf kein „/“ enthalten und nicht mit „.“ beginnen.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A name can&apos;t contain control characters.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Name darf keine Steuerzeichen enthalten.</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>Until Kestrel closes</source>
-        <translation type="unfinished"></translation>
+        <translation>Bis Kestrel geschlossen wird</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Until you restart</source>
-        <translation type="unfinished"></translation>
+        <translation>Bis zum Neustart</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Until you log out or restart</source>
-        <translation type="unfinished"></translation>
+        <translation>Bis zur Abmeldung oder zum Neustart</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Always: back, empty, at every start</source>
-        <translation type="unfinished"></translation>
+        <translation>Immer: bei jedem Start wieder da, leer</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Always: back, empty, at every login</source>
-        <translation type="unfinished"></translation>
+        <translation>Immer: bei jeder Anmeldung wieder da, leer</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Always, with its files saved to disk</source>
-        <translation type="unfinished"></translation>
+        <translation>Immer, mit auf Festplatte gespeicherten Dateien</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>RAM disk of %1, mounted on %2</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk von %1, eingehängt in %2</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>RAM disk in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk in %1</translation>
     </message>
     <message numerus="yes">
         <location line="+3"/>
         <source>Saved to %1 every %Ln minute(s), at logout and at shutdown</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Wird alle %Ln Minute, bei der Abmeldung und beim Herunterfahren in %1 gespeichert</numerusform>
+            <numerusform>Wird alle %Ln Minuten, bei der Abmeldung und beim Herunterfahren in %1 gespeichert</numerusform>
         </translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Saved to %1 at logout and at shutdown</source>
-        <translation type="unfinished"></translation>
+        <translation>Wird bei der Abmeldung und beim Herunterfahren in %1 gespeichert</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Not in memory now: click to bring it back</source>
-        <translation type="unfinished"></translation>
+        <translation>Jetzt nicht im Arbeitsspeicher: klicken, um sie zurückzuholen</translation>
     </message>
     <message>
         <location line="+280"/>
         <source>“%1” isn&apos;t in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist nicht im Arbeitsspeicher.</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>“%1” isn&apos;t in memory: nothing to save.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ ist nicht im Arbeitsspeicher: nichts zu speichern.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>“%1” hasn&apos;t been loaded from %2 yet, so it isn&apos;t saved over it.</source>
-        <translation type="unfinished"></translation>
+        <translation>„%1“ wurde noch nicht aus %2 geladen, daher wird nicht darüber gespeichert.</translation>
     </message>
     <message>
         <location line="+165"/>
         <source>systemctl %1 failed: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>systemctl %1 fehlgeschlagen: %2</translation>
     </message>
     <message>
         <location line="+52"/>
         <location filename="../src/ramdiskwin.cpp" line="+71"/>
         <source>RAM disks without a size limit need a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disks ohne Größenbegrenzung brauchen einen eigenen Ordner von Kestrel in /dev/shm, und er kann nicht erstellt werden.</translation>
     </message>
     <message>
         <location line="+36"/>
         <source>Making the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ wird erstellt</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Loading what&apos;s saved in %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Was in %1 gespeichert ist, wird geladen</translation>
     </message>
     <message>
         <location line="+22"/>
@@ -14804,223 +14995,228 @@ Not in the list yet: Add to List keeps it.</source>
         <location filename="../src/ramdiskwin.cpp" line="-123"/>
         <location line="+20"/>
         <source>RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk</translation>
     </message>
     <message>
         <location line="-127"/>
         <source>Saving the RAM disk “%1” to disk</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ wird auf Festplatte gespeichert</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>Saving to %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Speichern nach %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>It couldn&apos;t all be saved, so it&apos;s kept:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Sie konnte nicht ganz gespeichert werden, daher bleibt sie erhalten:
+%1</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Not all of %1 could be deleted.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nicht alles von %1 konnte gelöscht werden.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>Remove the RAM disk “%1”? Its files are saved to %2 one last time, and that copy is kept; they&apos;re no longer kept in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ entfernen? Ihre Dateien werden ein letztes Mal in %2 gespeichert, und diese Kopie bleibt erhalten; im Arbeitsspeicher werden sie nicht mehr gehalten.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Remove the RAM disk “%1”? The files in it are deleted.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ entfernen? Die Dateien darin werden gelöscht.</translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+23"/>
         <source>Remove RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk entfernen</translation>
     </message>
     <message>
         <location line="-15"/>
         <source>Removing the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ wird entfernt</translation>
     </message>
     <message>
         <location line="+32"/>
         <source>Changing the RAM disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk „%1“ wird geändert</translation>
     </message>
     <message>
         <location line="+145"/>
         <source>Private mode needs a folder of Kestrel&apos;s own in /dev/shm, and it can&apos;t be made.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Privatmodus braucht einen eigenen Ordner von Kestrel in /dev/shm, und er kann nicht erstellt werden.</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>Private (private mode&apos;s folder)</source>
-        <translation type="unfinished"></translation>
+        <translation>Privat (der Ordner des Privatmodus)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Leaving private mode deletes what&apos;s in its RAM disk, also the files saved in Private:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Verlassen des Privatmodus löscht, was in seiner RAM-Disk ist, auch die in Privat gespeicherten Dateien:
+
+%1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Closing Kestrel deletes the files in these RAM disks:
 
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Schließen von Kestrel löscht die Dateien in diesen RAM-Disks:
+
+%1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Close Kestrel</source>
-        <translation type="unfinished"></translation>
+        <translation>Kestrel schließen</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Delete and Leave Private Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Löschen und Privatmodus verlassen</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>Delete and Close</source>
-        <translation type="unfinished"></translation>
+        <translation>Löschen und schließen</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Don&apos;t show this again (Preferences → Privacy)</source>
-        <translation type="unfinished"></translation>
+        <translation>Nicht mehr anzeigen (Einstellungen → Datenschutz)</translation>
     </message>
     <message>
         <location filename="../src/ramdiskwin.cpp" line="-29"/>
         <source>Edit RAM Disk “%1”</source>
-        <translation type="unfinished"></translation>
+        <translation>RAM-Disk „%1“ bearbeiten</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>New RAM Disk</source>
-        <translation type="unfinished"></translation>
+        <translation>Neue RAM-Disk</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>A RAM disk keeps its files in memory: very fast, and gone when it&apos;s taken down, unless it saves them to disk.</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine RAM-Disk hält ihre Dateien im Arbeitsspeicher: sehr schnell, und weg, wenn sie aufgelöst wird, außer sie speichert sie auf Festplatte.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>A size limit of its own (needs your password to mount it)</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine eigene Größenbegrenzung (zum Einhängen ist Ihr Passwort nötig)</translation>
     </message>
     <message>
         <location line="+22"/>
         <source>Mounted on:</source>
-        <translation type="unfinished"></translation>
+        <translation>Eingehängt in:</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>How long it lasts:</source>
-        <translation type="unfinished"></translation>
+        <translation>Wie lange sie besteht:</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>A folder on disk</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Ordner auf der Festplatte</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Saved to:</source>
-        <translation type="unfinished"></translation>
+        <translation>Gespeichert in:</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Only at logout and shutdown</source>
-        <translation type="unfinished"></translation>
+        <translation>Nur bei Abmeldung und Herunterfahren</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Also saved every</source>
-        <translation type="unfinished"></translation>
+        <translation>Auch gespeichert alle</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Also saved every:</source>
-        <translation type="unfinished"></translation>
+        <translation>Auch gespeichert alle:</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>Mount the RAM Disk On</source>
-        <translation type="unfinished"></translation>
+        <translation>Die RAM-Disk einhängen in</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Save the RAM Disk&apos;s Files To</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Dateien der RAM-Disk speichern in</translation>
     </message>
     <message>
         <location line="+38"/>
         <source>There&apos;s a RAM disk called that already.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es gibt schon eine RAM-Disk mit diesem Namen.</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>There&apos;s something called that in %1 already.</source>
-        <translation type="unfinished"></translation>
+        <translation>In %1 gibt es schon etwas mit diesem Namen.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Choose the folder to mount it on.</source>
-        <translation type="unfinished"></translation>
+        <translation>Wählen Sie den Ordner, in den sie eingehängt wird.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder&apos;s path can&apos;t contain %, \ or &quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Pfad des Ordners darf kein %, \ oder &quot; enthalten.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Mount it on a new folder, or an empty one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hängen Sie sie in einen neuen oder einen leeren Ordner ein.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Choose the folder on disk its files are saved to.</source>
-        <translation type="unfinished"></translation>
+        <translation>Wählen Sie den Ordner auf der Festplatte, in dem ihre Dateien gespeichert werden.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>The folder it&apos;s saved to must be outside the RAM disk (and not around it).</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Ordner, in dem sie gespeichert wird, muss außerhalb der RAM-Disk liegen (und sie nicht umschließen).</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Save it to a folder on a disk, not in memory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Speichern Sie sie in einen Ordner auf einer Festplatte, nicht im Arbeitsspeicher.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>This needs systemd&apos;s user services (systemctl --user), which aren&apos;t running.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dies erfordert die Benutzerdienste von systemd (systemctl --user), die nicht laufen.</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>It uses memory only for what&apos;s in it, up to its size. Mounting it (and changing or removing it) asks for your password once.</source>
-        <translation type="unfinished"></translation>
+        <translation>Sie belegt Arbeitsspeicher nur für ihren Inhalt, bis zu ihrer Größe. Das Einhängen (und Ändern oder Entfernen) fragt einmal nach Ihrem Passwort.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>No password needed. It has no size limit of its own: it shares the memory set aside for /dev/shm (half the RAM).</source>
-        <translation type="unfinished"></translation>
+        <translation>Kein Passwort nötig. Sie hat keine eigene Größenbegrenzung: sie teilt den für /dev/shm vorgesehenen Arbeitsspeicher (die Hälfte des RAM).</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Its files are loaded from the folder on disk when it comes up, and saved there when you log out or shut down, and as often as set here. A power cut loses what changed since the last save.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ihre Dateien werden beim Start aus dem Ordner auf der Festplatte geladen und dort gespeichert, wenn Sie sich abmelden oder herunterfahren, und so oft wie hier eingestellt. Ein Stromausfall verliert, was sich seit dem letzten Speichern geändert hat.</translation>
     </message>
 </context>
 </TS>

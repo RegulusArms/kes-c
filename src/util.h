@@ -218,6 +218,9 @@ void natural_sort(QStringList &list);
 QString unique_path(const QString &directory, const QString &name, const QString &style = "copy",
                     const QSet<QString> &taken = {});
 QPair<QString, QString> split_ext(const QString &name);
+// The name a merge gives an item whose name is taken there: "1.jpeg" → "1-(1).jpeg" for n = 1, "1-(2).jpeg" for 2,
+// without an earlier "-(n)" ("1-(1).jpeg" → "1-(2).jpeg" for 2). A folder's whole name is the stem ("v1.2" → "v1.2-(1)").
+QString merge_name(const QString &name, int n, bool is_dir);
 QString fmt_time(qint64 ts, const char *fmt);   // strftime in local time
 
 // As Python's shlex.split (POSIX mode, no comments): words split at spaces, tabs and line

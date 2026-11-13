@@ -130,10 +130,66 @@ int main(int argc, char **argv)
     make(P("A/both.txt"), "from A");
     make(P("B/only-b.txt"), "b");
     make(P("B/both.txt"), "from B");
+    make(P("A/sub/s.txt"), "s from A");
+    make(P("B/sub/s.txt"), "s from B");
+    make(P("A/photo.tar.gz"), "tgz from A");
+    make(P("B/photo.tar.gz"), "tgz from B");
+    make(P("A/clash"), "a file from A");   // a file where B has a folder of that name
+    make(P("B/clash/in.txt"), "in");
+    make(P("A/num-(1).txt"), "num from A");   // a name that already has a suffix
+    make(P("B/num-(1).txt"), "num from B");
     check(run_ops(w, {{"merge_copy", P("A"), P("B")}}), "a merge finishes");
     check(text_of(P("B/only-a.txt")) == "a" && text_of(P("B/only-b.txt")) == "b",
           "merge: files from both folders are there");
-    check(text_of(P("B/both.txt")) == "from A", "merge: a file in both is replaced by the copied one");
+    check(text_of(P("B/both.txt")) == "from B" && text_of(P("B/both-(1).txt")) == "from A",
+          "merge: a file in both is kept, and the copied one put beside it as name-(1).ext (nothing replaced by default)");
+    check(text_of(P("B/sub/s.txt")) == "s from B" && text_of(P("B/sub/s-(1).txt")) == "s from A" &&
+              !lexists(P("B/sub-(1)")),
+          "merge: a folder in both is merged into, and a file in both inside it kept beside as well");
+    check(text_of(P("B/photo.tar.gz")) == "tgz from B" && text_of(P("B/photo-(1).tar.gz")) == "tgz from A" &&
+              text_of(P("B/clash/in.txt")) == "in" && text_of(P("B/clash-(1)")) == "a file from A" &&
+              text_of(P("B/num-(1).txt")) == "num from B" && text_of(P("B/num-(2).txt")) == "num from A",
+          "merge: the suffix goes before .tar.gz; a file meeting a folder of its name goes beside it; a name already "
+          "ending in -(1) becomes -(2)");
+    make(P("A/both.txt"), "from A again");
+    check(run_ops(w, {{"merge_copy", P("A"), P("B")}}) && text_of(P("B/both.txt")) == "from B" &&
+              text_of(P("B/both-(1).txt")) == "from A" && text_of(P("B/both-(2).txt")) == "from A again",
+          "merge: merged again, a name whose -(1) is taken too gets the next free number, -(2)");
+    {
+        fileops::Job over{"merge_copy", P("A"), P("B"), true};
+        over.overwrite = true;
+        make(P("A/both.txt"), "from A, replacing");
+        QFile::remove(P("A/clash"));   // (a file never replaces a folder: that would stop the merge with an error)
+        check(run_ops(w, {over}) && text_of(P("B/both.txt")) == "from A, replacing" &&
+                  text_of(P("B/sub/s.txt")) == "s from A" && text_of(P("B/both-(2).txt")) == "from A again" &&
+                  !lexists(P("B/both-(3).txt")),
+              "merge with \"Replace files with the same names\" ticked replaces them, and adds no -(n) copies");
+    }
+    check(merge_name("1.jpeg", 1, false) == "1-(1).jpeg" && merge_name("1-(1).jpeg", 2, false) == "1-(2).jpeg" &&
+              merge_name("v1.2", 1, true) == "v1.2-(1)" && merge_name(".bashrc", 1, false) == ".bashrc-(1)" &&
+              merge_name("a.tar.gz", 3, false) == "a-(3).tar.gz" && merge_name("-(1)", 1, false) == "-(1)-(1)" &&
+              merge_name("x-(a).txt", 1, false) == "x-(a)-(1).txt",
+          "merge_name: name-(n).ext, an earlier -(n) taken off, a folder's dots kept in its stem");
+    // resume (the admin session finishing a copy Kestrel began): the copy made before isn't copied again
+    {
+        make(P("R/src/done.txt"), "copied before");
+        make(P("R/src/new.txt"), "not copied yet");
+        make(P("R/src/other.txt"), "the source's");
+        makedirs(P("R/dst"), true);
+        check(run_ops(w, {{"copy", P("R/src/done.txt"), P("R/dst/done.txt")}}), "resume: the earlier copy is made");
+        make(P("R/dst/other.txt"), "someone else's, a different size");
+        fileops::Job res{"merge_copy", P("R/src"), P("R/dst"), true};
+        res.resume = true;
+        QStringList got;
+        bool ran = run_ops(w, {res});
+        got = listdir(P("R/dst"));
+        got.sort();
+        check(ran && got == QStringList({"done.txt", "new.txt", "other-(1).txt", "other.txt"}) &&
+                  text_of(P("R/dst/other.txt")) == "someone else's, a different size" &&
+                  text_of(P("R/dst/other-(1).txt")) == "the source's",
+              "resume: the copy made before is left alone (no done-(1).txt), the rest copied, another file of the same "
+              "name kept beside (" + got.join(", ") + ")");
+    }
     make(P("C/only-c.txt"), "c");
     check(run_ops(w, {{"copy", P("A"), P("C"), true}}), "a replace finishes");
     check(!lexists(P("C/only-c.txt")) && exists(P("C/only-a.txt")), "replace: the old folder's contents are gone");
@@ -518,6 +574,32 @@ int main(int argc, char **argv)
               "a folder copy to a new name that fails part-way keeps the files finished before it, whole, leaves no "
               "part file, and reports the error (" + in_fresh.join(", ") + ")");
         QDir(P("rep/fresh")).removeRecursively();
+        // a merge that keeps both and fails part-way (a write error): everything that was there is kept as it was, and
+        // only whole files were added (the one that failed isn't there, under any name, nor its part file)
+        make(P("rep/mg_src/both.txt"), "incoming");
+        make(P("rep/mg_src/big.bin"), QByteArray(BIG, 'b'));
+        make(P("rep/mg_dst/both.txt"), "precious");
+        make(P("rep/mg_dst/big.bin"), "old big");
+        ::getrlimit(RLIMIT_FSIZE, &old_lim);
+        lim = old_lim;
+        lim.rlim_cur = 1 << 20;
+        old_handler = ::signal(SIGXFSZ, SIG_IGN);
+        ::setrlimit(RLIMIT_FSIZE, &lim);
+        boxes.clear();
+        run_ops(w, {{"merge_copy", P("rep/mg_src"), P("rep/mg_dst"), true}});
+        ::setrlimit(RLIMIT_FSIZE, &old_lim);
+        ::signal(SIGXFSZ, old_handler);
+        QStringList in_mg = listdir(P("rep/mg_dst"));
+        bool mg_ok = text_of(P("rep/mg_dst/both.txt")) == "precious" && text_of(P("rep/mg_dst/big.bin")) == "old big" &&
+                     !lexists(P("rep/mg_dst/big-(1).bin")) &&
+                     (!lexists(P("rep/mg_dst/both-(1).txt")) || text_of(P("rep/mg_dst/both-(1).txt")) == "incoming");
+        for (const QString &n : in_mg)
+            mg_ok = mg_ok && !n.startsWith(".");
+        check(mg_ok && wait_for([]() { return !boxes.isEmpty() && boxes.last().contains("big"); }, 5000),
+              "a merge that fails part-way (a write error) keeps every file that was there, adds only whole files, "
+              "leaves no part file, and reports the error (" + in_mg.join(", ") + ")");
+        QDir(P("rep/mg_src")).removeRecursively();
+        QDir(P("rep/mg_dst")).removeRecursively();
         ::truncate(enc(P("rep/newdir/huge")).constData(), 10);
         make(P("rep/mvsrc/moved.txt"), "moved");
         make(P("rep/mvdst/old.txt"), "old");
@@ -1055,7 +1137,8 @@ int main(int argc, char **argv)
         boxes = earlier;
     }
 
-    // ---- the conflict dialog says what Merge does to files with the same names (they're replaced, for good)
+    // ---- the conflict dialog: nothing is replaced unless its box is ticked (never by default), and Enter gives the
+    // answer that keeps everything
     {
         ConflictDialog folder_dlg(w, P("dst"), true), file_dlg(w, P("dst/a.txt"), false);
         auto says = [](QDialog &d) {
@@ -1064,9 +1147,57 @@ int main(int argc, char **argv)
                 all += l->text() + "\n";
             return all;
         };
-        check(says(folder_dlg).contains("files there with the same names are\nreplaced. A merge can't be undone.") &&
+        auto button = [](QDialog &d, const QString &text) -> QPushButton * {
+            for (QPushButton *b : d.findChildren<QPushButton *>())
+                if (b->text() == text)
+                    return b;
+            return nullptr;
+        };
+        check(says(folder_dlg).contains("Nothing there is replaced") && says(folder_dlg).contains("can't be undone") &&
                   !says(file_dlg).contains("Merge"),
-              "the conflict dialog says a merge replaces files with the same names and can't be undone");
+              "the conflict dialog says a merge replaces nothing (and can't be undone)");
+        QPushButton *merge = button(folder_dlg, "Merge"), *replace = button(file_dlg, "Replace"),
+                    *both = button(file_dlg, "Keep Both");
+        check(!folder_dlg.overwrite_box->isChecked() && !file_dlg.overwrite_box->isChecked() && merge &&
+                  merge->isDefault() && both && both->isDefault() && replace && !replace->isEnabled(),
+              "the conflict dialog's box to replace starts unticked, Enter means Merge (folder) or Keep Both (file), and "
+              "a file's Replace can't be clicked until the box is ticked");
+        file_dlg.overwrite_box->setChecked(true);
+        check(replace && replace->isEnabled(), "ticking the box lets a file's Replace be clicked");
+    }
+    // ---- planning through the dialog: Merge without the box keeps both (also "for all", met by a file), with it
+    // replaces
+    {
+        make(P("pl/src/f/x.txt"), "new");
+        make(P("pl/src/g.txt"), "new g");
+        make(P("pl/dst/f/x.txt"), "old");
+        make(P("pl/dst/g.txt"), "old g");
+        auto plan = [&](bool tick, QList<fileops::Job> &out) {
+            bool done = false;
+            fileops::plan_transfer(w, {P("pl/src/f"), P("pl/src/g.txt")}, P("pl/dst"), "copy",
+                                   [&](const QList<fileops::Job> &jobs) { out = jobs, done = true; });
+            ConflictDialog *dlg = nullptr;
+            wait_for([&]() { return (dlg = shown_window<ConflictDialog>()) != nullptr; }, 5000);
+            if (dlg) {
+                dlg->overwrite_box->setChecked(tick);
+                dlg->all_box->setChecked(true);
+                for (QPushButton *b : dlg->findChildren<QPushButton *>())
+                    if (b->text() == "Merge")
+                        b->click();
+            }
+            return wait_for([&]() { return done; }, 5000);
+        };
+        QList<fileops::Job> safe, over;
+        bool planned = plan(false, safe);
+        check(planned && safe.size() == 2 && safe[0].op == "merge_copy" && !safe[0].overwrite &&
+                  safe[1].op == "copy" && safe[1].dst == P("pl/dst/g (2).txt"),
+              "Merge without the box ticked plans a merge that replaces nothing, and \"for all\" keeps both for a "
+              "file");
+        planned = plan(true, over);
+        check(planned && over.size() == 2 && over[0].op == "merge_copy" && over[0].overwrite && over[1].op == "copy" &&
+                  over[1].dst == P("pl/dst/g.txt") && over[1].replace,
+              "Merge with the box ticked plans a merge that replaces, and \"for all\" replaces a file");
+        QDir(P("pl")).removeRecursively();
     }
 
     // ---- Move to Trash on a selection that holds something already in the trash: that one can only be deleted

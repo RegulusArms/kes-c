@@ -30,6 +30,10 @@ struct OrientationTag {
 };
 OrientationTag orientation_tag(const QString &path);
 OrientationTag orientation_tag_in(const QByteArray &file);   // the same for a file's contents
+// A camera RAW file's EXIF Orientation (1–8), read with a few small reads (never the whole file): IFD0 of the TIFF-based
+// ones (DNG, NEF, CR2, ARW, PEF…, and ORF and RW2 with their own magic numbers), RAF's from its preview JPEG's EXIF,
+// CR3's from its CMT1 box. 0 when it has none Kestrel finds (CRW, MRW, X3F…).
+int raw_orientation(const QString &path);
 QList<MetaRow> full_metadata(const QString &path);
 // whether full_metadata has something to show for a file (by its name): images, and with exiftool also videos, audio,
 // PDFs, e-books and office documents (the right-click menu's Open Metadata)

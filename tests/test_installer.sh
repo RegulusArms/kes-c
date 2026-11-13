@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installer test: --default (folders, trash:///, the file chooser, the drop focus extension, PATH), --dock, asking
+# Installer test: --default (folders, trash:///, the file chooser, the drop focus extension, PATH), --dock, --native-gtk, asking
 # about the dock, and --uninstall putting it all back; kes-setup on its own (also on KDE), and its BleachBit cleaner (checked by
 # BleachBit itself when it's installed). Runs ../install.sh with a throwaway HOME and a keyfile GSettings backend (never
 # your real settings or dock), with the portal definition going to a throwaway folder, and with stub `pgrep`, `sudo`
@@ -106,6 +106,13 @@ check '! grep -q kestrel-explorer "$HOME/.bashrc" && [[ "$(cat "$HOME/.bashrc")"
 dock_check '[[ "$(exts)" == "$EXTS_BEFORE" && ! -e "$USER_EXT" ]]' \
     "--uninstall: disables and removes the drop focus extension, keeping the user's others"
 
+fresh   # install.sh passes --native-gtk on to kes-setup, and --uninstall takes it out
+"$INSTALL" --native-gtk </dev/null >"$WORK/out-gtk-install" 2>&1
+check 'grep -qx "GTK_USE_PORTAL=1" "$HOME/.config/environment.d/60-kestrel-explorer-portal.conf"' \
+    "install.sh --native-gtk: native GTK apps' file dialogs go through the portal"
+"$INSTALL" --uninstall >/dev/null 2>&1
+check '[[ ! -e "$HOME/.config/environment.d/60-kestrel-explorer-portal.conf" ]]' "install.sh --uninstall: takes --native-gtk's setting out"
+
 fresh   # the user already has a portals.conf of their own
 mkdir -p "$(dirname "$(PORTAL_CONF)")"
 printf '[preferred]\ndefault=gtk;\n' > "$(PORTAL_CONF)"
@@ -165,6 +172,37 @@ check '[[ ! -e "$(STATE_FILE)" && ! -e "$(PORTAL_CONF)" && ! -e "$(CHOOSER_SERVI
 check '[[ -f "$WORK/portals/kestrel.portal" ]]' "kes-setup --undo: leaves the package's portal definition"
 dock_check '[[ "$(exts)" == "$EXTS_BEFORE" && -d "$WORK/extensions/$FOCUS_UUID" ]]' \
     "kes-setup --undo: disables the drop focus extension and leaves the package's copy"
+
+# --native-gtk (opt-in, not part of --default): native GTK apps ask the portal for Open/Save, through the session's
+# environment (~/.config/environment.d), recorded and taken out by --undo; each message says where Kestrel can't be
+fresh
+GTK_ENV="$HOME/.config/environment.d/60-kestrel-explorer-portal.conf"
+"$SETUP" --kes /usr/bin/kes --default </dev/null >"$WORK/out-gtk0" 2>&1
+check '[[ ! -e "$GTK_ENV" ]] && grep -q "kes-setup --native-gtk" "$WORK/out-gtk0" && grep -q "gedit" "$WORK/out-gtk0"' \
+    "kes-setup --default doesn't send native GTK apps to the portal, and says how to and which dialogs can't be Kestrel's"
+mkdir -p "$(dirname "$GTK_ENV")"
+printf 'MINE=1\n' > "$(dirname "$GTK_ENV")/10-mine.conf"   # the user's own, which must stay
+"$SETUP" --kes /usr/bin/kes --native-gtk </dev/null >"$WORK/out-gtk1" 2>&1
+check 'grep -qx "GTK_USE_PORTAL=1" "$GTK_ENV" && grep -qx "GDK_DEBUG=portals" "$GTK_ENV" && grep -qx "native_gtk=yes" "$(STATE_FILE)"' \
+    "kes-setup --native-gtk: sets GTK_USE_PORTAL=1 and GDK_DEBUG=portals for the session, and records it"
+check 'grep -q "next login" "$WORK/out-gtk1" && grep -q "opening links" "$WORK/out-gtk1" && grep -q "gedit" "$WORK/out-gtk1" &&
+       ! grep -q "the file chooser yet" "$WORK/out-gtk1"' \
+    "kes-setup --native-gtk: says it takes effect at the next login, what else goes through the portal, and what it can't change"
+GEN=/usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator
+if [[ -x "$GEN" ]]; then
+    check '"$GEN" 2>/dev/null | grep -qx "GTK_USE_PORTAL=1" && "$GEN" 2>/dev/null | grep -qx "GDK_DEBUG=portals"' \
+        "kes-setup --native-gtk: systemd's environment.d generator reads both variables from it"
+else
+    echo "SKIP kes-setup --native-gtk: systemd's environment.d generator reads both variables from it (no generator)"
+fi
+"$SETUP" --undo >"$WORK/out-gtk2" 2>&1
+check '[[ ! -e "$GTK_ENV" && -f "$(dirname "$GTK_ENV")/10-mine.conf" ]] && grep -q "own file dialogs again" "$WORK/out-gtk2"' \
+    "kes-setup --undo: takes the native GTK setting out, keeping the user's own environment.d files"
+fresh   # without Kestrel as the portal's file chooser: it says those apps get the desktop's portal dialog until then
+"$SETUP" --kes /usr/bin/kes --native-gtk </dev/null >"$WORK/out-gtk3" 2>&1
+check 'grep -q "the file chooser yet (kes-setup --default)" "$WORK/out-gtk3"' \
+    "kes-setup --native-gtk without --default: says Kestrel isn't the file chooser yet"
+"$SETUP" --undo >/dev/null 2>&1
 
 # kes-setup on KDE Plasma (Kubuntu): Dolphin opens folders, and nothing opens trash:/// until Kestrel does
 fresh

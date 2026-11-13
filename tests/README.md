@@ -79,7 +79,8 @@ is a check that times the machine.
 **File operations.**
 
 - **Copy:** contents, permissions, modification time, relative and broken links, empty folders, names with `%`, `%1` and non-ASCII letters.
-- **Move:** a rename on the same drive. Merge and replace.
+- **Move:** a rename on the same drive. Replace.
+- **Merge:** replaces nothing by default: a file whose name is taken is put beside it as `name-(1).ext` (`-(2)` when that's taken too, before `.tar.gz`, and after an earlier `-(n)` is taken off), folders of the same name are merged into, a file meeting a folder goes beside it; with "Replace files with the same names" ticked they're replaced. Resuming one (the admin session finishing a copy) leaves the copy made before and adds no second copy. A merge that fails part-way (a write error) keeps every file that was there and adds only whole files.
 - **Delete:** read-only folders and links to folders.
 - **Cancel:** a copy cancelled part-way leaves no half-copied files.
 - **Without RENAME_NOREPLACE or hard links** (as on an LTFS tape; `KESTREL_TEST_NO_LINK`): a copy to a new name works, a file appearing under the name meanwhile is kept, and `put_new` refuses a taken name.
@@ -103,7 +104,7 @@ is a check that times the machine.
   - a copy that replaced a file isn't undone (only the other copies of a batch are);
   - Move to Trash on a selection that holds something already in the trash trashes the rest and asks only about that one.
 - **Rename:** a batch rename that fails part-way puts every item back (a dangling symlink too) and replaces nothing.
-- **Conflict dialog:** says a merge replaces files with the same names.
+- **Conflict dialog:** says a merge replaces nothing; its box to replace starts unticked; Enter means Merge (folder) or Keep Both (file); a file's Replace can't be clicked until the box is ticked. Planned through it, Merge without the box replaces nothing (and "for all" keeps both for a file), with it replaces.
 - **Unique names:** `a (copy).txt`, `a (copy 2).txt`, `a (2).txt`.
 - **Links:** symbolic, relative and hard links.
 - **Desktop shortcuts:**
@@ -411,7 +412,7 @@ is a check that times the machine.
   - a name on the tape that's taken is kept;
   - a write that fails part-way (a file-size limit) and a cancel while it writes leave no half-written file and no part.
 - **When a tape is asked its size or health:**
-  - not before the tower has told the process the other Kestrels' jobs (as in the file chooser, which never joins it), and on its own once it has;
+  - not before the tower has told the process the other Kestrels' jobs (as in a process that hasn't joined it yet), and on its own once it has;
   - not while a job uses it; again once the job has ended.
 - **Other programs during a tape write:** GNOME's low-disk-space check skips the tape (GNOME's settings kept in memory), and its list is as it was afterwards, a tape the user put there staying; a system monitor that's running is named in the job's log, once (a stand-in /proc).
 - **Writing with dd instead:**
@@ -506,6 +507,7 @@ is a check that times the machine.
   - Save is off on the Overview and Starred, and on again in a folder with nothing selected.
 - **Open:** shows only the chosen file type (folders stay), chooses a file on double-click, returns several with "multiple", and a folder when choosing folders.
 - **The window:** opens smaller than a main window (never at its saved, perhaps maximized, size) and with smaller icons, and keeps its own view settings: zooming or showing hidden files there leaves the main windows alone, and the next chooser starts from them.
+- **Every other setting is the main windows':** folder previews are read from the main windows' setting (not a `chooser/` copy an earlier version left), and turning them off in a chooser turns off the main windows' setting; an open chooser follows a setting changed meanwhile (`apply_settings`), one of its own view settings only by its `chooser/` key, which applies to it at once, and one it has no own value of yet by the main windows'.
 - **Cancelling:** Cancel, closing the window and the app's Request.Close answer "cancelled".
 - **Understood:** MIME-type filters and GTK button labels.
 - **Free names:**
@@ -534,6 +536,7 @@ is a check that times the machine.
   - a cancel stops a file's copy part-way (its progress counts bytes; the copy held there by `KESTREL_TEST_COPY_HOLD`), and ending the session part-way does the same;
   - copying or moving a folder onto another replaces it whole.
 - **New names:** a copy or move to a new name keeps a file another program saves there meanwhile (or already had).
+- **Merges** replace nothing by default (a taken name gets the next free `name-(n).ext`, folders are merged into); `"clash": "resume"` leaves the copies made before; `"clash": "replace"` replaces files with the same names.
 - **Symlinks** inside a copied or deleted tree are handled as links.
 - **Extended attributes:** a copy keeps a file's and a folder's when Kestrel asks (`"xattrs"`), and not otherwise.
 - **Ownership:** what it makes (copies, new folders and the parents made for them, files, links) gets the owner of the folder it's made in, and a copy given another group loses its set-group-ID bit (seen through one of the user's other groups; skipped if there's none).
@@ -561,6 +564,11 @@ is a check that times the machine.
   - files dragged from a view grouped by period or by day onto a folder in it move into it (the drag's data and actions as the view's own model gives them), in the grid and the list;
   - going back with the mouse's back button, moving the mouse while it's down drags nothing.
 - **Dragging onto a tab:** resting there shows the tab (highlighted), a drop onto it goes into its folder, the drag goes on into a subfolder there, the Overview's tab takes none and the Trash's moves to the trash.
+- **Dropping onto the sidebar:**
+  - a bookmark, a drive (added to the mount table) and the Trash are highlighted with what dropping does ("Move to …", "Move to Trash"), and the drop moves the file there;
+  - Recent, the Overview, a read-only drive and a bookmark whose folder is gone refuse, saying why, and start no job; a bookmark whose folder goes during a drag is still offered in that drag (each entry is looked at once), and refused in the next;
+  - a recent server that isn't connected takes a drop, connecting first; Starred stars the files and leaves them where they are;
+  - resting on an entry opens it in the pane.
 - **The tab menu** (right-click on a tab): Duplicate Tab puts a copy with the same folder and back history right after the tab, Open in New Window moves the tab to a new window, Close Tab closes that tab.
 - **The grid** is packed (each item in its cell, as many columns as fit) after zooming and at every window width. A right-click outside an item's icon and name gives the folder's menu.
 - **Band selection:** a band dragged from empty space selects the items it touches, whichever way it's dragged, in the grid and the list, plain and grouped.
@@ -604,6 +612,7 @@ is a check that times the machine.
 
 **The image viewer and saving its changes.**
 
+- **RAW photos the right way up:** a RAW file's orientation is read from DNG/TIFF (both byte orders), ORF, RW2, RAF (its preview's EXIF) and CR3 (its CMT1 box), with small files made in the test; a landscape preview of a portrait photo is turned by it (6, 8, and 5 and 7 mirrored), one that already has the photo's shape isn't (its tag not even read), and one with no tag is left as it is, not squeezed; a RAW's thumbnail an earlier Kestrel made isn't used (it may lie on its side), one made now is, and another app's is. (Reading a real RAW file needs the RAW image plugin, which the test systems don't have.)
 - **Saving a rotation:**
   - a rotation and flip on top of an orientation tag give the right EXIF orientation;
   - a saved rotation (all 8 orientations × 4 turns × flipped or not) shows the image as the viewer showed it, by changing only the tag's two bytes;
@@ -771,6 +780,7 @@ is a check that times the machine.
   - only naming Kestrel's cache, its lists (the remembered syncs too), the three history keys (with the image viewer's recent folders) and the save locations in its settings;
   - with BleachBit installed, its dry run in the throwaway home lists exactly Kestrel's files and changes nothing; the Cache option alone keeps the saved job logs and the Job logs option alone deletes only them; then a real clean empties the cache and deletes the lists, keeps a folder linked from the cache, GNOME's thumbnails, other apps' caches and every other setting (skipped while a Kestrel is running, since BleachBit won't clean then);
   - `--undo` removes the cleaner and leaves the user's own.
+- **`--native-gtk`** (opt-in): `--default` alone doesn't set it, and says how to and which dialogs can't be Kestrel's; `kes-setup --native-gtk` writes `GTK_USE_PORTAL=1` and `GDK_DEBUG=portals` to `~/.config/environment.d/` (read back by systemd's generator where it's installed) and records it, says it takes effect at the next login, what else goes through the portal and what it can't change, and says so when Kestrel isn't the file chooser yet; `--undo` takes it out and keeps the user's own files there; `install.sh --native-gtk` passes it on and `--uninstall` removes it.
 - **`kes-setup --install-optional`** (stub `dpkg`, `apt-cache` and `sudo`) asks apt to install exactly the optional packages that are missing and available, names the unavailable ones, and installs nothing when they're all there.
 
 ## Requirements

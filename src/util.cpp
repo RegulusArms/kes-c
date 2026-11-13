@@ -1063,6 +1063,16 @@ QPair<QString, QString> split_ext(const QString &name)
     return {stem, ext};
 }
 
+QString merge_name(const QString &name, int n, bool is_dir)
+{
+    auto [stem, ext] = is_dir ? qMakePair(name, QString()) : split_ext(name);
+    static const QRegularExpression suffix_re(R"(-\(\d+\)$)");
+    QString bare = QString(stem).remove(suffix_re);
+    if (bare.isEmpty())   // the name was only a suffix ("-(1)"): kept, and numbered after it
+        bare = stem;
+    return bare + "-(" + QString::number(n) + ")" + ext;
+}
+
 QString unique_path(const QString &directory, const QString &name, const QString &style, const QSet<QString> &taken)
 {
     QString target = join(directory, name);

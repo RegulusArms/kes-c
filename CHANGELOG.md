@@ -4,7 +4,52 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.4-alpha.0
+## 0.3.4-alpha.1
+
+- **Merging folders no longer replaces files.** When a folder is copied or moved onto one with the same name and you
+  choose Merge, a file with the same name as one already there is now kept beside it with a number, so both survive:
+  `1.jpeg` arrives as `1-(1).jpeg`, or `1-(2).jpeg` if that's taken as well. Before, the file already there was
+  replaced and lost for good. Folders with the same name inside are merged the same way. To replace instead, tick
+  *Replace files with the same names instead* in the conflict window.
+- **Nothing is replaced by accident in the conflict window.** For a file, Replace can't be clicked until you tick
+  *Allow replacing the file there*, and pressing Enter keeps everything (Merge for a folder, Keep Both for a file).
+  The box is never ticked to start with, also when the answer is applied to all conflicts.
+- When the admin session finishes a copy or merge that Kestrel couldn't complete (permission denied), it no longer
+  adds a second copy of the files Kestrel had already put there.
+- **Kestrel's file chooser for native GTK apps too (opt-in).** `kes-setup --native-gtk` (or `./install.sh
+  --native-gtk`; not part of `--default`) has native GTK apps (installed with apt, such as gedit) ask the desktop
+  portal for their Open and Save dialogs, so they get Kestrel's, from your next login. It also sends their links,
+  app choosing and some printing through the portal; `kes-setup --undo` takes it out. `--default` and the install
+  guide now say which apps get Kestrel's dialogs and which can't: an app that builds GTK's dialog itself (gedit's
+  Save and Save As) always shows GTK's own.
+- **Portrait RAW photos show the right way up.** A portrait shot in a camera RAW file (seen with Fujifilm RAF, and
+  most cameras' formats store it the same way) showed in the viewer lying on its side and squeezed into a portrait
+  frame, and its thumbnail was landscape: the camera's embedded preview, which Kestrel shows first, is stored
+  landscape with the photo marked only by its orientation tag. Kestrel now turns it by that tag (read from DNG, NEF,
+  CR2, CR3, ARW, ORF, RW2, PEF, RAF and the other TIFF-based formats). Where a file has no tag Kestrel can read, the
+  preview is shown as it is, no longer squeezed, and zooming in shows the full photo the right way up as before. RAW
+  thumbnails and folder previews made before are made again.
+- **Drop files onto the sidebar.** Files and folders dragged onto a drive, bookmark, mount or other place in the
+  sidebar now go there as a drop onto a folder does (moved on the same drive, copied onto another; Ctrl, Shift,
+  Ctrl+Shift and Alt as usual; a job you can undo), also from other apps. The entry is highlighted with what dropping
+  does said under it, and resting on it opens it so the drag can go on into a folder there. Dropping onto Starred
+  stars the files; onto a phone, share or server that isn't connected, or a RAM disk that isn't in memory, connects or
+  brings it back first. Recent, the Overview, a bookmark whose folder is gone and a read-only drive refuse, saying
+  why, instead of failing later in the job. Each entry is checked once per drag, so a slow drive isn't asked over and
+  over while you drag.
+- **The file chooser follows Kestrel's settings.** Other apps' Open and Save dialogs, and the Link window's two
+  sides, now use the main windows' default sort, folder previews, pinned-first and search options instead of copies
+  of their own, and follow any setting changed while they're open (in Preferences or another Kestrel window): before,
+  an open dialog kept what it started with, and the system's file chooser never heard changes made elsewhere, such
+  as private mode, separate caching, folder colours or deleted thumbnails. Only its view stays its own (Preferences →
+  Windows: view, icon sizes, hidden files, sidebar, info panel). Like every Kestrel, it now asks a tape its size
+  only while no job is using it.
+- **Every text is translated again** in all ten languages. The 442 texts added since the translations were last
+  brought up to date (private mode, RAM disks, the Link window, Disk Usage, Back Up Drive to Image, Encrypt and
+  Decrypt, verifying copies, the new merge wording and others) showed in English; they now show in the desktop's
+  language.
+
+## 0.3.4-alpha.0 (2026-11-12)
 
 - **A picture of every window in the guides.** [Features](docs/features.md) and [Archives](docs/archives.md) now show
   each of Kestrel's windows next to the text about it: the main window, Properties, Open With, Rename and Batch Rename,

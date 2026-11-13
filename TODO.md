@@ -77,14 +77,6 @@ into.
     its last action was none) or Kestrel did something wrong. If Brave refused it, compare with a drag from GNOME
     Files into the same page.
 
-- [ ] **The file chooser should use the same caches and follow the same preferences as the rest of Kestrel.** A
-  chooser window (src/chooser.cpp, a MainWindow with `chooser_mode`) should use the same thumbnail and folder-mosaic
-  caches and cache settings (the separate cache, private mode's RAM disk, cache size and clean-up), and follow every
-  other preference the main windows do, including changes made while a chooser is open (apply_settings in
-  src/app.cpp). The only exceptions are its own `chooser/…` keys (view, icon sizes, hidden files, sidebar, info
-  panel) and `chooser_start` / `chooser_places`. Check each setting in src/prefs.cpp against a chooser window, and
-  fix any that it ignores or reads from somewhere else.
-
 - [ ] **A merge into the parent folder lost a file (seen once, not reproduced yet).** On ZFS (2026-11-12): a folder
   `1` held a folder `1` with pictures in it (`1/1/img.jpg`). Cut `1/1` with the mouse, went up to the folder above,
   pasted; the conflict question came up for `1`, answered Merge with "Apply this action to all conflicts". The job
@@ -98,42 +90,6 @@ into.
   - Still to find out: whether the file was really gone or the folder view just didn't show it (`ls`, or F5); how
     many files and how big; whether anything else was cut or open at the time (another tab or window on `1`); the
     dataset's properties. Next time: turn on saving job logs, and check the folder with `ls` before anything else.
-
-- [ ] **Portrait RAW photos show sideways in the viewer, and their thumbnails are landscape (seen with Fujifilm .raf;
-  very likely every RAW format).** A portrait shot from an X-H2S shows in the viewer as a portrait frame with the
-  picture lying on its side, squeezed to fit; zoomed in far enough for the full decode, it's right. Its thumbnail in
-  the folder is landscape, as is every RAF's.
-  - Not only RAF: the plugin returns every format's embedded preview the same way, and nearly all cameras store that
-    preview landscape with portrait shots marked only by the Orientation tag (Canon CR2/CR3, Nikon NEF, Sony ARW,
-    Olympus ORF, Panasonic RW2, Pentax PEF, DNG). To confirm with portrait samples of each (raw.pixls.us), in a
-    container.
-  - Cause (checked in a container with kimageformat6-plugins 6.24 on Ubuntu 26.04): the viewer (`ImageViewer::request`)
-    and thumbnails (`load_scaled`, src/thumbs.cpp) read RAW files through QImageReader with `setQuality(0)` and
-    `setAutoTransform(true)`. At quality 0 the kimageformats raw plugin returns the camera's embedded preview
-    (`LoadTHUMB`: the biggest one, decoded with `QImage::loadFromData`), which ignores the preview's EXIF
-    orientation. The plugin doesn't support `QImageIOHandler::ImageTransformation` either, so autoTransform does
-    nothing. Fujifilm stores the preview landscape (4416×2944) with Orientation "Rotate 270 CW" in both the RAF's tags
-    and the preview's own EXIF.
-  - The viewer's squeeze: the plugin's `size()` does apply the orientation (`rawImageSize`: width and height swapped
-    when LibRaw's flip says so: 4176×6264 for that shot), so the viewer asks for a portrait scaled size
-    (1365×2048), and Qt scales the landscape preview into it. The full decode (quality -1) is the right way up
-    (LibRaw turns it), which is why zooming in fixes it.
-  - Fix: turn the preview in Kestrel. After a quality 0 read of a RAW file, apply the file's orientation tag
-    (metadata.cpp `orientation_tag`), and ask for the scaled size only after that, or scale it ourselves. src/metadata.cpp
-    doesn't read RAF yet (its header is `FUJIFILMCCD-RAW`, with the preview JPEG's offset and length as big-endian
-    32-bit numbers at bytes 84 and 88: the EXIF is in that JPEG). What it reads per format:
-    - already: the TIFF-based ones (DNG, NEF, NRW, CR2, ARW, SR2, SRF, PEF, SRW, ERF, 3FR, IIQ, MOS, MEF, KDC, DCR, FFF);
-    - a small change: ORF (`IIRO`/`MMOR`) and RW2/RWL (`IIU\0`), TIFF with another magic number;
-    - its own reading: RAF (above), CR3 (ISO-BMFF boxes; the tag is in the `CMT1` box, a TIFF);
-    - old or rare (CRW, MRW, X3F): the fallback.
-    Fallback where there's no tag: if `size()` is portrait and the preview landscape (or the other way), the preview
-    needs turning but the direction is unknown. Then show it unsqueezed as it is (the full decode on zooming in is
-    right), or decode at half size (the plugin's quality 10–19, which LibRaw turns; slower).
-    A preview whose shape already matches `size()` is never turned (some cameras store it turned already).
-  - Thumbnails already cached sideways need making again (the thumbnail cache's key or version). Test with a small RAF
-    or DNG whose preview is stored turned (a fixture made with exiftool), for both the viewer and the thumbnail.
-  - Seen with: X-H2S portrait shots, also a renamed one (`.raf` lower-case); the X-T30 and X-H2S landscape shots are
-    fine.
 
 ## New features
 
@@ -195,27 +151,6 @@ into.
   - Anything else: what Properties' General tab shows, as now.
   - A free window (show_free); never reads files on a tape or floppy without the drive's previews allowed, as with
     thumbnails.
-
-- [ ] **Drop files and folders onto any sidebar entry.** Dragging files or folders onto a drive, bookmark, mount or
-  other place in the left panel should put them there, as a drop onto a folder does (move/copy/link by the keys held,
-  Alt for the menu; a job, undoable). Already there: `Sidebar::dragMoveEvent`/`dropEvent` (src/widgets.cpp) accept a
-  drop onto any entry whose path is an existing folder (mounted drives, bookmarks, Home, the user folders, mounted
-  images, Trash → trashed) and hand it to `MainWindow::handle_drop`. Still to do:
-  - Show which entry the drop goes to: highlight the row under the pointer while dragging (now only the pointer
-    changes), and a tooltip-like hint for what will happen (Move to / Copy to *name*).
-  - Entries without a folder: an unmounted drive or image (mount it, then drop; say so if it fails), a phone or
-    network share (a gvfs path, or a URI that isn't under `/`), Starred (star the dropped items), Recent and the
-    Overview (refuse, with the pointer showing it).
-  - A bookmark whose folder is gone, or a drive that's read-only: refuse with the reason rather than failing later
-    in the job.
-  - Hovering over an entry for a moment while dragging opens it in the pane (spring-loaded), so the drop can go into
-    a subfolder there.
-  - `dragMoveEvent` calls `isdir()` on every move: cache it per row for the drag, so a slow drive (tape, floppy,
-    network share) isn't asked over and over.
-  - The drop has to work from other apps too (Brave, the desktop), not only from Kestrel's panes; and dropping onto
-    the drive the files are already on moves, onto another drive copies, as in the panes.
-  - Tests (`ui`, the dropping-onto-folders checks): a drop onto a bookmark, a mounted drive and Trash runs the job;
-    an unmounted drive and Recent refuse. docs/features.md (the sidebar) to say so.
 
 ### File tools
 
@@ -281,20 +216,6 @@ into.
   pins, Set as Wallpaper, and Recent Files' "Do not remember".
   - **Search index (optional):** `index_covers()` only knows Tracker/localsearch. KDE uses Baloo (folders in
     `~/.config/baloofilerc`, `baloosearch`). Without it, Kestrel uses its own search, which is fine.
-
-- [ ] **Kestrel as the file chooser for native GTK apps too (opt-in), and say where it can't be.** `kes-setup
-  --default` makes Kestrel the portal's FileChooser, but native (non-Flatpak, non-Snap) GTK apps don't ask the portal:
-  GTK 3 sends a `GtkFileChooserNative` there only when sandboxed or with `GTK_USE_PORTAL=1`, GTK 4 only when sandboxed
-  or with `GDK_DEBUG=portals`. So gedit's Open and Save show GTK's own dialog.
-  - **Opt-in:** a separate kes-setup flag (not part of `--default`) that sets `GTK_USE_PORTAL=1` and
-    `GDK_DEBUG=portals` for the session (`~/.config/environment.d/`), recorded in install-state and taken out by
-    `--undo`; install.sh passes it through. Say that it takes effect at the next login, and that it sends other things
-    through the portal as well (opening links, the app chooser, printing in some GTK versions). Cover it in
-    tests/test_installer.sh.
-  - **Document the limit** (docs/install.md, kes-setup's message): which apps get Kestrel (Flatpak and Snap apps,
-    browsers using the portal, Qt apps using it, and with the opt-in native GTK apps that use the native chooser) and
-    which can't: apps that build `GtkFileChooserDialog` themselves, e.g. gedit's Save / Save As (its Open uses the
-    native one). Nothing outside the app can replace that dialog.
 
 ### Translations
 
@@ -451,6 +372,30 @@ into.
   - Note the findings, fix them, and add the checks to tests/CHANGELOG.md.
 
 ## Done
+
+- [x] **Kestrel as the file chooser for native GTK apps too (opt-in), and where it can't be** (0.3.4-alpha.1).
+  `kes-setup --native-gtk` / `install.sh --native-gtk`: GTK_USE_PORTAL=1 and GDK_DEBUG=portals in
+  ~/.config/environment.d/60-kestrel-explorer-portal.conf (marked; install-state native_gtk=yes; --undo removes it),
+  next login; the limit (apps building GtkFileChooserDialog themselves: gedit's Save / Save As) in docs/install.md and
+  the --default and --native-gtk messages.
+
+- [x] **Portrait RAW photos show the right way up in the viewer and thumbnails** (0.3.4-alpha.1). The embedded
+  preview (quality 0) is turned by the file's Orientation when its shape doesn't match the photo's
+  (thumbs::raw_preview; metadata::raw_orientation reads TIFF-based formats incl. ORF/RW2, RAF's preview EXIF, CR3's
+  CMT1), never scaled into the photo's shape; no tag: shown unturned, unsqueezed. Old RAW thumbnails (Kestrel's,
+  without X-Kestrel-Raw-Turned) and mosaics (v3) are made again. Still to do: confirm with portrait samples of each
+  format from raw.pixls.us in a container with the RAW plugin.
+
+- [x] **Drop files and folders onto any sidebar entry** (0.3.4-alpha.1). Highlight and "Move to …" hint under the
+  entry, spring-loading (500 ms), each entry's target worked out once per drag, Starred stars, a phone, share or
+  server that isn't connected is connected first (a RAM disk brought back), Recent, the Overview, a gone bookmark and
+  a read-only drive (the mount table's "ro") refuse with the reason; the keys held at the drop go with it.
+
+- [x] **The file chooser uses the same caches and follows the same preferences as the rest of Kestrel**
+  (0.3.4-alpha.1). Chooser windows (and the Link window's two sides) are applied every setting change, the
+  `--file-chooser` process hears other Kestrels' changes through the tower, and only the `chooser/…` view keys
+  (view, icon sizes, hidden files, sidebar, info panel) and its size are its own; the sort default, pinned-first,
+  folder previews and search options are the main windows'.
 
 ## Struck items
 

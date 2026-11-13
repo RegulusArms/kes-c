@@ -146,7 +146,7 @@ void MainWindow::paste(const QString &target_in, bool as_link)
     }
 }
 
-void MainWindow::handle_drop(const QStringList &paths, const QString &target, bool copy_only)
+void MainWindow::handle_drop(const QStringList &paths, const QString &target, bool copy_only, int keys)
 {
     if (paths.isEmpty())
         return;
@@ -154,7 +154,7 @@ void MainWindow::handle_drop(const QStringList &paths, const QString &target, bo
         trash_paths(paths);
         return;
     }
-    Qt::KeyboardModifiers mods = QGuiApplication::keyboardModifiers();
+    Qt::KeyboardModifiers mods = keys < 0 ? QGuiApplication::keyboardModifiers() : Qt::KeyboardModifiers(keys);
     bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier, alt = mods & Qt::AltModifier;
     if (alt) {
         QMenu m(this);

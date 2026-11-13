@@ -1199,6 +1199,12 @@ Sidebar::Sidebar(QWidget *parent) : QListWidget(parent)
     setAcceptDrops(true);
     setDropIndicatorShown(true);
     setDragDropMode(QAbstractItemView::DropOnly);
+    spring.setSingleShot(true);
+    spring.setInterval(SPRING_MS);
+    connect(&spring, &QTimer::timeout, this, [this]() {   // resting on an entry while dragging: opened in the pane
+        if (drop_on >= 0 && !spring_path.isEmpty())
+            Q_EMIT open_path(spring_path, false);
+    });
     setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, &QWidget::customContextMenuRequested, this, &Sidebar::menu);
     connect(this, &QListWidget::itemClicked, this, &Sidebar::clicked);
@@ -1966,12 +1972,139 @@ Sidebar::Drop Sidebar::drop_for(const QPoint &pos, const QString &section, const
     return d;
 }
 
+// Files dropped onto an entry go where a drop onto a folder would (MainWindow::handle_drop: the keys held say move,
+// copy, link or ask, and by default a drop onto the drive they're on moves them, onto another copies), as a job. An
+// entry with no folder of its own takes them its own way: Starred stars them, a phone or network place that isn't
+// mounted is connected first (and says so if that fails), a RAM disk that isn't in memory is brought back first; the
+// Overview and Recent take none. A bookmark whose folder is gone, or a drive mounted read-only, refuses with the reason.
+// Each entry's target is worked out once for the drag (targets), so a slow drive isn't asked on every move.
+Sidebar::Target Sidebar::target_for(QListWidgetItem *it, const QMimeData *md)
+{
+    Target t;
+    if (!it)
+        return t;
+    QVariantList ke = it->data(Qt::UserRole).toList();
+    QString kind = ke.value(0).toString(), path = it->data(PathRole).toString();
+    if (kind == "header")
+        return t;
+    QString key = kind + "\n" + it->data(KeyRole).toString() + "\n" + path;
+    if (targets.contains(key))
+        return targets.value(key);
+    t.name = it->text();
+    bool members = md->hasFormat(archive::MEMBERS_MIME);
+    if (!members && drag_paths.isEmpty()) {
+        t.reason = tx("Only files and folders can be dropped here");
+    } else if (kind == "overview") {
+        t.reason = tx("The Overview takes no files");
+    } else if (kind == "recent") {
+        t.reason = tx("Recent takes no files: it lists the files you opened");
+    } else if (kind == "starred") {
+        if (members)
+            t.reason = tx("Only into a folder");
+        else
+            t.what = "star";
+    } else if (kind == "trash") {
+        if (members)
+            t.reason = tx("Only into a folder");
+        else
+            t.what = "trash", t.path = path;
+    } else if (kind == "ramdisk" && !ramdisk::online([&]() {
+                   const QList<ramdisk::Disk> list = ramdisk::disks();
+                   const ramdisk::Disk *d = ramdisk::find(list, ke.value(1).toString());
+                   return d ? *d : ramdisk::Disk();
+               }())) {
+        t.what = "ramdisk", t.path = path, t.id = ke.value(1).toString();
+    } else if (!path.startsWith('/')) {   // a phone, share or server that isn't mounted: its URI
+        t.what = "connect", t.path = path;
+    } else if (!isdir(path)) {
+        t.reason = tx("“%1” isn't there any more").arg(path);
+    } else if (drives::read_only(path)) {
+        t.reason = tx("%1 is read-only").arg(t.name);
+    } else {
+        t.what = "folder", t.path = path;
+        struct stat st;
+        if (stat_(path, st))
+            t.dev = qint64(st.st_dev);
+    }
+    if (t.what == "folder" && !members) {
+        bool all_here = std::all_of(drag_paths.begin(), drag_paths.end(), [&](const QString &p) { return dirname(p) == path; });
+        bool into_itself = std::any_of(drag_paths.begin(), drag_paths.end(),
+                                       [&](const QString &p) { return path == p || path.startsWith(p + "/"); });
+        if (into_itself)
+            t.what.clear(), t.reason = tx("A folder can't go into itself");
+        else if (all_here)
+            t.what.clear(), t.reason = tx("Already in %1").arg(t.name);
+    }
+    targets.insert(key, t);
+    return t;
+}
+
+QString Sidebar::op_for(const Target &t, Qt::KeyboardModifiers mods, bool copy_only) const
+{
+    if (t.what == "star" || t.what == "trash")
+        return t.what;
+    bool ctrl = mods & Qt::ControlModifier, shift = mods & Qt::ShiftModifier;
+    if (mods & Qt::AltModifier)
+        return "ask";
+    if (ctrl && shift)
+        return "link";
+    if (ctrl || copy_only)
+        return "copy";
+    if (shift)
+        return "move";
+    // as handle_drop decides: onto the drive they're on, moved; onto another (or one not mounted yet), copied
+    return t.dev >= 0 && t.dev == drag_dev ? "move" : "copy";
+}
+
+QString Sidebar::hint_for(const Target &t, const QString &op) const
+{
+    if (t.what.isEmpty())
+        return t.reason;
+    if (t.what == "star")
+        return tx("Add to Starred");
+    if (t.what == "trash")
+        return tx("Move to Trash");
+    if (t.what == "connect")
+        return op == "move" ? tx("Connect to %1, then move there").arg(t.name)
+               : op == "ask" ? tx("Connect to %1, then ask what to do").arg(t.name)
+                             : tx("Connect to %1, then copy there").arg(t.name);
+    if (t.what == "ramdisk")
+        return op == "move" ? tx("Bring %1 back into memory, then move there").arg(t.name)
+               : op == "ask" ? tx("Bring %1 back into memory, then ask what to do").arg(t.name)
+                             : tx("Bring %1 back into memory, then copy there").arg(t.name);
+    return op == "move"   ? tx("Move to %1").arg(t.name)
+           : op == "link" ? tx("Link in %1").arg(t.name)
+           : op == "ask"  ? tx("Move, copy or link to %1 (asks)").arg(t.name)
+                          : tx("Copy to %1").arg(t.name);
+}
+
+void Sidebar::end_drop()
+{
+    spring.stop();
+    spring_path.clear();
+    drop_on = -1;
+    drop_ok = false;
+    hint.clear();
+    viewport()->update();
+}
+
 void Sidebar::dragEnterEvent(QDragEnterEvent *ev)
 {
-    if (ev->mimeData()->hasFormat(SIDEBAR_MIME) && ev->source() == this)
+    if (ev->mimeData()->hasFormat(SIDEBAR_MIME) && ev->source() == this) {
         ev->acceptProposedAction();
-    else if (ev->mimeData()->hasUrls() || ev->mimeData()->hasFormat(archive::MEMBERS_MIME))
-        ev->acceptProposedAction();
+        return;
+    }
+    if (!ev->mimeData()->hasUrls() && !ev->mimeData()->hasFormat(archive::MEMBERS_MIME))
+        return;
+    // a new drag: its files, and their drive, once (the targets are found as the pointer comes over them)
+    targets.clear();
+    drag_paths.clear();
+    for (const QUrl &u : ev->mimeData()->urls())
+        if (u.isLocalFile())
+            drag_paths << uri_to_path(QString::fromLatin1(u.toEncoded()));   // (by its bytes, as FSModel)
+    struct stat st;
+    drag_dev = !drag_paths.isEmpty() && lstat_(drag_paths.first(), st) ? qint64(st.st_dev) : -1;
+    ev->acceptProposedAction();   // (so the moves keep coming, also over an entry that takes none)
 }
 
 void Sidebar::dragMoveEvent(QDragMoveEvent *ev)
@@ -1990,17 +2123,38 @@ void Sidebar::dragMoveEvent(QDragMoveEvent *ev)
         return;
     }
     QListWidgetItem *it = itemAt(ev->position().toPoint());
-    QString p = it ? it->data(PathRole).toString() : QString();
-    if (p.startsWith('/') && isdir(p))
+    Target t = target_for(it, ev->mimeData());
+    int row = it ? this->row(it) : -1;
+    bool is_header = it && it->data(Qt::UserRole).toList().value(0) == "header";
+    if (row != drop_on) {   // onto another entry: opened there if the drag rests on it
+        spring.stop();
+        spring_path = t.what == "folder" || t.what == "trash" ? t.path : QString();
+        if (!spring_path.isEmpty())
+            spring.start();
+    }
+    drop_on = is_header ? -1 : row;
+    drop_ok = !t.what.isEmpty();
+    bool copy_only = ev->mimeData()->hasFormat(COPY_ONLY_MIME) || !(ev->possibleActions() & Qt::MoveAction);
+    QString op = op_for(t, ev->modifiers(), copy_only);
+    hint = it && !is_header ? hint_for(t, op) : QString();
+    viewport()->update();
+    if (t.what.isEmpty()) {
+        ev->ignore();   // the pointer says it won't go here (the hint says why)
+        return;
+    }
+    Qt::DropAction a = op == "move" || op == "trash" ? Qt::MoveAction : op == "link" ? Qt::LinkAction : Qt::CopyAction;
+    if (ev->possibleActions() & a) {
+        ev->setDropAction(a);
+        ev->accept();
+    } else {
         ev->acceptProposedAction();
-    else
-        ev->ignore();
+    }
 }
 
 void Sidebar::dragLeaveEvent(QDragLeaveEvent *ev)
 {
     drop_line = -1;
-    viewport()->update();
+    end_drop();
     QListWidget::dragLeaveEvent(ev);
 }
 
@@ -2023,32 +2177,93 @@ void Sidebar::dropEvent(QDropEvent *ev)
         });
         return;
     }
-    QListWidgetItem *it = itemAt(ev->position().toPoint());
-    if (!it || it->data(PathRole).toString().isEmpty())
+    end_drop();
+    Target t = target_for(itemAt(ev->position().toPoint()), ev->mimeData());
+    targets.clear();   // (the next drag finds them again: drives come and go)
+    if (t.what.isEmpty()) {
+        ev->ignore();
         return;
+    }
+    int mods = int(ev->modifiers());
+    bool copy_only = ev->mimeData()->hasFormat(COPY_ONLY_MIME) || !(ev->possibleActions() & Qt::MoveAction);
+    QString op = op_for(t, ev->modifiers(), copy_only);
+    Qt::DropAction a = op == "move" || op == "trash" ? Qt::MoveAction : op == "link" ? Qt::LinkAction : Qt::CopyAction;
+    if (ev->possibleActions() & a) {
+        ev->setDropAction(a);
+        ev->accept();
+    } else {
+        ev->acceptProposedAction();
+    }
     if (ev->mimeData()->hasFormat(archive::MEMBERS_MIME)) {   // from Open as Archive (before urls(): see FSModel)
         QByteArray members = ev->mimeData()->data(archive::MEMBERS_MIME);
-        QString target = it->data(PathRole).toString();
-        ev->acceptProposedAction();
+        QString target = t.path;
         QTimer::singleShot(0, this, [this, members, target]() { Q_EMIT dropped_members(members, target); });
         return;
     }
-    QStringList paths;
-    for (const QUrl &u : ev->mimeData()->urls())
-        if (u.isLocalFile())
-            paths << u.toLocalFile();
-    QString target = it->data(PathRole).toString();
-    bool copy_only = ev->mimeData()->hasFormat(COPY_ONLY_MIME);
-    ev->acceptProposedAction();
-    QTimer::singleShot(0, this, [this, paths, target, copy_only]() { Q_EMIT dropped(paths, target, copy_only); });
+    QStringList paths = drag_paths;
+    QPointer<Sidebar> self(this);
+    // after the drag has finished (a question, a mount or a job mustn't run inside it)
+    QTimer::singleShot(0, this, [self, t, paths, copy_only, mods]() {
+        if (!self)
+            return;
+        if (t.what == "star") {
+            places::set_starred(paths, true);
+        } else if (t.what == "folder" || t.what == "trash") {
+            Q_EMIT self->dropped(paths, t.path, copy_only, mods);
+        } else if (t.what == "connect") {
+            overview::mount_uri(self->window(), t.path, [self, t, paths, copy_only, mods](const QString &local, const QString &err) {
+                if (!self)
+                    return;
+                if (local.isEmpty()) {
+                    if (!err.isEmpty())   // (empty: cancelled, or already said by the mount's own question)
+                        warn(self->window(), tx("Drop"), tx("Couldn't connect to %1, so nothing was put there:\n\n%2").arg(t.name, err));
+                    return;
+                }
+                Q_EMIT self->dropped(paths, local, copy_only, mods);
+            });
+        } else if (t.what == "ramdisk") {
+            const QList<ramdisk::Disk> list = ramdisk::disks();
+            const ramdisk::Disk *d = ramdisk::find(list, t.id);
+            if (!d)
+                return;
+            ramdisk::create(self->window(), *d, [self, t, paths, copy_only, mods](bool ok) {   // (a failure is said there)
+                if (self && ok)
+                    Q_EMIT self->dropped(paths, t.path, copy_only, mods);
+            });
+        }
+    });
 }
 
 void Sidebar::paintEvent(QPaintEvent *ev)
 {
     QListWidget::paintEvent(ev);
+    QPainter p(viewport());
+    p.setRenderHint(QPainter::Antialiasing);
+    if (drop_on >= 0 && drop_on < count()) {
+        // the entry files would go to (as a folder under them in the panes), and what dropping does, beneath it
+        QRect r = visualItemRect(item(drop_on));
+        if (drop_ok) {
+            QColor c = palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, 2));
+            c.setAlpha(70);
+            p.setBrush(c);
+            p.drawRoundedRect(QRectF(r).adjusted(2, 1, -2, -1), 4, 4);
+        }
+        if (!hint.isEmpty()) {
+            QFontMetrics fm(font());
+            int w = viewport()->width() - 8, h = fm.height() + 8;
+            QRect bubble(4, r.bottom() + 3, w, h);
+            if (bubble.bottom() > viewport()->height())
+                bubble.moveBottom(r.top() - 3);
+            p.setPen(palette().color(QPalette::ToolTipText));
+            p.setBrush(palette().color(QPalette::ToolTipBase));
+            p.drawRoundedRect(QRectF(bubble).adjusted(0.5, 0.5, -0.5, -0.5), 4, 4);
+            p.drawText(bubble.adjusted(6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                       fm.elidedText(hint, Qt::ElideMiddle, w - 12));
+        }
+    }
     if (drop_line < 0)
         return;
-    QPainter p(viewport());
     p.setPen(QPen(palette().color(QPalette::Highlight), 2));
     p.drawLine(4, drop_line, viewport()->width() - 4, drop_line);
 }

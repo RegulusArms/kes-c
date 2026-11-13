@@ -6,6 +6,8 @@
 // cached in ~/.cache/kestrel-explorer/folders.
 #pragma once
 
+#include <functional>
+
 #include <QHash>
 #include <QIcon>
 #include <QImage>
@@ -42,6 +44,16 @@ struct FolderOpts {
 };
 
 QImage load_scaled(const QString &path, int size);
+// A camera RAW file's embedded preview (the plugin's quality 0: fast, no demosaicing), the right way up and at most
+// max_side (0: as it is). full: the photo's own size, the right way up. The plugin returns the preview as the camera
+// stored it, which for a portrait shot is nearly always landscape, marked only by the Orientation tag (which neither
+// the plugin nor autoTransform applies to it): it's turned here by the file's tag (metadata::raw_orientation) when its
+// shape doesn't match the photo's. With no tag it's left as it is, but never squeezed into the photo's shape; a
+// preview whose shape already matches is never turned (some cameras store it turned).
+QImage raw_preview(const QString &path, int max_side, QSize *full = nullptr);
+// raw_preview's turning: preview turned by orientation (EXIF 1–8, 0 none) when its shape doesn't match photo's (the
+// photo's size the right way up); orientation is asked for only then
+QImage turned_preview(const QImage &preview, const QSize &photo, const std::function<int()> &orientation);
 // system thumbnailers (PDF, fonts, audio, …): {mime type: [Exec line, …]} from the freedesktop .thumbnailer files
 const QHash<QString, QStringList> &thumbnailers();
 QStringList thumbnailers_for(const QString &path);

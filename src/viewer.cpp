@@ -819,10 +819,16 @@ void ImageViewer::request(const QString &path, bool full)
     pending << key;
     int side = screen_side(), gen = generation.value(path);
     pool.start([this, path, full, side, gen]() {
+        if (is_raw(path) && !full) {   // RAW: the camera's embedded preview first, turned the right way up
+            QSize real;
+            QImage img = thumbs::raw_preview(path, side, &real);
+            if (!img.isNull() && (img.width() > img.height()) != (real.width() > real.height()))
+                real.transpose();   // (a preview that couldn't be turned: shown as it is, not squeezed)
+            Q_EMIT loaded(path, img, real, img.size() == real, gen);
+            return;
+        }
         QImageReader reader(path);
         reader.setAutoTransform(true);
-        if (is_raw(path) && !full)
-            reader.setQuality(0);   // RAW: the camera's embedded preview (or a fast half-size decode) first
         QSize stored = reader.size();
         if (!full && stored.isValid() && std::max(stored.width(), stored.height()) > side)
             reader.setScaledSize(stored.scaled(side, side, Qt::KeepAspectRatio));

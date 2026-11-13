@@ -84,15 +84,17 @@ QList<Mount> mounts()
         QList<QByteArray> before = line.left(dash).split(' '), after = line.mid(dash + 3).split(' ');
         if (before.size() < 5 || after.size() < 2)
             continue;
-        cached << Mount{unescape(before[4]), unescape(after[1]), unescape(after[0])};
+        // (the mount's own options, field 6: "rw,…" or "ro,…")
+        bool ro = before.size() > 5 && before[5].split(',').contains("ro");
+        cached << Mount{unescape(before[4]), unescape(after[1]), unescape(after[0]), ro};
     }
     for (const auto &[kind, path] : test_slow())
         cached << Mount{path, kind == Slow::Floppy ? "/dev/test-floppy" : "ltfs:test", kind == Slow::Floppy ? "vfat" : "fuse"};
-    // Tests add mounts of their own: KESTREL_TEST_MOUNTS="/path|fstype|source;…"
+    // Tests add mounts of their own: KESTREL_TEST_MOUNTS="/path|fstype|source;…" ("…|source|ro": mounted read-only)
     for (const QString &part : qEnvironmentVariable("KESTREL_TEST_MOUNTS").split(';', Qt::SkipEmptyParts)) {
         QStringList f = part.split('|');
-        if (f.size() == 3)
-            cached << Mount{f[0], f[2], f[1]};
+        if (f.size() == 3 || f.size() == 4)
+            cached << Mount{f[0], f[2], f[1], f.value(3) == "ro"};
     }
     slow_mounted = std::any_of(cached.begin(), cached.end(), [](const Mount &mt) { return kind_of(mt) != Slow::None; });
     return cached;
@@ -206,6 +208,13 @@ QString mount_root(const QString &path)
     QList<Mount> all = mounts();
     const Mount *mt = mount_of(all, path);
     return mt ? mt->root : QString("/");
+}
+
+bool read_only(const QString &path)
+{
+    QList<Mount> all = mounts();
+    const Mount *mt = mount_of(all, path);
+    return mt && mt->read_only;
 }
 
 QString mount_fstype(const QString &path)

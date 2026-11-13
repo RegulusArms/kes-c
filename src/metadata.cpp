@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <sys/stat.h>
+#include <functional>
 #include <mutex>
 
 using namespace util;
@@ -586,6 +587,111 @@ OrientationTag orientation_tag_in(const QByteArray &file)
     b.setData(file);
     b.open(QIODevice::ReadOnly);
     return orientation_of(read_file_meta(b));
+}
+
+// The Orientation in IFD0 of the TIFF structure starting at `base` in f ("II"/"MM", any magic number: 42, ORF's "RO"
+// and "OR", RW2's 0x55), read entry by entry; 0 if it has none
+static int tiff_orientation(QIODevice &f, qint64 base)
+{
+    if (!f.seek(base))
+        return 0;
+    QByteArray h = f.read(8);
+    if (h.size() < 8 || !(h.startsWith("II") || h.startsWith("MM")))
+        return 0;
+    bool le = h.startsWith("II");
+    auto u16 = [le](const char *p) {
+        auto b = reinterpret_cast<const uchar *>(p);
+        return le ? quint32(b[0] | b[1] << 8) : quint32(b[0] << 8 | b[1]);
+    };
+    auto u32 = [le](const char *p) { return le ? le32(p) : be32(p); };
+    qint64 ifd = u32(h.constData() + 4);
+    if (ifd < 8 || !f.seek(base + ifd))
+        return 0;
+    QByteArray cnt = f.read(2);
+    if (cnt.size() < 2)
+        return 0;
+    int n = std::min(int(u16(cnt.constData())), 1000);
+    QByteArray entries = f.read(qint64(n) * 12);
+    for (int i = 0; i + 12 <= entries.size() && i < n * 12; i += 12) {
+        const char *e = entries.constData() + i;
+        if (u16(e) == 0x0112 && u16(e + 2) == 3) {
+            int v = int(u16(e + 8));
+            return v >= 1 && v <= 8 ? v : 0;
+        }
+    }
+    return 0;
+}
+
+// CR3 (ISO base media): the TIFF in moov → Canon's uuid box → CMT1; its start, or -1
+static qint64 cr3_cmt1(QIODevice &f)
+{
+    static const QByteArray CANON = QByteArray::fromHex("85c0b687820f11e08111f4ce462b6a48");
+    // the boxes in [from, to): calls found(type, payload start, payload end) for each, until it returns true
+    auto walk = [&f](qint64 from, qint64 to, const std::function<bool(const QByteArray &, qint64, qint64)> &found) {
+        for (qint64 at = from; at + 8 <= to;) {
+            if (!f.seek(at))
+                return;
+            QByteArray h = f.read(16);
+            if (h.size() < 8)
+                return;
+            qint64 size = be32(h.constData()), head = 8;
+            if (size == 1 && h.size() >= 16) {
+                size = (qint64(be32(h.constData() + 8)) << 32) | be32(h.constData() + 12);
+                head = 16;
+            } else if (size == 0) {
+                size = to - at;
+            }
+            if (size < head)
+                return;
+            if (found(h.mid(4, 4), at + head, std::min(at + size, to)))
+                return;
+            at += size;
+        }
+    };
+    qint64 out = -1, end = f.size();
+    walk(0, end, [&](const QByteArray &type, qint64 start, qint64 stop) {
+        if (type != "moov")
+            return false;
+        walk(start, stop, [&](const QByteArray &t, qint64 s, qint64 e) {
+            if (t != "uuid" || !f.seek(s) || f.read(16) != CANON)
+                return false;
+            walk(s + 16, e, [&](const QByteArray &t2, qint64 s2, qint64) {
+                if (t2 != "CMT1")
+                    return false;
+                out = s2;
+                return true;
+            });
+            return true;
+        });
+        return true;
+    });
+    return out;
+}
+
+int raw_orientation(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return 0;
+    QByteArray head = f.read(96);
+    if (head.startsWith("II") || head.startsWith("MM"))   // DNG, NEF, CR2, ARW, PEF…, ORF (IIRO/MMOR), RW2 (IIU)
+        return tiff_orientation(f, 0);
+    if (head.startsWith("FUJIFILMCCD-RAW") && head.size() >= 92) {
+        // RAF: the preview JPEG's offset and length (big-endian, at 84 and 88); its EXIF holds the orientation
+        qint64 jpeg = be32(head.constData() + 84), len = be32(head.constData() + 88);
+        if (jpeg <= 0 || len <= 0 || !f.seek(jpeg))
+            return 0;
+        QBuffer b;
+        b.setData(f.read(std::min<qint64>(len, 256 << 10)));   // (the EXIF is near its start)
+        b.open(QIODevice::ReadOnly);
+        FileMeta fm = read_file_meta(b);
+        return fm.exif_offset < 0 ? 0 : tiff_orientation(f, jpeg + fm.exif_offset);
+    }
+    if (head.mid(4, 8) == "ftypcrx ") {   // CR3
+        qint64 tiff = cr3_cmt1(f);
+        return tiff < 0 ? 0 : tiff_orientation(f, tiff);
+    }
+    return 0;
 }
 
 

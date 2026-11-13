@@ -6,6 +6,45 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.4-alpha.1
+
+### Added
+
+- `fileops`: merges keep both. A file whose name is taken is put beside it as `name-(1).ext` (`-(2)` when that's taken,
+  before `.tar.gz`, an earlier `-(n)` taken off), a folder of the same name is merged into, a file meeting a folder goes
+  beside it, and merge_name's names; with the box ticked the merge replaces. A resumed merge (the admin session
+  finishing a copy) leaves the copy made before. Covers the change that merges no longer replace files by default.
+- `fileops`: a merge that fails part-way (RLIMIT_FSIZE) keeps every file that was there and adds only whole files, as
+  the failure-atomic rules ask of a new write path.
+- `fileops`: the conflict window's box to replace starts unticked, Enter keeps everything, a file's Replace can't be
+  clicked until the box is ticked, and planning through the window (with "for all") follows the box. Guards against
+  an answer given without reading destroying files.
+- `admin_helper`: a merge replaces nothing unless asked (`"clash"`), and `"resume"` adds no second copy of what was
+  copied before.
+- `chooser`: a chooser reads folder previews from the main windows' setting (an old `chooser/` copy ignored) and
+  writes it there; an open chooser follows a setting changed meanwhile, one of its own view settings only by its
+  `chooser/` key (applied at once) and one it has no own value of by the main windows'. Guards the fix that made
+  choosers follow every preference: they weren't in the list of windows settings were applied to.
+- `installer`: `kes-setup --native-gtk`: `--default` alone doesn't set it and says how to and what can't be
+  changed; it writes GTK_USE_PORTAL and GDK_DEBUG to environment.d (read back by systemd's generator where it's
+  installed), records it, says when it takes effect and what else goes through the portal, says when Kestrel isn't
+  the file chooser yet; `--undo` takes it out keeping the user's own files; install.sh passes it through and
+  `--uninstall` removes it. Covers the opt-in for native GTK apps.
+- `viewer`: RAW photos the right way up: the orientation read from each RAW format (small files built in the test),
+  the preview's turning and when it's left alone, and RAW thumbnails made by an earlier Kestrel made again. Covers
+  the fix for portrait RAW photos shown sideways (in the viewer, squeezed) and with landscape thumbnails.
+- `ui`: dropping files onto sidebar entries: a bookmark, a drive and the Trash highlight and take the drop (a job);
+  Recent, the Overview, a read-only drive and a gone bookmark refuse with their reason and start no job (checked
+  after the drop's 0 ms timers, not after a wait); an entry is looked at once per drag; a disconnected server offers
+  to connect first; Starred stars; resting on an entry opens it. Covers the sidebar drop feature.
+- `atc_tabs`: the file chooser's process (`kes --file-chooser`) checks in with the tower, so it hears settings changed
+  in other Kestrels, and a hand-off still goes to the Kestrel with a window, not to it.
+
+### Changed
+
+- `fileops`: the merge check expected a file in both folders to be replaced; it now expects both kept. The conflict
+  window's check looks for its new text ("Nothing there is replaced").
+
 ## 0.3.4-alpha.0
 
 No test changes.
