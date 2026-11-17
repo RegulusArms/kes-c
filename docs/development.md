@@ -163,8 +163,8 @@ translation" form (`.github/ISSUE_TEMPLATE/incorrect_translation.yml`).
 
 The tests watch this: `ui` fails on a literal passed to a widget or message without `tx()`, and `i18n` checks that
 every `.ts` builds and keeps each text's `%1` and `%n`, that every count in the code has English forms, that each
-desktop language finds its file (`pt_BR`, `pt_PT`, `de_AT` → `de`), that Russian picks its three plural forms, and, with
-the pseudo-translation installed, that the main windows and menus show no untranslated text. `tests/run.sh` runs
+desktop language finds its file (`pt_BR`, `pt_PT`, `de_AT` → `de`), and that Russian picks its three plural forms. A text
+missed by `tx()` elsewhere is found by running with the pseudo-translation (above). `tests/run.sh` runs
 every test with `LANGUAGE=en`, so the English texts they check are what they get on any machine.
 
 ## Layout

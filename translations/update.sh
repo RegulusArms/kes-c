@@ -6,7 +6,7 @@
 #   translations/update.sh --extract F.ts  every text, untranslated, into F.ts
 #   translations/update.sh --pseudo F.qm   the pseudo-translation, [Ǫρéñ ƒöłðéř······]: every text padded and accented,
 #                                          to see missed texts and clipped layouts (KESTREL_TEST_TRANSLATION=F.qm kes).
-#                                          Not shipped; the tests make one (tests/test_i18n.cpp).
+#                                          Not shipped; the tests check one can be made (tests/test_i18n.cpp).
 # The code marks its texts with tx(), txn(), TX_NOOP() and TXN_NOOP() (src/i18n.h), all in one context, "Kestrel". lupdate knows
 # only Qt's own names, so it reads a copy of the code where those calls are written out as
 # QCoreApplication::translate("Kestrel", …), QT_TRANSLATE_NOOP("Kestrel", …) and QT_TRANSLATE_N_NOOP("Kestrel", …).

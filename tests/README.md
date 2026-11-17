@@ -748,10 +748,9 @@ is a check that times the machine.
 
 - Every `translations/kestrel_*.ts` is built into the app (`:/i18n/kestrel_<language>.qm`) and loads, and none of its translations drops or adds a `%1` or `%n` of the text it translates.
 - English is loaded at startup and gives a count's text its plural forms ("%Ln file(s)" → 1 file, 2 files).
-- The last four skip without lupdate and lrelease (`qt6-l10n-tools`):
+- The last three skip without lupdate and lrelease (`qt6-l10n-tools`):
   - every count's text in the code (`translations/update.sh --extract`, through lupdate) has both English forms in `kestrel_en.ts`;
   - the pseudo-translation (`update.sh --pseudo`) is made and used;
-  - with it installed, the main window, its menus (main, Sort, right-click on a file, a folder, several items and empty space), the Overview, every Preferences tab, the Jobs window and Properties show no text in plain English (names of files, mounts and their drives' labels, the user and their group, file types, the apps that open them and Qt's own buttons aside);
   - in Properties → Metadata, Remove removes the tag a row stands for, also when its group is shown under another name, as a translation could (skips without exiftool).
 
 ### installer

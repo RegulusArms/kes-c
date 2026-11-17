@@ -4,7 +4,11 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.4-alpha.2
+## 0.3.4-alpha.3
+
+- Version bump only; see the [changes to the tests](tests/CHANGELOG.md#034-alpha3).
+
+## 0.3.4-alpha.2 (2026-11-13)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#034-alpha2).
 

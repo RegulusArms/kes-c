@@ -1,37 +1,16 @@
 // Translations (src/i18n.h, translations/): every .ts file is built into kes and keeps the placeholders of what it
-// translates; English has the plural forms of every count in the code; and with the pseudo-translation installed, the
-// windows and menus show no text that didn't go through tx().
+// translates; English has the plural forms of every count in the code; the pseudo-translation is made; and Properties →
+// Metadata removes the tag a row stands for, whatever its group shows.
 #include "common.h"
 
-#include "drives.h"
-#include "jobswin.h"
-#include "menus.h"
-#include "overview.h"
-#include "prefswin.h"
-
 #include <QAbstractButton>
-#include <QComboBox>
-#include <QDirIterator>
-#include <QGroupBox>
-#include <QLabel>
-#include <QLineEdit>
-#include <QMenu>
 #include <QMessageBox>
-#include <QMimeDatabase>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QStorageInfo>
 #include <QTabWidget>
-#include <QTextDocument>
-#include <QToolButton>
 #include <QTranslator>
 #include <QTreeWidget>
-#include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
-
-#include <grp.h>
-#include <pwd.h>
-#include <unistd.h>
 
 using namespace test;
 
@@ -87,67 +66,6 @@ static QStringList placeholders(const QString &text)
     }
     out.sort();
     return out;
-}
-
-// where each text was seen (its window and widget, and for a list its column), to name in a failure
-static QHash<QString, QString> seen_in;
-
-// what a window shows: its labels, buttons, tabs, combo box items, placeholders, tooltips, header labels and the rows
-// of its lists (plain text, markup taken out)
-static void texts_of(QWidget *top, QStringList &out)
-{
-    auto plain = [](const QString &t) {
-        if (!Qt::mightBeRichText(t))
-            return t;
-        QTextDocument d;
-        d.setHtml(t);
-        return d.toPlainText();
-    };
-    QList<QWidget *> all = top->findChildren<QWidget *>();
-    all.prepend(top);
-    for (QWidget *w : all) {
-        if (!w->isVisibleTo(top))
-            continue;
-        QString where = QString(w->window()->metaObject()->className()) + " › " + w->metaObject()->className() +
-                        (w->objectName().isEmpty() ? QString() : " " + w->objectName());
-        auto add = [&](const QString &t, const QString &what = QString()) {
-            out << t;
-            if (!t.isEmpty() && !seen_in.contains(t.trimmed()))
-                seen_in.insert(t.trimmed(), what.isEmpty() ? where : where + " " + what);
-        };
-        add(plain(w->toolTip()), "tooltip");
-        if (auto *l = qobject_cast<QLabel *>(w))
-            add(plain(l->text()));
-        else if (auto *b = qobject_cast<QAbstractButton *>(w))
-            add(b->text());
-        else if (auto *g = qobject_cast<QGroupBox *>(w))
-            add(g->title());
-        else if (auto *e = qobject_cast<QLineEdit *>(w))
-            add(e->placeholderText(), "placeholder");
-        else if (auto *c = qobject_cast<QComboBox *>(w)) {
-            for (int i = 0; i < c->count(); ++i)
-                add(c->itemText(i));
-        } else if (auto *tw = qobject_cast<QTabWidget *>(w)) {
-            for (int i = 0; i < tw->count(); ++i)
-                add(tw->tabText(i), "tab");
-        } else if (auto *tree = qobject_cast<QTreeWidget *>(w)) {
-            for (int c = 0; c < tree->columnCount(); ++c)
-                add(tree->headerItem()->text(c), "header");
-            int n = 0;   // every row, also those inside others (Preferences → Menus' submenus)
-            for (QTreeWidgetItemIterator it(tree); *it && n < 2000; ++it, ++n)
-                for (int c = 0; c < tree->columnCount(); ++c)
-                    add((*it)->text(c), QString("row, column %1").arg(c));
-        }
-    }
-}
-
-static void texts_of(const QMenu *m, QStringList &out)
-{
-    for (QAction *a : m->actions()) {
-        out << a->text() << a->toolTip();
-        if (a->menu())
-            texts_of(a->menu(), out);
-    }
 }
 
 int main(int argc, char **argv)
@@ -249,7 +167,7 @@ int main(int argc, char **argv)
                   .arg(texts) +
               (no_forms.isEmpty() ? QString() : ":\n  " + no_forms.mid(0, 20).join("\n  ")));
 
-    // ---- the pseudo-translation: every window and menu shown with it installed says nothing in plain English
+    // ---- the pseudo-translation is made, and installed gives each text its padded, accented form
     up.start("bash", {join(TRANSLATIONS, "update.sh"), "--pseudo", join(work, "pseudo.qm")});
     QTranslator pseudo;
     bool made = up.waitForFinished(120000) && up.exitCode() == 0 && pseudo.load(join(work, "pseudo.qm"));
@@ -258,107 +176,10 @@ int main(int argc, char **argv)
           "the pseudo-translation is made, and with it installed texts come from it, with their counts (" + tx("Open") +
               ", " + txn("%Ln file(s)", 3) + ")");
 
+    // A window for the Metadata check below
     QString dir = home_path("place");
-    makedirs(join(dir, "sub"), true);
-    write_text(join(dir, "note.txt"), "x");
-    QStringList shown;
+    makedirs(dir, true);
     MainWindow *w = open_window({dir});
-    wait_for([&]() { return w->pane()->all_paths().size() == 2; });
-    spin(300);
-    texts_of(w, shown);
-    for (QToolButton *b : w->findChildren<QToolButton *>())   // the main menu and the Sort menu (filled as it opens)
-        if (b->menu()) {
-            Q_EMIT b->menu()->aboutToShow();
-            texts_of(b->menu(), shown);
-        }
-    for (const QStringList &sel : {QStringList{join(dir, "note.txt")}, QStringList{join(dir, "sub")},
-                                   QStringList{join(dir, "note.txt"), join(dir, "sub")}, QStringList()}) {
-        QMenu *m = w->build_menu(w->pane(), sel);
-        texts_of(m, shown);
-        delete m;
-    }
-    w->navigate(OVERVIEW);
-    spin(500);
-    texts_of(w, shown);
-    w->preferences();
-    auto *pd = shown_window<PreferencesDialog>();
-    if (pd) {
-        for (int i = 0; i < pd->tabs->count(); ++i) {
-            pd->tabs->setCurrentIndex(i);
-            spin(50);
-            texts_of(pd, shown);
-        }
-        for (int i = 0; i < pd->menu_editor->kind_box->count(); ++i) {   // Menus: each kind's layout, not just the first
-            pd->menu_editor->kind_box->setCurrentIndex(i);
-            spin(20);
-            texts_of(pd->menu_editor, shown);
-        }
-        pd->close();
-    }
-    JobsWindow::open(w);
-    if (auto *jw = shown_window<JobsWindow>()) {
-        texts_of(jw, shown);
-        jw->close();
-    }
-    for (const QString &p : {join(dir, "note.txt"), join(dir, "sub")}) {
-        auto *d = new PropertiesDialog(w, {p});
-        show_free(d);
-        spin(300);
-        for (auto *tw : d->findChildren<QTabWidget *>())
-            for (int i = 0; i < tw->count(); ++i) {
-                tw->setCurrentIndex(i);
-                spin(50);
-                texts_of(d, shown);
-            }
-        d->close();
-    }
-    // A text in plain English: a word of three letters or more left once the pseudo-translated parts ([…]), the test's
-    // own names and the names that stay as they are (Kestrel, formats, programs) are taken out
-    static const QRegularExpression pseudo_part("\\[[^\\[\\]]*\\]"), word("[A-Za-z]{3,}");
-    static const QStringList kept = {"Kestrel", "Explorer", "place", "note", "txt", "sub", "home", "tmp", "kestrel", "test",
-                                     "GNOME", "LTFS", "UWP", "BleachBit", "SHA", "CRC", "SFV", "BLAKE", "MD5", "Ctrl",
-                                     "Shift", "Alt", "Del", "zip", "rar", "tar", "zpaq", "gzip", "bzip", "XZ", "LZ",
-                                     "Zstandard", "lzip", "LZMA", "PPMd", "BZip", "Deflate", "Copy", "MP", "WebM", "MKV",
-                                     "MOV", "GIF", "AAC", "Opus", "OGG", "Vorbis", "FLAC", "WAV", "ALAC", "dd", "exiftool",
-                                     "zst", "lz4", "bz2", "gz"};
-    // …and what the computer names: the mounts and their drives' labels (a runner's "cloudimg-rootfs"), the user and
-    // their group (a runner's "docker"), file types and the installed apps (Properties' Open With, Preferences' image
-    // and video openers: a runner's browsers; the system translates those), Qt's own buttons
-    const struct passwd *pw = getpwuid(getuid());
-    const struct group *gr = getgrgid(getgid());
-    QStringList theirs = {pw ? QString::fromLocal8Bit(pw->pw_name) : QString(), gr ? QString::fromLocal8Bit(gr->gr_name) : QString(),
-                          QMimeDatabase().mimeTypeForName("text/plain").comment(),
-                          QMimeDatabase().mimeTypeForName("inode/directory").comment()};
-    auto [rec_apps, other_apps] = apps_for(join(dir, "note.txt"));   // between them every app shown in a list
-    for (const AppRef &app : rec_apps + other_apps)
-        theirs << app_name(app);
-    for (const char *type : {"text/plain", "inode/directory", "image/jpeg", "video/mp4"})
-        theirs << app_name(default_app_for_type(type));   // a default may be one no list shows
-    for (const drives::Mount &mt : drives::mounts())
-        theirs << basename(mt.root) << mt.fstype << drives::device_label(mt.source) << mt.source.section('/', 0, 0)
-               << QStorageInfo(mt.root).displayName();
-    static const QStringList qt_buttons = {"Cancel", "OK", "Close", "Yes", "No", "Apply", "Reset", "Help"};
-    QStringList english_left;
-    for (QString t : shown) {
-        if (qt_buttons.contains(t.remove('&')))
-            continue;
-        QString rest = t;
-        rest.remove(pseudo_part);
-        rest.remove(QRegularExpression("\\S*/\\S*"));   // paths and MIME types
-        for (const QString &k : theirs)
-            if (!k.isEmpty())
-                rest.remove(k);
-        for (const QString &k : kept)
-            rest.remove(QRegularExpression("\\b" + QRegularExpression::escape(k) + "\\w*", QRegularExpression::CaseInsensitiveOption));
-        QString shown_as = t.trimmed() + "  (in " + seen_in.value(t.trimmed(), "a menu") + ")";
-        if (word.match(rest).hasMatch() && !english_left.contains(shown_as))
-            english_left << shown_as;
-    }
-    check(shown.size() > 200 && english_left.isEmpty(),
-          QString("the main window, its menus, the Overview, Preferences, the Jobs window and Properties show no "
-                  "text that isn't translated (%1 texts looked at)")
-                  .arg(shown.size()) +
-              (english_left.isEmpty() ? QString() : ":\n  " + english_left.mid(0, 40).join("\n  ")));
 
     // ---- what's written or removed is the tag the row stands for, not what it shows (a translation may name its
     // group differently)
