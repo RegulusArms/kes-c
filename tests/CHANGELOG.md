@@ -27,6 +27,8 @@ under the version whose change it covers. What each test checks today is in [REA
 
 ### Changed
 
+- `theme`: Generate Previews' checks count the large thumbnails their builds add, not all those in the cache: the
+  every-size check before them now leaves one there, which failed them.
 - `prefs`: the archive browser's kept view, icon size and row height (`archive/view_mode`, `archive/grid_size`,
   `archive/list_size`) are listed as kept state, not settings, in the check that every setting read is in Preferences.
 

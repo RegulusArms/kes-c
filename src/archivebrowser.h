@@ -64,6 +64,7 @@ public:
     void quick_look();                         // the selected pictures in the image viewer
     void copy_selected();                      // Ctrl+C: their copies on the clipboard, as copied files
     QMimeData *drag_data(const QStringList &members);
+    void hold_for_drag(const QStringList &copies) { drag_pins += copies; }   // fetched for the drag: let go when it ends
     void drag_ended();                         // the drag's copies unpinned (and counted as just handed over)
     QPixmap thumbnail(const QString &member) const { return thumbs.value(member); }
     bool thumbnails_busy() const { return thumb_job; }

@@ -451,17 +451,18 @@ int main(int argc, char **argv)
             RecursiveBuilder b(root, 256, g_thumbs, nullptr, 3, folders_only, depth);
             b.run();
         };
+        int large0 = large();   // (kept by the checks above: only what these builds add is counted)
         build(true, 1);
-        check(preview(root) && preview(s1) && !preview(s2) && large() == 0,
+        check(preview(root) && preview(s1) && !preview(s2) && large() == large0,
               "Generate Folder Previews makes previews for the folder and the folders directly in it, not deeper, "
               "and no thumbnail for every file");
         build(true, -1);
-        check(preview(s2) && large() == 0, "Generate Folder Previews Recursively makes previews for every folder below, "
+        check(preview(s2) && large() == large0, "Generate Folder Previews Recursively makes previews for every folder below, "
                                            "and no thumbnail for every file");
         build(false, 1);
-        check(large() == 2, "Generate Previews makes the thumbnails of the folder's own files, not deeper");
+        check(large() - large0 == 2, "Generate Previews makes the thumbnails of the folder's own files, not deeper");
         build(false, -1);
-        check(large() == 6, "Generate Previews Recursively makes every file's thumbnail too");
+        check(large() - large0 == 6, "Generate Previews Recursively makes every file's thumbnail too");
     }
     {   // the walk doesn't wait for the previews: it's done ("scanning" over, the total known) long before they are
         QString root = home_path("gen-big");

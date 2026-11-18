@@ -388,6 +388,7 @@ protected:
             fetched = true;
             QString why;
             QStringList got = browser->fetch_now(members, &why);
+            browser->hold_for_drag(got);   // (pinned by fetch_now until the drag ends)
             for (const QString &p : got)
                 files << QUrl::fromLocalFile(p);
             if (got.isEmpty() && !why.isEmpty()) {
