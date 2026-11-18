@@ -49,7 +49,7 @@ is a check that times the machine.
 | Test | Checks | Covers |
 |---|---|---|
 | [`fileops`](#fileops) | 165 | File operations |
-| [`archives`](#archives) | 73 | Archives through the window, remembered passwords |
+| [`archives`](#archives) | 90 | Archives through the window, the archive browser and its RAM cache, remembered passwords |
 | [`prefs`](#prefs) | 37 | Preferences and the right-click menus' layouts |
 | [`atc_sync`](#atc_sync) | 23 | The tower |
 | [`atc_tasks`](#atc_tasks) | 35 | The shared task list |
@@ -163,7 +163,7 @@ is a check that times the machine.
 
 ### archives
 
-**Archives through the window: Extract All, Open as Archive, Test, and remembered passwords.**
+**Archives through the window: Extract All, Open as Archive (the archive browser and its RAM cache, the simple list), Test, and remembered passwords.**
 
 - **Checksum files made while a tar archive is compressed:**
   - a tar.gz's `.sha256` and `.sfv` and a plain tar's `-CHECKSUM` hold the finished archive's hashes (as sha256sum, md5sum and sha512sum say, and as Verify Checksums checks them), also through gpg;
@@ -188,7 +188,7 @@ is a check that times the machine.
   - tells sound archives from damaged ones (naming the file) and a wrong password apart;
   - the menu's Open as Archive / Test Archive(s);
   - Test Archives asks for passwords and tells the results in one message.
-- **The archive window:** asks for the password of encrypted names, is a free window, opens once, extracts the selected files; with encrypted files, asks once when one is extracted.
+- **The archive window** (the simple list): asks for the password of encrypted names, is a free window, opens once, extracts the selected files; with encrypted files, asks once when one is extracted.
 - **Which archives a selection holds** (a split set once, by its first part; no other files) and the menu it gets:
   - Extract All Here / Extract All To… for several;
   - Extract Here / Extract To… for a split set selected whole;
@@ -215,6 +215,21 @@ is a check that times the machine.
   - items dragged onto a Kestrel folder are extracted straight into it (no temporary copy); for another app when its drop asks (into the temporary folder);
   - encrypted ones whose password isn't known are offered to Kestrel only;
   - day-old temporary copies are deleted.
+- **The archive browser** (Open as Archive's default window), on a 7z of pictures, a text file and folders:
+  - it's a free window, opening inside the archive's one top folder, folders first then by name (also sorted descending);
+  - into a folder, back, forward and up (the folder left selected), up to the archive's top;
+  - the list and the panes' grid (GridDelegate), each zoomed on its own;
+  - the pictures' thumbnails are made from copies in the RAM cache (`KESTREL_SHM_DIR`, outside the home folder), and nothing lands on disk: no thumbnail, folder preview or file named as a member;
+  - Copy puts the member's cached copy on the clipboard (pinned while it's there), and Paste in a Kestrel window copies it;
+  - a drag hands over cached copies, copy-only and pinned until the drag ends; dropped on a Kestrel folder they're copied, the cached copy kept;
+  - Space shows the picture in the image viewer from its cached copy, pinned while shown;
+  - closing the window deletes its copies.
+- **The RAM cache** (`archivecache`):
+  - full, it deletes its oldest copy first, passing over one that's pinned and one a program has open;
+  - with every copy in use it says it's full and deletes nothing; a member bigger than the whole cache is refused;
+  - an extraction held once whole in its part folder (`KESTREL_TEST_CACHE_HOLD`) shows nothing under the member's name, and cancelled leaves nothing (no part folder, no room kept); not cancelled, the copy is renamed into a folder of its own under its name;
+  - at start-up a cache folder whose Kestrel has gone (its lock free) is deleted, the running one's kept.
+- **Preferences → Open as Archive opens: the simple list** opens the plain member list instead.
 - **Without 7-Zip** (`KESTREL_TEST_HIDE_TOOLS=7z`): unzip lists a zip, extracts single items whose names hold `[ ] * ?` (as names, not patterns) and tests it (skipped where unzip isn't installed).
 
 ### prefs

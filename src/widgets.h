@@ -27,6 +27,8 @@
 #include <functional>
 
 class Animator;
+class QListView;
+class QTreeView;
 class ThumbnailManager;
 class QVBoxLayout;
 class QHBoxLayout;
@@ -210,6 +212,14 @@ private:
     ThumbnailManager *thumbs;
     std::function<bool(const QString &)> is_cut;
 };
+
+// The file views' setup, shared by the panes and the archive browser (archivebrowser.h): the grid (icon mode, fixed
+// cells laid out in one pass), the list (rows, sortable columns, ListDelegate)
+void style_grid_view(QListView *g);
+void style_list_view(QTreeView *t);
+// The grid's cell: the delegate's, widened so whole columns fill the width (as if the scrollbar always showed, so it
+// coming and going doesn't re-flow the grid). *avail: the width the cells share.
+QSize grid_cell_size(QListView *g, const GridDelegate *d, int *avail = nullptr);
 
 // The headers of grouped views (groups.h): an arrow (pointing right when collapsed), the group's name and count, and a line.
 int group_header_height(const QFontMetrics &fm);

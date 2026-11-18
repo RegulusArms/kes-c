@@ -17,6 +17,11 @@
 #include "ramdisk.h"
 #include "ramdiskwin.h"
 #include "thumbs.h"
+
+#include <QHeaderView>
+#include <QListView>
+#include <QScrollBar>
+#include <QTreeView>
 #include "util.h"
 #include "windows.h"
 
@@ -677,6 +682,50 @@ GridDelegate::GridDelegate(QWidget *pane, ThumbnailManager *thumbs, std::functio
                            QObject *parent)
     : QStyledItemDelegate(parent), pane(pane), thumbs(thumbs), is_cut(std::move(is_cut))
 {
+}
+
+void style_grid_view(QListView *g)
+{
+    g->setViewMode(QListView::IconMode);
+    g->setMovement(QListView::Static);
+    g->setResizeMode(QListView::Adjust);
+    g->setWrapping(true);
+    g->setUniformItemSizes(true);
+    // One pass, not in batches: a batched layout redone (after a zoom, a resize, a change in the folder) started each
+    // batch on a new row, leaving an empty cell at the end of the row before it. A pass over 50,000 items takes about
+    // 20 ms (45 ms grouped by date, where each item is asked its size).
+    g->setLayoutMode(QListView::SinglePass);
+    g->setMouseTracking(true);
+    g->setFrameShape(QFrame::NoFrame);
+}
+
+void style_list_view(QTreeView *t)
+{
+    t->setRootIsDecorated(false);
+    t->setItemsExpandable(false);
+    t->setUniformRowHeights(true);
+    t->setAlternatingRowColors(true);
+    t->setSelectionBehavior(QAbstractItemView::SelectRows);
+    t->setSortingEnabled(true);
+    t->setItemDelegate(new ListDelegate(t));
+    t->header()->setAccessibleName(tx("Columns"));
+    t->setFrameShape(QFrame::NoFrame);
+}
+
+QSize grid_cell_size(QListView *g, const GridDelegate *d, int *avail_out)
+{
+    QSize cell = d->cell_size();
+    // Width as if the scrollbar were always shown: otherwise the scrollbar appearing/disappearing changes the
+    // column width and the grid re-flows.
+    int sb = g->verticalScrollBar()->isVisible() ? 0 : g->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    // less 1: QListView wraps an item that would end past the last pixel column (width - 1), so cells adding up to
+    // exactly the width would push the last column onto the next row and leave a gap at the end of every row
+    int avail = g->viewport()->width() - sb - 1;
+    int cols = std::max(1, avail / cell.width());
+    int extra = cols > 1 ? (avail - cols * cell.width()) / cols : 0;
+    if (avail_out)
+        *avail_out = avail;
+    return QSize(cell.width() + std::max(0, extra), cell.height());
 }
 
 QSize GridDelegate::cell_size() const

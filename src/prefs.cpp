@@ -219,6 +219,14 @@ static QList<Pref> build()
     add(TX_NOOP("Archives"), TX_NOOP("Extract To…"), "archive/x_trash", TX_NOOP("Move the archive to the trash afterwards"), BOOL, false,
         TX_NOOP("Extract To…"));
     add(TX_NOOP("Archives"), TX_NOOP("Extract To…"), "archive/x_open", TX_NOOP("Open the extracted folder"), BOOL, false, TX_NOOP("Extract To…"));
+    add(TX_NOOP("Archives"), TX_NOOP("Open as Archive"), "archive/opens", TX_NOOP("Open as Archive opens"), CHOICE, "browser", "",
+        TX_NOOP("The archive browser: its folders browsed like real ones, with thumbnails, the image viewer, and drag and "
+        "copy out; what it extracts is kept in memory only. The simple list: one tree of everything in it."))
+        .choices = {{TX_NOOP("The archive browser"), "browser"}, {TX_NOOP("The simple list"), "list"}};
+    range(add(TX_NOOP("Archives"), TX_NOOP("Open as Archive"), "archive/ram_cache", TX_NOOP("Memory for what the archive browser extracts"), INT, 10, "",
+              TX_NOOP("A share of the computer's memory (at most what its memory folder, /dev/shm, has free). When it's full, the "
+              "oldest copies are deleted to make room; copies still in use are kept.")),
+          1, 50, TX_NOOP("% of RAM"));
     add(TX_NOOP("Archives"), TX_NOOP("Passwords"), "archive_passwords", TX_NOOP("Saved archive passwords"), CUSTOM, QVariant(),
         TX_NOOP("Passwords and Keys (Seahorse)"));
 

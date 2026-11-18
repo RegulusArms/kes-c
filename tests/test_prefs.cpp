@@ -130,7 +130,8 @@ int main(int argc, char **argv)
         static const QStringList STATE = {"geometry", "splitter", "recent_servers", "chooser_folder", "jobs_window_geometry",
                                           "jobs_window_split", "jobs_window_lists", "sidebar_places_order", "sidebar_devices_order",
                                           "sidebar_mounts_order", "sidebar_collapsed", "tower_window_geometry",
-                                          "viewer_geometry", "viewer_recent_folders", "health_warned"};
+                                          "viewer_geometry", "viewer_recent_folders", "health_warned",
+                                          "archive/view_mode", "archive/grid_size", "archive/list_size"};
         QStringList missing;
         // settings().value("key"), view_value("key"), and s.value("key") where s is the settings (QSettings &s)
         static const QRegularExpression re(R"(settings\(\)\.value\("([^"]+)\"|view_value\("([^"]+)\")");

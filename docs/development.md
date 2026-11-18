@@ -228,7 +228,9 @@ every test with `LANGUAGE=en`, so the English texts they check are what they get
 | `src/proc.cpp` | Running command-line tools: pipes, process groups, timeouts |
 | `src/archive.cpp` | Archive engine: tool detection, the commands for every format, progress, cancel, password handling |
 | `src/archive_ui.cpp` | Compress and Extract dialogs, password prompts, and the archive job flows: Extract, Extract All and its password search, Test Archive(s) |
-| `src/archivewin.cpp` | Open as Archive: the window listing what's inside an archive, extracting single items from it, or all of it, or testing it |
+| `src/archivewin.cpp` | Open as Archive: what its two windows share (reading the listing, the password, extracting single items, drops of items dragged out), and the simple list (a tree of everything in the archive) |
+| `src/archivebrowser.cpp` | Open as Archive's default window, the archive browser: the archive's folders in the panes' grid and list views, thumbnails, the image viewer, Copy and drag out, all from copies in the RAM cache |
+| `src/archivecache.cpp` | The archive browser's RAM cache: a folder on a tmpfs (`/dev/shm`), its size limit, first in first out, copies in use kept, swept at start-up after a crash |
 | `src/keyring.cpp` | Remembered archive passwords in the desktop's keyring (the Secret Service, through libsecret), found by the archive's fingerprint |
 | `src/uwp.cpp` | Integration with the UWP wallpaper manager (over D-Bus and the `uwp` command) |
 | `src/stats.cpp` | The `KESTREL_STATS=1` performance counters (see [Performance counters](#performance-counters)) |

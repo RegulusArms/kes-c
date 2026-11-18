@@ -4,6 +4,7 @@
 #include "animate.h"
 #include "archive.h"
 #include "archive_ui.h"
+#include "archivecache.h"
 #include "atc.h"
 #include "chooser.h"
 #include "diskimage.h"
@@ -2235,6 +2236,7 @@ int kes_main(int argc, char **argv)
     ramdisk::apply_private();   // before anything reads or writes a cache
     set_separate_cache(prefs::get("separate_cache").toBool());
     ramdisk::prune();
+    ArchiveCache::sweep();   // the archive browser's RAM caches left by a Kestrel that crashed
     g_thumbs = new ThumbnailManager;
     apply_thumb_settings(g_thumbs);
     for (int i = 1; i < argc; ++i)

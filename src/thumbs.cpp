@@ -1,6 +1,7 @@
 #include "thumbs.h"
 #include "metadata.h"
 
+#include "archivecache.h"
 #include "drives.h"
 #include "fileops.h"
 #include "jobs.h"
@@ -218,7 +219,8 @@ QStringList thumbnailers_for(const QString &path)
 bool in_app_cache(const QString &path)
 {
     QString root = APP_CACHE();
-    return path == root || path.startsWith(root + '/');
+    // (also the archive browser's RAM cache: an archive's names and pictures don't go to the thumbnail caches on disk)
+    return path == root || path.startsWith(root + '/') || ArchiveCache::contains(path);
 }
 
 bool can_thumbnail(const QString &path)
@@ -287,68 +289,120 @@ QImage system_thumb(const QString &path, int size)
 // made by an earlier version, may lie on its side and is made again.
 static const char *RAW_TURNED = "X-Kestrel-Raw-Turned";
 
-QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh)
+// A thumbnail of path kept in the cache at bucket b that is still good (made from this version of the file), or a null
+// image. Those made before are still used where they're kept: in private mode the shared cache's (new ones go to the
+// private RAM disk); after separate caching is turned off, Kestrel's own folder's until they're deleted (new ones go
+// to the shared cache). With separate caching on the shared cache isn't read either.
+static QImage cached_thumb(const QString &path, const QString &uri, qint64 mtime, int b)
 {
-    QString flavor = FLAVORS.value(bucket_for(size));
-    QString uri = file_uri(path);
-    QString cache_dir = join(THUMB_DIR(), flavor);
-    QString cache_path = join(cache_dir, md5(uri) + ".png");
-    QStringList read_dirs = THUMB_READ_DIRS();
-    bool in_cache_dir = path.startsWith(SHARED_THUMB_DIR() + "/") || path.startsWith(OWN_THUMB_DIR() + "/") ||
-                        path.startsWith(THUMB_DIR() + "/");
-    // Those made before are still used where they're kept: in private mode the shared cache's (new ones go to the
-    // private RAM disk); after separate caching is turned off, Kestrel's own folder's until they're deleted (new
-    // ones go to the shared cache). With separate caching on the shared cache isn't read either.
-    QStringList cached_at;
-    for (const QString &d : read_dirs)
-        cached_at << join(join(d, flavor), md5(uri) + ".png");
-    for (const QString &cached : cached_at) {
-        if (in_cache_dir || fresh || !exists(cached))
+    QString name = md5(uri) + ".png";
+    for (const QString &d : THUMB_READ_DIRS()) {
+        QString cached = join(join(d, FLAVORS.value(b)), name);
+        if (!exists(cached))
             continue;
         QImage img(cached);
         // (a RAW's that Kestrel made before it turned their previews may be lying on its side: made again)
         bool stale_raw = is_raw(path) && img.text("Software") == APP_NAME && img.text(RAW_TURNED).isEmpty();
-        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime) && !stale_raw) {
+        if (!img.isNull() && img.text("Thumb::MTime") == QString::number(mtime) && !stale_raw)
+            return img;
+    }
+    return QImage();
+}
+
+// img (already tagged) saved as the thumbnail at bucket b: whole under a temporary name, then renamed into place
+static void store_thumb(QImage img, const QString &uri, int b)
+{
+    QString cache_dir = join(THUMB_DIR(), FLAVORS.value(b));
+    try {
+        makedirs(cache_dir, true, 0700);
+        QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
+        int fd = ::mkstemps(tmpl.data(), 4);
+        if (fd < 0)
+            return;
+        ::close(fd);
+        QString tmp = dec(tmpl.constData());
+        if (img.save(tmp, "PNG")) {
+            ::chmod(tmpl.constData(), 0600);
+            util::rename(tmp, join(cache_dir, md5(uri) + ".png"));
+        } else {
+            ::unlink(tmpl.constData());
+        }
+    } catch (const OSError &) {
+    }
+}
+
+static QImage fit(const QImage &img, int b)
+{
+    if (img.width() <= b && img.height() <= b)
+        return img;
+    QImage out = img.scaled(b, b, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    for (const QString &k : img.textKeys())   // (scaled() drops them)
+        out.setText(k, img.text(k));
+    return out;
+}
+
+QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh, bool all_sizes)
+{
+    int want = bucket_for(size);
+    QString uri = file_uri(path);
+    bool in_cache_dir = path.startsWith(SHARED_THUMB_DIR() + "/") || path.startsWith(OWN_THUMB_DIR() + "/") ||
+                        path.startsWith(THUMB_DIR() + "/");
+    if (!in_cache_dir && !fresh) {
+        QImage img = cached_thumb(path, uri, mtime, want);
+        if (!img.isNull()) {
             stats::count("thumbnails from the disk cache");
             return img;
         }
+        // not at this size, but at a bigger one (the view was zoomed out, or it was made before every size was made
+        // at once): cut down from that rather than read the file again, and kept at this size too
+        for (int b : {256, 512}) {
+            if (b <= want)
+                continue;
+            img = cached_thumb(path, uri, mtime, b);
+            if (img.isNull())
+                continue;
+            img = fit(img, want);
+            store_thumb(img, uri, want);
+            stats::count("thumbnails from a bigger one in the disk cache");
+            return img;
+        }
     }
+    // Made once, at the biggest size, and kept at every size (the normal, large and x-large ones of the shared cache's
+    // layout): zooming in or out, or another view, finds it already made instead of reading the file again. A folder
+    // preview's tiles (all_sizes off) are made at their own size only: Generate Folder Previews makes no thumbnail of
+    // every file.
+    int make = all_sizes ? 512 : want;
     QImage img;
     if (is_image(path))
-        img = load_scaled(path, size);
+        img = load_scaled(path, make);
     else if (is_video(path))
-        img = video_frame(path, size);
+        img = video_frame(path, make);
     bool own = !img.isNull();
     if (img.isNull())   // PDFs, fonts, … (and images Qt can't decode): the system thumbnailers
-        img = system_thumb(path, size);
+        img = system_thumb(path, make);
     if (img.isNull())
         return QImage();
     stats::count("thumbnails made");
-    // don't bother caching images that are already thumbnail sized
-    if (!in_cache_dir && (img.width() >= size || img.height() >= size || is_video(path) || !own)) {
-        try {
-            makedirs(cache_dir, true, 0700);
-            img.setText("Thumb::URI", uri);   // notr: a PNG text key
-            img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
-            img.setText("Software", APP_NAME);   // notr: a PNG text key
-            if (is_raw(path))
-                img.setText(RAW_TURNED, "1");   // notr: a PNG text key
-            QByteArray tmpl = enc(join(cache_dir, "kes-XXXXXX.png"));
-            int fd = ::mkstemps(tmpl.data(), 4);
-            if (fd >= 0) {
-                ::close(fd);
-                QString tmp = dec(tmpl.constData());
-                if (img.save(tmp, "PNG")) {
-                    ::chmod(tmpl.constData(), 0600);
-                    util::rename(tmp, cache_path);
-                } else {
-                    ::unlink(tmpl.constData());
-                }
-            }
-        } catch (const OSError &) {
-        }
+    img.setText("Thumb::URI", uri);   // notr: a PNG text key
+    img.setText("Thumb::MTime", QString::number(mtime));   // notr: a PNG text key
+    img.setText("Software", APP_NAME);   // notr: a PNG text key
+    if (is_raw(path))
+        img.setText(RAW_TURNED, "1");   // notr: a PNG text key
+    QImage out;
+    for (int b : {128, 256, 512}) {
+        if (b != want && (!all_sizes || b > make))
+            continue;
+        QImage sized = fit(img, b);
+        if (b == want)
+            out = sized;
+        // don't bother caching images that are already thumbnail sized; one already kept at this size (when only
+        // another one was asked for) stays
+        bool big = img.width() >= b || img.height() >= b || is_video(path) || !own;
+        if (in_cache_dir || !big || (b != want && !fresh && !cached_thumb(path, uri, mtime, b).isNull()))
+            continue;
+        store_thumb(sized, uri, b);
     }
-    return img;
+    return out;
 }
 
 QStringList pick_folder_images(const QString &folder, int count, const QString &order, const QString &cover)
@@ -576,7 +630,7 @@ QImage folder_thumb(const QString &path, qint64 mtime, int size, const FolderOpt
         struct stat st;
         if (!stat_(pth, st))
             continue;
-        QImage im = file_thumb(pth, st.st_mtime, tile, fresh);
+        QImage im = file_thumb(pth, st.st_mtime, tile, fresh, false);
         if (!im.isNull()) {
             images << im;
             videos << is_video(pth);
@@ -1596,9 +1650,7 @@ void RecursiveBuilder::one(char kind, const QString &path)
                 thumbs::folder_thumb(path, st.st_mtime, size, o, fresh);
                 how = MADE_FOLDER;
             } else if (st.st_size <= max_bytes || is_video(path)) {
-                bool made = !thumbs::file_thumb(path, st.st_mtime, size, fresh).isNull();
-                if (size != 128)   // mosaic tiles use the small size
-                    thumbs::file_thumb(path, st.st_mtime, 128, fresh);
+                bool made = !thumbs::file_thumb(path, st.st_mtime, size, fresh).isNull();   // (every size)
                 how = made ? MADE_FILE : NONE;
             } else {
                 how = BIG;

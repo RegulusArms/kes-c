@@ -362,6 +362,51 @@ int main(int argc, char **argv)
               "...after which they're made again, into the shared cache");
         rmtree(pics);
     }
+
+    // -- a thumbnail is made once and kept at every size (normal, large, x-large), so zooming finds it made; one
+    // missing at a size is cut down from a bigger one kept, not made from the file again
+    {
+        QString pics = home_path("allsizes");
+        makedirs(pics, true);
+        auto picture = [&](const QString &name, int w, int h) {
+            QString f = join(pics, name);
+            QImage im(w, h, QImage::Format_RGB32);
+            im.fill(Qt::red);
+            im.save(f, "PNG");
+            return f;
+        };
+        auto mtime_of = [](const QString &f) {
+            struct stat st;
+            return stat(f.toLocal8Bit().constData(), &st) == 0 ? qint64(st.st_mtime) : qint64(-1);
+        };
+        auto kept = [](const QString &flavor, const QString &f) {
+            return QImage(join(join(THUMB_DIR(), flavor), md5(file_uri(f)) + ".png"));
+        };
+        auto side = [](const QImage &im) { return im.isNull() ? 0 : std::max(im.width(), im.height()); };
+        QString big = picture("big.png", 1200, 800);
+        QImage made = thumbs::file_thumb(big, mtime_of(big), 128);
+        check(side(made) == 128 && side(kept("normal", big)) == 128 && side(kept("large", big)) == 256 &&
+                  side(kept("x-large", big)) == 512,
+              "a thumbnail asked for at one size is kept at every size (normal 128, large 256, x-large 512)");
+        // the x-large one replaced by a blue one with the same tags, the normal one deleted: the normal one comes back
+        // blue, cut from the x-large one, not red from the file
+        QImage xl = kept("x-large", big), blue(xl.size(), QImage::Format_RGB32);
+        blue.fill(Qt::blue);
+        for (const QString &k : xl.textKeys())
+            blue.setText(k, xl.text(k));
+        blue.save(join(join(THUMB_DIR(), "x-large"), md5(file_uri(big)) + ".png"), "PNG");
+        QFile::remove(join(join(THUMB_DIR(), "normal"), md5(file_uri(big)) + ".png"));
+        QFile::remove(join(join(THUMB_DIR(), "large"), md5(file_uri(big)) + ".png"));
+        QImage cut = thumbs::file_thumb(big, mtime_of(big), 128);
+        check(side(cut) == 128 && cut.pixelColor(64, 40) == QColor(Qt::blue) &&
+                  kept("normal", big).pixelColor(64, 40) == QColor(Qt::blue),
+              "...one missing at a size is cut down from a bigger one in the cache (and kept), not made from the file");
+        QString small = picture("small.png", 200, 100);
+        thumbs::file_thumb(small, mtime_of(small), 512);
+        check(side(kept("normal", small)) == 128 && kept("large", small).isNull() && kept("x-large", small).isNull(),
+              "...a picture smaller than a size isn't kept at that size (it's shown from the file)");
+        rmtree(pics);
+    }
     QString iface = "org.gnome.desktop.interface";
     if (desktop_schema(iface) == iface && has_schema_key(iface, "accent-color")) {
         GSettings *gs = g_settings_new("org.gnome.desktop.interface");

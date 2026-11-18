@@ -4,7 +4,26 @@
 
 What changed in each version of Kestrel Explorer, newest first.
 
-## 0.3.4-alpha.3
+## 0.3.4-alpha.4
+
+- **Thumbnails are made once for every zoom level.** Each thumbnail size (small, large and extra large) was its own
+  cache, filled only at the size being looked at, so a folder seen before at one zoom level had its thumbnails made
+  all over again at another, or in another view. That looked as if the cache had been lost, for example after a
+  restart. Now a thumbnail is made once, at the largest size, and kept at all three sizes. A size that is still
+  missing (from thumbnails made by earlier versions) is cut down from a larger one already kept, rather than read
+  from the file again. Images smaller than a size are still shown straight from the file. The cache uses more disk
+  space as a result. Folder previews still make only their tiles' size.
+- **Open as Archive is now a small Kestrel window inside the archive.** Its folders are browsed like real ones: icons
+  with thumbnails or a list, zoom, sorting, back, forward and up, and a path bar of the archive's folders. Space shows
+  pictures in the image viewer, double-click opens a file with its app, and items can be copied (Ctrl+C) and pasted,
+  or dragged, into a Kestrel window, onto the desktop or into another app; Extract Here, Extract To…, Extract All… and
+  Test are still there. Everything it extracts for this is kept in memory (a folder in `/dev/shm`, with a size limit in
+  Preferences → Archives) and never written to disk, its thumbnails included, so an archive's names and pictures
+  don't end up in the thumbnail caches. When the memory is full the oldest copies go first, never one still in use;
+  the copies are deleted when the window closes, or at the next start after a crash. The old plain list of everything
+  in the archive is still there: Preferences → Archives → Open as Archive opens: the simple list.
+
+## 0.3.4-alpha.3 (2026-11-17)
 
 - Version bump only; see the [changes to the tests](tests/CHANGELOG.md#034-alpha3).
 

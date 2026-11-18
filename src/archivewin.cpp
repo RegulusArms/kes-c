@@ -68,7 +68,6 @@ public:
 // until then (a closed window, a cancelled job) they're deleted with this.
 struct ArchiveWindow::Listing {
     QList<archive::Entry> entries;
-    QString password;
     QList<QTreeWidgetItem *> top;
     int files = 0, folders = 0;
     qint64 total = 0;
@@ -285,29 +284,32 @@ private:
 };
 }  // namespace
 
-static QList<QPointer<ArchiveWindow>> &open_windows()
+QList<QPointer<ArchiveView>> &ArchiveView::open_views()
 {
-    static QList<QPointer<ArchiveWindow>> list;
+    static QList<QPointer<ArchiveView>> list;
     return list;
 }
+
+ArchiveView::ArchiveView(MainWindow *owner_, const QString &path) : QWidget(owner_), owner(owner_), archive_path(path) {}
 
 ArchiveWindow *ArchiveWindow::open(MainWindow *owner, const QString &path_in)
 {
     QString path = archive::first_volume(path_in);
-    for (const QPointer<ArchiveWindow> &w : open_windows())
-        if (w && w->archive_path == path && w->isVisible()) {   // (a closed one is about to be deleted)
+    for (const QPointer<ArchiveView> &v : open_views())
+        if (auto *w = qobject_cast<ArchiveWindow *>(v.data());
+            w && w->archive_path == path && w->isVisible()) {   // (a closed one is about to be deleted)
             w->raise();
             w->activateWindow();
             return w;
         }
     auto *w = new ArchiveWindow(owner, path);
-    open_windows() << w;
+    open_views() << w;
     show_free(w);
     w->load();
     return w;
 }
 
-ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(owner_), owner(owner_), archive_path(path)
+ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : ArchiveView(owner_, path)
 {
     setObjectName("archive_window");
     setWindowTitle(tx("%1 — Archive").arg(basename(path)));
@@ -373,12 +375,29 @@ ArchiveWindow::ArchiveWindow(MainWindow *owner_, const QString &path) : QWidget(
 
 void ArchiveWindow::load()
 {
+    auto got = std::make_shared<Listing>();
+    QPointer<ArchiveWindow> self(this);
+    read_listing([got](Task *, const QList<archive::Entry> &e) {
+        got->entries = e;
+        got->build();
+    }, [self, got]() {
+        if (self)
+            self->show_listing(*got);
+    });
+}
+
+void ArchiveView::read_listing(std::function<void(Task *, const QList<archive::Entry> &)> build, std::function<void()> shown)
+{
     if (!owner)
         return;
-    auto got = std::make_shared<Listing>();
+    struct Got {
+        QList<archive::Entry> entries;
+        QString password;
+    };
+    auto got = std::make_shared<Got>();
     QPointer<QWidget> asker(this);
     QString path = archive_path;
-    auto work = [got, asker, path](Task *task) -> QVariant {
+    auto work = [got, asker, path, build](Task *task) -> QVariant {
         QString missing = archive::missing_extract_tool(path);
         if (!missing.isEmpty())
             return QVariantMap{{"error", tx("Kestrel needs another program to open it. Install it with:  sudo apt install %1").arg(missing)}};
@@ -390,7 +409,7 @@ void ArchiveWindow::load()
                 got->password = pw;
                 task->log(txn("%Ln item(s) listed in %1", got->entries.size()).arg(path));
                 task->report(0, 0, txn("Reading %1 — sorting %Ln item(s)", got->entries.size()).arg(basename(path)), true);
-                got->build();
+                build(task, got->entries);
                 return QVariantMap{{"ok", true}};
             } catch (const archive::WrongPassword &) {   // its names are encrypted
                 if (!pw.isEmpty())
@@ -401,8 +420,8 @@ void ArchiveWindow::load()
             }
         }
     };
-    QPointer<ArchiveWindow> self(this);
-    auto done = [self, got](const QVariant &r) {
+    QPointer<ArchiveView> self(this);
+    auto done = [self, got, shown](const QVariant &r) {
         if (!self)
             return;
         QVariantMap m = r.toMap();
@@ -412,7 +431,8 @@ void ArchiveWindow::load()
             self->status->setText(m["error"].toString());
         } else {
             self->password = got->password;
-            self->show_listing(*got);
+            self->entries = got->entries;
+            shown();
         }
     };
     Task *t = fileops::queue_job(owner, tx("Reading %1").arg(basename(archive_path)), {archive_path}, work, done);
@@ -425,7 +445,6 @@ void ArchiveWindow::load()
 
 void ArchiveWindow::show_listing(Listing &l)
 {
-    entries = l.entries;
     tree->clear();
     tree->addTopLevelItems(l.top);
     l.top.clear();
@@ -497,16 +516,16 @@ void ArchiveWindow::context_menu(const QPoint &pos)
     connect(m, &QMenu::aboutToHide, m, &QObject::deleteLater);
 }
 
-void ArchiveWindow::choose_and_extract()
+void ArchiveView::choose_and_extract()
 {
-    QPointer<ArchiveWindow> self(this);
+    QPointer<ArchiveView> self(this);
     choose_folder(this, tx("Extract To"), dirname(archive_path), [self](const QString &d) {
         if (self)
             self->extract_selected(d);
     });
 }
 
-bool ArchiveWindow::needs_password(const QStringList &members) const
+bool ArchiveView::needs_password(const QStringList &members) const
 {
     for (const archive::Entry &e : entries)
         if (e.encrypted)
@@ -516,7 +535,7 @@ bool ArchiveWindow::needs_password(const QStringList &members) const
     return false;
 }
 
-void ArchiveWindow::extract_selected(const QString &dest)
+void ArchiveView::extract_selected(const QString &dest)
 {
     QStringList members = selected_members();
     if (members.isEmpty() || !owner)
@@ -530,7 +549,7 @@ void ArchiveWindow::extract_selected(const QString &dest)
     });
 }
 
-void ArchiveWindow::extract_job(MainWindow *owner, QPointer<ArchiveWindow> win, const QString &path,
+void ArchiveView::extract_job(MainWindow *owner, QPointer<ArchiveView> win, const QString &path,
                                 const QStringList &members, const QString &dest, const QString &title,
                                 std::function<void(const QStringList &)> after)
 {
@@ -618,7 +637,7 @@ void ArchiveWindow::open_member(const QString &member)
                 });
 }
 
-qint64 ArchiveWindow::size_of(const QStringList &members) const
+qint64 ArchiveView::size_of(const QStringList &members) const
 {
     qint64 total = 0;
     for (const archive::Entry &e : entries)
@@ -643,7 +662,7 @@ QMimeData *ArchiveWindow::drag_data(const QStringList &members) const
     return md;
 }
 
-bool ArchiveWindow::drop_members(MainWindow *win, const QMimeData *data, const QString &dest)
+bool ArchiveView::drop_members(MainWindow *win, const QMimeData *data, const QString &dest)
 {
     if (!data || !data->hasFormat(MEMBERS_MIME) || !win)
         return false;
@@ -654,8 +673,8 @@ bool ArchiveWindow::drop_members(MainWindow *win, const QMimeData *data, const Q
         members << v.toString();
     if (!path.startsWith('/') || members.isEmpty())
         return false;
-    QPointer<ArchiveWindow> from;
-    for (const QPointer<ArchiveWindow> &w : open_windows())
+    QPointer<ArchiveView> from;
+    for (const QPointer<ArchiveView> &w : open_views())
         if (w && w->archive_path == path)
             from = w;
     QPointer<MainWindow> mw(win);
@@ -666,19 +685,3 @@ bool ArchiveWindow::drop_members(MainWindow *win, const QMimeData *data, const Q
     });
     return true;
 }
-
-namespace archive_ui {
-
-void browse(MainWindow *win, const QString &path)
-{
-    QString missing = archive::missing_extract_tool(path);
-    if (!missing.isEmpty()) {
-        warn(win, tx("Open as Archive"),
-             tx("Kestrel needs another program to open “%1”.\n\nInstall it with:  sudo apt install ").arg(basename(path)) +
-                 missing);
-        return;
-    }
-    ArchiveWindow::open(win, path);
-}
-
-}  // namespace archive_ui

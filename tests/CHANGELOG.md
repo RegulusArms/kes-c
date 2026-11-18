@@ -6,6 +6,30 @@ What changed in the test suite (`tests/`) and in CI's test jobs (`.github/workfl
 newest first, and why. The versions and their grouping follow the main [CHANGELOG](../CHANGELOG.md): a test is listed
 under the version whose change it covers. What each test checks today is in [README.md](README.md).
 
+## 0.3.4-alpha.4
+
+### Added
+
+- `theme`: a thumbnail asked for at one size is kept at all three (normal, large, x-large); one missing at a size is
+  cut down from a larger one in the cache (a planted blue x-large must come back as the blue normal), not made from
+  the file again; a picture smaller than a size isn't kept at that size. These cover making thumbnails at every size
+  at once, which stops a folder's thumbnails being made again when the view's zoom changes.
+- `archives`: the archive browser, Open as Archive's new default window: browsing the archive's folders (into, back,
+  forward, up, sorting with folders first), the list and the panes' grid each zoomed on its own, thumbnails made from
+  copies in the RAM cache with nothing written to disk (no thumbnail, folder preview or file named as a member), Copy
+  and Paste into a Kestrel window, a drag handing over cached copies (copy-only, pinned until the drag ends) dropped
+  on a Kestrel folder, Quick Look from a cached copy, and closing the window deleting its copies. The RAM cache itself:
+  first-in-first-out eviction passing over pinned copies and ones a program has open, "full" when everything is in
+  use, a member bigger than the cache refused, a cancelled extraction (held whole in its part folder by the new
+  `KESTREL_TEST_CACHE_HOLD` hook) leaving nothing under the member's name, the copy renamed into place otherwise, and
+  the start-up sweep of a crashed Kestrel's folder. Also that Preferences' "the simple list" opens the plain member
+  list. These cover the new window and the promise that what it extracts stays in memory.
+
+### Changed
+
+- `prefs`: the archive browser's kept view, icon size and row height (`archive/view_mode`, `archive/grid_size`,
+  `archive/list_size`) are listed as kept state, not settings, in the check that every setting read is in Preferences.
+
 ## 0.3.4-alpha.3
 
 ### Removed

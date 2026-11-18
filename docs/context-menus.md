@@ -20,7 +20,8 @@ reorder them or move them into or out of a submenu, and add separators and subme
 - [A tab](#a-tab)
 - [The sidebar](#the-sidebar)
 - [Overview cards](#overview-cards)
-- [Open as Archive window](#open-as-archive-window)
+- [Open as Archive: the archive browser](#open-as-archive-the-archive-browser)
+- [Open as Archive: the simple list](#open-as-archive-the-simple-list)
 - [Properties → Metadata](#properties--metadata)
 - [Dropping with Alt held](#dropping-with-alt-held)
 
@@ -141,7 +142,7 @@ menu's entries, with these after Links & Shortcuts:
 |---|---|---|
 | **Extract Here** | Extracts beside the archive into a new folder named after it (or the archive's own single top folder); asks for a password when needed | Always |
 | **Extract To…** | Asks where to extract, with options | Always |
-| **Open as Archive** | Opens a window listing what's inside, to open or extract single items (see [below](#open-as-archive-window)) | When its program can list it |
+| **Open as Archive** | Opens a window inside the archive, to browse it, open, view, copy, drag or extract single items: the archive browser, or the simple list if Preferences → Archives says so (see [the browser](#open-as-archive-the-archive-browser) and [the list](#open-as-archive-the-simple-list) below) | When its program can list it |
 | **Test Archive** | Checks the archive for damage without extracting | Always |
 | **Extract (install …)** | Greyed out in place of the above, naming the package that extracts this format | When that program is missing |
 | **Encrypt…** | As for a file | Always |
@@ -303,9 +304,22 @@ Right-click a block in the map, or a row in the list beside it.
 | **Move to Trash** | Moves it to the trash and takes it off the map (Undo in a Kestrel window brings it back) | Files and folders |
 | **Properties** | Its Properties | Files and folders |
 
-## Open as Archive window
+## Open as Archive: the archive browser
 
-Right-click items listed inside an archive.
+Right-click items in a folder of the archive (Open as Archive's default window). It shows only with items selected.
+
+| Entry | What it does | Shows |
+|---|---|---|
+| **Open** | A folder: shows it in the browser. A file: extracts a read-only copy into Kestrel's memory cache and opens it with its app | One item selected |
+| **View** | Shows the selected pictures in the image viewer, from copies in the memory cache (as Space does) | Pictures among the selected items |
+| **Copy** | Extracts the items into the memory cache and puts those copies on the clipboard, to paste in a Kestrel window, on the desktop or in another app (as Ctrl+C does) | Always |
+| **Extract Here** | Extracts the selected items beside the archive | Always |
+| **Extract To…** | Asks for a folder and extracts them there | Always |
+
+## Open as Archive: the simple list
+
+Right-click items listed inside an archive, in the plain member list (Preferences → Archives → Open as Archive opens:
+the simple list).
 
 | Entry | What it does | Shows |
 |---|---|---|

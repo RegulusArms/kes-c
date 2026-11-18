@@ -7,10 +7,19 @@
 #include "common.h"
 
 #include "archive_ui.h"
+#include "archivebrowser.h"
+#include "archivecache.h"
 #include "archivewin.h"
 #include "hashcheck.h"
 #include "prefswin.h"
 #include "keyring.h"
+#include "prefs.h"
+#include "viewer.h"
+
+#include <QClipboard>
+#include <QDirIterator>
+#include <QImage>
+#include <QListView>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -28,6 +37,7 @@
 #include <QStatusBar>
 #include <QTreeWidget>
 
+#include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -1087,6 +1097,272 @@ int main(int argc, char **argv)
         again->urls();
         check(!lexists(old), "temporary copies not used for a day are deleted when a new one is made");
         pw2->close();
+    }
+
+    // ---- the archive browser (Open as Archive's default window) and its RAM cache
+    {
+        QString bsrc = home_path("bsrc");
+        makedirs(join(bsrc, "pics/sub/deeper"), true);
+        for (int i = 0; i < 3; ++i) {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(QColor::fromHsv(i * 100, 255, 255));
+            img.save(join(bsrc, QString("pics/p%1.png").arg(i)));
+        }
+        write_text(join(bsrc, "pics/notes.txt"), "notes");
+        write_text(join(bsrc, "pics/sub/deeper/z.txt"), "z");
+        QString b7 = home_path("browse.7z");
+        bool made_b = make({z7, "a", "-t7z", "-mx1", b7, "pics"}, bsrc);
+        // what mustn't land on disk (outside the source): a copy of a member (by its name), a thumbnail, a folder preview
+        static const QStringList member_names = {"p0.png", "p1.png", "p2.png", "notes.txt", "z.txt"};
+        auto disk_files = [&]() {
+            QStringList out;
+            QDirIterator it(HOME(), QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                QString f = it.next();
+                if (f.startsWith(bsrc + "/"))
+                    continue;
+                if (member_names.contains(basename(f)) || f.startsWith(THUMB_DIR() + "/") ||
+                    f.startsWith(join(APP_CACHE(), "folders") + "/") || f.startsWith(HOME() + "/.cache/thumbnails/"))
+                    out << f;
+            }
+            return out;
+        };
+        QStringList before = disk_files();
+        ArchiveCache *cache = ArchiveCache::instance();
+        settings().remove("archive/view_mode");
+        settings().remove("archive/grid_size");
+        archive_ui::browse(w, b7);   // as the menu's Open as Archive
+        ArchiveBrowser *ab = shown_window<ArchiveBrowser>();
+        wait_for([&]() { return ab && ab->loaded(); });
+        QStringList top = ab ? ab->shown_members() : QStringList();
+        check(made_b && ab && is_free_window(ab) && ab->folder() == "pics/" &&
+                  top == QStringList({"pics/sub/", "pics/notes.txt", "pics/p0.png", "pics/p1.png", "pics/p2.png"}),
+              "Open as Archive opens the archive browser by default (a free window), inside the archive's one top "
+              "folder, folders first then by name (" + top.join(", ") + ")");
+        if (!ab)
+            finish();
+
+        // browsed like a folder: into a folder, back, forward, up (the folder it came from selected)
+        ab->activate("pics/sub/");
+        bool into = ab->folder() == "pics/sub/" && ab->shown_members() == QStringList{"pics/sub/deeper/"};
+        ab->go_back();
+        bool back = ab->folder() == "pics/" && ab->selected_members() == QStringList{"pics/sub/"};
+        ab->go_forward();
+        bool fwd = ab->folder() == "pics/sub/";
+        ab->go_up();
+        bool up = ab->folder() == "pics/" && ab->selected_members() == QStringList{"pics/sub/"};
+        ab->go_up();
+        bool top_level = ab->folder().isEmpty() && ab->shown_members() == QStringList{"pics/"};
+        ab->go_to("pics/");
+        check(into && back && fwd && up && top_level,
+              "the browser goes into a folder of the archive, back, forward and up like a pane (the folder left "
+              "selected), up to the archive's top");
+        ab->sort_by(0, Qt::DescendingOrder);
+        QStringList desc = ab->shown_members();
+        ab->sort_by(0, Qt::AscendingOrder);
+        check(desc == QStringList({"pics/sub/", "pics/p2.png", "pics/p1.png", "pics/p0.png", "pics/notes.txt"}),
+              "sorting by name descending keeps folders first (" + desc.join(", ") + ")");
+        ab->set_view_mode("list");
+        int list_before = ab->zoom_value();
+        ab->zoom(1);
+        bool list_zoom = !ab->is_grid() && ab->zoom_value() > list_before && ab->list->isVisibleTo(ab);
+        ab->set_view_mode("grid");
+        int grid_before = ab->zoom_value();
+        ab->zoom(-1);
+        check(list_zoom && ab->is_grid() && ab->zoom_value() < grid_before && ab->grid->isVisibleTo(ab) &&
+                  ab->grid->itemDelegate()->inherits("GridDelegate"),
+              "it shows the list or the panes' grid (their GridDelegate), each zoomed on its own");
+
+        // thumbnails: made from copies in the RAM cache, kept in memory, never written to disk
+        bool thumbed = wait_for([&]() {
+            return !ab->thumbnail("pics/p0.png").isNull() && !ab->thumbnail("pics/p1.png").isNull() &&
+                   !ab->thumbnail("pics/p2.png").isNull();
+        });
+        QImage t1 = ab->thumbnail("pics/p1.png").toImage();
+        QStringList copies = cache->paths();
+        bool in_ram = copies.size() >= 3 && std::all_of(copies.begin(), copies.end(), [&](const QString &c) {
+            return c.startsWith(ArchiveCache::base() + "/") && !c.startsWith(HOME() + "/");
+        });
+        wait_for([&]() { return !ab->thumbnails_busy(); });
+        QStringList leaked = disk_files();
+        for (const QString &f : before)
+            leaked.removeAll(f);
+        check(made_b && thumbed && t1.pixelColor(t1.width() / 2, t1.height() / 2) == QColor::fromHsv(100, 255, 255).toRgb() &&
+                  in_ram && leaked.isEmpty(),
+              "the pictures' thumbnails are made from copies extracted into the RAM cache (outside the home folder), "
+              "and nothing is written to disk: no thumbnail, no folder preview, no copy (" + leaked.join(", ") + ")");
+
+        // Copy, then Paste in a Kestrel window: a copy job from the cache's copies; pinned while on the clipboard
+        cache->grace_ms = 0;
+        QString pasted = home_path("pasted");
+        makedirs(pasted, true);
+        w->pane()->set_path(pasted);
+        wait_for([&]() { return w->pane()->path == pasted; });
+        ab->select_members({"pics/notes.txt"});
+        ab->copy_selected();
+        bool on_clip = wait_for([]() {
+            const QMimeData *md = QGuiApplication::clipboard()->mimeData();
+            return md && md->hasFormat(ArchiveCache::CLIP_MIME);
+        });
+        QList<QUrl> clip_urls = QGuiApplication::clipboard()->mimeData()->urls();
+        QString clip_copy = clip_urls.value(0).toLocalFile();
+        bool pinned_clip = cache->in_use(clip_copy);
+        w->paste();
+        bool landed = wait_for([&]() { return read_file(join(pasted, "notes.txt")) == "notes"; });
+        wait_for([&]() { return TaskBoard::instance()->all().isEmpty(); });
+        QGuiApplication::clipboard()->setText("something else");
+        bool let_go = wait_for([&]() { return !cache->in_use(clip_copy); });
+        check(on_clip && clip_copy.startsWith(ArchiveCache::base() + "/") && clip_copy.endsWith("/notes.txt") &&
+                  pinned_clip && landed && exists(clip_copy) && let_go,
+              "Copy puts the member's copy from the RAM cache on the clipboard (kept while it's there), and Paste in a "
+              "Kestrel window copies it like any file");
+
+        // dragged out: the copies in the cache, marked copy-only; a drop on a Kestrel folder copies them
+        std::unique_ptr<QMimeData> dm(ab->drag_data({"pics/p1.png"}));
+        bool formats = dm->hasFormat("text/uri-list") && dm->hasFormat(COPY_ONLY_MIME) && !dm->hasFormat(archive::MEMBERS_MIME);
+        bool dropped = w->pane()->view()->model()->dropMimeData(dm.get(), Qt::CopyAction, -1, -1, QModelIndex());
+        QString drag_copy = dm->urls().value(0).toLocalFile();
+        bool drop_landed = wait_for([&]() { return read_file(join(pasted, "p1.png")) == read_file(join(bsrc, "pics/p1.png")); });
+        bool drag_pinned = cache->in_use(drag_copy);
+        ab->drag_ended();
+        wait_for([&]() { return TaskBoard::instance()->all().isEmpty(); });
+        check(formats && dropped && drag_copy.startsWith(ArchiveCache::base() + "/") && drop_landed && drag_pinned &&
+                  exists(drag_copy) && wait_for([&]() { return !cache->in_use(drag_copy); }),
+              "a drag hands over the copies in the RAM cache (copy-only, held until the drag ends); dropped on a "
+              "Kestrel folder they're copied there, the cache's copy kept");
+
+        // Quick Look: the picture's copy in the image viewer, held while it shows
+        ab->select_members({"pics/p2.png"});
+        ab->quick_look();
+        bool viewing = wait_for([&]() { return ab->viewer && ab->viewer->isVisible(); });
+        QString shown = viewing ? ab->viewer->current() : QString();
+        bool held = cache->in_use(shown);
+        if (viewing)
+            ab->viewer->close();
+        // (its deleteLater() carried out here: Qt 6.4 doesn't in a nested event loop)
+        check(viewing && shown.startsWith(ArchiveCache::base() + "/") && shown.endsWith("/p2.png") && held &&
+                  wait_for([&]() {
+                      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+                      return !cache->in_use(shown);
+                  }),
+              "Space shows the selected picture in the image viewer from its copy in the RAM cache, held while shown");
+
+        // closing the window deletes its copies
+        QStringList had = cache->paths();
+        ab->close();
+        bool gone = wait_for([&]() {
+            return std::none_of(had.begin(), had.end(), [](const QString &p) { return lexists(p); });
+        });
+        check(!had.isEmpty() && gone && cache->paths().isEmpty(), "closing the browser deletes its copies from the RAM cache");
+
+        // first in, first out; copies in use are kept
+        auto fake = [&](const QString &name) {
+            QString part = cache->new_part();
+            write_text(join(part, name), QByteArray(1000, 'x'), true);
+            QString p = cache->add(ArchiveCache::key("/fifo.7z", name), join(part, name), 1000);
+            util::rmtree(part);
+            return p;
+        };
+        cache->set_limit(3000);
+        QString a = fake("a"), b = fake("b"), c = fake("c");
+        bool room = cache->reserve(1000) == ArchiveCache::OK;
+        check(room && !lexists(a) && exists(b) && exists(c), "a full RAM cache makes room by deleting its oldest copy first");
+        cache->release(1000);
+        QString d = fake("d");
+        cache->pin(b);
+        bool room2 = cache->reserve(1000) == ArchiveCache::OK;
+        check(room2 && exists(b) && !lexists(c) && exists(d),
+              "...passing over a copy that's pinned (on the clipboard, in the viewer, being dragged), deleting the next oldest");
+        cache->release(1000);
+        QString e = fake("e");
+        int fd = ::open(enc(d).constData(), O_RDONLY | O_CLOEXEC);
+        bool room3 = cache->reserve(1000) == ArchiveCache::OK;
+        check(fd >= 0 && room3 && exists(d) && !lexists(e), "...and one a program has open");
+        cache->release(1000);
+        ::close(fd);
+        cache->pin(d);
+        ArchiveCache::Room full = cache->reserve(2000);
+        check(full == ArchiveCache::FULL && exists(b) && exists(d) && cache->reserve(5000) == ArchiveCache::TOO_BIG,
+              "when every copy is in use it says the cache is full (deleting none), and a member bigger than the whole "
+              "cache is refused");
+        cache->unpin(b, false);
+        cache->unpin(d, false);
+        cache->forget("/fifo.7z");
+        cache->set_limit(-1);
+
+        // a cancelled extraction into the cache leaves nothing under the member's name
+        ArchiveBrowser *ab2 = ArchiveBrowser::open(w, b7);
+        ab2->set_view_mode("list");   // (small icons: no thumbnails being made meanwhile)
+        wait_for([&]() { return ab2->loaded(); });
+        QString hold = home_path("cache-hold");
+        write_text(hold, "x");
+        qputenv("KESTREL_TEST_CACHE_HOLD", hold.toUtf8());
+        bool called = false;
+        ab2->fetch({"pics/notes.txt"}, "Fetching for the test", [&](const QStringList &) { called = true; });
+        bool reached = wait_for([&]() { return exists(hold + ".reached"); });
+        auto named = [&]() {   // copies under the member's name, outside part folders
+            QStringList out;
+            QDirIterator it(cache->root(), {"notes.txt"}, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                QString f = it.next();
+                if (!f.contains("/.kes-"))
+                    out << f;
+            }
+            return out;
+        };
+        auto anything = [&]() {
+            QStringList out;
+            QDirIterator it(cache->root(), QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot);
+            while (it.hasNext()) {
+                QString f = it.next();
+                if (basename(f) != ".lock")
+                    out << f;
+            }
+            return out;
+        };
+        bool none_yet = named().isEmpty();
+        for (const TaskInfo &t : TaskBoard::instance()->all())
+            if (t.local && t.title == "Fetching for the test")
+                t.local->cancel();
+        util::unlink(hold);
+        bool ended = wait_for([&]() { return TaskBoard::instance()->all().isEmpty(); });
+        QStringList left = anything();
+        check(reached && none_yet && ended && !called && left.isEmpty() &&
+                  cache->find(ArchiveCache::key(b7, "pics/notes.txt")).isEmpty() && cache->used() == 0,
+              "an extraction into the RAM cache is made in a hidden part folder; cancelled, it leaves nothing (no "
+              "file under the member's name, no part folder, no room kept) (" + left.join(", ") + ")");
+        qunsetenv("KESTREL_TEST_CACHE_HOLD");
+        QString got;
+        ab2->fetch({"pics/notes.txt"}, "Fetching for the test", [&](const QStringList &l) {
+            got = l.value(0);
+            cache->unpin(got, false);
+        });
+        wait_for([&]() { return !got.isEmpty(); });
+        check(got.startsWith(cache->root() + "/") && basename(got) == "notes.txt" && read_file(got) == "notes" &&
+                  cache->find(ArchiveCache::key(b7, "pics/notes.txt")) == got,
+              "...not cancelled, the member's copy is renamed into a folder of its own, under its own name");
+        ab2->close();
+
+        // start-up: a cache folder left by a Kestrel that's gone is deleted, a running one's kept
+        QString stale = join(ArchiveCache::base(), "999999-0");
+        makedirs(stale, true);
+        write_text(join(stale, ".lock"), "");
+        write_text(join(stale, "left.txt"), "x");
+        QString mine = cache->root();
+        ArchiveCache::sweep();
+        check(!lexists(stale) && isdir(mine), "a RAM cache folder left by a Kestrel that crashed is deleted at start-up "
+                                              "(not the running Kestrel's)");
+
+        // the simple list instead, as Preferences can choose
+        prefs::set("archive/opens", "list");
+        archive_ui::browse(w, b7);
+        ArchiveWindow *simple = shown_window<ArchiveWindow>();
+        check(simple && simple->path() == b7, "with Preferences → Open as Archive opens: the simple list, it opens the plain "
+                                             "member list instead");
+        if (simple)
+            simple->close();
+        prefs::reset({"archive/opens"});
+        cache->grace_ms = 60000;
     }
 
     // ---- unzip, taken only without 7-Zip (which the tests always have): listing, single items, testing

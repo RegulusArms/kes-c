@@ -625,17 +625,7 @@ void Pane::setup_common(QAbstractItemView *v)
 void Pane::setup_grid()
 {
     QListView *g = grid;
-    g->setViewMode(QListView::IconMode);
-    g->setMovement(QListView::Static);
-    g->setResizeMode(QListView::Adjust);
-    g->setWrapping(true);
-    g->setUniformItemSizes(true);
-    // One pass, not in batches: a batched layout redone (after a zoom, a resize, a change in the folder) started each
-    // batch on a new row, leaving an empty cell at the end of the row before it. A pass over 50,000 items takes about
-    // 20 ms (45 ms grouped by date, where each item is asked its size).
-    g->setLayoutMode(QListView::SinglePass);
-    g->setMouseTracking(true);
-    g->setFrameShape(QFrame::NoFrame);
+    style_grid_view(g);
     MainWindow *w = win;
     delegate = new GridDelegate(this, thumbs, [w](const QString &p) { return w->cut_paths.contains(p); }, g);
     animator = new Animator(g, this);
@@ -648,15 +638,7 @@ void Pane::setup_grid()
 void Pane::setup_tree()
 {
     QTreeView *t = tree;
-    t->setRootIsDecorated(false);
-    t->setItemsExpandable(false);
-    t->setUniformRowHeights(true);
-    t->setAlternatingRowColors(true);
-    t->setSelectionBehavior(QAbstractItemView::SelectRows);
-    t->setSortingEnabled(true);
-    t->setItemDelegate(new ListDelegate(t));
-    t->header()->setAccessibleName(tx("Columns"));
-    t->setFrameShape(QFrame::NoFrame);
+    style_list_view(t);
     t->setIconSize(QSize(list_size, list_size));
     int col = win->view_value("sort_col", 0).toInt();
     auto order = Qt::SortOrder(win->view_value("sort_order", 0).toInt());
@@ -1047,16 +1029,8 @@ void Pane::set_search_options(bool subfolders, bool contents)
 
 void Pane::update_grid_size()
 {
-    QSize cell = delegate->cell_size();
-    // Width as if the scrollbar were always shown: otherwise the scrollbar appearing/disappearing changes the
-    // column width and the grid re-flows.
-    int sb = grid->verticalScrollBar()->isVisible() ? 0 : grid->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
-    // less 1: QListView wraps an item that would end past the last pixel column (width - 1), so cells adding up to
-    // exactly the width would push the last column onto the next row and leave a gap at the end of every row
-    int avail = grid->viewport()->width() - sb - 1;
-    int cols = std::max(1, avail / cell.width());
-    int extra = cols > 1 ? (avail - cols * cell.width()) / cols : 0;
-    QSize size(cell.width() + std::max(0, extra), cell.height());
+    int avail = 0;
+    QSize size = grid_cell_size(grid, delegate, &avail);
     if (grouped) {
         if (grid->gridSize().isValid())
             grid->setGridSize(QSize());

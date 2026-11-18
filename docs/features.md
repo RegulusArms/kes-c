@@ -164,9 +164,9 @@
 
 **Archives** (details in [Archives](archives.md))
 - **Extract Here** and **Extract To…** for 7z, zip, rar (including split `.part1.rar` sets), zpaq, tar with any compression, single `.gz`/`.xz`/`.zst`/… files, and iso, cab, deb, rpm and more.
-- **Open as Archive**: a window listing what's inside an archive, to extract single files or folders from it (7z, zip, rar, zpaq, tar and what 7-Zip opens). Double-click a file to open it with its app (from a temporary copy), or drag items out onto a Kestrel folder, the sidebar, the desktop or another app.
+- **Open as Archive**: a small Kestrel window inside an archive (7z, zip, rar, zpaq, tar and what 7-Zip opens). Its folders are browsed like real ones: icons with thumbnails or a list, zoom, sorting, back, forward and up, and a path bar. Open a file with its app, look at pictures in the image viewer (Space), Copy (Ctrl+C) and paste, or drag items out onto a Kestrel folder, the desktop or another app, and extract single files and folders. Everything it extracts for this is kept in memory, never written to disk, and goes when the window closes. Preferences → Archives can make it open the simple list instead: one tree of everything in the archive.
 
-  ![Open as Archive: holiday-photos.7z as a tree of its folders and files with their sizes, packed sizes and dates, a filter box, and Extract Here, Extract To…, Extract All… and Test](screenshots/archive-window.png)
+  ![Open as Archive, the simple list: holiday-photos.7z as a tree of its folders and files with their sizes, packed sizes and dates, a filter box, and Extract Here, Extract To…, Extract All… and Test](screenshots/archive-window.png)
 
 - **Test Archive(s)**: check every file in one or several archives against its checksum without extracting, with one message at the end.
 - **Extract All Here** and **Extract All To…** for several archives at once: one job, one ✕, one summary at the end; a split set counts as one archive.

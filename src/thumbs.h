@@ -59,13 +59,16 @@ const QHash<QString, QStringList> &thumbnailers();
 QStringList thumbnailers_for(const QString &path);
 // whether a file can get a thumbnail: images and videos (Kestrel's own), anything else a system thumbnailer handles
 bool can_thumbnail(const QString &path);
-// whether path is Kestrel's own cache folder (~/.cache/kestrel-explorer) or inside it: no thumbnails or previews there
+// whether path is Kestrel's own cache folder (~/.cache/kestrel-explorer) or inside it, or in the archive browser's RAM
+// cache (archivecache.h): no thumbnails or previews there
 bool in_app_cache(const QString &path);
 QImage system_thumb(const QString &path, int size);
 QImage video_frame(const QString &path, int size);
 // a QImage thumbnail (max size x size) using the freedesktop cache; null if there is none. fresh: made again even if
 // the cache has one (Regenerate Previews), and the cache's copy replaced
-QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh = false);
+// path's thumbnail at size's bucket, from the cache or made (and kept): made at the biggest size and kept at every
+// size, unless all_sizes is off (a folder preview's tiles); one kept at a bigger size is cut down rather than made again
+QImage file_thumb(const QString &path, qint64 mtime, int size, bool fresh = false, bool all_sizes = true);
 QStringList pick_folder_images(const QString &folder, int count, const QString &order, const QString &cover = QString());
 QImage compose_folder(const QList<QImage> &images, int size, const QString &color, const QList<bool> &videos);
 // The symbol of a special folder (icon theme name, e.g. "folder-download": its -symbolic version) drawn on a plain
