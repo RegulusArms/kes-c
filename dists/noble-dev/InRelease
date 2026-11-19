@@ -1,0 +1,38 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Codename: noble-dev
+Date: Thu, 19 Nov 2026 00:22:47 UTC
+Architectures: amd64
+Components: main
+Description: Kestrel Explorer development builds for Ubuntu 24.04 (noble) and systems based on it
+MD5Sum:
+ 8876a79820c60d841a96baa490160735 1381 main/binary-amd64/Packages
+ 2e341052eb8dda905fa5b2eb1b9cbdf0 794 main/binary-amd64/Packages.gz
+ 01e72d9b84498e3ca1fce35f2c059c0d 183 main/binary-amd64/Release
+SHA1:
+ 9b4e769a81733489ea9ea7c3f557b296d0758415 1381 main/binary-amd64/Packages
+ 93ccf6a93faa50b1fa2f0058160f769fefb282de 794 main/binary-amd64/Packages.gz
+ 64dcad888ae407b339d282e704a8e59928be117f 183 main/binary-amd64/Release
+SHA256:
+ ab708e1a795ac5ec86d91a542064328c085531bea68981b3b91becbf453e677c 1381 main/binary-amd64/Packages
+ 77cdbeb93d17c6a98a6b7cc33ecb5235180ec6dc94587741cd6524907dca603f 794 main/binary-amd64/Packages.gz
+ 1632088008400d095d38225a972bafeee067633e0fcb8574e557fa5bce747b89 183 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEQPAla0OYKoWytqRpkl2syCFqQh8FAmr+QVgACgkQkl2syCFq
+Qh8oahAAuUIyCjQ6lE/ifgfAjUKybfVRD/Ce4kkf2TDxAa23eWkPoJ5x861yEqk0
+PmmCVTYYnRmm3N26F6v06oeE5mokS4vn+GUch4D47boNy7Qom398ZH2Pda9XaxWW
+L/pmmAkEEYlp/fF5V5IxGbv4l4Y+pP9mb3TFbua7tpbBv3hiu4qXwrL/CEt1vIF3
+snR8J3ZbMlPMbxBJqDmLUtNQQZQBC/yM7NdihAH6I2wsQL1mZryW85AwAt6JXS9M
+Y41SJLQW0FAaQXcRav/ENKPKnUrohWRSzk2qctqr3nBbkLTd89MIz3rbcky7IeaP
+w3fit1B4nkuSSbKZRSQWFN9Y2eRzAdiFY9BrZp9UzvZ1g5aeJzLnIMGpGbNQizDa
+ZVAYGdgZ5DYL36ftNgJgbmJMRk5fE6bJWKNG2tRdoziPhTAkC12b4QdPcCse/lUk
+oLtEDtIHA/o4sCZCzcpMMlQJoExslkQlelbOSTMwNrA6KRxBYZQo+HT4lN+s2L1u
+9nMkYAMePAMcvZM11XpxMF2i3PdAfMeDLKcM4DqjSFPkGBD8OjzRjpY8BBbnUpez
+wl50YllTuYfPaW05IZzZtgclBriWX3Kn8t9ei7iaIEG8hCOSEp2imZkm4QDUOJNY
+ToeDwKIVCK+4Hro64BeRSlDws81X4emEa+DvSwcAqOW+pj2eJj4=
+=huy+
+-----END PGP SIGNATURE-----

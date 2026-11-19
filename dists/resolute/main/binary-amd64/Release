@@ -1,0 +1,5 @@
+Component: main
+Origin: Kestrel Explorer
+Label: Kestrel Explorer
+Architecture: amd64
+Description: Kestrel Explorer releases for Ubuntu 26.04 (resolute) and systems based on it
